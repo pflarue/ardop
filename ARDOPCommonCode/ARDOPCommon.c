@@ -81,6 +81,7 @@ int TrailerLength = 20;
 BOOL InitRXO = FALSE;
 BOOL WriteRxWav = FALSE;
 BOOL TwoToneAndExit = FALSE;
+BOOL UseSDFT = FALSE;
 char DecodeWav[256] = "";			// Pathname of WAV file to decode.
 
 int PTTMode = PTTRTS;				// PTT Control Flags.
@@ -164,6 +165,7 @@ static struct option long_options[] =
 	{"writewav",  no_argument, 0, 'w'},
 	{"decodewav",  required_argument, 0, 'W'},
 	{"twotone", no_argument, 0, 'n'},
+	{"sdft", no_argument, 0, 'n'},
 	{"help",  no_argument, 0 , 'h'},
 	{ NULL , no_argument , NULL , no_argument }
 };
@@ -201,6 +203,7 @@ char HelpScreen[] =
 	"-w or --writewav                     Write WAV files of received audio for debugging.\n"
 	"-W pathname or --decodewav pathname  Pathname of WAV file to decode instead of listening.\n"
 	"-n or --twotone                      Send a 5 second two tone signal and exit.\n"
+	"-s or --sdft                         Use the alternative Sliding DFT based 4FSK decoder.\n"
 	"\n"
 	" CAT and RTS PTT can share the same port.\n"
 	" See the ardop documentation for more information on cat and ptt options\n"
@@ -217,7 +220,7 @@ void processargs(int argc, char * argv[])
 	{		
 		int option_index = 0;
 
-		c = getopt_long(argc, argv, "l:c:p:g::k:u:e:hLRytrzwW:n", long_options, &option_index);
+		c = getopt_long(argc, argv, "l:c:p:g::k:u:e:hLRytrzwW:ns", long_options, &option_index);
 
 		// Check for end of operation or error
 		if (c == -1)
@@ -358,6 +361,10 @@ void processargs(int argc, char * argv[])
 
 		case 'n':
 			TwoToneAndExit = TRUE;
+			break;
+
+		case 's':
+			UseSDFT = TRUE;
 			break;
 
 		case '?':
