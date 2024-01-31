@@ -80,6 +80,7 @@ int	intARQDefaultDlyMs = 240;
 int TrailerLength = 20;
 BOOL InitRXO = FALSE;
 BOOL WriteRxWav = FALSE;
+BOOL WriteTxWav = FALSE;
 BOOL TwoToneAndExit = FALSE;
 BOOL UseSDFT = FALSE;
 char DecodeWav[256] = "";			// Pathname of WAV file to decode.
@@ -201,6 +202,7 @@ char HelpScreen[] =
 	"--trailerlength val                  Sets Trailer Length (mS)\n"
 	"-r or --receiveonly                  Start in RXO (receive only) mode.\n"
 	"-w or --writewav                     Write WAV files of received audio for debugging.\n"
+	"-T or --writetxwav                   Write WAV files of sent audio for debugging.\n"
 	"-W pathname or --decodewav pathname  Pathname of WAV file to decode instead of listening.\n"
 	"-n or --twotone                      Send a 5 second two tone signal and exit.\n"
 	"-s or --sdft                         Use the alternative Sliding DFT based 4FSK decoder.\n"
@@ -220,7 +222,7 @@ void processargs(int argc, char * argv[])
 	{		
 		int option_index = 0;
 
-		c = getopt_long(argc, argv, "l:c:p:g::k:u:e:hLRytrzwW:ns", long_options, &option_index);
+		c = getopt_long(argc, argv, "l:c:p:g::k:u:e:hLRytrzwTW:ns", long_options, &option_index);
 
 		// Check for end of operation or error
 		if (c == -1)
@@ -353,6 +355,10 @@ void processargs(int argc, char * argv[])
 
 		case 'w':
 			WriteRxWav = TRUE;
+			break;
+
+		case 'T':
+			WriteTxWav = TRUE;
 			break;
 
 		case 'W':

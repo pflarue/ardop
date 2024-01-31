@@ -7,7 +7,7 @@
 #endif
 
 #include "ARDOPC.h"
-
+#include "../ARDOPCommonCode/wav.h"
 
 unsigned int pttOnTime;
 
@@ -21,9 +21,12 @@ FILE * fp1;
 
 extern short Dummy;
 extern int DriveLevel;
+extern BOOL WriteTxWav;
+extern struct WavFile *txwfu;
 
 int intSoftClipCnt = 0;
 
+void StartTxWav();
 void Flush();
 
 void GetTwoToneLeaderWithSync(int intSymLen)
@@ -1083,6 +1086,10 @@ unsigned short * SoundInit();
 void initFilter(int Width, int Centre)
 {
 	int i, j;
+
+	if (WriteTxWav)
+		StartTxWav();
+	
 	fWidth = Width;
 	centreSlot = Centre / 100;
 	largest = smallest = 0;
@@ -1179,7 +1186,9 @@ void SampleSink(short Sample)
 	float intFilteredSample = 0;			//  Filtered sample
 
 	Sample = Sample * DriveLevel / 100;
-
+	if (txwfu != NULL)
+		WriteWav(&Sample, 1, txwfu);
+	
 	//	We save the previous intN samples
 	//	The samples are held in a cyclic buffer
 

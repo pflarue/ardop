@@ -72,6 +72,7 @@ BOOL UseRightTX = TRUE;
 
 extern BOOL InitRXO;
 extern BOOL WriteRxWav;
+extern BOOL WriteTxWav;
 extern BOOL TwoToneAndExit;
 extern char DecodeWav[256];
 extern int WavNow;  // Time since start of WAV file being decoded
@@ -125,6 +126,8 @@ char LogName[3][256] = {"ARDOPDebug", "ARDOPException", "ARDOPSession"};
 
 FILE *statslogfile = NULL;
 struct WavFile *rxwf = NULL;
+struct WavFile *txwff = NULL;
+struct WavFile *txwfu = NULL;
 #define RXWFTAILMS 10000;  // 10 seconds
 unsigned int rxwf_EndNow = 0;
 
@@ -184,6 +187,60 @@ void StartRxWav()
 	rxwf = OpenWavW(rxwf_pathname);
 	extendRxwf();
 }
+
+void StartTxWav()
+{
+	// Open two new WAV files for filtered and unfiltered Tx audio.
+	//
+	// Wav files will use a filename that includes port, UTC date, 
+	// and UTC time, similar to log files but with added time to 
+	// the nearest second.  Like Log files, these Wav files will be 
+	// written to the Log directory if defined, else to the current 
+	// directory
+	char txwff_pathname[1024];
+	char txwfu_pathname[1024];
+
+	if (txwff != NULL || txwfu != NULL)
+	{
+		WriteDebugLog(LOGWARNING, "WARNING: Trying to open Tx WAV file, but already open.");
+		return;
+	}
+	struct tm * tm;
+	time_t T;
+
+	T = time(NULL);
+	tm = gmtime(&T);
+
+	struct timespec tp;
+	int ss, hh, mm;
+	clock_gettime(CLOCK_REALTIME, &tp);
+	ss = tp.tv_sec % 86400;  // Seconds in a day
+	hh = ss / 3600;
+	mm = (ss - (hh * 3600)) / 60;
+	ss = ss % 60;
+
+	if (LogDir[0])
+	{
+		sprintf(txwff_pathname, "%s/ARDOP_txfaudio_%d_%04d%02d%02d_%02d%02d%02d.wav",
+			LogDir, port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
+			hh, mm, ss);
+		sprintf(txwfu_pathname, "%s/ARDOP_txuaudio_%d_%04d%02d%02d_%02d%02d%02d.wav",
+			LogDir, port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
+			hh, mm, ss);
+	}
+	else
+	{
+		sprintf(txwff_pathname, "ARDOP_txfaudio_%d_%04d%02d%02d_%02d:%02d:%02d.wav",
+			port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
+			hh, mm, ss);
+		sprintf(txwfu_pathname, "ARDOP_txuaudio_%d_%04d%02d%02d_%02d:%02d:%02d.wav",
+			port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
+			hh, mm, ss);
+	}
+	txwff = OpenWavW(txwff_pathname);
+	txwfu = OpenWavW(txwfu_pathname);
+}
+
 
 VOID CloseDebugLog()
 {	
@@ -1529,6 +1586,8 @@ short * SendtoCard(short * buf, int n)
 
 	if (playhandle)
 		SoundCardWrite(&buffer[Index][0], n);
+	if (txwff != NULL)
+		WriteWav(&buffer[Index][0], n, txwff);
 
 //	txSleep(10);				// Run buckground while waiting 
 
@@ -1811,6 +1870,16 @@ void SoundFlush()
 		dttNextPlay = Now + intFrameRepeatInterval + extraDelay;
 
 	KeyPTT(FALSE);		 // Unkey the Transmitter
+	if (txwff != NULL)
+	{
+		CloseWav(txwff);
+		txwff = NULL;
+	}
+	if (txwfu != NULL)
+	{
+		CloseWav(txwfu);
+		txwfu = NULL;
+	}
 
 	OpenSoundCapture(SavedCaptureDevice, SavedCaptureRate, strFault);
 	StartCapture();
