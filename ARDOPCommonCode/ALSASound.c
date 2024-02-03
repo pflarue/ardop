@@ -49,7 +49,7 @@ void displayLevel(int max);
 BOOL WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite);
 VOID processargs(int argc, char * argv[]);
 void Send5SecTwoTone();
-void setProtocolMode(char* strMode);
+
 
 int initdisplay();
 
@@ -73,6 +73,8 @@ BOOL UseRightTX = TRUE;
 extern BOOL InitRXO;
 extern BOOL WriteRxWav;
 extern BOOL TwoToneAndExit;
+extern char DecodeWav[256];
+extern int WavNow;  // Time since start of WAV file being decoded
 
 char LogDir[256] = "";
 
@@ -317,6 +319,12 @@ unsigned int getTicks()
 {	
 	struct timespec tp;
 	
+	// When decoding a WAV file, return WavNow, a measure of the offset
+	// in ms from the start of the WAV file.
+	if (DecodeWav[0])
+		return WavNow;
+
+	// Otherwise, return a measure of clock time (also measured in ms).
 	clock_gettime(CLOCK_MONOTONIC, &tp);
 	return (tp.tv_sec - time_start.tv_sec) * 1000 + (tp.tv_nsec - time_start.tv_nsec) / 1000000;
 }
@@ -416,6 +424,12 @@ void main(int argc, char * argv[])
 	setlinebuf(stdout);				// So we can redirect output to file and tail
 
 	Debugprintf("%s Version %s", ProductName, ProductVersion);
+
+	if (DecodeWav[0])
+	{
+		decode_wav();
+		return;
+	}
 
 	if (HostPort[0])
 	{		
@@ -1641,6 +1655,9 @@ int WriteLog(char * msg, int Log)
 	int hh;
 	int mm;
 	int ss;
+	int wavhh;
+	int wavmm;
+	float wavss;
 
 	clock_gettime(CLOCK_REALTIME, &tp);
 	
@@ -1667,8 +1684,21 @@ int WriteLog(char * msg, int Log)
 	mm = (ss - (hh * 3600)) / 60;
 	ss = ss % 60;
 
-	sprintf(timebuf, "%02d:%02d:%02d.%03d ",
-		hh, mm, ss, (int)tp.tv_nsec/1000000);
+	if (DecodeWav[0])
+	{
+		// When decoding a WAV file, include an approximate reference to the time offset
+		// since the start of the WAV file.
+		wavhh = Now/3600000;
+		wavmm = ((Now/1000) - wavhh * 3600) / 60;
+		wavss = (Now % 60000) / 1000.0;
+		sprintf(timebuf, "%02d:%02d:%02d.%03d (WAV %02d:%02d:%05.2f) ",
+			hh, mm, ss, (int)tp.tv_nsec/1000000, wavhh, wavmm, wavss);
+	}
+	else
+	{
+		sprintf(timebuf, "%02d:%02d:%02d.%03d ",
+			hh, mm, ss, (int)tp.tv_nsec/1000000);
+	}
 
 	fputs(timebuf, logfile[Log]);
 	fputs(msg, logfile[Log]);

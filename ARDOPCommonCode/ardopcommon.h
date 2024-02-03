@@ -229,6 +229,7 @@ BOOL GetNextFECFrame();
 void GenerateFSKTemplates();
 void printtick(char * msg);
 void InitValidFrameTypes();
+void setProtocolMode(char* strMode);
 //#endif
 
 extern void Generate50BaudTwoToneLeaderTemplate();
@@ -587,3 +588,6 @@ BOOL EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, enum _A
 #define PTTHAMLIB	16
 
 #endif
+
+int decode_wav();
+

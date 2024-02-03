@@ -144,6 +144,8 @@ extern int useHamLib;
 
 #define TARGET_RESOLUTION 1         // 1-millisecond target resolution
 
+extern int WavNow;  // Time since start of WAV file being decoded
+extern char DecodeWav[256];
 extern BOOL WriteRxWav;
 extern BOOL TwoToneAndExit;
 struct WavFile *rxwf = NULL;
@@ -304,6 +306,12 @@ void main(int argc, char * argv[])
 
 	WriteDebugLog(LOGALERT, "%s Version %s", ProductName, ProductVersion);
 
+	if (DecodeWav[0])
+	{
+		decode_wav();
+		return;
+	}
+
 	if (HostPort[0])
 	{		
 		char *pkt = strlop(HostPort, '/');
@@ -426,6 +434,11 @@ void main(int argc, char * argv[])
 
 unsigned int getTicks()
 {
+	// When decoding a WAV file, return WavNow, a measure of the offset
+	// in ms from the start of the WAV file.
+	if (DecodeWav[0])
+		return WavNow;
+
 	return timeGetTime();
 //		QueryPerformanceCounter(&NewTicks);
 //		return (int)(NewTicks.QuadPart - StartTicks.QuadPart) / Frequency.QuadPart;
@@ -730,6 +743,9 @@ VOID WriteDebugLog(int LogLevel, const char * format, ...)
 	char timebuf[128];
 	UCHAR Value[100];
 	SYSTEMTIME st;
+	int wavhh;
+	int wavmm;
+	float wavss;
 
 	
 	va_start(arglist, format);
@@ -766,8 +782,22 @@ VOID WriteDebugLog(int LogLevel, const char * format, ...)
 		if ((logfile[0] = fopen(Value, "ab")) == NULL)
 			return;
 	}
-	sprintf(timebuf, "%02d:%02d:%02d.%03d ",
-		st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+	if (DecodeWav[0])
+	{
+		// When decoding a WAV file, include an approximate reference to the time offset
+		// since the start of the WAV file.
+		wavhh = Now/3600000;
+		wavmm = ((Now/1000) - wavhh * 3600) / 60;
+		wavss = (Now % 60000) / 1000.0;
+		sprintf(timebuf, "%02d:%02d:%02d.%03d (WAV %02d:%02d:%05.2f) ",
+			st.wHour, st.wMinute, st.wSecond, st.wMilliseconds, 
+			wavhh, wavmm, wavss);
+	}
+	else
+	{
+		sprintf(timebuf, "%02d:%02d:%02d.%03d ",
+			st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+	}
 
 	fputs(timebuf, logfile[0]);
 

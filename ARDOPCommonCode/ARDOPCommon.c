@@ -46,6 +46,7 @@ const char ProductVersion[] = "2.0.3.2-pflarue-3";
 #include <ctype.h>
 
 #include "ardopcommon.h"
+#include "wav.h"
 #include "getopt.h"
 
 extern int gotGPIO;
@@ -80,6 +81,7 @@ int TrailerLength = 20;
 BOOL InitRXO = FALSE;
 BOOL WriteRxWav = FALSE;
 BOOL TwoToneAndExit = FALSE;
+char DecodeWav[256] = "";			// Pathname of WAV file to decode.
 
 int PTTMode = PTTRTS;				// PTT Control Flags.
 
@@ -160,6 +162,7 @@ static struct option long_options[] =
 	{"trailerlength",  required_argument, 0 , 't'},
 	{"receive", no_argument, 0, 'r'},
 	{"writewav",  no_argument, 0, 'w'},
+	{"decodewav",  required_argument, 0, 'W'},
 	{"twotone", no_argument, 0, 'n'},
 	{"help",  no_argument, 0 , 'h'},
 	{ NULL , no_argument , NULL , no_argument }
@@ -177,26 +180,27 @@ char HelpScreen[] =
 	"  On Linux the program will create a pty and symlink it to the specified name.\n"
 	"\n"
 	"Optional Paramters\n"
-	"-l path or --logdir path          Path for log files\n"
-	"-c device or --cat device         Device to use for CAT Control\n"
-	"-p device or --ptt device         Device to use for PTT control using RTS\n"
+	"-l path or --logdir path             Path for log files\n"
+	"-c device or --cat device            Device to use for CAT Control\n"
+	"-p device or --ptt device            Device to use for PTT control using RTS\n"
 #ifdef LINBPQ
-	"                                  or CM108-like Device to use for PTT\n"
+	"                                     or CM108-like Device to use for PTT\n"
 #else
-	"                                  or VID:PID of CM108-like Device to use for PTT\n"
+	"                                     or VID:PID of CM108-like Device to use for PTT\n"
 #endif
-	"-g [Pin]                          GPIO pin to use for PTT (ARM Only)\n"
-	"                                  Default 17. use -Pin to invert PTT state\n"
-	"-k string or --keystring string   String (In HEX) to send to the radio to key PTT\n"
-	"-u string or --unkeystring string String (In HEX) to send to the radio to unkeykey PTT\n"
+	"-g [Pin]                             GPIO pin to use for PTT (ARM Only)\n"
+	"                                     Default 17. use -Pin to invert PTT state\n"
+	"-k string or --keystring string      String (In HEX) to send to the radio to key PTT\n"
+	"-u string or --unkeystring string    String (In HEX) to send to the radio to unkeykey PTT\n"
 	"-L use Left Channel of Soundcard for receive in stereo mode\n"
 	"-R use Right Channel of Soundcard for receive in stereo mode\n"
-	"-e val or --extradelay val        Extend no response timeot for use on paths with long delay\n"
-	"--leaderlength val                Sets Leader Length (mS)\n"
-	"--trailerlength val               Sets Trailer Length (mS)\n"
-	"-r or --receiveonly               Start in RXO (receive only) mode.\n"
-	"-w or --writewav                  Write WAV files of received audio for debugging.\n"
-	"-n or --twotone                   Send a 5 second two tone signal and exit.\n"
+	"-e val or --extradelay val           Extend no response timeout for use on paths with long delay\n"
+	"--leaderlength val                   Sets Leader Length (mS)\n"
+	"--trailerlength val                  Sets Trailer Length (mS)\n"
+	"-r or --receiveonly                  Start in RXO (receive only) mode.\n"
+	"-w or --writewav                     Write WAV files of received audio for debugging.\n"
+	"-W pathname or --decodewav pathname  Pathname of WAV file to decode instead of listening.\n"
+	"-n or --twotone                      Send a 5 second two tone signal and exit.\n"
 	"\n"
 	" CAT and RTS PTT can share the same port.\n"
 	" See the ardop documentation for more information on cat and ptt options\n"
@@ -213,7 +217,7 @@ void processargs(int argc, char * argv[])
 	{		
 		int option_index = 0;
 
-		c = getopt_long(argc, argv, "l:c:p:g::k:u:e:hLRytrzwn", long_options, &option_index);
+		c = getopt_long(argc, argv, "l:c:p:g::k:u:e:hLRytrzwW:n", long_options, &option_index);
 
 		// Check for end of operation or error
 		if (c == -1)
@@ -346,6 +350,10 @@ void processargs(int argc, char * argv[])
 
 		case 'w':
 			WriteRxWav = TRUE;
+			break;
+
+		case 'W':
+			strcpy(DecodeWav, optarg);
 			break;
 
 		case 'n':
@@ -1000,3 +1008,93 @@ void DecodeCM108(char * ptr)
 }
 
 #endif
+
+// When decoding a WAV file, WavNow will be set to the offset from the
+// start of that file to the end of the data about to be passed to
+// ProcessNewSamples() in ms.  Thus, it serves as a proxy for Now()
+// which is otherwise based on clock time.  This substitution occurs
+// in getTicks() in ALSASound.c or Waveout.c.
+int WavNow;
+
+int decode_wav()
+{
+	FILE *wavf;
+	unsigned char wavHead[44];
+	size_t readCount;
+	const char headStr[5] = "RIFF";
+	unsigned int nSamples;
+	int sampleRate;
+	short samples[1024];
+	const unsigned int blocksize = 240;  // Number of 16-bit samples to read at a time
+	WavNow = 0;
+
+	// Regardless of whether this was set with a command line argument, proceed in
+	// RXO (receive only) protocol mode.  During normal operation, this is set
+	// in ardopmain(), which is not used when decoding a WAV file.
+	setProtocolMode("RXO");
+
+	WriteDebugLog(LOGINFO, "Decoding WAV file %s.", DecodeWav);
+	wavf = fopen(DecodeWav, "rb");
+	if (wavf == NULL)
+	{
+		WriteDebugLog(LOGERROR, "Unable to open WAV file %s.", DecodeWav);
+		return 1;
+	}
+	readCount = fread(wavHead, 1, 44, wavf);
+	if (readCount != 44)
+	{
+		WriteDebugLog(LOGERROR, "Error reading WAV file header.");
+		return 2;
+	}
+	if (memcmp(wavHead, headStr, 4) != 0)
+	{
+		WriteDebugLog(LOGERROR, "%s is not a valid WAV file. 0x%x %x %x %x != 0x%x %x %x %x",
+					DecodeWav, wavHead[0], wavHead[1], wavHead[2], wavHead[3],
+					headStr[0], headStr[1], headStr[2], headStr[3]);
+		return 3;
+	}
+	if (wavHead[20] != 0x01)
+	{
+		WriteDebugLog(LOGERROR, "Unexpected WAVE type.");
+		return 4;
+	}
+	if (wavHead[22] != 0x01)
+	{
+		WriteDebugLog(LOGERROR, "Expected single channel WAV.  Consider converting it with SoX.");
+		return 7;
+	}
+	sampleRate = wavHead[24] + (wavHead[25] << 8) + (wavHead[26] << 16) + (wavHead[27] << 24);
+	if (sampleRate != 12000)
+	{
+		WriteDebugLog(LOGERROR, "Expected 12kHz sample rate but found %d Hz.  Consider converting it with SoX.", sampleRate);
+		return 8;
+	}
+
+	nSamples = (wavHead[40] + (wavHead[41] << 8) + (wavHead[42] << 16) + (wavHead[43] << 24)) / 2;
+	WriteDebugLog(LOGDEBUG, "Reading %d 16-bit samples.", nSamples);
+	while (nSamples >= blocksize)
+	{
+		readCount = fread(samples, 2, blocksize, wavf);
+		if (readCount != blocksize)
+		{
+			WriteDebugLog(LOGERROR, "Premature end of data while reading WAV file.");
+			return 5;
+		}
+		WavNow += blocksize * 1000 / 12000;
+		ProcessNewSamples(samples, blocksize);
+		nSamples -= blocksize;
+	}
+	readCount = fread(samples, 2, nSamples, wavf);
+	if (readCount != nSamples)
+	{
+		WriteDebugLog(LOGERROR, "Premature end of data while reading WAV file.");
+		return 6;
+	}
+	WavNow += nSamples * 1000 / 12000;
+	ProcessNewSamples(samples, nSamples);
+	nSamples = 0;
+
+	fclose(wavf);
+	WriteDebugLog(LOGDEBUG, "Done decoding %s.", DecodeWav);
+	return 0;
+}
