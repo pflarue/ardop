@@ -46,6 +46,8 @@ unsigned int getTicks();
 #define LOGDEBUG 7
 #define LOGDEBUGPLUS 8
 
+extern const char strLogLevels[9][13];
+
 #include <time.h>
 
 #include <stdio.h>
@@ -388,8 +390,8 @@ extern BOOL AccumulateStats;
 extern BOOL Use600Modes;
 extern BOOL FSKOnly;
 extern BOOL fastStart;
-extern BOOL ConsoleLogLevel;
-extern BOOL FileLogLevel;
+extern int ConsoleLogLevel;
+extern int FileLogLevel;
 extern BOOL EnablePingAck;
 
 extern int dttLastPINGSent;

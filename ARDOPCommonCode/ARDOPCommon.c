@@ -49,6 +49,19 @@ const char ProductVersion[] = "2.0.3.2-pflarue-3";
 #include "wav.h"
 #include "getopt.h"
 
+const char strLogLevels[9][13] =
+{
+	"LOGEMERGENCY", 
+	"LOGALERT",
+	"LOGCRIT",
+	"LOGERROR",
+	"LOGWARNING",
+	"LOGNOTICE",
+	"LOGINFO",
+	"LOGDEBUG",
+	"LOGDEBUGPLUS"
+};
+
 extern int gotGPIO;
 extern int useGPIO;
 
@@ -155,6 +168,8 @@ extern char LogDir[256];
 static struct option long_options[] =
 {
 	{"logdir",  required_argument, 0 , 'l'},
+	{"verboselog",  required_argument, 0 , 'v'},
+	{"verboseconsole",  required_argument, 0 , 'V'},
 	{"ptt",  required_argument, 0 , 'p'},
 	{"cat",  required_argument, 0 , 'c'},
 	{"keystring",  required_argument, 0 , 'k'},
@@ -184,6 +199,8 @@ char HelpScreen[] =
 	"\n"
 	"Optional Paramters\n"
 	"-l path or --logdir path             Path for log files\n"
+	"-v path or --verboselog val          Increase (decr for val<0) file log level from default.\n"
+	"-V path or --verboseconsole val      Increase (decr for val<0) console log level from default.\n"
 	"-c device or --cat device            Device to use for CAT Control\n"
 	"-p device or --ptt device            Device to use for PTT control using RTS\n"
 #ifdef LINBPQ
@@ -222,7 +239,7 @@ void processargs(int argc, char * argv[])
 	{		
 		int option_index = 0;
 
-		c = getopt_long(argc, argv, "l:c:p:g::k:u:e:hLRytrzwTW:ns", long_options, &option_index);
+		c = getopt_long(argc, argv, "l:v:V:c:p:g::k:u:e:hLRytrzwTW:ns", long_options, &option_index);
 
 		// Check for end of operation or error
 		if (c == -1)
@@ -241,6 +258,21 @@ void processargs(int argc, char * argv[])
 			strcpy(LogDir, optarg);
 			break;
 
+		case 'v':
+			FileLogLevel += atoi(optarg);
+			if (FileLogLevel > LOGDEBUGPLUS)
+				FileLogLevel = LOGDEBUGPLUS;
+			else if (FileLogLevel < LOGEMERGENCY)
+				FileLogLevel = LOGEMERGENCY;
+			break;
+
+		case 'V':
+			ConsoleLogLevel += atoi(optarg);
+			if (ConsoleLogLevel > LOGDEBUGPLUS)
+				ConsoleLogLevel = LOGDEBUGPLUS;
+			else if (ConsoleLogLevel < LOGEMERGENCY)
+				ConsoleLogLevel = LOGEMERGENCY;
+			break;
 			
 		case 'g':
 			if (optarg)

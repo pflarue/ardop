@@ -5,6 +5,9 @@
 extern UCHAR bytSessionID;
 extern UCHAR bytFrameData1[760];
 
+// Use of RXO is assumed to indicate that the user is interested in observing all received traffic.
+// So LOGINFO, rather than a higher log level such as LOGDEBUG, is used for most positive results.
+
 // Function to compute the "distance" from a specific bytFrame Xored by bytID using 1 symbol parity 
 // The tones representing the Frame Type include two parity symbols which should be identical, and
 // should match ComputeTypeParity(bytFrameType).  For RXO mode, the SessionID is unknown/unreliable,
@@ -95,7 +98,7 @@ BOOL RxoDecodeSessionID(UCHAR bytFrameType, int * intToneMags, float dblMaxDista
 				bytID, dblDistance, dblMaxDistance, bytSessionID);		
 	return TRUE;
 	}
-	WriteDebugLog(LOGDEBUG, "[RXO DecodeSessionID OK  ] Decoded ID=H%02X Dist=%.2f (%.2f Max). (Prior ID=H%02X)", 
+	WriteDebugLog(LOGINFO, "[RXO DecodeSessionID OK  ] Decoded ID=H%02X Dist=%.2f (%.2f Max). (Prior ID=H%02X)", 
 			bytID, dblDistance, dblMaxDistance, bytSessionID);	
 	bytSessionID = bytID;
 	return TRUE;
@@ -123,7 +126,7 @@ int RxoMinimalDistanceFrameType(int * intToneMags)
 	if (dblMinDistance < 0.3)
 	{
 		// Decode of Frame Type is Good independent of bytSessionID
-		WriteDebugLog(LOGDEBUG, "[Frame Type Decode OK  ] H%02X:%s", bytIatMinDistance, Name(bytIatMinDistance));
+		WriteDebugLog(LOGINFO, "[Frame Type Decode OK  ] H%02X:%s", bytIatMinDistance, Name(bytIatMinDistance));
 
 		// Only update bytSessionID if the decode distance is nearly as good as the 
 		// decode distance for the Frame Type.  Recall that the two parity tones and 
@@ -156,26 +159,26 @@ void ProcessRXOFrame(UCHAR bytFrameType, int frameLen, UCHAR * bytData, BOOL bln
 		if (bytFrameType >= 0x31 && bytFrameType <= 0x38)
 		{
 			// Is there a reason why frameLen is not defined for ConReq?
-			WriteDebugLog(LOGDEBUG, "    [RXO %02X] ConReq data is callerID targetID", bytSessionID);
+			WriteDebugLog(LOGINFO, "    [RXO %02X] ConReq data is callerID targetID", bytSessionID);
 			frameLen = strlen((char*) bytData);
 		}
 		else if (bytFrameType >= 0x39 && bytFrameType <= 0x3C)
 		{
-			WriteDebugLog(LOGDEBUG, "    [RXO %02X] ConAck data is the length (in tens of ms) of the received leader repeated 3 times: %d %d %d",
+			WriteDebugLog(LOGINFO, "    [RXO %02X] ConAck data is the length (in tens of ms) of the received leader repeated 3 times: %d %d %d",
 				bytSessionID, bytFrameData1[0], bytFrameData1[1], bytFrameData1[2]);
 		}
 		else if (bytFrameType >= 0xE0)
 		{
-			WriteDebugLog(LOGDEBUG, "    [RXO %02X] DataAck FrameType (0x%02X) indicates decode quality (%d/100). 60+ typically required for decoding.",
+			WriteDebugLog(LOGINFO, "    [RXO %02X] DataAck FrameType (0x%02X) indicates decode quality (%d/100). 60+ typically required for decoding.",
 				bytSessionID, bytFrameType, 38 + (2 * (bytFrameType & 0x1F)));
 		}
 		else if (bytFrameType <= 0x1F)
 		{
-			WriteDebugLog(LOGDEBUG, "    [RXO %02X] DataNak FrameType (0x%02X) indicates decode quality (%d/100). 60+ typically required for decoding.",
+			WriteDebugLog(LOGINFO, "    [RXO %02X] DataNak FrameType (0x%02X) indicates decode quality (%d/100). 60+ typically required for decoding.",
 				bytSessionID, bytFrameType, 38 + (2 * (bytFrameType & 0x1F)));
 		}
 
-		WriteDebugLog(LOGDEBUG, "    [RXO %02X] %s frame received OK.  frameLen = %d", 
+		WriteDebugLog(LOGINFO, "    [RXO %02X] %s frame received OK.  frameLen = %d", 
 				bytSessionID, Name(bytFrameType), frameLen);
 		bytData[frameLen] = 0;
 		if (frameLen > 0)
@@ -187,7 +190,7 @@ void ProcessRXOFrame(UCHAR bytFrameType, int frameLen, UCHAR * bytData, BOOL bln
 				sprintf(strMsg + intMsgLen, "%02X ", bytData[i]);
 				intMsgLen += 3;
 			}
-			WriteDebugLog(LOGDEBUG, "%s", strMsg);
+			WriteDebugLog(LOGINFO, "%s", strMsg);
 			notUtf8 = utf8_check(bytData);
 			if (notUtf8 == NULL)
 			{
@@ -196,10 +199,10 @@ void ProcessRXOFrame(UCHAR bytFrameType, int frameLen, UCHAR * bytData, BOOL bln
 					if (bytData[i] == 0x0D && bytData[i + 1] != 0x0A)
 						bytData[i] = 0x0A;
 				}
-				WriteDebugLog(LOGDEBUG, "    [RXO %02X] %d bytes of data as UTF-8 text:\n%s", bytSessionID, frameLen, bytData);
+				WriteDebugLog(LOGINFO, "    [RXO %02X] %d bytes of data as UTF-8 text:\n%s", bytSessionID, frameLen, bytData);
 			}
 			else
-				WriteDebugLog(LOGDEBUG, "    [RXO %02X] Data does not appear to be valid UTF-8 text.", bytSessionID);			
+				WriteDebugLog(LOGINFO, "    [RXO %02X] Data does not appear to be valid UTF-8 text.", bytSessionID);			
 		}
 		sprintf(strMsg, "STATUS [RXO %02X] %s frame received OK.", bytSessionID, Name(bytFrameType));
 		SendCommandToHost(strMsg);

@@ -1097,13 +1097,13 @@ void ProcessNewSamples(short * Samples, int nSamples)
 				
 					txSleep(250);
 
-					WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.ProcessNewSamples] ProtocolState=IRStoISS, substate = %s ACK received. Cease BREAKS, NewProtocolState=ISS, substate ISSData", ARQSubStates[ARQState]);
+					WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessNewSamples] ProtocolState=IRStoISS, substate = %s ACK received. Cease BREAKS, NewProtocolState=ISS, substate ISSData", ARQSubStates[ARQState]);
 					blnEnbARQRpt = FALSE;	// stop the BREAK repeats
 					intLastARQDataFrameToHost = -1; // initialize to illegal value to capture first new ISS frame and pass to host
 
 					if (bytCurrentFrameType == 0) //  hasn't been initialized yet
 					{
-						WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.ProcessNewSamples, ProtocolState=IRStoISS, Initializing GetNextFrameData");
+						WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessNewSamples, ProtocolState=IRStoISS, Initializing GetNextFrameData");
 		   				GetNextFrameData(&intShiftUpDn, 0, "", TRUE); // just sets the initial data, frame type, and sets intShiftUpDn= 0
 					}
 
@@ -1120,7 +1120,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 				ClearAllMixedSamples();
 				State = SearchingForLeader;
 				blnFrameDecodedOK = TRUE;
-				WriteDebugLog(LOGDEBUG, "[DecodeFrame] Frame: %s ", Name(intFrameType));
+				WriteDebugLog(LOGINFO, "[DecodeFrame] Frame: %s ", Name(intFrameType));
 
 				DecodeCompleteTime = Now;
 
@@ -3574,7 +3574,7 @@ BOOL Decode4FSKID(UCHAR bytFrameType, char * strCallID, char * strGridSquare)
 	unsigned char * p = bytFrameData1;
 
 
-	Debugprintf("%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x  %02x %02x %02x %02x ",
+	WriteDebugLog(LOGDEBUG, "%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x  %02x %02x %02x %02x ",
 		p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15]);
 
 
@@ -4143,7 +4143,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 				intNumCar = pktNumCar;
 				PSKInitDone = 0;
 
-				WriteDebugLog(6, "Pkt Frame Header Type %s Len %d", strMod, Len);
+				WriteDebugLog(LOGINFO, "Pkt Frame Header Type %s Len %d", strMod, Len);
 				strlop(strMod, '/');
 				blnDecodeOK = TRUE;
 

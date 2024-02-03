@@ -415,7 +415,7 @@ void ProcessCommandFromHost(char * strCMD)
 		{
 			i = atoi(ptrParams);
 
-			if (i >= LOGEMERGENCY  && i <= LOGDEBUG)
+			if (i >= LOGEMERGENCY  && i <= LOGDEBUGPLUS)
 			{
 				ConsoleLogLevel = i;
 				sprintf(cmdReply, "%s now %d", strCMD, ConsoleLogLevel);
@@ -860,7 +860,7 @@ void ProcessCommandFromHost(char * strCMD)
 		{
 			i = atoi(ptrParams);
 
-			if (i >= LOGEMERGENCY  && i <= LOGDEBUG)
+			if (i >= LOGEMERGENCY  && i <= LOGDEBUGPLUS)
 			{
 				FileLogLevel = i;
 				sprintf(cmdReply, "%s now %d", strCMD, FileLogLevel);
