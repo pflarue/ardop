@@ -11,7 +11,7 @@ extern const char ProductVersion[];
 //	Sound interface buffer size
 
 #define SendSize 1200		// 100 mS for now
-#define ReceiveSize 512	// Must be 1024 for FFT (or we will need torepack frames)
+// #define ReceiveSize 512	// Must be 1024 for FFT (or we will need torepack frames)
 #define NumberofinBuffers 4
 
 // Host to TNC Buffer Size
@@ -377,7 +377,8 @@ enum _ProtocolMode
 {
 	Undef,
 	FEC,
-	ARQ
+	ARQ,
+	RXO  // Receive Only.  Decode all possible frames while recovering SessionID.  ProtocolState should always be DISC
 };
 
 extern enum _ProtocolMode ProtocolMode;

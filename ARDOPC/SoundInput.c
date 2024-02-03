@@ -7,6 +7,7 @@
 #endif
 
 #include "ARDOPC.h"
+#include "RXO.h"
 
 #pragma warning(disable : 4244)		// Code does lots of float to int
 
@@ -1072,6 +1073,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			if (IsShortControlFrame(intFrameType))
 			{
 				// Frame has no data so is now complete
+				frameLen = 0;
 
 				// See if IRStoISS shortcut can be invoked
 
@@ -1356,6 +1358,10 @@ ProcessFrame:
 					// Drop through
 				}
 			}				
+			else if (ProtocolMode == RXO)
+			{
+				ProcessRXOFrame(intFrameType, frameLen, bytData, TRUE);
+			}
 			else if (ProtocolMode == ARQ)
 			{
 				if (!blnTimeoutTriggered)
@@ -1401,6 +1407,10 @@ ProcessFrame:
 				else if (intFrameType == 0x30)
 					AddTagToDataAndSendToHost(bytData, "ERR", frameLen);
 			}				
+			else if (ProtocolMode == RXO)
+			{
+				ProcessRXOFrame(intFrameType, frameLen, bytData, FALSE);
+			}
 			else if (ProtocolMode == ARQ)
 			{
 				if (ProtocolState == DISC)		  // allows ARQ mode to operate like FEC when not connected
@@ -2408,7 +2418,9 @@ int Acquire4FSKFrameType()
 
 	// Now do check received  Tone array for testing minimum distance decoder
 
-	if (blnPending)			// If we have a pending connection (btween the IRS first decode of ConReq until it receives a ConAck from the iSS)  
+	if (ProtocolMode == RXO)  // bytSessionID is uncertain, but alternatives will be tried if unsuccessful.
+		NewType = RxoMinimalDistanceFrameType(&intToneMags[0][0]);
+	else if (blnPending)			// If we have a pending connection (btween the IRS first decode of ConReq until it receives a ConAck from the iSS)
 		NewType = MinimalDistanceFrameType(&intToneMags[0][0], bytPendingSessionID);		 // The pending session ID will become the session ID once connected) 
 	else if (blnARQConnected)		// If we are connected then just use the stcConnection.bytSessionID
 		NewType = MinimalDistanceFrameType(&intToneMags[0][0], bytSessionID);

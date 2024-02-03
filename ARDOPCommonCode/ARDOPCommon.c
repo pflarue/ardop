@@ -77,6 +77,7 @@ extern char PlaybackDevice[80];
 int extraDelay = 0;				// Used for long delay paths eg Satellite
 int	intARQDefaultDlyMs = 240;
 int TrailerLength = 20;
+BOOL InitRXO = FALSE;
 BOOL WriteRxWav = FALSE;
 BOOL TwoToneAndExit = FALSE;
 
@@ -157,6 +158,7 @@ static struct option long_options[] =
 	{"extradelay",  required_argument, 0 , 'e'},
 	{"leaderlength",  required_argument, 0 , 'x'},
 	{"trailerlength",  required_argument, 0 , 't'},
+	{"receive", no_argument, 0, 'r'},
 	{"writewav",  no_argument, 0, 'w'},
 	{"twotone", no_argument, 0, 'n'},
 	{"help",  no_argument, 0 , 'h'},
@@ -192,6 +194,7 @@ char HelpScreen[] =
 	"-e val or --extradelay val        Extend no response timeot for use on paths with long delay\n"
 	"--leaderlength val                Sets Leader Length (mS)\n"
 	"--trailerlength val               Sets Trailer Length (mS)\n"
+	"-r or --receiveonly               Start in RXO (receive only) mode.\n"
 	"-w or --writewav                  Write WAV files of received audio for debugging.\n"
 	"-n or --twotone                   Send a 5 second two tone signal and exit.\n"
 	"\n"
@@ -210,7 +213,7 @@ void processargs(int argc, char * argv[])
 	{		
 		int option_index = 0;
 
-		c = getopt_long(argc, argv, "l:c:p:g::k:u:e:hLRytzwn", long_options, &option_index);
+		c = getopt_long(argc, argv, "l:c:p:g::k:u:e:hLRytrzwn", long_options, &option_index);
 
 		// Check for end of operation or error
 		if (c == -1)
@@ -335,6 +338,10 @@ void processargs(int argc, char * argv[])
 
 		case 't':
 			TrailerLength = atoi(optarg);
+			break;
+
+		case 'r':
+			InitRXO = TRUE;
 			break;
 
 		case 'w':

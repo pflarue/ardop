@@ -49,6 +49,7 @@ void displayLevel(int max);
 BOOL WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite);
 VOID processargs(int argc, char * argv[]);
 void Send5SecTwoTone();
+void setProtocolMode(char* strMode);
 
 int initdisplay();
 
@@ -69,6 +70,7 @@ BOOL UseRightRX = TRUE;
 BOOL UseLeftTX = TRUE;
 BOOL UseRightTX = TRUE;
 
+extern BOOL InitRXO;
 extern BOOL WriteRxWav;
 extern BOOL TwoToneAndExit;
 

@@ -221,6 +221,7 @@ BOOL blnCodecStarted = FALSE;
 
 unsigned int dttNextPlay = 0;
 
+extern BOOL InitRXO;
 
 const UCHAR bytValidFrameTypesALL[]=
 {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
@@ -747,7 +748,31 @@ void testRS()
 	FrameOK = RSDecode(bytRawData, DataLen, intRSLen, &blnRSOK);
 }
 
-
+void setProtocolMode(char* strMode)
+{
+	if (strcmp(strMode, "ARQ") == 0)
+	{
+		WriteDebugLog(LOGINFO, "Setting ProtocolMode to ARQ.");
+		ProtocolMode = ARQ;
+	}
+	else
+	if (strcmp(strMode, "RXO") == 0)
+	{
+		WriteDebugLog(LOGINFO, "Setting ProtocolMode to RXO.");
+		ProtocolMode = RXO;
+	}
+	else
+	if (strcmp(strMode, "FEC") == 0)
+	{
+		WriteDebugLog(LOGINFO, "Setting ProtocolMode to FEC.");
+		ProtocolMode = FEC;
+	}
+	else
+	{
+		WriteDebugLog(LOGWARNING, "WARNING: Invalid argument to setProtocolMode.  %s given, but expected one of ARQ, RXO, or FEC.  Setting ProtocolMode to ARQ as a default.", strMode);
+		ProtocolMode = ARQ;
+	}
+}
 
 void ardopmain()
 {
@@ -773,17 +798,23 @@ void ardopmain()
 
 	tmrPollOBQueue = Now + 10000;
 
-	ProtocolMode = ARQ;
+	if (InitRXO)
+		setProtocolMode("RXO");
+	else
+		setProtocolMode("ARQ");
 
 	while(!blnClosing)
 	{
 		PollReceivedSamples();
-		CheckTimers();	
-		if (SerialMode)
-			SerialHostPoll();
-		else
-			TCPHostPoll();
-		MainPoll();
+		if (ProtocolMode != RXO)
+		{
+			CheckTimers();
+			if (SerialMode)
+				SerialHostPoll();
+			else
+				TCPHostPoll();
+			MainPoll();
+		}
 		PlatformSleep(10);
 	}
 

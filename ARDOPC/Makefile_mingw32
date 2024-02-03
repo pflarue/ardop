@@ -2,7 +2,7 @@
 
 OBJS = ARDOPCommon.o WinSerial.o KISSModule.o pktARDOP.o pktSession.o BusyDetect.o Waveout.o \
 ARDOPC.o ardopSampleArrays.o ARQ.o FFT.o FEC.o HostInterface.o Modulate.o rs.o \
-berlekamp.o galois.o SoundInput.o TCPHostInterface.o SCSHostInterface.o hid.o wav.o
+berlekamp.o galois.o SoundInput.o TCPHostInterface.o SCSHostInterface.o hid.o wav.o RXO.o
 
 # Configuration:
 CFLAGS = -DLINBPQ -MMD -g 
