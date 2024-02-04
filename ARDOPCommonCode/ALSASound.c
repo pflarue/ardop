@@ -481,6 +481,8 @@ void main(int argc, char * argv[])
 	setlinebuf(stdout);				// So we can redirect output to file and tail
 
 	Debugprintf("%s Version %s", ProductName, ProductVersion);
+	Debugprintf("ConsoleLogLevel = %d (%s)", ConsoleLogLevel, strLogLevels[ConsoleLogLevel]);
+	Debugprintf("FileLogLevel = %d (%s)", FileLogLevel, strLogLevels[FileLogLevel]);
 
 	if (DecodeWav[0])
 	{
@@ -1654,7 +1656,7 @@ void PollReceivedSamples()
 				sprintf(HostCmd, "INPUTPEAKS %d %d", min, max);
 				SendCommandToHostQuiet(HostCmd);
 
-				WriteDebugLog(LOGDEBUG, "Input peaks = %d, %d", min, max);
+				WriteDebugLog(LOGINFO, "Input peaks = %d, %d", min, max);
 			}
 			min = max = 0;							// Every 2 secs
 		}
@@ -1814,7 +1816,7 @@ void SoundFlush()
 
 	txlenMs = SampleNo / 12 + 20;		// 12000 samples per sec. 20 mS TXTAIL
 
-	Debugprintf("Tx Time %d Time till end = %d", txlenMs, (pttOnTime + txlenMs) - Now);
+	WriteDebugLog(LOGDEBUG, "Tx Time %d Time till end = %d", txlenMs, (pttOnTime + txlenMs) - Now);
 
 	while (Now < (pttOnTime + txlenMs))
 	{

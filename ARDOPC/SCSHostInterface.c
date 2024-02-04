@@ -1141,7 +1141,7 @@ VOID ProcessSCSTextCommand(char * Command, int Len)
 		PutString("\r\nOK");
 		PTCMode = FALSE;
 		blnListen = TRUE;
-		ConsoleLogLevel = 6;
+		ConsoleLogLevel = LOGINFO;
 		WriteDebugLog(LOGINFO, "ARDOP Native Mode");
 	}
 

@@ -375,6 +375,8 @@ void main(int argc, char * argv[])
 	}
 
 	WriteDebugLog(LOGALERT, "%s Version %s", ProductName, ProductVersion);
+	WriteDebugLog(LOGALERT, "ConsoleLogLevel = %d (%s)", ConsoleLogLevel, strLogLevels[ConsoleLogLevel]);
+	WriteDebugLog(LOGALERT, "FileLogLevel = %d (%s)", FileLogLevel, strLogLevels[FileLogLevel]);
 
 	if (DecodeWav[0])
 	{
@@ -739,7 +741,7 @@ void PollReceivedSamples()
 				lastlevelreport = Now;
 
 				sprintf(HostCmd, "INPUTPEAKS %d %d", min, max);
-				WriteDebugLog(LOGDEBUG, "Input peaks = %d, %d", min, max);
+				WriteDebugLog(LOGINFO, "Input peaks = %d, %d", min, max);
 				SendCommandToHostQuiet(HostCmd);
 
 			}
