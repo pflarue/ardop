@@ -146,9 +146,12 @@ extern int useHamLib;
 
 extern int WavNow;  // Time since start of WAV file being decoded
 extern char DecodeWav[256];
+extern BOOL WriteTxWav;
 extern BOOL WriteRxWav;
 extern BOOL TwoToneAndExit;
 struct WavFile *rxwf = NULL;
+struct WavFile *txwff = NULL;
+struct WavFile *txwfu = NULL;
 #define RXWFTAILMS 10000;  // 10 seconds
 unsigned int rxwf_EndNow = 0;
 
@@ -212,6 +215,73 @@ void StartRxWav()
 	
 	rxwf = OpenWavW(rxwf_pathname);
 	extendRxwf();
+}
+
+void StartTxWav()
+{
+	// Open two new WAV files for filtered and unfiltered Tx audio.
+	//
+	// Wav files will use a filename that includes port, UTC date, 
+	// and UTC time, similar to log files but with added time to 
+	// the nearest second.  Like Log files, these Wav files will be 
+	// written to the Log directory if defined, else to the current 
+	// directory
+	char txwff_pathname[1024];
+	char txwfu_pathname[1024];
+	SYSTEMTIME st;
+
+	if (txwff != NULL || txwfu != NULL)
+	{
+		WriteDebugLog(LOGWARNING, "WARNING: Trying to open Tx WAV file, but already open.");
+		return;
+	}
+
+	GetSystemTime(&st);
+
+	if (LogDir[0])
+    {
+        if (HostPort[0])
+        {
+            sprintf(txwff_pathname, "%s/ARDOP_txfaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
+                LogDir, HostPort, st.wYear, st.wMonth, st.wDay,
+                st.wHour, st.wMinute, st.wSecond);
+            sprintf(txwfu_pathname, "%s/ARDOP_txuaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
+                LogDir, HostPort, st.wYear, st.wMonth, st.wDay,
+                st.wHour, st.wMinute, st.wSecond);
+        }
+        else
+        {
+            sprintf(txwff_pathname, "%s/ARDOP_txfaudio_%04d%02d%02d_%02d%02d%02d.wav",
+                LogDir, st.wYear, st.wMonth, st.wDay,
+                st.wHour, st.wMinute, st.wSecond);
+            sprintf(txwfu_pathname, "%s/ARDOP_txuaudio_%04d%02d%02d_%02d%02d%02d.wav",
+                LogDir, st.wYear, st.wMonth, st.wDay,
+                st.wHour, st.wMinute, st.wSecond);
+        }
+    }
+	else
+    {
+        if (HostPort[0])
+        {
+            sprintf(txwff_pathname, "ARDOP_txfaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
+                HostPort, st.wYear, st.wMonth, st.wDay,
+                st.wHour, st.wMinute, st.wSecond);
+            sprintf(txwfu_pathname, "ARDOP_txuaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
+                HostPort, st.wYear, st.wMonth, st.wDay,
+                st.wHour, st.wMinute, st.wSecond);
+        }
+        else
+        {
+            sprintf(txwff_pathname, "ARDOP_txfaudio_%04d%02d%02d_%02d%02d%02d.wav",
+                st.wYear, st.wMonth, st.wDay,
+                st.wHour, st.wMinute, st.wSecond);
+            sprintf(txwfu_pathname, "ARDOP_txuaudio_%04d%02d%02d_%02d%02d%02d.wav",
+                st.wYear, st.wMonth, st.wDay,
+                st.wHour, st.wMinute, st.wSecond);
+        }
+	}
+	txwff = OpenWavW(txwff_pathname);
+	txwfu = OpenWavW(txwfu_pathname);
 }
 
 	
@@ -486,6 +556,9 @@ short * SendtoCard(unsigned short * buf, int n)
 
 	waveOutPrepareHeader(hWaveOut, &header[Index], sizeof(WAVEHDR));
 	waveOutWrite(hWaveOut, &header[Index], sizeof(WAVEHDR));
+
+	if (txwff != NULL)
+		WriteWav(&buffer[Index][0], n, txwff);
 
 	// wait till previous buffer is complete
 
@@ -939,6 +1012,16 @@ void SoundFlush()
 //	WriteDebugLog(LOGDEBUG, "Now %d Now - dttNextPlay 1  = %d", Now, Now - dttNextPlay);
 
 	KeyPTT(FALSE);		 // Unkey the Transmitter
+	if (txwff != NULL)
+	{
+		CloseWav(txwff);
+		txwff = NULL;
+	}
+	if (txwfu != NULL)
+	{
+		CloseWav(txwfu);
+		txwfu = NULL;
+	}
 
 	// Clear the capture buffers. I think this is only  needed when testing
 	// with audio loopback.
