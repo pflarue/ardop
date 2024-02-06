@@ -120,7 +120,7 @@ WAVEINCAPS pwic;
 
 unsigned int RTC = 0;
 
-void InitSound(BOOL Quiet);
+int InitSound(BOOL Quiet);
 void HostPoll();
 void TCPHostPoll();
 void SerialHostPoll();
@@ -501,7 +501,11 @@ void main(int argc, char * argv[])
 
 	if (TwoToneAndExit)
 	{
-		InitSound(TRUE);
+		if (!InitSound(TRUE)
+		{
+			WriteDebugLog(LOGCRIT, "Error in InitSound().  Stopping ardop.");
+			return;
+		}
 		WriteDebugLog(LOGINFO, "Sending a 5 second 2-tone signal. Then exiting ardop.");
 		Send5SecTwoTone();
 		return;
@@ -632,7 +636,7 @@ void GetSoundDevices()
 }
 
 
-void InitSound(BOOL Report)
+int InitSound(BOOL Report)
 {
 	int i, ret;
 
@@ -703,6 +707,7 @@ void InitSound(BOOL Report)
 	}
 
 	ret = waveInStart(hWaveIn);
+	return true;
 }
 
 int min = 0, max = 0, lastlevelGUI = 0, lastlevelreport = 0;

@@ -779,7 +779,11 @@ void ardopmain()
 	blnTimeoutTriggered = FALSE;
 	SetARDOPProtocolState(DISC);
 
-	InitSound();
+	if (!InitSound())
+	{
+		WriteDebugLog(LOGCRIT, "Error in InitSound().  Stopping ardop.");
+		return;
+	}
 
 	if (SerialMode)
 		SerialHostInit();
