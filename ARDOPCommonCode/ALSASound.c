@@ -105,7 +105,7 @@ char PlaybackDevice[80] = "ARDOP";
 char * CaptureDevices = CaptureDevice;
 char * PlaybackDevices = CaptureDevice;
 
-void InitSound();
+int InitSound();
 
 int Ticks;
 
@@ -679,7 +679,11 @@ void main(int argc, char * argv[])
 
 	if (TwoToneAndExit)
 	{
-		InitSound();
+		if (!InitSound())
+		{
+			WriteDebugLog(LOGCRIT, "Error in InitSound().  Stopping ardop.");
+			return;
+		}
 		WriteDebugLog(LOGINFO, "Sending a 5 second 2-tone signal. Then exiting ardop.");
 		Send5SecTwoTone();
 		return;
@@ -1065,12 +1069,15 @@ int GetNextInputDevice(char * dest, int max, int n)
 // OpenSoundPlayback() is executed, then intPeriodTime or periodSize will be
 // set to a suitable non-zero value allowing the fix to be reapplied each
 // additional time OpenSoundPlayback() is executed.
-unsigned int intPeriodTime; // duration of one period in microseconds.
-snd_pcm_uframes_t periodSize;  // number of frames per period
+unsigned int intPeriodTime = 0; // duration of one period in microseconds.
+snd_pcm_uframes_t periodSize = 0;  // number of frames per period
 
 // If ALSA configuration is not valid on first execution of
 // OpenSoundPlayback(), then try to fix it.  If it is invalid
-// after than, return false (fail).
+// after that, ignore it.  In a previous implementation, OpenSoundPlayback()
+// would return false (fail) if the fix did not work.  Now it is ignored, thus
+// reverting to the behavior before this problem was found, since that behavior
+// may still be usable.
 BOOL blnFirstOpenSoundPlayback = true;
 
 int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, char * ErrorMsg)
@@ -1211,33 +1218,37 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 	}
 	// WriteDebugLog(LOGINFO, "snd_pcm_hw_params_get_period_size(hw_params, &periodSize, &intDir) periodSize=%d intDir=%d", periodSize, intDir);
 
-	if (intPeriodTime * intRate != periodSize * 1000000) {
+	if (intPeriodTime * intRate != periodSize * 1000000 && (blnFirstOpenSoundPlayback || intPeriodTime || periodSize)) {
 		snd_pcm_close(playhandle);
 		playhandle = NULL;
 		snd_pcm_hw_params_free(hw_params);
 
-		if (!blnFirstOpenSoundPlayback)
+		if (blnFirstOpenSoundPlayback)
 		{
-			WriteDebugLog(LOGERROR, "Unable to fix inconsistent ALSA playback configuration.");
-			return false;
-		}
-		blnFirstOpenSoundPlayback = false;
-
-		WriteDebugLog(LOGWARNING, "WARNING: Inconsistent ALSA playback configuration: %d * %d != %d * 1000000.",
-			intPeriodTime, intRate, periodSize);
-		WriteDebugLog(LOGWARNING, "Attempting to reconfigure...");
-
-		// It should be possible to fix this problem by Decreasing either intPeriodTime or periodSize.
-		if (intPeriodTime * intRate > periodSize * 1000000) {
-			intPeriodTime = periodSize * 1000000 / intRate;
-			WriteDebugLog(LOGWARNING, "Setting playback period time to %d.", intPeriodTime);
+			// It should be possible to fix this problem by Decreasing either intPeriodTime or periodSize.
+			blnFirstOpenSoundPlayback = false;
+			WriteDebugLog(LOGWARNING, "WARNING: Inconsistent ALSA playback configuration: %d * %d != %d * 1000000.",
+				intPeriodTime, intRate, periodSize);
+			WriteDebugLog(LOGWARNING, "Attempting to reconfigure...");
+			if (intPeriodTime * intRate > periodSize * 1000000) {
+				intPeriodTime = periodSize * 1000000 / intRate;
+				WriteDebugLog(LOGWARNING, "Setting playback period time to %d.", intPeriodTime);
+			}
+			else
+			{
+				periodSize = intPeriodTime * intRate / 1000000;
+				WriteDebugLog(LOGWARNING, "Setting playback period size to %d.", periodSize);
+			}
 		}
 		else
 		{
-			periodSize = intPeriodTime * intRate / 1000000;
-			WriteDebugLog(LOGWARNING, "Setting playback period size to %d.", periodSize);
+			// This branch is untested since a case where the configuration can't be fixed has not been found.
+			WriteDebugLog(LOGERROR, "Unable to fix inconsistent ALSA playback configuration.  Reverting to previous configuration.");
+			intPeriodTime = 0;
+			periodSize = 0;
 		}
-		// Try OpenSoundPlayback() again using the calculated value of intPeriodTime or periodSize.
+
+		// Do OpenSoundPlayback() again using the new value of intPeriodTime or periodSize.
 		return OpenSoundPlayback(PlaybackDevice, m_sampleRate, channels, ErrorMsg);
 	}
 	// WriteDebugLog(LOGINFO, "Period time=%d (microsecond). Sample Rate=%d (Hz).  Period Size=%d (samples).",
@@ -1714,12 +1725,11 @@ short loopbuff[1200];		// Temp for testing - loop sent samples to decoder
 
 
 
-void InitSound(BOOL Quiet)
+int InitSound(BOOL Quiet)
 {
 	GetInputDeviceCollection();
 	GetOutputDeviceCollection();
-	
-	OpenSoundCard(CaptureDevice, PlaybackDevice, 12000, 12000, NULL);
+	return OpenSoundCard(CaptureDevice, PlaybackDevice, 12000, 12000, NULL);
 }
 
 int min = 0, max = 0, lastlevelreport = 0, lastlevelGUI = 0;
