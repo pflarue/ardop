@@ -151,7 +151,8 @@ extern BOOL WriteRxWav;
 extern BOOL TwoToneAndExit;
 struct WavFile *rxwf = NULL;
 struct WavFile *txwff = NULL;
-struct WavFile *txwfu = NULL;
+// writing unfiltered tx audio to WAV disabled
+// struct WavFile *txwfu = NULL;
 #define RXWFTAILMS 10000;  // 10 seconds
 unsigned int rxwf_EndNow = 0;
 
@@ -217,6 +218,10 @@ void StartRxWav()
 	extendRxwf();
 }
 
+// writing unfiltered tx audio to WAV disabled.  Only filtered 
+// tx audio will be written.  However, the code for unfiltered
+// audio is left in place but commented out so that it can eaily
+// be restored if desired.
 void StartTxWav()
 {
 	// Open two new WAV files for filtered and unfiltered Tx audio.
@@ -227,10 +232,10 @@ void StartTxWav()
 	// written to the Log directory if defined, else to the current 
 	// directory
 	char txwff_pathname[1024];
-	char txwfu_pathname[1024];
+	// char txwfu_pathname[1024];
 	SYSTEMTIME st;
 
-	if (txwff != NULL || txwfu != NULL)
+	if (txwff != NULL) // || txwfu != NULL)
 	{
 		WriteDebugLog(LOGWARNING, "WARNING: Trying to open Tx WAV file, but already open.");
 		return;
@@ -245,18 +250,18 @@ void StartTxWav()
             sprintf(txwff_pathname, "%s/ARDOP_txfaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
                 LogDir, HostPort, st.wYear, st.wMonth, st.wDay,
                 st.wHour, st.wMinute, st.wSecond);
-            sprintf(txwfu_pathname, "%s/ARDOP_txuaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
-                LogDir, HostPort, st.wYear, st.wMonth, st.wDay,
-                st.wHour, st.wMinute, st.wSecond);
+            // sprintf(txwfu_pathname, "%s/ARDOP_txuaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
+            //     LogDir, HostPort, st.wYear, st.wMonth, st.wDay,
+            //     st.wHour, st.wMinute, st.wSecond);
         }
         else
         {
             sprintf(txwff_pathname, "%s/ARDOP_txfaudio_%04d%02d%02d_%02d%02d%02d.wav",
                 LogDir, st.wYear, st.wMonth, st.wDay,
                 st.wHour, st.wMinute, st.wSecond);
-            sprintf(txwfu_pathname, "%s/ARDOP_txuaudio_%04d%02d%02d_%02d%02d%02d.wav",
-                LogDir, st.wYear, st.wMonth, st.wDay,
-                st.wHour, st.wMinute, st.wSecond);
+            // sprintf(txwfu_pathname, "%s/ARDOP_txuaudio_%04d%02d%02d_%02d%02d%02d.wav",
+            //     LogDir, st.wYear, st.wMonth, st.wDay,
+            //     st.wHour, st.wMinute, st.wSecond);
         }
     }
 	else
@@ -266,22 +271,22 @@ void StartTxWav()
             sprintf(txwff_pathname, "ARDOP_txfaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
                 HostPort, st.wYear, st.wMonth, st.wDay,
                 st.wHour, st.wMinute, st.wSecond);
-            sprintf(txwfu_pathname, "ARDOP_txuaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
-                HostPort, st.wYear, st.wMonth, st.wDay,
-                st.wHour, st.wMinute, st.wSecond);
+            // sprintf(txwfu_pathname, "ARDOP_txuaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
+            //     HostPort, st.wYear, st.wMonth, st.wDay,
+            //     st.wHour, st.wMinute, st.wSecond);
         }
         else
         {
             sprintf(txwff_pathname, "ARDOP_txfaudio_%04d%02d%02d_%02d%02d%02d.wav",
                 st.wYear, st.wMonth, st.wDay,
                 st.wHour, st.wMinute, st.wSecond);
-            sprintf(txwfu_pathname, "ARDOP_txuaudio_%04d%02d%02d_%02d%02d%02d.wav",
-                st.wYear, st.wMonth, st.wDay,
-                st.wHour, st.wMinute, st.wSecond);
+            // sprintf(txwfu_pathname, "ARDOP_txuaudio_%04d%02d%02d_%02d%02d%02d.wav",
+            //     st.wYear, st.wMonth, st.wDay,
+            //     st.wHour, st.wMinute, st.wSecond);
         }
 	}
 	txwff = OpenWavW(txwff_pathname);
-	txwfu = OpenWavW(txwfu_pathname);
+	// txwfu = OpenWavW(txwfu_pathname);
 }
 
 	
@@ -1019,11 +1024,12 @@ void SoundFlush()
 		CloseWav(txwff);
 		txwff = NULL;
 	}
-	if (txwfu != NULL)
-	{
-		CloseWav(txwfu);
-		txwfu = NULL;
-	}
+	// writing unfiltered tx audio to WAV disabled
+	// if (txwfu != NULL)
+	// {
+	// 	CloseWav(txwfu);
+	// 	txwfu = NULL;
+	// }
 
 	// Clear the capture buffers. I think this is only  needed when testing
 	// with audio loopback.
