@@ -127,7 +127,8 @@ char LogName[3][256] = {"ARDOPDebug", "ARDOPException", "ARDOPSession"};
 FILE *statslogfile = NULL;
 struct WavFile *rxwf = NULL;
 struct WavFile *txwff = NULL;
-struct WavFile *txwfu = NULL;
+// writing unfiltered tx audio to WAV disabled
+// struct WavFile *txwfu = NULL;
 #define RXWFTAILMS 10000;  // 10 seconds
 unsigned int rxwf_EndNow = 0;
 
@@ -188,6 +189,10 @@ void StartRxWav()
 	extendRxwf();
 }
 
+// writing unfiltered tx audio to WAV disabled.  Only filtered 
+// tx audio will be written.  However, the code for unfiltered
+// audio is left in place but commented out so that it can eaily
+// be restored if desired.
 void StartTxWav()
 {
 	// Open two new WAV files for filtered and unfiltered Tx audio.
@@ -198,9 +203,9 @@ void StartTxWav()
 	// written to the Log directory if defined, else to the current 
 	// directory
 	char txwff_pathname[1024];
-	char txwfu_pathname[1024];
+	// char txwfu_pathname[1024];
 
-	if (txwff != NULL || txwfu != NULL)
+	if (txwff != NULL) // || txwfu != NULL)
 	{
 		WriteDebugLog(LOGWARNING, "WARNING: Trying to open Tx WAV file, but already open.");
 		return;
@@ -224,21 +229,21 @@ void StartTxWav()
 		sprintf(txwff_pathname, "%s/ARDOP_txfaudio_%d_%04d%02d%02d_%02d%02d%02d.wav",
 			LogDir, port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
 			hh, mm, ss);
-		sprintf(txwfu_pathname, "%s/ARDOP_txuaudio_%d_%04d%02d%02d_%02d%02d%02d.wav",
-			LogDir, port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
-			hh, mm, ss);
+		// sprintf(txwfu_pathname, "%s/ARDOP_txuaudio_%d_%04d%02d%02d_%02d%02d%02d.wav",
+		// 	LogDir, port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
+		// 	hh, mm, ss);
 	}
 	else
 	{
 		sprintf(txwff_pathname, "ARDOP_txfaudio_%d_%04d%02d%02d_%02d:%02d:%02d.wav",
 			port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
 			hh, mm, ss);
-		sprintf(txwfu_pathname, "ARDOP_txuaudio_%d_%04d%02d%02d_%02d:%02d:%02d.wav",
-			port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
-			hh, mm, ss);
+		// sprintf(txwfu_pathname, "ARDOP_txuaudio_%d_%04d%02d%02d_%02d:%02d:%02d.wav",
+		// 	port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
+		// 	hh, mm, ss);
 	}
 	txwff = OpenWavW(txwff_pathname);
-	txwfu = OpenWavW(txwfu_pathname);
+	// txwfu = OpenWavW(txwfu_pathname);
 }
 
 
@@ -1981,11 +1986,12 @@ void SoundFlush()
 		CloseWav(txwff);
 		txwff = NULL;
 	}
-	if (txwfu != NULL)
-	{
-		CloseWav(txwfu);
-		txwfu = NULL;
-	}
+	// writing unfiltered tx audio to WAV disabled
+	// if (txwfu != NULL)
+	// {
+	// 	CloseWav(txwfu);
+	// 	txwfu = NULL;
+	// }
 
 	OpenSoundCapture(SavedCaptureDevice, SavedCaptureRate, strFault);
 	StartCapture();

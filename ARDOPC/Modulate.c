@@ -22,7 +22,8 @@ FILE * fp1;
 extern short Dummy;
 extern int DriveLevel;
 extern BOOL WriteTxWav;
-extern struct WavFile *txwfu;
+// writing unfiltered tx audio to WAV disabled
+// extern struct WavFile *txwfu;
 
 int intSoftClipCnt = 0;
 
@@ -1186,8 +1187,9 @@ void SampleSink(short Sample)
 	float intFilteredSample = 0;			//  Filtered sample
 
 	Sample = Sample * DriveLevel / 100;
-	if (txwfu != NULL)
-		WriteWav(&Sample, 1, txwfu);
+	// writing unfiltered tx audio to WAV disabled
+	// if (txwfu != NULL)
+	//	WriteWav(&Sample, 1, txwfu);
 	
 	//	We save the previous intN samples
 	//	The samples are held in a cyclic buffer
