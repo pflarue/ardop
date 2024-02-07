@@ -17,7 +17,6 @@ const char ProductName[] = "ardopc";
 
 #ifdef WIN32
 #define _CRT_SECURE_NO_DEPRECATE
-#define _USE_32BIT_TIME_T
 
 #include <windows.h>
 #include <mmsystem.h>

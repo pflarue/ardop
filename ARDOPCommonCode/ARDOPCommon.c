@@ -23,7 +23,6 @@ const char ProductVersion[] = "2.0.3.2-pflarue-3";
 
 #ifdef WIN32
 #define _CRT_SECURE_NO_DEPRECATE
-#define _USE_32BIT_TIME_T
 
 #include <windows.h>
 #include <mmsystem.h>
