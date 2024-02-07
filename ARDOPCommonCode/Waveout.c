@@ -1200,7 +1200,7 @@ HANDLE OpenCOMPort(VOID * pPort, int speed, BOOL SetDTR, BOOL SetRTS, BOOL Quiet
 
 	// if Port Name starts COM, convert to \\.\COM or ports above 10 wont work
 
-	if ((unsigned int)pPort < 256)			// just a com port number
+	if (atoi(pPort) != 0)			// just a com port number
 		sprintf( szPort, "\\\\.\\COM%d", pPort);
 
 	else if (_memicmp(pPort, "COM", 3) == 0)
@@ -1225,8 +1225,8 @@ HANDLE OpenCOMPort(VOID * pPort, int speed, BOOL SetDTR, BOOL SetRTS, BOOL Quiet
 	{
 		if (Quiet == 0)
 		{
-			if (pPort < (VOID *)256)
-				sprintf(buf," COM%d could not be opened \r\n ", (unsigned int)pPort);
+			if (atoi(pPort) != 0)
+				sprintf(buf," COM%d could not be opened \r\n ", atoi(pPort));
 			else
 				sprintf(buf," %s could not be opened \r\n ", pPort);
 
@@ -1299,8 +1299,8 @@ HANDLE OpenCOMPort(VOID * pPort, int speed, BOOL SetDTR, BOOL SetRTS, BOOL Quiet
 	}
 	else
 	{
-		if ((unsigned int)pPort < 256)
-			sprintf(buf,"COM%d Setup Failed %d ", pPort, GetLastError());
+		if (atoi(pPort) != 0)
+			sprintf(buf,"COM%d Setup Failed %d ", atoi(pPort), GetLastError());
 		else
 			sprintf(buf,"%s Setup Failed %d ", pPort, GetLastError());
 
