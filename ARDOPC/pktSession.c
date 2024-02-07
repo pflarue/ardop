@@ -371,6 +371,10 @@ unsigned int ReleaseBuffer(VOID *pBUFF)
 	return 0;
 }
 
+/*
+// win64 Compiler warning in this function.
+// Since it doesn't appear to be used anywhere, comment it out
+// rather than debug it.
 int C_Q_ADD(VOID *PQ, VOID *PBUFF)
 {
 	unsigned int * Q;
@@ -400,6 +404,7 @@ int C_Q_ADD(VOID *PQ, VOID *PBUFF)
 
 	return(0);
 }
+*/
 
 BOOL ConvToAX25(char * callsign, unsigned char * ax25call)
 {
