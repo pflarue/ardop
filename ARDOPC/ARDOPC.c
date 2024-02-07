@@ -1,7 +1,8 @@
 // ARDOPC.cpp : Defines the entry point for the console application.
 //
 
-const char ProductName[] = "ardopc";
+// ardopcf is a fork by pflarue of ardopc by John Wiseman
+const char ProductName[] = "ardopcf";
 
 // Version k  Fix conflicting definitions of bytDataToSend
 // Version m  Add CM108 PTT (Sept 2021)

@@ -3,7 +3,8 @@
 //	Code Common to all versions of ARDOP. 
 //
 
-const char ProductVersion[] = "2.0.3.2-pflarue-3";
+// Forked from v2.0.3.2 by John Wiseman
+const char ProductVersion[] = "2.0.3.2.1";
 
 //	2.0.3.1 November 2023
 
@@ -15,12 +16,6 @@ const char ProductVersion[] = "2.0.3.2-pflarue-3";
 //	Add Craig KM6LYW's snd_pcm_hw_params_set_period_size_near patch
 //	Set default TrailerLength to 20 (ms)
 //	Add --trailerlength command line parameter
-
-// 2.0.3.2-pflarue-3  December 2023
-
-// Modify SoundFlush() and OpenSoundCapture() to reduce delay decoding
-// received audio after transmitting.
-
 
 #ifdef WIN32
 #define _CRT_SECURE_NO_DEPRECATE
@@ -191,7 +186,7 @@ static struct option long_options[] =
 
 char HelpScreen[] =
 	"Usage:\n"
-	"%s port [capture device playbackdevice] [Options]\n"
+	"%s port [capturedevice playbackdevice] [Options]\n"
 	"defaults are port = 8515, capture device ARDOP playback device ARDOP\n"
 	"If you need to specify capture and playback devices you must specify port\n"
 	"\n"
