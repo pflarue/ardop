@@ -501,7 +501,7 @@ void main(int argc, char * argv[])
 
 	if (TwoToneAndExit)
 	{
-		if (!InitSound(TRUE)
+		if (!InitSound(TRUE))
 		{
 			WriteDebugLog(LOGCRIT, "Error in InitSound().  Stopping ardop.");
 			return;
@@ -707,7 +707,7 @@ int InitSound(BOOL Report)
 	}
 
 	ret = waveInStart(hWaveIn);
-	return true;
+	return TRUE;
 }
 
 int min = 0, max = 0, lastlevelGUI = 0, lastlevelreport = 0;
