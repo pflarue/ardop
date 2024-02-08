@@ -252,6 +252,8 @@ float dblNCOPhaseInc = 2 * M_PI * 3000 / 12000;  // was dblNCOFreq
 int	intMFSReadPtr = 30;				// reset the MFSReadPtr offset 30 to accomodate the filter delay
 
 int RcvdSamplesLen = 0;				// Samples in RX buffer
+int cumAdvances = 0;
+int symbolCnt = 0;
 
 
 BOOL Acquire2ToneLeaderSymbolFraming();
@@ -1247,6 +1249,18 @@ void ProcessNewSamples(short * Samples, int nSamples)
 
 //		printtick("got whole frame");
 
+		if (strncmp (Name(intFrameType), "4FSK.200.50S", 12) == 0 && UseSDFT)
+		{
+			float observed_baudrate = 50.0 / ((intSampPerSym + ((float) cumAdvances)/symbolCnt)/intSampPerSym);
+			WriteDebugLog(LOGDEBUGPLUS, "Estimated %s symbol rate = %.3f. (ideal=50.000)",
+				Name(intFrameType), observed_baudrate);
+		}
+		else if (strncmp (Name(intFrameType), "4FSK.500.100", 12) == 0 && UseSDFT)
+		{
+			float observed_baudrate = 100.0 / ((intSampPerSym + ((float) cumAdvances)/symbolCnt)/intSampPerSym);
+			WriteDebugLog(LOGDEBUGPLUS, "Estimated %s symbol rate = %.3f. (ideal=100.000)",
+				Name(intFrameType), observed_baudrate);
+		}
 		if (strcmp (strMod, "4FSK") == 0)
 			Update4FSKConstellation(&intToneMags[0][0], &intLastRcvdFrameQuality);
 		else if (strcmp (strMod, "16FSK") == 0)
@@ -2631,8 +2645,6 @@ BOOL Demod1Car4FSK()
 
 short intSdftSamples[5 * MAXDFTLEN / 2];
 const short intHalfDftlenZeros[MAXDFTLEN / 2];
-int cumAdvances = 0;
-int symbolCnt = 0;
 // Function to demodulate each carrier for 4FSK tones
 void DemodEachCar4FSK_SDFT(int Start, int * intCenterFrqs, BOOL blnGetFrameType)
 {
