@@ -3,19 +3,10 @@
 //	Code Common to all versions of ARDOP. 
 //
 
-// Forked from v2.0.3.2 by John Wiseman
-const char ProductVersion[] = "2.0.3.2.1";
-
-//	2.0.3.1 November 2023
-
-//	Determine end of TX time from frame length
-
-
-//	2.0.3.2 November 2023
-
-//	Add Craig KM6LYW's snd_pcm_hw_params_set_period_size_near patch
-//	Set default TrailerLength to 20 (ms)
-//	Add --trailerlength command line parameter
+// definition of ProductVersion moved to version.h
+// This simplifies test builds with using local version numbers independent 
+//   of version numbers pushed to git repository.
+#include "version.h"
 
 #ifdef WIN32
 #define _CRT_SECURE_NO_DEPRECATE
