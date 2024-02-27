@@ -18,9 +18,10 @@ sample SDFT with a sample rate of 12kHz, a normal SDFT (or any traditional
 DFT/FFT algorithm) could produce output for frequencies that are multiples of
 50Hz.  These would include 1400, 1450, 1500, 1550, and 1600 Hz, which does
 not include the 1425, 1475, 1525, and 1575 Hz frequencies that Ardop uses for
-single carrier 4FSK.  However, this SDFT variant will produce output for
+single carrier 50 baud 4FSK.  However, this SDFT variant will produce output for
 these desired frequencies that are offset by 25 Hz from those available from
-other DFT algorithms.
+other DFT algorithms.  It is also suitable for Ardop's 100 baud 4FSK frames
+that use frequencies of 1350, 1450, 1550, and 1650 with a 120 sample SDFT.
 
 Lyon 2007 Eq 14-4:
 Sk(n) = cmath.exp(2j * pi * k / N) * (Sk(n-1) + x(n) - x(n-N))
@@ -29,8 +30,8 @@ Sk(n) = cmath.exp(2j * pi * (k + 1/2)/ N) * (Sk(n-1) + x(n) + x(n-N))
 
 Of course, the Goertzel algorithm can be used to calculate results for
 arbitrary frequencies.  Thus, it has been used for the Ardop tones.  However,
-it only produces results for a single block of 240 samples each time.  Thus,
-to get results for an adjacent overlapping block of 240 tones, such as might
+it only produces results for a single block of 240 (or 120) samples each time.  Thus,
+to get results for an adjacent overlapping block of 240 (or 120) tones, such as might
 be useful to check or adjust symbol timing, would require repeated execution
 of the full Goertzel algorithm.  In contrast, the SDFT algorithm produces
 results for all overlapping blocks of samples at one sample intervals.
@@ -54,7 +55,7 @@ Carrier and frqNum spanning two symbol periods.  Each time sdft() is called,
 it will calculate sdft_s for one symbol's worth of points.  However, the
 decision point, where the values corresponding to the four tones are
 compared to evaluate which tone was present, will be near the middle of the
-results calculated bt that execution of sddft().  This allows the results
+results calculated by that execution of sddft().  This allows the results
 extending before and after the decision point to be used to generate an
 improved estimate of where that decision point should be.  To initiate this
 process init_sdft() will process the first half a symbol's worth of samples.
@@ -64,24 +65,25 @@ as sdft_s[cnum][frqNum][-1] will be used to calculate the first result for
 the following execution of sdft().  The prior symbol's worth of input
 samples are also required to calculate each sdft_s value.  Thus, the input
 samples supplied to sdft() must include samples from the prior symbol as
-the new samples.
+well as the new samples.
 */
-float complex sdft_s[CARCNT][FRQCNT][DFTLEN];
+float complex sdft_s[CARCNT][FRQCNT][MAXDFTLEN];  
 
 /*
 sdft_coeff[Carrier][frqNum] are the "constant" coefficients for calulating
-sdft_s for a given frequency, and sdft_coeff_cfrqs[Carrier] are the
-corresponding center frequencies that those sdft_coeff values are
+sdft_s for a given frequency and intDftLen, and sdft_coeff_cfrqs[Carrier] are 
+the corresponding center frequencies that those sdft_coeff values are
 appropriate for.  Thus, sdft_coeff must be recalculated whenever the
-sdft_coef_cfrqs values change.  For example, changing between a 1 carrier
-4FSK frame and a 2 carrier 4FSK frame would result in a change to the
-center frequency of the first carrier, and so the sdft_coeff values would
-need to be recalculated.  As an alternative, precalculation and hard
+sdft_coef_cfrqs or intDftLen values change.  For example, changing between 
+a 50 baud 1 carrier 4FSK frame and a 100 baud 1 carrier 4FSK frame would 
+result in a change to individual tone frequencies, and so the sdft_coeff values 
+would need to be recalculated.  As an alternative, precalculation and hard
 coding of of these coefficients for all tones used by all Ardop FSK modes
 might be worthwhile.
 */
 float complex sdft_coeff[CARCNT][FRQCNT];
 float sdft_coeff_cfrqs[CARCNT];
+int sdft_coeff_dftlen = 0;
 
 /*
 A new estimate of Start is independently calculated for each carrier, but
@@ -96,7 +98,7 @@ carrier, though this might reduce the robustness of the estimate for noisy
 signals.
 */
 
-void update_sdft_coeff(int * intCenterFrqs)
+void update_sdft_coeff(int * intCenterFrqs, int intDftLen)
 {
     // Define/redefine sdft_coeff if not already defined.
     int cnum;
@@ -116,41 +118,45 @@ void update_sdft_coeff(int * intCenterFrqs)
             // CarrierOK[cnum] is True, so skip demodulating this carrier
             continue;
         }
-        if (cfrq == sdft_coeff_cfrqs[cnum])
+        if (cfrq == sdft_coeff_cfrqs[cnum] && intDftLen == sdft_coeff_dftlen)
         {
-            // sdft_coeff already evaluated for this center frequency
+            // sdft_coeff already evaluated for this center frequency and dftlen
             continue;
         }
         sdft_coeff_cfrqs[cnum] = cfrq;
         for (frqNum = 0; frqNum < FRQCNT; frqNum ++)
         {
             /*
-            Sk[n] = cexpf(2 * I * M_PI * (k + 1/2)/ DFTLEN) * (Sk[n-1] + x[n] + x[n-DFTLEN])
-            Sk[n] = coeff * (Sk[n-1] + x[n] + x[n-DFTLEN])
-            coeff = cexpf(2 * I * M_PI * (k + 1/2)/ DFTLEN)
-            frq = (k + 1/2) * SRATE / DFTLEN
-            k = (DFTLEN * frq / SRATE) - 1/2
-            coeff = cexpf(2 * I * M_PI * ((DFTLEN * frq / SRATE) - 1/2 + 1/2)/ DFTLEN)
+            Sk[n] = cexpf(2 * I * M_PI * (k + 1/2)/ intDftLen) * (Sk[n-1] + x[n] + x[n-intDftLen])
+            Sk[n] = coeff * (Sk[n-1] + x[n] + x[n-intDftLen])
+            coeff = cexpf(2 * I * M_PI * (k + 1/2)/ intDftLen)
+            frq = (k + 1/2) * SRATE / intDftLen
+            k = (intDftLen * frq / SRATE) - 1/2
+            coeff = cexpf(2 * I * M_PI * ((intDftLen * frq / SRATE) - 1/2 + 1/2)/ intDftLen)
             coeff = cexpf(2 * I * M_PI * frq / SRATE)
-            dfrq = SRATE / DFTLEN
+            dfrq = SRATE / intDftLen
             frq = cfrq + dfrq * (FRQCNT/2 - 0.5) - dfrq * frqNum.= cfrq + dfrq * ((FRQCNT/2 - 0.5) - frqNum)
             coeff = cexpf(2 * I * M_PI * (cfrq + dfrq * ((FRQCNT/2 - 0.5) - frqNum)) / SRATE)
-            coeff = cexpf(2 * I * M_PI * (cfrq + SRATE / DFTLEN * ((FRQCNT/2 - 0.5) - frqNum)) / SRATE)
-            coeff = cexpf(2 * I * M_PI * SRATE * (cfrq / SRATE + ((FRQCNT/2 - 0.5) - frqNum) / DFTLEN) / SRATE)
-            coeff = cexpf(2 * I * M_PI * (cfrq / SRATE + ((FRQCNT/2 - 0.5) - frqNum) / DFTLEN))
+            coeff = cexpf(2 * I * M_PI * (cfrq + SRATE / intDftLen * ((FRQCNT/2 - 0.5) - frqNum)) / SRATE)
+            coeff = cexpf(2 * I * M_PI * SRATE * (cfrq / SRATE + ((FRQCNT/2 - 0.5) - frqNum) / intDftLen) / SRATE)
+            coeff = cexpf(2 * I * M_PI * (cfrq / SRATE + ((FRQCNT/2 - 0.5) - frqNum) / intDftLen))
             */
-            sdft_coeff[cnum][frqNum] = cexp(2 * I * M_PI * (cfrq / SRATE + ((FRQCNT/2 - 0.5) - frqNum) / DFTLEN));
+            sdft_coeff[cnum][frqNum] = cexp(2 * I * M_PI * (cfrq / SRATE + ((FRQCNT/2 - 0.5) - frqNum) / intDftLen));
             WriteDebugLog(LOGDEBUGPLUS, "sdft_coeff[%d][%d]=%.6f j%.6f", cnum, frqNum, creal(sdft_coeff[cnum][frqNum]), cimagf(sdft_coeff[cnum][frqNum]));
         }
     }
+    sdft_coeff_dftlen = intDftLen;
 }
 
 
 bool blnSdftInitialized = false;
-void init_sdft(int * intCenterFrqs, short * intSamples)
+void init_sdft(int * intCenterFrqs, short * intSamples, int intDftLen)
 {
-    // Call init_sdft() before calling sdft() for the first 4FSK symbol in a frame
-    // intSamples shall contain at least DFTLEN/2 samples.
+    // Call init_sdft() before calling sdft() for the first 4FSK symbol in a 
+    // frame or before calling sdft() when intDftLen may have changed, such
+    // as after demodulating the 50 baud 4FSK frame type for a 100 baud 4FSK 
+    // frame.
+    // intSamples shall contain at least intDftLen/2 samples.
     // Any additional samples will be ignored.
 
     int cnum;
@@ -158,7 +164,7 @@ void init_sdft(int * intCenterFrqs, short * intSamples)
     int snum;
     float cfrq;
 
-    update_sdft_coeff(intCenterFrqs);
+    update_sdft_coeff(intCenterFrqs, intDftLen);
     for (cnum = 0; cnum < CARCNT; cnum++)
     {
         cfrq = intCenterFrqs[cnum];
@@ -174,53 +180,58 @@ void init_sdft(int * intCenterFrqs, short * intSamples)
         }
         for (frqNum = 0; frqNum < FRQCNT; frqNum++)
         {
-            for (snum = 0; snum < DFTLEN/2; snum++)
+            for (snum = 0; snum < intDftLen/2; snum++)
             {
                 sdft_s[cnum][frqNum][snum] = 0.0;
             }
-            for (snum = DFTLEN/2; snum < DFTLEN; snum++)
+            for (snum = intDftLen/2; snum < intDftLen; snum++)
             {
-                // Sk[n] = coeff * (Sk[n-1] + x[n] + x[n-DFTLEN])
+                // Sk[n] = coeff * (Sk[n-1] + x[n] + x[n-intDftLen])
                 sdft_s[cnum][frqNum][snum] = (
                     sdft_coeff[cnum][frqNum] * (
                         // Prior sdft_s value.
                         sdft_s[cnum][frqNum][snum - 1]
                         // The new sample.  intSamples has an implied
-                        // set of DFTLEN/2 leaving zeros for which sdft_s
+                        // set of intDftLen/2 leading zeros for which sdft_s
                         // was automatically set to 0.0.  So, adjust
-                        // the index into intSamples by DFTLEN/2
-                        + intSamples[snum - DFTLEN / 2]
-                        // The sample from DFTLEN samples samples back.
+                        // the index into intSamples by intDftLen/2
+                        + intSamples[snum - intDftLen / 2]
+                        // The sample from intDftLen samples samples back.
                         + 0.0
                     )
                 );
             }
         }
     }
-    // This is reset to FALSE at the end of demodulating the frame or after
-    // frame type decode fail.  All frames use 4FSK for the frame type.
-    // Some use it for the frame data as well.
+    // This is reset to FALSE at the end of demodulating the a frame type 
+    // (whether successful or not), and after demodulating a frame.
+    // All frames use 50 baud 4FSK for the frame type.  Some frame types 
+    // use 50 or 100 baud 4FSK for the frame data as well.  The possible 
+    // change in 4FSK baud rate from the frame type to the frame data is
+    // why blnSdftInitialized is reset to false after demodulating the
+    // frame type.  Alternatively, this could be done only when the frame
+    // type indicates the use of 100 baud 4FSK data.
     blnSdftInitialized = true;
 }
 
-int sdft(int * intCenterFrqs, short * intSamples, int intToneMags[CARCNT][4096], int intToneMagsIndex[CARCNT])
+int sdft(int * intCenterFrqs, short * intSamples, int intToneMags[CARCNT][4096], int intToneMagsIndex[CARCNT], int intDftLen)
 {
     /*
-    intSamples shall have a length of at least 2 * DFTLEN +
+    intSamples shall have a length of at least 2 * intDftLen +
     search_distance * decision_damping.  If it is longer than this, then
     any additional samples will be ignored.  Samples beyond
-    2 * DFTLEN will only be used if the new decision_index is found
+    2 * intDftLen will only be used if the new decision_index is found
     to be greater than the value found based on leader/sync and prior calls
-    to sdft().  The first DFTLEN samples shall be the samples
+    to sdft().  The first intDftLen samples shall be the samples
     processed by the prior call to sdft() or init_sdft(), and the following
-    DFTLEN samples are those to be processed now.  The external
+    intDftLen samples are those to be processed now.  The external
     varialble sdft_s shall hold the results produced by that prior call to
     init_sdft() or sdft(), though it is actually only the final value of
     these that are used.  The current estimated location of the decision
     index, which is based on evaluation of the prior symbols and the frame
-    leader/sync is at a decision_index of DFTLEN +
-    DFTLEN / 2 relative to intSamples, which will corrspond to a
-    decision_index of DFTLEN / 2 relative to sdft_s.
+    leader/sync is at a decision_index of intDftLen +
+    intDftLen / 2 relative to intSamples, which will corrspond to a
+    decision_index of intDftLen / 2 relative to sdft_s.
 
     intCenterFrqs is a list of center frequencies for up to CARCNT carriers to
     be evaluated.  If less than CARCNT carriers are to be evaluated, their
@@ -250,7 +261,7 @@ int sdft(int * intCenterFrqs, short * intSamples, int intToneMags[CARCNT][4096],
     small, sdft_var and sdft_var_sum could be calculated for only a limited
     number of samples around the prior decision index.
     */
-    float sdft_var[CARCNT][DFTLEN];
+    float sdft_var[CARCNT][MAXDFTLEN];
     /*
     A sdft_var_sumlen point moving average of sddft_var values is used to
     filter out noise in in the sdft_var values.  Thus, sdft_var_sum is the
@@ -263,9 +274,9 @@ int sdft(int * intCenterFrqs, short * intSamples, int intToneMags[CARCNT][4096],
     (sdft_var_sumlen - 1) / 2 gives the gives the offset in each direction
     to the first and last sdft_var values included in sdft_var_sum.
     */
-    int sdft_var_sumlen = 49;  // [odd valued] length of moving average for sdft_var
+    int sdft_var_sumlen = intDftLen/4 - 1;  // [odd valued] length of moving average for sdft_var
     assert(sdft_var_sumlen % 2 == 1);
-    float sdft_var_sum[CARCNT][DFTLEN];
+    float sdft_var_sum[CARCNT][MAXDFTLEN];
 
     /*
     Tuning search_dist and decision_damping might improve (or damage)
@@ -282,7 +293,7 @@ int sdft(int * intCenterFrqs, short * intSamples, int intToneMags[CARCNT][4096],
     the prior value of decision_index.  This explicitly limits the impact
     of multiple sequential identical tone values.
     */
-    int search_dist = DFTLEN / 8;
+    int search_dist = intDftLen / 8;
     /*
     The distance from decision_index to the new peak_index is multiplied by
     decision_damping to calculate the amount that decision_index should be
@@ -331,17 +342,17 @@ int sdft(int * intCenterFrqs, short * intSamples, int intToneMags[CARCNT][4096],
             // sdft_s[cnum][frqNum][0] uses the value from the end of sdft_s.
             // So, calculate this one outside the loop used for the others.
             sdft_s[cnum][frqNum][0] = sdft_coeff[cnum][frqNum] * (
-                sdft_s[cnum][frqNum][DFTLEN - 1]  // prior sdft_s
-                + intSamples[DFTLEN]  // new sample
-                + intSamples[0]  // sample from DFTLEN samples back
+                sdft_s[cnum][frqNum][intDftLen - 1]  // prior sdft_s
+                + intSamples[intDftLen]  // new sample
+                + intSamples[0]  // sample from intDftLen samples back
             );
-            for (snum = 1; snum < DFTLEN; snum++)
+            for (snum = 1; snum < intDftLen; snum++)
             {
-                // Sk[n] = coeff * (Sk[n-1] + x[n] + x[n-DFTLEN])
+                // Sk[n] = coeff * (Sk[n-1] + x[n] + x[n-intDftLen])
                 sdft_s[cnum][frqNum][snum] = sdft_coeff[cnum][frqNum] * (
                     sdft_s[cnum][frqNum][snum - 1]  // prior sdft_s
-                    + intSamples[DFTLEN + snum]  // new sample
-                    + intSamples[snum]  // sample from DFTLEN samples back
+                    + intSamples[intDftLen + snum]  // new sample
+                    + intSamples[snum]  // sample from intDftLen samples back
                 );
             }
         }
@@ -350,7 +361,7 @@ int sdft(int * intCenterFrqs, short * intSamples, int intToneMags[CARCNT][4096],
         sdft_var for all samples.  The range should be reduced to only those
         used for calculation of sdft_var_sum.
         */
-        for (snum = 0; snum < DFTLEN; snum++)
+        for (snum = 0; snum < intDftLen; snum++)
         {
             sms_sum = 0;
             smssq_sum = 0;
@@ -379,23 +390,23 @@ int sdft(int * intCenterFrqs, short * intSamples, int intToneMags[CARCNT][4096],
         Calculate a running sum of sdft_var_sumlen values of sdft_var.
         This represents (moving average of sdft_var) * sdft_var_sumlen.
         Calculate sdft_var_sum only within a range of search_dist from
-        the nominal decision index at DFTLEN/2.
+        the nominal decision index at intDftLen/2.
         Calculate the first value explicitly, then calculate the others
         incrementally.
         */
-        sdft_var_sum[cnum][DFTLEN / 2 - search_dist] = 0.0;
+        sdft_var_sum[cnum][intDftLen / 2 - search_dist] = 0.0;
         for (
-            snum = DFTLEN/2 - search_dist - (sdft_var_sumlen - 1) / 2;
-            snum < DFTLEN/2 - search_dist + (sdft_var_sumlen - 1) / 2 + 1;
+            snum = intDftLen/2 - search_dist - (sdft_var_sumlen - 1) / 2;
+            snum < intDftLen/2 - search_dist + (sdft_var_sumlen - 1) / 2 + 1;
             snum++)
            {
-               sdft_var_sum[cnum][DFTLEN / 2 - search_dist] += sdft_var[cnum][snum];
+               sdft_var_sum[cnum][intDftLen / 2 - search_dist] += sdft_var[cnum][snum];
            }
-        peak_index = DFTLEN / 2 - search_dist;
-        peak_index_var_sum = sdft_var_sum[cnum][DFTLEN / 2 - search_dist];
+        peak_index = intDftLen / 2 - search_dist;
+        peak_index_var_sum = sdft_var_sum[cnum][intDftLen / 2 - search_dist];
         for (
-            snum = DFTLEN / 2 - search_dist + 1;
-            snum < DFTLEN / 2 + search_dist + 1;
+            snum = intDftLen / 2 - search_dist + 1;
+            snum < intDftLen / 2 + search_dist + 1;
             snum++)
         {
             sdft_var_sum[cnum][snum] = (
@@ -411,15 +422,15 @@ int sdft(int * intCenterFrqs, short * intSamples, int intToneMags[CARCNT][4096],
         }
         /*
         If decision_index based on leader/sync and prior symbols is already
-        correct, then peak_index will be equal to DFTLEN / 2.  If
+        correct, then peak_index will be equal to intDftLen / 2.  If
         not, then adjust decision_index to be closer to peak_index.
         decision_index values are floats rather than integers.  After these
         values are combined from all carriers, the result will be converted
         to an integer to be used as an index array.
         */
         decision_index[cnum] = (
-            DFTLEN / 2
-            + decision_damping*(peak_index - DFTLEN / 2)
+            intDftLen / 2
+            + decision_damping*(peak_index - intDftLen / 2)
         );
     }
 
@@ -475,7 +486,7 @@ int sdft(int * intCenterFrqs, short * intSamples, int intToneMags[CARCNT][4096],
             // from GoertzelRealImag() to intToneMags.
             intToneMags[cnum][intToneMagsIndex[cnum]] = creal(
                 sdft_s[cnum][frqNum][composite_decision_index]
-                * conj(sdft_s[cnum][frqNum][composite_decision_index]))/((DFTLEN*DFTLEN)>>2);
+                * conj(sdft_s[cnum][frqNum][composite_decision_index]))/((intDftLen*intDftLen)>>2);
 
 /* // UNCOMMENT THIS BLOCK TO SHOW SDFT VALIDATION COMPARISONS IN DEBUG LOG
             float gReal, gImag;  // Used to validate sdft by comparing to Goertzel
@@ -491,29 +502,29 @@ int sdft(int * intCenterFrqs, short * intSamples, int intToneMags[CARCNT][4096],
                 intToneMagsIndex[cnum],
                 intToneMags[cnum][intToneMagsIndex[cnum]]
                );
-            GoertzelRealImag(intSamples, composite_decision_index + 1, DFTLEN,
-                // m = DFTLEN * frq / SRATE
-                // frq = sdft_coeff_cfrqs[cnum] + (frqNum - 1.5) * SRATE / DFTLEN
-                // m = DFTLEN * (sdft_coeff_cfrqs[cnum] + (frqNum - 1.5) * SRATE / DFTLEN) / SRATE
-                DFTLEN * (sdft_coeff_cfrqs[cnum] - (frqNum - 1.5) * SRATE / DFTLEN) / SRATE,
+            GoertzelRealImag(intSamples, composite_decision_index + 1, intDftLen,
+                // m = intDftLen * frq / SRATE
+                // frq = sdft_coeff_cfrqs[cnum] + (frqNum - 1.5) * SRATE / intDftLen
+                // m = intDftLen * (sdft_coeff_cfrqs[cnum] + (frqNum - 1.5) * SRATE / intDftLen) / SRATE
+                intDftLen * (sdft_coeff_cfrqs[cnum] - (frqNum - 1.5) * SRATE / intDftLen) / SRATE,
                 &gReal, &gImag);
             WriteDebugLog(LOGDEBUGPLUS, "Goertzel = %.0f diff=%.02f\% (m=%.02f)",
                 gReal*gReal + gImag*gImag,
                 100 * (gReal*gReal + gImag*gImag - intToneMags[cnum][intToneMagsIndex[cnum]]) / (gReal*gReal + gImag*gImag),
-                DFTLEN * (sdft_coeff_cfrqs[cnum] - (frqNum - 1.5) * SRATE / DFTLEN) / SRATE
+                intDftLen * (sdft_coeff_cfrqs[cnum] - (frqNum - 1.5) * SRATE / intDftLen) / SRATE
             );
 */ // END OF VALIDATION BLOCK
             intToneMagsIndex[cnum] += 1;
         }
        }
 
-       /*
+    /*
     index_advance is the amount that composite_decision_index has changed.
     This will be the return value of this function so that it can be used
     to select which data points to include in intSamples for the next
     call of this function.
     */
-    index_advance = composite_decision_index - DFTLEN / 2;
+    index_advance = composite_decision_index - intDftLen / 2;
     /*
     The next call of this function will use sdft_s[][][-1] to compute a
     new value for sdft_s[][][0].  So, sdft_s[][][-1] must be corrected
@@ -536,9 +547,9 @@ int sdft(int * intCenterFrqs, short * intSamples, int intToneMags[CARCNT][4096],
             }
             for (frqNum = 0; frqNum < FRQCNT; frqNum++)
             {
-                // Only the value of sdft_s[cnum][frqNum][DFTLEN - 1] matters, and
+                // Only the value of sdft_s[cnum][frqNum][intDftLen - 1] matters, and
                 // its value is already known.  So, just copy it to this location.
-                sdft_s[cnum][frqNum][DFTLEN - 1] = sdft_s[cnum][frqNum][DFTLEN - 1 + index_advance];
+                sdft_s[cnum][frqNum][intDftLen - 1] = sdft_s[cnum][frqNum][intDftLen - 1 + index_advance];
             }
         }
     }
@@ -559,19 +570,19 @@ int sdft(int * intCenterFrqs, short * intSamples, int intToneMags[CARCNT][4096],
             }
             for (frqNum = 0; frqNum < FRQCNT; frqNum++)
             {
-                // Only the value of sdft_s[cnum][frqNum][DFTLEN - 1] matters, but
+                // Only the value of sdft_s[cnum][frqNum][intDftLen - 1] matters, but
                 // its value is not yet known, and it can only be calculated by
                 // calculating all of the sdft_s values from the current
-                // sdft_s[cnum][frqNum][DFTLEN - 1] forward by index_advance
+                // sdft_s[cnum][frqNum][intDftLen - 1] forward by index_advance
                 /// samples.
-                for (snum = DFTLEN; snum < DFTLEN + index_advance; snum++)
+                for (snum = intDftLen; snum < intDftLen + index_advance; snum++)
                 {
-                    // Sk[n] = coeff * (Sk[n-1] + x[n] + x[n-DFTLEN])
-                    // Repeatedly overwrite sdft_s[cnum][frqNum][DFTLEN - 1]
-                    sdft_s[cnum][frqNum][DFTLEN - 1] = sdft_coeff[cnum][frqNum] * (
-                        sdft_s[cnum][frqNum][DFTLEN - 1]  // prior sdft_s
-                        + intSamples[DFTLEN + snum]  // new sample
-                        + intSamples[snum]  // sample from DFTLEN samples back
+                    // Sk[n] = coeff * (Sk[n-1] + x[n] + x[n-intDftLen])
+                    // Repeatedly overwrite sdft_s[cnum][frqNum][intDftLen - 1]
+                    sdft_s[cnum][frqNum][intDftLen - 1] = sdft_coeff[cnum][frqNum] * (
+                        sdft_s[cnum][frqNum][intDftLen - 1]  // prior sdft_s
+                        + intSamples[intDftLen + snum]  // new sample
+                        + intSamples[snum]  // sample from intDftLen samples back
                     );
                 }
             }
