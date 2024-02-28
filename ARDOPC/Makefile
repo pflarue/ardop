@@ -8,7 +8,7 @@ berlekamp.o galois.o SoundInput.o TCPHostInterface.o SCSHostInterface.o wav.o RX
 CFLAGS = -DLINBPQ -MMD -g 
 CC = gcc
 
-vpath %.c ../ARDOPCommonCode
+vpath %.c ../ARDOPCommonCode ../lib/rscode ../lib/hid ../lib/bpq32
 vpath %.h ../ARDOPCommonCode
 vpath %.o ./
 			                       

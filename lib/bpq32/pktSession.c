@@ -28,7 +28,7 @@ along with LinBPQ/BPQ32.  If not, see http://www.gnu.org/licenses
 #define HANDLE int
 #endif
 
-#include "ARDOPC.h"
+#include "../../ARDOPC/ARDOPC.h"
 
 #ifndef WIN32
 

@@ -463,7 +463,7 @@ void LostHost()
 }
 
 
-#include "hidapi.h"
+#include "../lib/hid/hidapi.h"
 
 #ifdef WIN32
 

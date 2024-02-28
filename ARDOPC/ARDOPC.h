@@ -126,7 +126,7 @@ extern unsigned int pttOnTime;
 
 
 
-#include "ecc.h"				// RS Constants
+#include "../lib/rscode/ecc.h"				// RS Constants
 
 typedef int BOOL;
 typedef unsigned char UCHAR;
