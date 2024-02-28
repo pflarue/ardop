@@ -1305,9 +1305,8 @@ BOOL RSDecode(UCHAR * bytRcv, int Length, int CheckLen, BOOL * blnRSOK)
 {	
 #ifdef NEWRS
 
-	// Using a modified version of Henry Minsky's code
-	
-	//Copyright Henry Minsky (hqm@alum.mit.edu) 1991-2009
+	// Using a modified version of Henry Minsky's rscode library
+	// see ardop/lib/rscode
 
 	// Rick's Implementation processes the byte array in reverse. and also 
 	//	has the check bytes in the opposite order. I've modified the encoder
