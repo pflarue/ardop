@@ -963,9 +963,15 @@ VOID Statsprintf(const char * format, ...)
 			return;
 		else
 		{
-			sprintf(timebuf, "%02d:%02d:%02d.%03d\r\n",
+			// Including the date is redundant with the filename for the session log
+			// file, but is useful for also writing it to the console.
+			sprintf(timebuf, "%04d/%02d/%02d %02d:%02d:%02d.%03dz\r\n",
+				st.wYear, st.wMonth, st.wDay,
 				st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
 			fputs(timebuf, statslogfile);
+			// Printing the UTC date and time to the console with the session stats
+			// may be useful if sessions are logged manually.
+			printf("%s\n", timebuf);
 		}
 	}
 
