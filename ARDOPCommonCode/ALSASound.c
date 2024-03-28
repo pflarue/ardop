@@ -74,6 +74,7 @@ extern BOOL InitRXO;
 extern BOOL WriteRxWav;
 extern BOOL WriteTxWav;
 extern BOOL TwoToneAndExit;
+extern BOOL FixTiming;
 extern char DecodeWav[256];
 extern int WavNow;  // Time since start of WAV file being decoded
 
@@ -1069,8 +1070,8 @@ int GetNextInputDevice(char * dest, int max, int n)
 // OpenSoundPlayback() is executed, then intPeriodTime or periodSize will be
 // set to a suitable non-zero value allowing the fix to be reapplied each
 // additional time OpenSoundPlayback() is executed.
-unsigned int intPeriodTime = 0; // duration of one period in microseconds.
-snd_pcm_uframes_t periodSize = 0;  // number of frames per period
+unsigned int intSetPeriodTime = 0; // If !=0, explicitly set duration of one period in microseconds.
+snd_pcm_uframes_t setPeriodSize = 0;  // If != 0, explicitly set number of frames per period
 
 // If ALSA configuration is not valid on first execution of
 // OpenSoundPlayback(), then try to fix it.  If it is invalid
@@ -1089,6 +1090,9 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 
 	char buf1[100];
 	char * ptr;
+
+	unsigned int intPeriodTime = 0; // reported duration of one period in microseconds.
+	snd_pcm_uframes_t periodSize = 0;  // reported number of frames per period
 
 	if (playhandle)
 	{
@@ -1161,11 +1165,11 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 	
 //	Debugprintf("Play using %d channels", channels);
 
-	if (intPeriodTime)
+	if (intSetPeriodTime)
 	{
 		// Explicitly set duration of one period in microseconds to correct ALSA's
 		// misconfiguration that would result in a TX symbol timing error.
-		if ((err = snd_pcm_hw_params_set_period_time (playhandle, hw_params, intPeriodTime, 0)) < 0) {
+		if ((err = snd_pcm_hw_params_set_period_time (playhandle, hw_params, intSetPeriodTime, 0)) < 0) {
 			if (ErrorMsg)
 				sprintf (ErrorMsg, "cannot set playback period time (%s)", snd_strerror(err));
 			else
@@ -1173,11 +1177,11 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 			return false;
 		}
 	}
-	else if (periodSize)
+	else if (setPeriodSize)
 	{
 		// Explicitly set the number of frames per period to correct ALSA's
 		// misconfiguration that would result in a TX symbol timing error.
-		if ((err = snd_pcm_hw_params_set_period_size (playhandle, hw_params, periodSize, 0)) < 0) {
+		if ((err = snd_pcm_hw_params_set_period_size (playhandle, hw_params, setPeriodSize, 0)) < 0) {
 			if (ErrorMsg)
 				sprintf (ErrorMsg, "cannot set playback period size (%s)", snd_strerror(err));
 			else
@@ -1218,7 +1222,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 	}
 	// WriteDebugLog(LOGINFO, "snd_pcm_hw_params_get_period_size(hw_params, &periodSize, &intDir) periodSize=%d intDir=%d", periodSize, intDir);
 
-	if (intPeriodTime * intRate != periodSize * 1000000 && (blnFirstOpenSoundPlayback || intPeriodTime || periodSize)) {
+	if (intPeriodTime * intRate != periodSize * 1000000 && (blnFirstOpenSoundPlayback || intSetPeriodTime || setPeriodSize) && FixTiming) {
 		snd_pcm_close(playhandle);
 		playhandle = NULL;
 		snd_pcm_hw_params_free(hw_params);
@@ -1231,26 +1235,32 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 				intPeriodTime, intRate, periodSize);
 			WriteDebugLog(LOGWARNING, "Attempting to reconfigure...");
 			if (intPeriodTime * intRate > periodSize * 1000000) {
-				intPeriodTime = periodSize * 1000000 / intRate;
-				WriteDebugLog(LOGWARNING, "Setting playback period time to %d.", intPeriodTime);
+				intSetPeriodTime = periodSize * 1000000 / intRate;
+				WriteDebugLog(LOGWARNING, "Setting playback period time to %d.", intSetPeriodTime);
 			}
 			else
 			{
-				periodSize = intPeriodTime * intRate / 1000000;
-				WriteDebugLog(LOGWARNING, "Setting playback period size to %d.", periodSize);
+				setPeriodSize = intPeriodTime * intRate / 1000000;
+				WriteDebugLog(LOGWARNING, "Setting playback period size to %d.", setPeriodSize);
 			}
 		}
 		else
 		{
 			// This branch is untested since a case where the configuration can't be fixed has not been found.
 			WriteDebugLog(LOGERROR, "Unable to fix inconsistent ALSA playback configuration.  Reverting to previous configuration.");
-			intPeriodTime = 0;
-			periodSize = 0;
+			intSetPeriodTime = 0;
+			setPeriodSize = 0;
 		}
 
 		// Do OpenSoundPlayback() again using the new value of intPeriodTime or periodSize.
 		return OpenSoundPlayback(PlaybackDevice, m_sampleRate, channels, ErrorMsg);
 	}
+	else if (intPeriodTime * intRate != periodSize * 1000000 && blnFirstOpenSoundPlayback && !FixTiming) {
+		WriteDebugLog(LOGWARNING, "WARNING: Inconsistent ALSA playback configuration: %d * %d != %d * 1000000.",
+			intPeriodTime, intRate, periodSize);
+		WriteDebugLog(LOGWARNING, "WARNING: The -A option was specified.  So, ALSA misconfiguration will be ignored.  This option is ONLY intended for testing/debuging.  It IS NOT INTENDED FOR NORMAL USE.");
+	}
+	blnFirstOpenSoundPlayback = false;
 	// WriteDebugLog(LOGINFO, "Period time=%d (microsecond). Sample Rate=%d (Hz).  Period Size=%d (samples).",
 	//	intPeriodTime, intRate, periodSize);
 	
