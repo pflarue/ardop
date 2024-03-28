@@ -1039,13 +1039,17 @@ void ProcessNewSamples(short * Samples, int nSamples)
 //			printtick(Msg);
 			return;		//  insufficient samples
 		}
+		// Reset sdft in case frame data is 4FSK with baud rate different from the
+		// 50 baud used for the frame type.  Alternatively, this could be done only
+		// for specified frame types, which would be slightly more efficient when
+		// processing frames with 50 baud 4FSK frame data.
+		blnSdftInitialized = FALSE;
 
 		if (intFrameType == -1)		  // poor decode quality (large decode distance)
 		{
 			State = SearchingForLeader;
 			ClearAllMixedSamples();
 			DiscardOldSamples();
-			blnSdftInitialized = FALSE;
 			WriteDebugLog(LOGDEBUG, "poor frame type decode");
 
 			// stcStatus.BackColor = SystemColors.Control
@@ -1239,7 +1243,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			return;	
 
 		//	We have the whole frame, so process it
-		 blnSdftInitialized = FALSE;
+		blnSdftInitialized = FALSE;
 
 //		printtick("got whole frame");
 
@@ -2127,6 +2131,7 @@ BOOL DemodFrameType4FSK(int intPtr, short * intSamples, int * intToneMags)
 
 	if (UseSDFT)
 	{
+		intSampPerSym = 240;  // 50 baud 4FSK frame type
 		DemodEachCar4FSK_SDFT(intPtr, intStdCenterFrqs[0], TRUE);
 		return TRUE;
 	}
@@ -2611,8 +2616,8 @@ BOOL Demod1Car4FSK()
 	return TRUE;
 }
 
-short intSdftSamples[5 * DFTLEN / 2];
-const short intHalfDftlenZeros[DFTLEN / 2];
+short intSdftSamples[5 * MAXDFTLEN / 2];
+const short intHalfDftlenZeros[MAXDFTLEN / 2];
 int cumAdvances = 0;
 int symbolCnt = 0;
 // Function to demodulate each carrier for 4FSK tones
@@ -2647,15 +2652,18 @@ void DemodEachCar4FSK_SDFT(int Start, int * intCenterFrqs, BOOL blnGetFrameType)
     UCHAR bytSym;
     int intToneMags_max;
 	UCHAR bytCharValues[CARCNT];
+	// size of intSampPerSym/2 samples
+	int intHalfSampPerSymSize = sizeof(intHalfDftlenZeros)*intSampPerSym/MAXDFTLEN;
 
-    // If this is the first call for a new 4FSK frame, then call init_sdft(Start, intCenterFrqs)
-    // before demodulating first symbol.
+    // If demodulating the frame type, or if this is the first call to demodulate data for a 
+    // 4FSK frame, then blnSdftInitialized is false, so call 
+    // init_sdft(Start, intCenterFrqs, intSampPerSym) before demodulating first symbol.
     if (!blnSdftInitialized)
     {
-        // init_sdft() consumes the first DFTLEN/2 samples of the first symbol.
-        init_sdft(intCenterFrqs, intFilteredMixedSamples + Start);
-        memcpy(intSdftSamples, intHalfDftlenZeros, sizeof(intHalfDftlenZeros));
-        memcpy(intSdftSamples + DFTLEN/2, intFilteredMixedSamples + Start, sizeof(intHalfDftlenZeros));
+        // init_sdft() consumes the first intSampPerSym/2 samples of the first symbol.
+        init_sdft(intCenterFrqs, intFilteredMixedSamples + Start, intSampPerSym);
+        memcpy(intSdftSamples, intHalfDftlenZeros, intHalfSampPerSymSize);
+        memcpy(intSdftSamples + intSampPerSym/2, intFilteredMixedSamples + Start, intHalfSampPerSymSize);
         // Don't adjust Start or apply Corrections after init_sdft()
         cumAdvances = 0;
         symbolCnt = 0;
@@ -2675,23 +2683,23 @@ void DemodEachCar4FSK_SDFT(int Start, int * intCenterFrqs, BOOL blnGetFrameType)
 		/*
         Since this represents a time range in the samples, demodulate
         output for all carriers for this time range together.
-        sdft() requires intSamples to begin with the DFTLEN samples
+        sdft() requires intSamples to begin with the intSampPerSym samples
         consumed by the prior call of sdft(), or the values passed to
-        init_sdft() which were implicity preceeded by DFTLEN/2 zeros.
+        init_sdft() which were implicity preceeded by intSampPerSym/2 zeros.
         These old samples shall be followed by
-        DFTLEN new samples and some extra samples to allow for a
-        positive timing_advance.  An extra DFTLEN/2, for a total
-        2.5*DFTLEN samples, is more than enough extra.
+        intSampPerSym new samples and some extra samples to allow for a
+        positive timing_advance.  An extra intSampPerSym/2, for a total
+        2.5*intSampPerSym samples, is more than enough extra.
         This requires that intFilteredMixedSamples extends
-        (nSym + 1)*DFTLEN past Start when this function was called.
-        intSdftSamples already begins with DFTLEN old samples
+        (nSym + 1)*intSampPerSym past Start when this function was called.
+        intSdftSamples already begins with intSampPerSym old samples
         */
         memcpy(
-			intSdftSamples + DFTLEN,
-			intFilteredMixedSamples + Start + DFTLEN/2,
-			3 * sizeof(intHalfDftlenZeros));
+			intSdftSamples + intSampPerSym,
+			intFilteredMixedSamples + Start + intSampPerSym/2,
+			3 * intHalfSampPerSymSize);
         // timing advance may be positive or negative.
-        timing_advance = sdft(intCenterFrqs, intSdftSamples, intToneMags, intToneMagsIndex);
+        timing_advance = sdft(intCenterFrqs, intSdftSamples, intToneMags, intToneMagsIndex, intSampPerSym);
         cumAdvances += timing_advance;
         symbolCnt++;
         // Adjust Start so that the correct samples are included in
@@ -2708,8 +2716,8 @@ void DemodEachCar4FSK_SDFT(int Start, int * intCenterFrqs, BOOL blnGetFrameType)
 		// timing_advance, as required.
         memcpy(
             intSdftSamples,
-            intFilteredMixedSamples + Start + DFTLEN/2,
-            2 * sizeof(intHalfDftlenZeros));
+            intFilteredMixedSamples + Start + intSampPerSym/2,
+            2 * intHalfSampPerSymSize);
 
         // Could an indicator of confidence level of bytSym be used for improved FEC??
 	    for (cnum = 0; cnum < CARCNT; cnum++)
@@ -2769,7 +2777,7 @@ void DemodEachCar4FSK_SDFT(int Start, int * intCenterFrqs, BOOL blnGetFrameType)
                 1.0 * cumAdvances / symbolCnt
             );
         }
-        Start += DFTLEN;  // Advance by one symbol.  timing adjustments already made.
+        Start += intSampPerSym;  // Advance by one symbol.  timing adjustments already made.
 	}
     if (!blnGetFrameType)
     {
