@@ -1,3 +1,4 @@
+
 //
 //	Code Common to all versions of ARDOP. 
 //
@@ -177,11 +178,12 @@ static struct option long_options[] =
 	{"extradelay",  required_argument, 0 , 'e'},
 	{"leaderlength",  required_argument, 0 , 'x'},
 	{"trailerlength",  required_argument, 0 , 't'},
-	{"receive", no_argument, 0, 'r'},
+	{"receiveonly", no_argument, 0, 'r'},
 	{"writewav",  no_argument, 0, 'w'},
-	{"decodewav",  required_argument, 0, 'W'},
+	{"writetxwav",  no_argument, 0, 'T'},
+	{"decodewav",  required_argument, 0, 'd'},
 	{"twotone", no_argument, 0, 'n'},
-	{"sdft", no_argument, 0, 'n'},
+	{"sdft", no_argument, 0, 's'},
 	{"ignorealsaerror", no_argument, 0, 'A'},	
 	{"help",  no_argument, 0 , 'h'},
 	{ NULL , no_argument , NULL , no_argument }
@@ -212,7 +214,7 @@ char HelpScreen[] =
 	"-g [Pin]                             GPIO pin to use for PTT (ARM Only)\n"
 	"                                     Default 17. use -Pin to invert PTT state\n"
 	"-k string or --keystring string      String (In HEX) to send to the radio to key PTT\n"
-	"-u string or --unkeystring string    String (In HEX) to send to the radio to unkeykey PTT\n"
+	"-u string or --unkeystring string    String (In HEX) to send to the radio to unkey PTT\n"
 	"-L use Left Channel of Soundcard for receive in stereo mode\n"
 	"-R use Right Channel of Soundcard for receive in stereo mode\n"
 	"-e val or --extradelay val           Extend no response timeout for use on paths with long delay\n"
@@ -221,7 +223,7 @@ char HelpScreen[] =
 	"-r or --receiveonly                  Start in RXO (receive only) mode.\n"
 	"-w or --writewav                     Write WAV files of received audio for debugging.\n"
 	"-T or --writetxwav                   Write WAV files of sent audio for debugging.\n"
-	"-W pathname or --decodewav pathname  Pathname of WAV file to decode instead of listening.\n"
+	"-d pathname or --decodewav pathname  Pathname of WAV file to decode instead of listening.\n"
 	"-n or --twotone                      Send a 5 second two tone signal and exit.\n"
 	"-s or --sdft                         Use the alternative Sliding DFT based 4FSK decoder.\n"
 	"-A or --ignorealsaerror              Ignore ALSA config error that causes timing error.\n"
@@ -242,7 +244,7 @@ void processargs(int argc, char * argv[])
 	{		
 		int option_index = 0;
 
-		c = getopt_long(argc, argv, "l:v:V:c:p:g::k:u:e:hLRytrzwTW:nsA", long_options, &option_index);
+		c = getopt_long(argc, argv, "l:v:V:c:p:g::k:u:e:hLRytrzwTd:nsA", long_options, &option_index);
 
 		// Check for end of operation or error
 		if (c == -1)
@@ -396,7 +398,7 @@ void processargs(int argc, char * argv[])
 			WriteTxWav = TRUE;
 			break;
 
-		case 'W':
+		case 'd':
 			strcpy(DecodeWav, optarg);
 			break;
 
