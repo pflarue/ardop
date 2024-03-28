@@ -319,34 +319,37 @@ VOID Statsprintf(const char * format, ...)
 	char Mess[10000];
 	va_list(arglist);
 	UCHAR Value[100];
-	char timebuf[32];
-	struct timespec tp;
-
-	int hh;
-	int mm;
-	int ss;
-
-	clock_gettime(CLOCK_REALTIME, &tp);
 
 	va_start(arglist, format);
 	vsnprintf(Mess, sizeof(Mess), format, arglist);
 	strcat(Mess, "\n");
 
-	ss = tp.tv_sec % 86400;		// Secs int day
-	hh = ss / 3600;
-	mm = (ss - (hh * 3600)) / 60;
-	ss = ss % 60;
-
-	sprintf(timebuf, "%02d:%02d:%02d.%03d ",
-		hh, mm, ss, (int)tp.tv_nsec/1000000);
-
 	if (statslogfile == NULL)
 	{
+		char timebuf[32];
+		struct timespec tp;
+
+		int hh;
+		int mm;
+		int ss;
 		struct tm * tm;
 		time_t T;
 
+		clock_gettime(CLOCK_REALTIME, &tp);
+
+		ss = tp.tv_sec % 86400;		// Secs int day
+		hh = ss / 3600;
+		mm = (ss - (hh * 3600)) / 60;
+		ss = ss % 60;
+
 		T = time(NULL);
 		tm = gmtime(&T);
+
+		// Including the date is redundant with the filename for the session log
+		// file, but is useful for also writing it to the console.
+		sprintf(timebuf, "%04d/%02d/%02d %02d:%02d:%02d.%03dz ",
+			tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
+			hh, mm, ss, (int)tp.tv_nsec/1000000);
 
 		sprintf(Value, "%s%d_%04d%02d%02d.log",
 		LogName[2], port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday);
@@ -360,8 +363,10 @@ VOID Statsprintf(const char * format, ...)
 		{
 			fputs(timebuf, statslogfile);
 			fputs("\n", statslogfile);
+			// Printing the UTC date and time to the console with the session stats
+			// may be useful if sessions are logged manually.
+			printf("%s\n", timebuf);
 		}
-
 	}
 
 	fputs(Mess, statslogfile);
