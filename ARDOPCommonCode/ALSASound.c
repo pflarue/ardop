@@ -50,6 +50,7 @@ BOOL WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite);
 VOID processargs(int argc, char * argv[]);
 void Send5SecTwoTone();
 
+VOID WriteDebugLog(int Level, const char * format, ...);
 
 int initdisplay();
 
@@ -157,6 +158,7 @@ void StartRxWav()
 	// the recording was started, but the times of the received 
 	// transmissions, other than the first one, are not indicated.
 	char rxwf_pathname[1024];
+	int pnlen;
 
 	if (rxwf != NULL)
 	{
@@ -179,13 +181,23 @@ void StartRxWav()
 	ss = ss % 60;
 
 	if (LogDir[0])
-		sprintf(rxwf_pathname, "%s/ARDOP_rxaudio_%d_%04d%02d%02d_%02d%02d%02d.wav",
+		pnlen = snprintf(rxwf_pathname, sizeof(rxwf_pathname),
+			"%s/ARDOP_rxaudio_%d_%04d%02d%02d_%02d%02d%02d.wav",
 			LogDir, port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
 			hh, mm, ss);
 	else
-		sprintf(rxwf_pathname, "ARDOP_rxaudio_%d_%04d%02d%02d_%02d:%02d:%02d.wav",
+		pnlen = snprintf(rxwf_pathname, sizeof(rxwf_pathname),
+			"ARDOP_rxaudio_%d_%04d%02d%02d_%02d:%02d:%02d.wav",
 			port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
 			hh, mm, ss);
+	if (pnlen == -1 || pnlen > sizeof(rxwf_pathname)) {
+		// Logpath too long likely to also prevent writing to log files.
+		// So, print this error directly to console instead of using
+		// WriteDebugLog.
+		printf("Unable to write WAV file, invalid pathname. Logpath may be too long.\n");
+		WriteRxWav = FALSE;
+		return;
+	}
 	rxwf = OpenWavW(rxwf_pathname);
 	extendRxwf();
 }
@@ -205,6 +217,8 @@ void StartTxWav()
 	// directory
 	char txwff_pathname[1024];
 	// char txwfu_pathname[1024];
+	int pnflen;
+	// int pnulen;
 
 	if (txwff != NULL) // || txwfu != NULL)
 	{
@@ -227,22 +241,42 @@ void StartTxWav()
 
 	if (LogDir[0])
 	{
-		sprintf(txwff_pathname, "%s/ARDOP_txfaudio_%d_%04d%02d%02d_%02d%02d%02d.wav",
+		pnflen = snprintf(txwff_pathname, sizeof(txwff_pathname),
+			"%s/ARDOP_txfaudio_%d_%04d%02d%02d_%02d%02d%02d.wav",
 			LogDir, port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
 			hh, mm, ss);
-		// sprintf(txwfu_pathname, "%s/ARDOP_txuaudio_%d_%04d%02d%02d_%02d%02d%02d.wav",
+		// pnulen = snprintf(txwfu_pathname, sizeof(txwfu_pathname),
+		//  "%s/ARDOP_txuaudio_%d_%04d%02d%02d_%02d%02d%02d.wav",
 		// 	LogDir, port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
 		// 	hh, mm, ss);
 	}
 	else
 	{
-		sprintf(txwff_pathname, "ARDOP_txfaudio_%d_%04d%02d%02d_%02d:%02d:%02d.wav",
+		pnflen = snprintf(txwff_pathname, sizeof(txwff_pathname),
+			"ARDOP_txfaudio_%d_%04d%02d%02d_%02d:%02d:%02d.wav",
 			port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
 			hh, mm, ss);
-		// sprintf(txwfu_pathname, "ARDOP_txuaudio_%d_%04d%02d%02d_%02d:%02d:%02d.wav",
+		// pnulen = snprintf(txwfu_pathname, sizeof(txwfu_pathname),
+		//  "ARDOP_txuaudio_%d_%04d%02d%02d_%02d:%02d:%02d.wav",
 		// 	port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
 		// 	hh, mm, ss);
 	}
+	if (pnflen == -1 || pnflen > sizeof(txwff_pathname)) {
+		// Logpath too long likely to also prevent writing to log files.
+		// So, print this error directly to console instead of using
+		// WriteDebugLog.
+		printf("Unable to write WAV file, invalid pathname. Logpath may be too long.\n");
+		WriteTxWav = FALSE;
+		return;
+	}
+	// if (pnulen == -1 || pnulen > sizeof(txwfu_pathname)) {
+	// Logpath too long likely to also prevent writing to log files.
+	// So, print this error directly to console instead of using
+	// WriteDebugLog.
+	//  printf("Unable to write WAV file, invalid pathname. Logpath may be too long.\n");
+	//	WriteTxWav = FALSE;
+	//	return;
+	// }
 	txwff = OpenWavW(txwff_pathname);
 	// txwfu = OpenWavW(txwfu_pathname);
 }
@@ -318,10 +352,11 @@ VOID Statsprintf(const char * format, ...)
 {
 	char Mess[10000];
 	va_list(arglist);
-	UCHAR Value[100];
+	UCHAR Value[256];
+	int vlen;
 
 	va_start(arglist, format);
-	vsnprintf(Mess, sizeof(Mess), format, arglist);
+	vsnprintf(Mess, sizeof(Mess) - 1, format, arglist);
 	strcat(Mess, "\n");
 
 	if (statslogfile == NULL)
@@ -351,8 +386,16 @@ VOID Statsprintf(const char * format, ...)
 			tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
 			hh, mm, ss, (int)tp.tv_nsec/1000000);
 
-		sprintf(Value, "%s%d_%04d%02d%02d.log",
-		LogName[2], port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday);
+		vlen = snprintf(Value, sizeof(Value), "%s%d_%04d%02d%02d.log",
+			LogName[2], port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday);
+		if (vlen == -1 || vlen > sizeof(Value)) {
+			// Logpath too long likely to also prevent writing to log files.
+			// So, print this error directly to console instead of using
+			// WriteDebugLog.
+			printf("ERROR: Unable to write Stats Log. Logpath may be too long.\n");
+			printf("%s", Mess);
+			return;
+		}
 
 		if ((statslogfile = fopen(Value, "ab")) == NULL)
 		{
@@ -477,6 +520,7 @@ void main(int argc, char * argv[])
 {
 	struct timespec tp;
 	struct sigaction act;
+	int lnlen;
 
 //	Sleep(1000);	// Give LinBPQ time to complete init if exec'ed by linbpq
 
@@ -484,9 +528,13 @@ void main(int argc, char * argv[])
 
 	if (LogDir[0])
 	{
-		sprintf(&LogName[0][0], "%s/%s", LogDir, "ARDOPDebug");
-		sprintf(&LogName[1][0], "%s/%s", LogDir, "ARDOPException");
-		sprintf(&LogName[2][0], "%s/%s", LogDir, "ARDOPSession");
+		snprintf(&LogName[0][0], sizeof(LogName[0]), "%s/%s", LogDir, "ARDOPDebug");
+		lnlen = snprintf(&LogName[1][0], sizeof(LogName[1]), "%s/%s", LogDir, "ARDOPException");
+		snprintf(&LogName[2][0], sizeof(LogName[2]), "%s/%s", LogDir, "ARDOPSession");
+		if (lnlen == -1 || lnlen > sizeof(LogName[1])) {
+			printf("ERROR: Unable to write Log files. Logpath may be too long.\n");
+			FileLogLevel = 0;  // This will prevent most attempts to write to log files.
+		}
 	}
 
 	setlinebuf(stdout);				// So we can redirect output to file and tail
@@ -1846,6 +1894,7 @@ int WriteLog(char * msg, int Log)
 	struct timespec tp;
 
 	UCHAR Value[256];
+	int vlen;
 	
 	int hh;
 	int mm;
@@ -1865,12 +1914,16 @@ int WriteLog(char * msg, int Log)
 		tm = gmtime(&T);
 
 		if (HostPort[0])
-			sprintf(Value, "%s%s_%04d%02d%02d.log",
+			vlen = snprintf(Value, sizeof(Value), "%s%s_%04d%02d%02d.log",
 				LogName[Log], HostPort, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday);
 		else
-			sprintf(Value, "%s%d_%04d%02d%02d.log",
+			vlen = snprintf(Value, sizeof(Value), "%s%d_%04d%02d%02d.log",
 				LogName[Log], port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday);
-	
+		if (vlen == -1 || vlen > sizeof(Value)) {
+			printf("ERROR: Unable to open log file.  Log path probably too long.\n");
+			FileLogLevel = 0;
+			return FALSE;
+		}
 		if ((logfile[Log] = fopen(Value, "a")) == NULL)
 			return FALSE;
 	}
