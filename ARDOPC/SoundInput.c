@@ -1896,7 +1896,9 @@ BOOL SearchFor2ToneLeader3(short * intNewSamples, int Length, float * dblOffsetH
                    		
 				// Capture power for debugging ...note: convert to 3 KHz noise bandwidth from 25Hz or 12.Hz for reporting consistancy.
 	
-				sprintf(strDecodeCapture, "Ldr; S:N(3KHz) Early= %f dB, Full %f dB, Offset= %f Hz: ", dblSNdBPwrEarly - 20.8f, dblSNdBPwr  - 24.77f, *dblOffsetHz);
+				snprintf(strDecodeCapture, sizeof(strDecodeCapture), 
+					"Ldr; S:N(3KHz) Early= %f dB, Full %f dB, Offset= %f Hz: ", 
+					dblSNdBPwrEarly - 20.8f, dblSNdBPwr  - 24.77f, *dblOffsetHz);
 
 				if (AccumulateStats)
 				{              
@@ -2264,8 +2266,9 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 
 		if (intIatMinDistance1 == 0x29 && intIatMinDistance3 == 0x29 && ((dblMinDistance1 < 0.3) || (dblMinDistance3 < 0.3)))
 		{
-			sprintf(strDecodeCapture, "%s MD Decode;1 ID=H%X, Type=H29: %s, D1= %.2f, D3= %.2f",
-				 strDecodeCapture, bytLastARQSessionID, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance3);
+			snprintf(strDecodeCapture + strlen(strDecodeCapture), sizeof(strDecodeCapture) - strlen(strDecodeCapture), 
+				" MD Decode;1 ID=H%X, Type=H29: %s, D1= %.2f, D3= %.2f",
+				bytLastARQSessionID, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance3);
 			
 			WriteDebugLog(LOGDEBUG, "[Frame Type Decode OK  ] %s", strDecodeCapture);
 
@@ -2276,8 +2279,9 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 
 		if (intIatMinDistance1 == intIatMinDistance2 && ((dblMinDistance1 < 0.3) || (dblMinDistance2 < 0.3)))
 		{
-			sprintf(strDecodeCapture, "%s MD Decode;2 ID=H%X, Type=H%X:%s, D1= %.2f, D2= %.2f",
-				 strDecodeCapture, bytSessionID, intIatMinDistance1, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance2);
+			snprintf(strDecodeCapture + strlen(strDecodeCapture),  sizeof(strDecodeCapture) - strlen(strDecodeCapture), 
+				" MD Decode;2 ID=H%X, Type=H%X:%s, D1= %.2f, D2= %.2f",
+				bytSessionID, intIatMinDistance1, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance2);
 			WriteDebugLog(LOGDEBUG, "[Frame Type Decode OK  ] %s", strDecodeCapture);
 			dblOffsetLastGoodDecode = dblOffsetHz;
 			dttLastGoodFrameTypeDecode = Now;
@@ -2286,8 +2290,9 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 		}
 		if ((dblMinDistance1 < 0.3) && (dblMinDistance1 < dblMinDistance2) && IsDataFrame(intIatMinDistance1) )	//  this would handle the case of monitoring an ARQ connection where the SessionID is not 0xFF
 		{
-			sprintf(strDecodeCapture, "%s MD Decode;3 ID=H%X, Type=H%X:%s, D1= %.2f, D2= %.2f",
-				 strDecodeCapture, bytSessionID, intIatMinDistance1, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance2);
+			snprintf(strDecodeCapture + strlen(strDecodeCapture), sizeof(strDecodeCapture) - strlen(strDecodeCapture), 
+				" MD Decode;3 ID=H%X, Type=H%X:%s, D1= %.2f, D2= %.2f",
+				bytSessionID, intIatMinDistance1, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance2);
 			WriteDebugLog(LOGDEBUG, "[Frame Type Decode OK  ] %s", strDecodeCapture);
 			
 			return intIatMinDistance1;
@@ -2295,15 +2300,17 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 
 		if ((dblMinDistance2 < 0.3) && (dblMinDistance2 < dblMinDistance1) && IsDataFrame(intIatMinDistance2))  // this would handle the case of monitoring an FEC transmission that failed above when the session ID is = 0xFF
 		{
-			sprintf(strDecodeCapture, "%s MD Decode;4 ID=H%X, Type=H%X:%s, D1= %.2f, D2= %.2f",
-				 strDecodeCapture, bytSessionID, intIatMinDistance1, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance2);
+			snprintf(strDecodeCapture + strlen(strDecodeCapture),  sizeof(strDecodeCapture) - strlen(strDecodeCapture),
+				" MD Decode;4 ID=H%X, Type=H%X:%s, D1= %.2f, D2= %.2f",
+				bytSessionID, intIatMinDistance1, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance2);
 			WriteDebugLog(LOGDEBUG, "[Frame Type Decode OK  ] %s", strDecodeCapture);
 
 			return intIatMinDistance2;
 		}
 
-		sprintf(strDecodeCapture, "%s MD Decode;5 Type1=H%X, Type2=H%X, D1= %.2f, D2= %.2f",
-			 strDecodeCapture, intIatMinDistance1, intIatMinDistance2, dblMinDistance1, dblMinDistance2);
+		snprintf(strDecodeCapture + strlen(strDecodeCapture), sizeof(strDecodeCapture) - strlen(strDecodeCapture),
+			" MD Decode;5 Type1=H%X, Type2=H%X, D1= %.2f, D2= %.2f",
+			intIatMinDistance1, intIatMinDistance2, dblMinDistance1, dblMinDistance2);
 		WriteDebugLog(LOGDEBUG, "[Frame Type Decode Fail] %s", strDecodeCapture);
 		
 		return -1;		// indicates poor quality decode so  don't use
@@ -2316,8 +2323,9 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 
 		if (intIatMinDistance1 == intIatMinDistance2)  // matching indexes at minimal distances so high probablity of correct decode.
 		{
-			sprintf(strDecodeCapture, "%s MD Decode;6 ID=H%X, Type=H%X:%s, D1= %.2f, D2= %.2f",
-				 strDecodeCapture, bytSessionID, intIatMinDistance1, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance2);
+			snprintf(strDecodeCapture + strlen(strDecodeCapture), sizeof(strDecodeCapture) - strlen(strDecodeCapture),
+				" MD Decode;6 ID=H%X, Type=H%X:%s, D1= %.2f, D2= %.2f",
+				bytSessionID, intIatMinDistance1, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance2);
 
 
 			if ((dblMinDistance1 < 0.3) || (dblMinDistance2 < 0.3))
@@ -2338,8 +2346,9 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 
 		else if (intIatMinDistance1 == intIatMinDistance3)	 //matching indexes at minimal distances so high probablity of correct decode.
 		{
-			sprintf(strDecodeCapture, "%s MD Decode;7 ID=H%X, Type=H%X:%s, D1= %.2f, D3= %.2f",
-				 strDecodeCapture, bytSessionID, intIatMinDistance1, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance3);
+			snprintf(strDecodeCapture + strlen(strDecodeCapture), sizeof(strDecodeCapture) - strlen(strDecodeCapture),
+				" MD Decode;7 ID=H%X, Type=H%X:%s, D1= %.2f, D3= %.2f",
+				bytSessionID, intIatMinDistance1, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance3);
 
 			if (intIatMinDistance1 >= 0x31 && intIatMinDistance1 <= 0x38 && ((dblMinDistance1 < 0.3) || (dblMinDistance3 < 0.3)))  // Check for ConReq (ISS must have missed previous ConAck  
 			{
@@ -2369,8 +2378,9 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 			if ((intIatMinDistance1 >= 0xE0 && intIatMinDistance1 <=0xFF) || (intIatMinDistance1 == 0x23) || 
 				(intIatMinDistance1 == 0x2C) || (intIatMinDistance1 == 0x29))  // Check for critical ACK, BREAK, END, or DISC frames  
 			{
-				sprintf(strDecodeCapture, "%s MD Decode;8 ID=H%X, Critical Type=H%X: %s, D1= %.2f, D2= %.2f",
-					 strDecodeCapture, bytSessionID, intIatMinDistance1, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance2);
+				snprintf(strDecodeCapture + strlen(strDecodeCapture), sizeof(strDecodeCapture) - strlen(strDecodeCapture),
+					" MD Decode;8 ID=H%X, Critical Type=H%X: %s, D1= %.2f, D2= %.2f",
+					bytSessionID, intIatMinDistance1, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance2);
 				if ((dblMinDistance1 < 0.3f) || (dblMinDistance2 < 0.3f)) // use tighter limits   here
 				{
 					dblOffsetLastGoodDecode = dblOffsetHz;
@@ -2386,8 +2396,9 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 			}
 			else	//  non critical frames
 			{
-				sprintf(strDecodeCapture, "%s MD Decode;9 ID=H%X, Type=H%X: %s, D1= %.2f, D2= %.2f",
-					 strDecodeCapture, bytSessionID, intIatMinDistance1, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance2);
+				snprintf(strDecodeCapture + strlen(strDecodeCapture), sizeof(strDecodeCapture) - strlen(strDecodeCapture),
+					" MD Decode;9 ID=H%X, Type=H%X: %s, D1= %.2f, D2= %.2f",
+					bytSessionID, intIatMinDistance1, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance2);
 				//  use looser limits here, there is no risk of protocol damage from these frames
 				if ((dblMinDistance1 < 0.4) || (dblMinDistance2 < 0.4))
 				{
@@ -2406,14 +2417,16 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 		}
 		else		//non matching indexes
 		{
-			sprintf(strDecodeCapture, "%s MD Decode;10  Type1=H%X: Type2=H%X: , D1= %.2f, D2= %.2f",
-				 strDecodeCapture, intIatMinDistance1 , intIatMinDistance2, dblMinDistance1, dblMinDistance2);
+			snprintf(strDecodeCapture + strlen(strDecodeCapture), sizeof(strDecodeCapture) - strlen(strDecodeCapture),
+				" MD Decode;10  Type1=H%X: Type2=H%X: , D1= %.2f, D2= %.2f",
+				intIatMinDistance1 , intIatMinDistance2, dblMinDistance1, dblMinDistance2);
 //			WriteDebugLog(LOGDEBUG, "[Frame Type Decode Fail] %s", strDecodeCapture);
 			return -1; // indicates poor quality decode so  don't use
 		}
 	}
-	sprintf(strDecodeCapture, "%s MD Decode;11  Type1=H%X: Type2=H%X: , D1= %.2f, D2= %.2f",
-		strDecodeCapture, intIatMinDistance1 , intIatMinDistance2, dblMinDistance1, dblMinDistance2);
+	snprintf(strDecodeCapture + strlen(strDecodeCapture), sizeof(strDecodeCapture) - strlen(strDecodeCapture),
+		" MD Decode;11  Type1=H%X: Type2=H%X: , D1= %.2f, D2= %.2f",
+		intIatMinDistance1 , intIatMinDistance2, dblMinDistance1, dblMinDistance2);
 	WriteDebugLog(LOGDEBUG, "[Frame Type Decode Fail] %s", strDecodeCapture);
 	return -1; // indicates poor quality decode so  don't use
 }
@@ -2829,7 +2842,7 @@ void Demod1Car4FSKChar(int Start, UCHAR * Decoded, int Carrier)
 	dblSearchFreq = intCenterFreq + (1.5f * intBaud);	// the highest freq (equiv to lowest sent freq because of sideband reversal)
 
 	// Do one symbol
-	sprintf(DebugMess, "4FSK_bytSym :");
+	snprintf(DebugMess, sizeof(DebugMess), "4FSK_bytSym :");
 	for (j = 0; j < 4; j++)		// for each 4FSK symbol (2 bits) in a byte
 	{
 		dblMagSum = 0;
@@ -2858,7 +2871,9 @@ void Demod1Car4FSKChar(int Start, UCHAR * Decoded, int Carrier)
 		else
 			bytSym = 3;
 
-		sprintf(DebugMess + strlen(DebugMess), " %d(%.0f %03.0f/%03.0f/%03.0f/%03.0f)", bytSym, dblMagSum, 100*dblMag[0]/dblMagSum, 100*dblMag[1]/dblMagSum, 100*dblMag[2]/dblMagSum, 100*dblMag[3]/dblMagSum);
+		snprintf(DebugMess + strlen(DebugMess), sizeof(DebugMess) - strlen(DebugMess),
+			" %d(%.0f %03.0f/%03.0f/%03.0f/%03.0f)", 
+			bytSym, dblMagSum, 100*dblMag[0]/dblMagSum, 100*dblMag[1]/dblMagSum, 100*dblMag[2]/dblMagSum, 100*dblMag[3]/dblMagSum);
 		bytData = (bytData << 2) + bytSym;
 
 		// !!!!!!! this needs attention !!!!!!!!
