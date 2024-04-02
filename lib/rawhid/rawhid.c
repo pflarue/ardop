@@ -25,6 +25,7 @@
 #ifndef TEENSY
 
 #ifdef WIN32
+#include "../../ARDOPCommonCode/ardopcommon.h"
 
 /* Simple Raw HID functions for Windows - for use with Teensy RawHID example
  * http://www.pjrc.com/teensy/rawhid.html
