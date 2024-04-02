@@ -3,7 +3,6 @@
 
 #ifdef WIN32
 #define _CRT_SECURE_NO_DEPRECATE
-#define _USE_32BIT_TIME_T
 #include <windows.h>
 #pragma comment(lib, "WS2_32.Lib")
 
@@ -235,7 +234,7 @@ void TCPAddTagToDataAndSendToHost(UCHAR * bytData, char * strTag, int Len)
 	if (blnInitializing)
 		return;
 
-	if (CommandTrace) WriteDebugLog(LOGINFO, "[AddTagToDataAndSendToHost] bytes=%d Tag %s", Len, strTag);
+	if (CommandTrace) WriteDebugLog(LOGDEBUG, "[AddTagToDataAndSendToHost] bytes=%d Tag %s", Len, strTag);
 
 	//	Have to save copy for possible retry (and possibly until previous 
 	//	command is acked
@@ -292,9 +291,9 @@ void ProcessReceivedControl()
 
 	//	Commands start with c: and end with CR.
 	//	Data starts with d: and has a length field
-	//	“d:ARQ|FEC|ERR|, 2 byte count (Hex 0001 – FFFF), binary data, +2 Byte CRC”
+	//	"d:ARQ|FEC|ERR|, 2 byte count (Hex 0001 - FFFF), binary data, +2 Byte CRC"
 
-	//	As far as I can see, shortest frame is “c:RDY<Cr> + 2 byte CRC” = 8 bytes
+	//	As far as I can see, shortest frame is "c:RDY<Cr> + 2 byte CRC" = 8 bytes
 
 	//	I don't think it likely we will get packets this long, but be aware...
 
@@ -400,9 +399,9 @@ void ProcessReceivedData()
 
 	//	Commands start with c: and end with CR.
 	//	Data starts with d: and has a length field
-	//	“d:ARQ|FEC|ERR|, 2 byte count (Hex 0001 – FFFF), binary data, +2 Byte CRC”
+	//	"d:ARQ|FEC|ERR|, 2 byte count (Hex 0001 - FFFF), binary data, +2 Byte CRC"
 
-	//	As far as I can see, shortest frame is “c:RDY<Cr> + 2 byte CRC” = 8 bytes
+	//	As far as I can see, shortest frame is "c:RDY<Cr> + 2 byte CRC" = 8 bytes
 
 	//	I don't think it likely we will get packets this long, but be aware...
 

@@ -133,10 +133,11 @@ int inIndex = 0;				// DMA Buffer being used 0 or 1
 
 BOOL DMARunning = FALSE;		// Used to start DMA on first write
 
-void InitSound()
+int InitSound()
 {
 	Config_ADC_DMA();
 	Start_ADC_DMA();
+	return TRUE;
 }
 
 unsigned short * SendtoCard(unsigned short buf, int n)

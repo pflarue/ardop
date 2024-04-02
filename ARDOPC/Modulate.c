@@ -1,7 +1,12 @@
 //	Sample Creation routines (encode and filter) for ARDOP Modem
 
-#include "ARDOPC.h"
+#ifdef WIN32
+#define _CRT_SECURE_NO_DEPRECATE
+#include <windows.h>
+#endif
 
+#include "ARDOPC.h"
+#include "../ARDOPCommonCode/wav.h"
 
 unsigned int pttOnTime;
 
@@ -14,9 +19,14 @@ FILE * fp1;
 // Function to generate the Two-tone leader and Frame Sync (used in all frame types) 
 
 extern short Dummy;
+extern int DriveLevel;
+extern BOOL WriteTxWav;
+// writing unfiltered tx audio to WAV disabled
+// extern struct WavFile *txwfu;
 
 int intSoftClipCnt = 0;
 
+void StartTxWav();
 void Flush();
 
 void GetTwoToneLeaderWithSync(int intSymLen)
@@ -54,6 +64,7 @@ void SendLeaderAndSYNC(UCHAR * bytEncodedBytes, int intLeaderLen)
 	UCHAR bytMask;
 	UCHAR bytSymToSend;
 	short intSample;
+	char DebugMess[256];
 	if (intLeaderLen == 0)
 		intLeaderLenMS = LeaderLength;
 	else
@@ -68,6 +79,7 @@ void SendLeaderAndSYNC(UCHAR * bytEncodedBytes, int intLeaderLen)
 
 	// note revised To accomodate 1 parity symbol per byte (10 symbols total)
 
+	sprintf(DebugMess, "LeaderAndSYNC tones : ");
 	for(j = 0; j < 2; j++)		 // for the 2 bytes of the frame type
 	{              
 		bytMask = 0xc0;
@@ -78,6 +90,7 @@ void SendLeaderAndSYNC(UCHAR * bytEncodedBytes, int intLeaderLen)
 				bytSymToSend = (bytMask & bytEncodedBytes[j]) >> (2 * (3 - k));
 			else
 				bytSymToSend = ComputeTypeParity(bytEncodedBytes[0]);
+			sprintf(DebugMess + strlen(DebugMess), "%d", bytSymToSend);
 
 			for(n = 0; n < 240; n++)
 			{
@@ -91,6 +104,8 @@ void SendLeaderAndSYNC(UCHAR * bytEncodedBytes, int intLeaderLen)
 			bytMask = bytMask >> 2;
 		}
 	}
+	// Include these tone values in debug log only if FileLogLevel is LOGDEBUGPLUS
+	WriteDebugLog(LOGDEBUGPLUS, "%s", DebugMess);
 }
 
 
@@ -108,6 +123,7 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 
     char strType[18] = "";
     char strMod[16] = "";
+    char DebugMess[1024];
 
 	UCHAR bytSymToSend, bytMask, bytMinQualThresh;
 
@@ -122,7 +138,7 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 	if (strcmp(strMod, "4FSK") != 0)
 		return;
 
-	WriteDebugLog(LOGDEBUG, "Sending Frame Type %s", strType);
+	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
 
 	if (Type == PktFrameHeader)
@@ -184,13 +200,15 @@ Reenter:
 		
 		dblCarScalingFactor = 1.0; //  (scaling factors determined emperically to minimize crest factor) 
 
+		sprintf(DebugMess, "Mod4FSKDataAndPlay 1Car tones :");
 		for (m = 0; m < intDataBytesPerCar; m++)  // For each byte of input data
 		{
 			bytMask = 0xC0;		 // Initialize mask each new data byte
-			
+			sprintf(DebugMess + strlen(DebugMess), " ");
 			for (k = 0; k < 4; k++)		// for 4 symbol values per byte of data
 			{
 				bytSymToSend = (bytMask & bytEncodedBytes[intDataPtr]) >> (2 * (3 - k)); // Values 0-3
+				sprintf(DebugMess + strlen(DebugMess), "%d", bytSymToSend);
 
 				for (n = 0; n < intSampPerSym; n++)	 // Sum for all the samples of a symbols 
 				{
@@ -218,6 +236,10 @@ Reenter:
 			}
 			intDataPtr += 1;
 		}
+		// Include these tone values in debug log only if FileLogLevel is LOGDEBUGPLUS
+		if (intDataBytesPerCar == 0)
+			sprintf(DebugMess + strlen(DebugMess), "(None)");
+		WriteDebugLog(LOGDEBUGPLUS, "%s", DebugMess);
 
 		if (Type == PktFrameHeader)
 		{
@@ -367,7 +389,7 @@ void Mod8FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 	if (strcmp(strMod, "8FSK") != 0)
 		return;
 
-	WriteDebugLog(LOGDEBUG, "Sending Frame Type %s", strType);
+	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
 
 	initFilter(200,1500);
@@ -443,7 +465,7 @@ void Mod16FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int
 	if (strcmp(strMod, "16FSK") != 0)
 		return;
 
-	WriteDebugLog(LOGDEBUG, "Sending Frame Type %s", strType);
+	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
 
 	initFilter(500,1500);
@@ -512,7 +534,7 @@ void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len,
 	if (strcmp(strMod, "4FSK") != 0)
 		return;
 
-	WriteDebugLog(LOGDEBUG, "Sending Frame Type %s", strType);
+	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
 
 	initFilter(2000,1500);
@@ -664,7 +686,7 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 		goto PktLoopBack;
 	}
 	
-	WriteDebugLog(LOGDEBUG, "Sending Frame Type %s", strType);
+	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
 
 /*	// DOnt use PSK Header at the moment
@@ -1064,6 +1086,10 @@ unsigned short * SoundInit();
 void initFilter(int Width, int Centre)
 {
 	int i, j;
+
+	if (WriteTxWav)
+		StartTxWav();
+	
 	fWidth = Width;
 	centreSlot = Centre / 100;
 	largest = smallest = 0;
@@ -1159,6 +1185,11 @@ void SampleSink(short Sample)
 	int j;
 	float intFilteredSample = 0;			//  Filtered sample
 
+	Sample = Sample * DriveLevel / 100;
+	// writing unfiltered tx audio to WAV disabled
+	// if (txwfu != NULL)
+	//	WriteWav(&Sample, 1, txwfu);
+	
 	//	We save the previous intN samples
 	//	The samples are held in a cyclic buffer
 

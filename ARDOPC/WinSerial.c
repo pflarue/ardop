@@ -4,7 +4,6 @@
 
 #ifdef WIN32
 #define _CRT_SECURE_NO_DEPRECATE
-#define _USE_32BIT_TIME_T
 
 #include <windows.h>
 #include <winioctl.h>
@@ -19,7 +18,7 @@
 #include "ARDOPC.h"
 
 VOID ProcessSCSPacket(UCHAR * rxbuffer, int Length);
-WriteCOMBlock(hDevice, Message, MsgLen);
+BOOL WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite);
 int ReadCOMBlock(HANDLE fd, char * Block, int MaxLength);
 VOID ProcessKISSBytes(UCHAR * RXBuffer, int Read);
 void KISSTCPPoll();
@@ -30,7 +29,7 @@ extern BOOL UseKISS;			// Enable Packet (KISS) interface
 int Speed;
 int PollDelay;
 
-SOCKET PktSock;
+extern SOCKET PktSock;
 extern SOCKET PktListenSock;
 
 extern BOOL PKTCONNECTED;
@@ -131,8 +130,6 @@ extern volatile int RXBPtr;
 #define DebugReadCompletion 8
 */
 
-HANDLE hControl;
-
 typedef struct _SERIAL_STATUS {
     unsigned long Errors;
     unsigned long HoldReasons;
@@ -217,7 +214,7 @@ int BPQSerialGetData(UCHAR * Message, unsigned int BufLen, unsigned long * MsgLe
 {
 	DWORD dwLength = 0;
 	DWORD Available = 0;
-	int Length, RealLen = 0;
+	long unsigned int Length, RealLen = 0;
 	
 	int ret = PeekNamedPipe(hDevice, NULL, 0, NULL, &Available, NULL);
 
@@ -296,7 +293,7 @@ BOOL SerialHostInit()
 {
 	WSADATA WsaData;			 // receives data from WSAStartup
 	unsigned long OpenCount = 0;
-	unsigned int Errorval;
+	long unsigned int Errorval;
 	char * Baud = strlop(PORTNAME, ',');
 
 	VCOM = TRUE;

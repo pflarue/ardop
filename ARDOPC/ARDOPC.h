@@ -11,7 +11,7 @@ extern const char ProductVersion[];
 //	Sound interface buffer size
 
 #define SendSize 1200		// 100 mS for now
-#define ReceiveSize 512	// Must be 1024 for FFT (or we will need torepack frames)
+// #define ReceiveSize 512	// Must be 1024 for FFT (or we will need torepack frames)
 #define NumberofinBuffers 4
 
 // Host to TNC Buffer Size
@@ -29,7 +29,6 @@ extern const char ProductVersion[];
 
 #define WIN32_LEAN_AND_MEAN		// Exclude rarely-used stuff from Windows headers
 #define _CRT_SECURE_NO_DEPRECATE
-#define _USE_32BIT_TIME_T
 
 #ifndef WIN32
 #define max(x, y) ((x) > (y) ? (x) : (y))
@@ -37,7 +36,6 @@ extern const char ProductVersion[];
 #endif
 
 #ifdef WIN32
-float round(float x);
 typedef void *HANDLE;
 #else
 #define HANDLE int
@@ -61,6 +59,7 @@ extern unsigned int pttOnTime;
 #define LOGNOTICE 5
 #define LOGINFO 6
 #define LOGDEBUG 7
+#define LOGDEBUGPLUS 8
 
 #include <time.h>
 
@@ -127,7 +126,7 @@ extern unsigned int pttOnTime;
 
 
 
-#include "ecc.h"				// RS Constants
+#include "../lib/rscode/ecc.h"				// RS Constants
 
 typedef int BOOL;
 typedef unsigned char UCHAR;
@@ -276,7 +275,7 @@ void GetSemaphore();
 void FreeSemaphore();
 const char * Name(UCHAR bytID);
 const char * shortName(UCHAR bytID);
-void InitSound();
+int InitSound();
 void initFilter(int Width, int centerFreq);
 void FourierTransform(int NumSamples, short * RealIn, float * RealOut, float * ImagOut, int InverseTransform);
 VOID ClosePacketSessions();
@@ -377,7 +376,8 @@ enum _ProtocolMode
 {
 	Undef,
 	FEC,
-	ARQ
+	ARQ,
+	RXO  // Receive Only.  Decode all possible frames while recovering SessionID.  ProtocolState should always be DISC
 };
 
 extern enum _ProtocolMode ProtocolMode;

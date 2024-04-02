@@ -23,6 +23,7 @@
 #define HANDLE int
 
 #include "ardopcommon.h"
+#include "wav.h"
 
 #define SHARECAPTURE		// if defined capture device is opened and closed for each transission
 
@@ -47,6 +48,9 @@ int PackSamplesAndSend(short * input, int nSamples);
 void displayLevel(int max);
 BOOL WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite);
 VOID processargs(int argc, char * argv[]);
+void Send5SecTwoTone();
+
+VOID WriteDebugLog(int Level, const char * format, ...);
 
 int initdisplay();
 
@@ -67,6 +71,13 @@ BOOL UseRightRX = TRUE;
 BOOL UseLeftTX = TRUE;
 BOOL UseRightTX = TRUE;
 
+extern BOOL InitRXO;
+extern BOOL WriteRxWav;
+extern BOOL WriteTxWav;
+extern BOOL TwoToneAndExit;
+extern BOOL FixTiming;
+extern char DecodeWav[256];
+extern int WavNow;  // Time since start of WAV file being decoded
 
 char LogDir[256] = "";
 
@@ -96,7 +107,7 @@ char PlaybackDevice[80] = "ARDOP";
 char * CaptureDevices = CaptureDevice;
 char * PlaybackDevices = CaptureDevice;
 
-void InitSound();
+int InitSound();
 
 int Ticks;
 
@@ -116,6 +127,160 @@ char LogName[3][256] = {"ARDOPDebug", "ARDOPException", "ARDOPSession"};
 #define SESSIONLOG 2
 
 FILE *statslogfile = NULL;
+struct WavFile *rxwf = NULL;
+struct WavFile *txwff = NULL;
+// writing unfiltered tx audio to WAV disabled
+// struct WavFile *txwfu = NULL;
+#define RXWFTAILMS 10000;  // 10 seconds
+unsigned int rxwf_EndNow = 0;
+
+void extendRxwf()
+{
+	rxwf_EndNow = Now + RXWFTAILMS;
+}
+
+void StartRxWav()
+{
+	// Open a new WAV file if not already recording.  
+	// If already recording, then just extend the time before
+	// recording will end.
+	//
+	// Wav files will use a filename that includes port, UTC date, 
+	// and UTC time, similar to log files but with added time to 
+	// the nearest second.  Like Log files, these Wav files will be 
+	// written to the Log directory if defined, else to the current 
+	// directory
+	//
+	// As currently implemented, the wav file written contains only
+	// received audio.  Since nothing is written for the time while 
+	// transmitting, and thus not receiving, this recording is not 
+	// time continuous.  Thus, the filename indicates the time that
+	// the recording was started, but the times of the received 
+	// transmissions, other than the first one, are not indicated.
+	char rxwf_pathname[1024];
+	int pnlen;
+
+	if (rxwf != NULL)
+	{
+		// Already recording, so just extend recording time.
+		extendRxwf();
+		return;
+	}
+	struct tm * tm;
+	time_t T;
+
+	T = time(NULL);
+	tm = gmtime(&T);
+
+	struct timespec tp;
+	int ss, hh, mm;
+	clock_gettime(CLOCK_REALTIME, &tp);
+	ss = tp.tv_sec % 86400;  // Seconds in a day
+	hh = ss / 3600;
+	mm = (ss - (hh * 3600)) / 60;
+	ss = ss % 60;
+
+	if (LogDir[0])
+		pnlen = snprintf(rxwf_pathname, sizeof(rxwf_pathname),
+			"%s/ARDOP_rxaudio_%d_%04d%02d%02d_%02d%02d%02d.wav",
+			LogDir, port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
+			hh, mm, ss);
+	else
+		pnlen = snprintf(rxwf_pathname, sizeof(rxwf_pathname),
+			"ARDOP_rxaudio_%d_%04d%02d%02d_%02d:%02d:%02d.wav",
+			port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
+			hh, mm, ss);
+	if (pnlen == -1 || pnlen > sizeof(rxwf_pathname)) {
+		// Logpath too long likely to also prevent writing to log files.
+		// So, print this error directly to console instead of using
+		// WriteDebugLog.
+		printf("Unable to write WAV file, invalid pathname. Logpath may be too long.\n");
+		WriteRxWav = FALSE;
+		return;
+	}
+	rxwf = OpenWavW(rxwf_pathname);
+	extendRxwf();
+}
+
+// writing unfiltered tx audio to WAV disabled.  Only filtered 
+// tx audio will be written.  However, the code for unfiltered
+// audio is left in place but commented out so that it can eaily
+// be restored if desired.
+void StartTxWav()
+{
+	// Open two new WAV files for filtered and unfiltered Tx audio.
+	//
+	// Wav files will use a filename that includes port, UTC date, 
+	// and UTC time, similar to log files but with added time to 
+	// the nearest second.  Like Log files, these Wav files will be 
+	// written to the Log directory if defined, else to the current 
+	// directory
+	char txwff_pathname[1024];
+	// char txwfu_pathname[1024];
+	int pnflen;
+	// int pnulen;
+
+	if (txwff != NULL) // || txwfu != NULL)
+	{
+		WriteDebugLog(LOGWARNING, "WARNING: Trying to open Tx WAV file, but already open.");
+		return;
+	}
+	struct tm * tm;
+	time_t T;
+
+	T = time(NULL);
+	tm = gmtime(&T);
+
+	struct timespec tp;
+	int ss, hh, mm;
+	clock_gettime(CLOCK_REALTIME, &tp);
+	ss = tp.tv_sec % 86400;  // Seconds in a day
+	hh = ss / 3600;
+	mm = (ss - (hh * 3600)) / 60;
+	ss = ss % 60;
+
+	if (LogDir[0])
+	{
+		pnflen = snprintf(txwff_pathname, sizeof(txwff_pathname),
+			"%s/ARDOP_txfaudio_%d_%04d%02d%02d_%02d%02d%02d.wav",
+			LogDir, port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
+			hh, mm, ss);
+		// pnulen = snprintf(txwfu_pathname, sizeof(txwfu_pathname),
+		//  "%s/ARDOP_txuaudio_%d_%04d%02d%02d_%02d%02d%02d.wav",
+		// 	LogDir, port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
+		// 	hh, mm, ss);
+	}
+	else
+	{
+		pnflen = snprintf(txwff_pathname, sizeof(txwff_pathname),
+			"ARDOP_txfaudio_%d_%04d%02d%02d_%02d:%02d:%02d.wav",
+			port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
+			hh, mm, ss);
+		// pnulen = snprintf(txwfu_pathname, sizeof(txwfu_pathname),
+		//  "ARDOP_txuaudio_%d_%04d%02d%02d_%02d:%02d:%02d.wav",
+		// 	port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
+		// 	hh, mm, ss);
+	}
+	if (pnflen == -1 || pnflen > sizeof(txwff_pathname)) {
+		// Logpath too long likely to also prevent writing to log files.
+		// So, print this error directly to console instead of using
+		// WriteDebugLog.
+		printf("Unable to write WAV file, invalid pathname. Logpath may be too long.\n");
+		WriteTxWav = FALSE;
+		return;
+	}
+	// if (pnulen == -1 || pnulen > sizeof(txwfu_pathname)) {
+	// Logpath too long likely to also prevent writing to log files.
+	// So, print this error directly to console instead of using
+	// WriteDebugLog.
+	//  printf("Unable to write WAV file, invalid pathname. Logpath may be too long.\n");
+	//	WriteTxWav = FALSE;
+	//	return;
+	// }
+	txwff = OpenWavW(txwff_pathname);
+	// txwfu = OpenWavW(txwfu_pathname);
+}
+
 
 VOID CloseDebugLog()
 {	
@@ -161,7 +326,8 @@ VOID WriteDebugLog(int Level, const char * format, ...)
 	if (!DebugLog)
 		return;
 
-	WriteLog(Mess, DEBUGLOG);
+	if (Level <= FileLogLevel)
+		WriteLog(Mess, DEBUGLOG);
 	return;
 }
 
@@ -186,38 +352,50 @@ VOID Statsprintf(const char * format, ...)
 {
 	char Mess[10000];
 	va_list(arglist);
-	UCHAR Value[100];
-	char timebuf[32];
-	struct timespec tp;
-
-	int hh;
-	int mm;
-	int ss;
-
-	clock_gettime(CLOCK_REALTIME, &tp);
+	UCHAR Value[256];
+	int vlen;
 
 	va_start(arglist, format);
-	vsnprintf(Mess, sizeof(Mess), format, arglist);
+	vsnprintf(Mess, sizeof(Mess) - 1, format, arglist);
 	strcat(Mess, "\n");
-
-	ss = tp.tv_sec % 86400;		// Secs int day
-	hh = ss / 3600;
-	mm = (ss - (hh * 3600)) / 60;
-	ss = ss % 60;
-
-	sprintf(timebuf, "%02d:%02d:%02d.%03d ",
-		hh, mm, ss, (int)tp.tv_nsec/1000000);
 
 	if (statslogfile == NULL)
 	{
+		char timebuf[32];
+		struct timespec tp;
+
+		int hh;
+		int mm;
+		int ss;
 		struct tm * tm;
 		time_t T;
+
+		clock_gettime(CLOCK_REALTIME, &tp);
+
+		ss = tp.tv_sec % 86400;		// Secs int day
+		hh = ss / 3600;
+		mm = (ss - (hh * 3600)) / 60;
+		ss = ss % 60;
 
 		T = time(NULL);
 		tm = gmtime(&T);
 
-		sprintf(Value, "%s%d_%04d%02d%02d.log",
-		LogName[2], port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday);
+		// Including the date is redundant with the filename for the session log
+		// file, but is useful for also writing it to the console.
+		sprintf(timebuf, "%04d/%02d/%02d %02d:%02d:%02d.%03dz ",
+			tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
+			hh, mm, ss, (int)tp.tv_nsec/1000000);
+
+		vlen = snprintf(Value, sizeof(Value), "%s%d_%04d%02d%02d.log",
+			LogName[2], port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday);
+		if (vlen == -1 || vlen > sizeof(Value)) {
+			// Logpath too long likely to also prevent writing to log files.
+			// So, print this error directly to console instead of using
+			// WriteDebugLog.
+			printf("ERROR: Unable to write Stats Log. Logpath may be too long.\n");
+			printf("%s", Mess);
+			return;
+		}
 
 		if ((statslogfile = fopen(Value, "ab")) == NULL)
 		{
@@ -228,8 +406,10 @@ VOID Statsprintf(const char * format, ...)
 		{
 			fputs(timebuf, statslogfile);
 			fputs("\n", statslogfile);
+			// Printing the UTC date and time to the console with the session stats
+			// may be useful if sessions are logged manually.
+			printf("%s\n", timebuf);
 		}
-
 	}
 
 	fputs(Mess, statslogfile);
@@ -250,6 +430,12 @@ unsigned int getTicks()
 {	
 	struct timespec tp;
 	
+	// When decoding a WAV file, return WavNow, a measure of the offset
+	// in ms from the start of the WAV file.
+	if (DecodeWav[0])
+		return WavNow;
+
+	// Otherwise, return a measure of clock time (also measured in ms).
 	clock_gettime(CLOCK_MONOTONIC, &tp);
 	return (tp.tv_sec - time_start.tv_sec) * 1000 + (tp.tv_nsec - time_start.tv_nsec) / 1000000;
 }
@@ -334,6 +520,7 @@ void main(int argc, char * argv[])
 {
 	struct timespec tp;
 	struct sigaction act;
+	int lnlen;
 
 //	Sleep(1000);	// Give LinBPQ time to complete init if exec'ed by linbpq
 
@@ -341,14 +528,26 @@ void main(int argc, char * argv[])
 
 	if (LogDir[0])
 	{
-		sprintf(&LogName[0][0], "%s/%s", LogDir, "ARDOPDebug");
-		sprintf(&LogName[1][0], "%s/%s", LogDir, "ARDOPException");
-		sprintf(&LogName[2][0], "%s/%s", LogDir, "ARDOPSession");
+		snprintf(&LogName[0][0], sizeof(LogName[0]), "%s/%s", LogDir, "ARDOPDebug");
+		lnlen = snprintf(&LogName[1][0], sizeof(LogName[1]), "%s/%s", LogDir, "ARDOPException");
+		snprintf(&LogName[2][0], sizeof(LogName[2]), "%s/%s", LogDir, "ARDOPSession");
+		if (lnlen == -1 || lnlen > sizeof(LogName[1])) {
+			printf("ERROR: Unable to write Log files. Logpath may be too long.\n");
+			FileLogLevel = 0;  // This will prevent most attempts to write to log files.
+		}
 	}
 
 	setlinebuf(stdout);				// So we can redirect output to file and tail
 
 	Debugprintf("%s Version %s", ProductName, ProductVersion);
+	Debugprintf("ConsoleLogLevel = %d (%s)", ConsoleLogLevel, strLogLevels[ConsoleLogLevel]);
+	Debugprintf("FileLogLevel = %d (%s)", FileLogLevel, strLogLevels[FileLogLevel]);
+
+	if (DecodeWav[0])
+	{
+		decode_wav();
+		return;
+	}
 
 	if (HostPort[0])
 	{		
@@ -531,6 +730,18 @@ void main(int argc, char * argv[])
 
 	if (sigaction(SIGPIPE, &act, NULL) < 0) 
 		perror ("SIGPIPE");
+
+	if (TwoToneAndExit)
+	{
+		if (!InitSound())
+		{
+			WriteDebugLog(LOGCRIT, "Error in InitSound().  Stopping ardop.");
+			return;
+		}
+		WriteDebugLog(LOGINFO, "Sending a 5 second 2-tone signal. Then exiting ardop.");
+		Send5SecTwoTone();
+		return;
+	}
 
 	ardopmain();
 
@@ -903,12 +1114,38 @@ int GetNextInputDevice(char * dest, int max, int n)
 	strcpy(dest, ReadDevices[n]);
 	return strlen(dest);
 }
+
+// A problem has been observed in which period_time * rate != period_size in
+// OpenSoundPlayback() for certain hardware configurations.  The result is that
+// the effective TX audio rate does not match the stated/desired rate.  The
+// problem appears to be in the ALSA library.  A workaround is implemented to
+// mitigate the problem.  If this problem is identified the first time that
+// OpenSoundPlayback() is executed, then intPeriodTime or periodSize will be
+// set to a suitable non-zero value allowing the fix to be reapplied each
+// additional time OpenSoundPlayback() is executed.
+unsigned int intSetPeriodTime = 0; // If !=0, explicitly set duration of one period in microseconds.
+snd_pcm_uframes_t setPeriodSize = 0;  // If != 0, explicitly set number of frames per period
+
+// If ALSA configuration is not valid on first execution of
+// OpenSoundPlayback(), then try to fix it.  If it is invalid
+// after that, ignore it.  In a previous implementation, OpenSoundPlayback()
+// would return false (fail) if the fix did not work.  Now it is ignored, thus
+// reverting to the behavior before this problem was found, since that behavior
+// may still be usable.
+BOOL blnFirstOpenSoundPlayback = true;
+
 int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, char * ErrorMsg)
 {
+	unsigned int intRate;  // number of frames per second
+	int intDir;
+
 	int err = 0;
 
 	char buf1[100];
 	char * ptr;
+
+	unsigned int intPeriodTime = 0; // reported duration of one period in microseconds.
+	snd_pcm_uframes_t periodSize = 0;  // reported number of frames per period
 
 	if (playhandle)
 	{
@@ -981,10 +1218,104 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 	
 //	Debugprintf("Play using %d channels", channels);
 
+	if (intSetPeriodTime)
+	{
+		// Explicitly set duration of one period in microseconds to correct ALSA's
+		// misconfiguration that would result in a TX symbol timing error.
+		if ((err = snd_pcm_hw_params_set_period_time (playhandle, hw_params, intSetPeriodTime, 0)) < 0) {
+			if (ErrorMsg)
+				sprintf (ErrorMsg, "cannot set playback period time (%s)", snd_strerror(err));
+			else
+				Debugprintf("cannot set playback period time (%s)", snd_strerror(err));
+			return false;
+		}
+	}
+	else if (setPeriodSize)
+	{
+		// Explicitly set the number of frames per period to correct ALSA's
+		// misconfiguration that would result in a TX symbol timing error.
+		if ((err = snd_pcm_hw_params_set_period_size (playhandle, hw_params, setPeriodSize, 0)) < 0) {
+			if (ErrorMsg)
+				sprintf (ErrorMsg, "cannot set playback period size (%s)", snd_strerror(err));
+			else
+				Debugprintf("cannot set playback period size (%s)", snd_strerror(err));
+			return false;
+		}
+	}
+
 	if ((err = snd_pcm_hw_params (playhandle, hw_params)) < 0) {
 		Debugprintf("cannot set parameters (%s)", snd_strerror(err));
 		return false;
 	}
+
+	if ((err = snd_pcm_hw_params_get_rate(hw_params, &intRate, &intDir)) < 0) {
+		if (ErrorMsg)
+			sprintf (ErrorMsg, "cannot get playback rate (%s)", snd_strerror(err));
+		else
+			Debugprintf("cannot get playback rate (%s)", snd_strerror(err));
+		return false;
+	}
+	// WriteDebugLog(LOGINFO, "snd_pcm_hw_params_get_rate(hw_params, &intRate, &intDir) intRate=%d intDir=%d", intRate, intDir);
+
+	if ((err = snd_pcm_hw_params_get_period_time(hw_params, &intPeriodTime, &intDir)) < 0) {
+		if (ErrorMsg)
+			sprintf (ErrorMsg, "cannot get playback period time (%s)", snd_strerror(err));
+		else
+			Debugprintf("cannot get playback period time (%s)", snd_strerror(err));
+		return false;
+	}
+	// WriteDebugLog(LOGINFO, "snd_pcm_hw_params_get_period_time(hw_params, &intPeriodTime, &intDir) intPeriodTime=%d intDir=%d", intPeriodTime, intDir);
+
+	if ((err = snd_pcm_hw_params_get_period_size(hw_params, &periodSize, &intDir)) < 0) {
+		if (ErrorMsg)
+			sprintf (ErrorMsg, "cannot get playback period size (%s)", snd_strerror(err));
+		else
+			Debugprintf("cannot get playback period size (%s)", snd_strerror(err));
+		return false;
+	}
+	// WriteDebugLog(LOGINFO, "snd_pcm_hw_params_get_period_size(hw_params, &periodSize, &intDir) periodSize=%d intDir=%d", periodSize, intDir);
+
+	if (intPeriodTime * intRate != periodSize * 1000000 && (blnFirstOpenSoundPlayback || intSetPeriodTime || setPeriodSize) && FixTiming) {
+		snd_pcm_close(playhandle);
+		playhandle = NULL;
+		snd_pcm_hw_params_free(hw_params);
+
+		if (blnFirstOpenSoundPlayback)
+		{
+			// It should be possible to fix this problem by Decreasing either intPeriodTime or periodSize.
+			blnFirstOpenSoundPlayback = false;
+			WriteDebugLog(LOGWARNING, "WARNING: Inconsistent ALSA playback configuration: %d * %d != %d * 1000000.",
+				intPeriodTime, intRate, periodSize);
+			WriteDebugLog(LOGWARNING, "Attempting to reconfigure...");
+			if (intPeriodTime * intRate > periodSize * 1000000) {
+				intSetPeriodTime = periodSize * 1000000 / intRate;
+				WriteDebugLog(LOGWARNING, "Setting playback period time to %d.", intSetPeriodTime);
+			}
+			else
+			{
+				setPeriodSize = intPeriodTime * intRate / 1000000;
+				WriteDebugLog(LOGWARNING, "Setting playback period size to %d.", setPeriodSize);
+			}
+		}
+		else
+		{
+			// This branch is untested since a case where the configuration can't be fixed has not been found.
+			WriteDebugLog(LOGERROR, "Unable to fix inconsistent ALSA playback configuration.  Reverting to previous configuration.");
+			intSetPeriodTime = 0;
+			setPeriodSize = 0;
+		}
+
+		// Do OpenSoundPlayback() again using the new value of intPeriodTime or periodSize.
+		return OpenSoundPlayback(PlaybackDevice, m_sampleRate, channels, ErrorMsg);
+	}
+	else if (intPeriodTime * intRate != periodSize * 1000000 && blnFirstOpenSoundPlayback && !FixTiming) {
+		WriteDebugLog(LOGWARNING, "WARNING: Inconsistent ALSA playback configuration: %d * %d != %d * 1000000.",
+			intPeriodTime, intRate, periodSize);
+		WriteDebugLog(LOGWARNING, "WARNING: The -A option was specified.  So, ALSA misconfiguration will be ignored.  This option is ONLY intended for testing/debuging.  It IS NOT INTENDED FOR NORMAL USE.");
+	}
+	blnFirstOpenSoundPlayback = false;
+	// WriteDebugLog(LOGINFO, "Period time=%d (microsecond). Sample Rate=%d (Hz).  Period Size=%d (samples).",
+	//	intPeriodTime, intRate, periodSize);
 	
 	snd_pcm_hw_params_free(hw_params);
 	
@@ -1403,6 +1734,19 @@ int SoundCardRead(short * input, unsigned int nSamples)
 		}
 	}
 
+	if (rxwf != NULL)
+	{
+		// There is an open Wav file recording.
+		// Either close it or write samples to it.
+		if (rxwf_EndNow < Now)
+		{
+			CloseWav(rxwf);
+			rxwf = NULL;
+		}
+		else
+			WriteWav(samples, ret, rxwf);
+	}
+
 	return ret;
 }
 
@@ -1427,6 +1771,8 @@ short * SendtoCard(short * buf, int n)
 
 	if (playhandle)
 		SoundCardWrite(&buffer[Index][0], n);
+	if (txwff != NULL)
+		WriteWav(&buffer[Index][0], n, txwff);
 
 //	txSleep(10);				// Run buckground while waiting 
 
@@ -1442,12 +1788,11 @@ short loopbuff[1200];		// Temp for testing - loop sent samples to decoder
 
 
 
-void InitSound(BOOL Quiet)
+int InitSound(BOOL Quiet)
 {
 	GetInputDeviceCollection();
 	GetOutputDeviceCollection();
-	
-	OpenSoundCard(CaptureDevice, PlaybackDevice, 12000, 12000, NULL);
+	return OpenSoundCard(CaptureDevice, PlaybackDevice, 12000, 12000, NULL);
 }
 
 int min = 0, max = 0, lastlevelreport = 0, lastlevelGUI = 0;
@@ -1493,7 +1838,7 @@ void PollReceivedSamples()
 				sprintf(HostCmd, "INPUTPEAKS %d %d", min, max);
 				SendCommandToHostQuiet(HostCmd);
 
-				WriteDebugLog(LOGDEBUG, "Input peaks = %d, %d", min, max);
+				WriteDebugLog(LOGINFO, "Input peaks = %d, %d", min, max);
 			}
 			min = max = 0;							// Every 2 secs
 		}
@@ -1549,10 +1894,14 @@ int WriteLog(char * msg, int Log)
 	struct timespec tp;
 
 	UCHAR Value[256];
+	int vlen;
 	
 	int hh;
 	int mm;
 	int ss;
+	int wavhh;
+	int wavmm;
+	float wavss;
 
 	clock_gettime(CLOCK_REALTIME, &tp);
 	
@@ -1565,12 +1914,16 @@ int WriteLog(char * msg, int Log)
 		tm = gmtime(&T);
 
 		if (HostPort[0])
-			sprintf(Value, "%s%s_%04d%02d%02d.log",
+			vlen = snprintf(Value, sizeof(Value), "%s%s_%04d%02d%02d.log",
 				LogName[Log], HostPort, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday);
 		else
-			sprintf(Value, "%s%d_%04d%02d%02d.log",
+			vlen = snprintf(Value, sizeof(Value), "%s%d_%04d%02d%02d.log",
 				LogName[Log], port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday);
-	
+		if (vlen == -1 || vlen > sizeof(Value)) {
+			printf("ERROR: Unable to open log file.  Log path probably too long.\n");
+			FileLogLevel = 0;
+			return FALSE;
+		}
 		if ((logfile[Log] = fopen(Value, "a")) == NULL)
 			return FALSE;
 	}
@@ -1579,8 +1932,21 @@ int WriteLog(char * msg, int Log)
 	mm = (ss - (hh * 3600)) / 60;
 	ss = ss % 60;
 
-	sprintf(timebuf, "%02d:%02d:%02d.%03d ",
-		hh, mm, ss, (int)tp.tv_nsec/1000000);
+	if (DecodeWav[0])
+	{
+		// When decoding a WAV file, include an approximate reference to the time offset
+		// since the start of the WAV file.
+		wavhh = Now/3600000;
+		wavmm = ((Now/1000) - wavhh * 3600) / 60;
+		wavss = (Now % 60000) / 1000.0;
+		sprintf(timebuf, "%02d:%02d:%02d.%03d (WAV %02d:%02d:%05.2f) ",
+			hh, mm, ss, (int)tp.tv_nsec/1000000, wavhh, wavmm, wavss);
+	}
+	else
+	{
+		sprintf(timebuf, "%02d:%02d:%02d.%03d ",
+			hh, mm, ss, (int)tp.tv_nsec/1000000);
+	}
 
 	fputs(timebuf, logfile[Log]);
 	fputs(msg, logfile[Log]);
@@ -1637,7 +2003,7 @@ void SoundFlush()
 
 	txlenMs = SampleNo / 12 + 20;		// 12000 samples per sec. 20 mS TXTAIL
 
-	Debugprintf("Tx Time %d Time till end = %d", txlenMs, (pttOnTime + txlenMs) - Now);
+	WriteDebugLog(LOGDEBUG, "Tx Time %d Time till end = %d", txlenMs, (pttOnTime + txlenMs) - Now);
 
 	while (Now < (pttOnTime + txlenMs))
 	{
@@ -1693,9 +2059,24 @@ void SoundFlush()
 		dttNextPlay = Now + intFrameRepeatInterval + extraDelay;
 
 	KeyPTT(FALSE);		 // Unkey the Transmitter
+	if (txwff != NULL)
+	{
+		CloseWav(txwff);
+		txwff = NULL;
+	}
+	// writing unfiltered tx audio to WAV disabled
+	// if (txwfu != NULL)
+	// {
+	// 	CloseWav(txwfu);
+	// 	txwfu = NULL;
+	// }
 
 	OpenSoundCapture(SavedCaptureDevice, SavedCaptureRate, strFault);
 	StartCapture();
+
+	if (WriteRxWav)
+		// Start recording if not already recording, else to extend the recording time.
+		StartRxWav();
 	return;
 }
 

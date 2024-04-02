@@ -21,7 +21,6 @@ extern const char ProductVersion[];
 
 #define WIN32_LEAN_AND_MEAN		// Exclude rarely-used stuff from Windows headers
 #define _CRT_SECURE_NO_DEPRECATE
-#define _USE_32BIT_TIME_T
 
 #ifndef WIN32
 #define max(x, y) ((x) > (y) ? (x) : (y))
@@ -44,6 +43,9 @@ unsigned int getTicks();
 #define LOGNOTICE 5
 #define LOGINFO 6
 #define LOGDEBUG 7
+#define LOGDEBUGPLUS 8
+
+extern const char strLogLevels[9][13];
 
 #include <time.h>
 
@@ -111,6 +113,11 @@ typedef int BOOL;
 typedef unsigned char UCHAR;
 
 #define VOID void
+#ifdef WIN32
+typedef void *HANDLE;
+#else
+#define HANDLE int
+#endif
 
 #define FALSE 0
 #define TRUE 1
@@ -223,6 +230,7 @@ BOOL GetNextFECFrame();
 void GenerateFSKTemplates();
 void printtick(char * msg);
 void InitValidFrameTypes();
+void setProtocolMode(char* strMode);
 //#endif
 
 extern void Generate50BaudTwoToneLeaderTemplate();
@@ -251,7 +259,7 @@ void GetSemaphore();
 void FreeSemaphore();
 const char * Name(UCHAR bytID);
 const char * shortName(UCHAR bytID);
-void InitSound();
+int InitSound();
 void initFilter(int Width, int centerFreq);
 void FourierTransform(int NumSamples, short * RealIn, float * RealOut, float * ImagOut, int InverseTransform);
 VOID ClosePacketSessions();
@@ -381,8 +389,8 @@ extern BOOL AccumulateStats;
 extern BOOL Use600Modes;
 extern BOOL FSKOnly;
 extern BOOL fastStart;
-extern BOOL ConsoleLogLevel;
-extern BOOL FileLogLevel;
+extern int ConsoleLogLevel;
+extern int FileLogLevel;
 extern BOOL EnablePingAck;
 
 extern int dttLastPINGSent;
@@ -581,3 +589,6 @@ BOOL EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, enum _A
 #define PTTHAMLIB	16
 
 #endif
+
+int decode_wav();
+

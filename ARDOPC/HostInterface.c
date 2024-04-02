@@ -220,7 +220,10 @@ void ProcessCommandFromHost(char * strCMD)
 						SendReplyToHost(cmdCopy);
 						goto cmddone;
 					}
-					sprintf(strFault, "Not from mode FEC");
+					if (ProtocolMode == RXO)
+						sprintf(strFault, "Not from mode RXO");
+					else
+						sprintf(strFault, "Not from mode FEC");
 					goto cmddone;
 				}
 			}
@@ -412,7 +415,7 @@ void ProcessCommandFromHost(char * strCMD)
 		{
 			i = atoi(ptrParams);
 
-			if (i >= LOGEMERGENCY  && i <= LOGDEBUG)
+			if (i >= LOGEMERGENCY  && i <= LOGDEBUGPLUS)
 			{
 				ConsoleLogLevel = i;
 				sprintf(cmdReply, "%s now %d", strCMD, ConsoleLogLevel);
@@ -857,7 +860,7 @@ void ProcessCommandFromHost(char * strCMD)
 		{
 			i = atoi(ptrParams);
 
-			if (i >= LOGEMERGENCY  && i <= LOGDEBUG)
+			if (i >= LOGEMERGENCY  && i <= LOGDEBUGPLUS)
 			{
 				FileLogLevel = i;
 				sprintf(cmdReply, "%s now %d", strCMD, FileLogLevel);
@@ -1106,6 +1109,9 @@ void ProcessCommandFromHost(char * strCMD)
 			if (ProtocolMode == ARQ)
 				sprintf(cmdReply, "PROTOCOLMODE ARQ");
 			else
+			if (ProtocolMode == RXO)
+				sprintf(cmdReply, "PROTOCOLMODE RXO");
+			else
 				sprintf(cmdReply, "PROTOCOLMODE FEC");
 
 			SendReplyToHost(cmdReply);
@@ -1115,6 +1121,9 @@ void ProcessCommandFromHost(char * strCMD)
 		if (strcmp(ptrParams, "ARQ") == 0)
 			ProtocolMode = ARQ;
 		else 
+		if (strcmp(ptrParams, "RXO") == 0)
+			ProtocolMode = RXO;
+		else
 		if (strcmp(ptrParams, "FEC") == 0)
 			ProtocolMode = FEC;
 		else
@@ -1124,6 +1133,9 @@ void ProcessCommandFromHost(char * strCMD)
 		}
 		if (ProtocolMode == ARQ)
 			sprintf(cmdReply, "PROTOCOLMODE now ARQ");
+		else
+		if (ProtocolMode == RXO)
+			sprintf(cmdReply, "PROTOCOLMODE now RXO");
 		else
 			sprintf(cmdReply, "PROTOCOLMODE now FEC");
 

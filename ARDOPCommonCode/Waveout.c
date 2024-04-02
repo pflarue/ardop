@@ -10,11 +10,11 @@
 //	This is the Windows Version
 
 #define _CRT_SECURE_NO_DEPRECATE
-#define _USE_32BIT_TIME_T
 
 #include <windows.h>
 #include <mmsystem.h>
 
+#include "wav.h"
 
 #ifdef USE_DIREWOLF
 #include "direwolf/fsk_demod_state.h"
@@ -119,7 +119,7 @@ WAVEINCAPS pwic;
 
 unsigned int RTC = 0;
 
-void InitSound(BOOL Quiet);
+int InitSound(BOOL Quiet);
 void HostPoll();
 void TCPHostPoll();
 void SerialHostPoll();
@@ -135,13 +135,158 @@ int LastNow;
 
 extern void Generate50BaudTwoToneLeaderTemplate();
 extern BOOL blnDISCRepeating;
-
+void Send5SecTwoTone();
 
 extern struct sockaddr HamlibAddr;		// Dest for above
 extern int useHamLib;
 
 
 #define TARGET_RESOLUTION 1         // 1-millisecond target resolution
+
+extern int WavNow;  // Time since start of WAV file being decoded
+extern char DecodeWav[256];
+extern BOOL WriteTxWav;
+extern BOOL WriteRxWav;
+extern BOOL TwoToneAndExit;
+struct WavFile *rxwf = NULL;
+struct WavFile *txwff = NULL;
+// writing unfiltered tx audio to WAV disabled
+// struct WavFile *txwfu = NULL;
+#define RXWFTAILMS 10000;  // 10 seconds
+unsigned int rxwf_EndNow = 0;
+
+void extendRxwf()
+{
+	rxwf_EndNow = Now + RXWFTAILMS;
+}
+
+void StartRxWav()
+{
+	// Open a new WAV file if not already recording.  
+	// If already recording, then just extend the time before
+	// recording will end.
+	//
+	// Wav files will use a filename that includes port, UTC date, 
+	// and UTC time, similar to log files but with added time to 
+	// the nearest second.  Like Log files, these Wav files will be 
+	// written to the Log directory if defined, else to the current 
+	// directory
+	//
+	// As currently implemented, the wav file written contains only
+	// received audio.  Since nothing is written for the time while 
+	// transmitting, and thus not receiving, this recording is not 
+	// time continuous.  Thus, the filename indicates the time that
+	// the recording was started, but the times of the received 
+	// transmissions, other than the first one, are not indicated.
+	char rxwf_pathname[1024];
+	SYSTEMTIME st;
+
+	if (rxwf != NULL)
+	{
+		// Already recording, so just extend recording time.
+		extendRxwf();
+		return;
+	}
+
+	GetSystemTime(&st);
+
+	if (LogDir[0])
+    {
+        if (HostPort[0])
+            sprintf(rxwf_pathname, "%s/ARDOP_rxaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
+                LogDir, HostPort, st.wYear, st.wMonth, st.wDay,
+                st.wHour, st.wMinute, st.wSecond);
+        else
+            sprintf(rxwf_pathname, "%s/ARDOP_rxaudio_%04d%02d%02d_%02d%02d%02d.wav",
+                LogDir, st.wYear, st.wMonth, st.wDay,
+                st.wHour, st.wMinute, st.wSecond);
+    }
+	else
+    {
+        if (HostPort[0])
+            sprintf(rxwf_pathname, "ARDOP_rxaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
+                HostPort, st.wYear, st.wMonth, st.wDay,
+                st.wHour, st.wMinute, st.wSecond);
+        else
+            sprintf(rxwf_pathname, "ARDOP_rxaudio_%04d%02d%02d_%02d%02d%02d.wav",
+                st.wYear, st.wMonth, st.wDay,
+                st.wHour, st.wMinute, st.wSecond);
+	}
+	
+	rxwf = OpenWavW(rxwf_pathname);
+	extendRxwf();
+}
+
+// writing unfiltered tx audio to WAV disabled.  Only filtered 
+// tx audio will be written.  However, the code for unfiltered
+// audio is left in place but commented out so that it can eaily
+// be restored if desired.
+void StartTxWav()
+{
+	// Open two new WAV files for filtered and unfiltered Tx audio.
+	//
+	// Wav files will use a filename that includes port, UTC date, 
+	// and UTC time, similar to log files but with added time to 
+	// the nearest second.  Like Log files, these Wav files will be 
+	// written to the Log directory if defined, else to the current 
+	// directory
+	char txwff_pathname[1024];
+	// char txwfu_pathname[1024];
+	SYSTEMTIME st;
+
+	if (txwff != NULL) // || txwfu != NULL)
+	{
+		WriteDebugLog(LOGWARNING, "WARNING: Trying to open Tx WAV file, but already open.");
+		return;
+	}
+
+	GetSystemTime(&st);
+
+	if (LogDir[0])
+    {
+        if (HostPort[0])
+        {
+            sprintf(txwff_pathname, "%s/ARDOP_txfaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
+                LogDir, HostPort, st.wYear, st.wMonth, st.wDay,
+                st.wHour, st.wMinute, st.wSecond);
+            // sprintf(txwfu_pathname, "%s/ARDOP_txuaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
+            //     LogDir, HostPort, st.wYear, st.wMonth, st.wDay,
+            //     st.wHour, st.wMinute, st.wSecond);
+        }
+        else
+        {
+            sprintf(txwff_pathname, "%s/ARDOP_txfaudio_%04d%02d%02d_%02d%02d%02d.wav",
+                LogDir, st.wYear, st.wMonth, st.wDay,
+                st.wHour, st.wMinute, st.wSecond);
+            // sprintf(txwfu_pathname, "%s/ARDOP_txuaudio_%04d%02d%02d_%02d%02d%02d.wav",
+            //     LogDir, st.wYear, st.wMonth, st.wDay,
+            //     st.wHour, st.wMinute, st.wSecond);
+        }
+    }
+	else
+    {
+        if (HostPort[0])
+        {
+            sprintf(txwff_pathname, "ARDOP_txfaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
+                HostPort, st.wYear, st.wMonth, st.wDay,
+                st.wHour, st.wMinute, st.wSecond);
+            // sprintf(txwfu_pathname, "ARDOP_txuaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
+            //     HostPort, st.wYear, st.wMonth, st.wDay,
+            //     st.wHour, st.wMinute, st.wSecond);
+        }
+        else
+        {
+            sprintf(txwff_pathname, "ARDOP_txfaudio_%04d%02d%02d_%02d%02d%02d.wav",
+                st.wYear, st.wMonth, st.wDay,
+                st.wHour, st.wMinute, st.wSecond);
+            // sprintf(txwfu_pathname, "ARDOP_txuaudio_%04d%02d%02d_%02d%02d%02d.wav",
+            //     st.wYear, st.wMonth, st.wDay,
+            //     st.wHour, st.wMinute, st.wSecond);
+        }
+	}
+	txwff = OpenWavW(txwff_pathname);
+	// txwfu = OpenWavW(txwfu_pathname);
+}
 
 	
 VOID __cdecl Debugprintf(const char * format, ...)
@@ -234,6 +379,14 @@ void main(int argc, char * argv[])
 	}
 
 	WriteDebugLog(LOGALERT, "%s Version %s", ProductName, ProductVersion);
+	WriteDebugLog(LOGALERT, "ConsoleLogLevel = %d (%s)", ConsoleLogLevel, strLogLevels[ConsoleLogLevel]);
+	WriteDebugLog(LOGALERT, "FileLogLevel = %d (%s)", FileLogLevel, strLogLevels[FileLogLevel]);
+
+	if (DecodeWav[0])
+	{
+		decode_wav();
+		return;
+	}
 
 	if (HostPort[0])
 	{		
@@ -345,11 +498,27 @@ void main(int argc, char * argv[])
 	if(!SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS))
 		printf("Failed to set High Priority (%d)\n"), GetLastError();
 
+	if (TwoToneAndExit)
+	{
+		if (!InitSound(TRUE))
+		{
+			WriteDebugLog(LOGCRIT, "Error in InitSound().  Stopping ardop.");
+			return;
+		}
+		WriteDebugLog(LOGINFO, "Sending a 5 second 2-tone signal. Then exiting ardop.");
+		Send5SecTwoTone();
+		return;
+	}
 	ardopmain();
 }
 
 unsigned int getTicks()
 {
+	// When decoding a WAV file, return WavNow, a measure of the offset
+	// in ms from the start of the WAV file.
+	if (DecodeWav[0])
+		return WavNow;
+
 	return timeGetTime();
 //		QueryPerformanceCounter(&NewTicks);
 //		return (int)(NewTicks.QuadPart - StartTicks.QuadPart) / Frequency.QuadPart;
@@ -397,6 +566,9 @@ short * SendtoCard(unsigned short * buf, int n)
 
 	waveOutPrepareHeader(hWaveOut, &header[Index], sizeof(WAVEHDR));
 	waveOutWrite(hWaveOut, &header[Index], sizeof(WAVEHDR));
+
+	if (txwff != NULL)
+		WriteWav(&buffer[Index][0], n, txwff);
 
 	// wait till previous buffer is complete
 
@@ -463,7 +635,7 @@ void GetSoundDevices()
 }
 
 
-void InitSound(BOOL Report)
+int InitSound(BOOL Report)
 {
 	int i, ret;
 
@@ -534,6 +706,7 @@ void InitSound(BOOL Report)
 	}
 
 	ret = waveInStart(hWaveIn);
+	return TRUE;
 }
 
 int min = 0, max = 0, lastlevelGUI = 0, lastlevelreport = 0;
@@ -577,12 +750,25 @@ void PollReceivedSamples()
 				lastlevelreport = Now;
 
 				sprintf(HostCmd, "INPUTPEAKS %d %d", min, max);
-				WriteDebugLog(LOGDEBUG, "Input peaks = %d, %d", min, max);
+				WriteDebugLog(LOGINFO, "Input peaks = %d, %d", min, max);
 				SendCommandToHostQuiet(HostCmd);
 
 			}
 			min = max = 0;
 		}
+
+        if (rxwf != NULL)
+        {
+            // There is an open Wav file recording.
+            // Either close it or write samples to it.
+            if (rxwf_EndNow < Now)
+            {
+                CloseWav(rxwf);
+                rxwf = NULL;
+            }
+            else
+                WriteWav(&inbuffer[inIndex][0], inheader[inIndex].dwBytesRecorded/2, rxwf);
+        }
 
 //		WriteDebugLog(LOGDEBUG, "Process %d %d", inIndex, inheader[inIndex].dwBytesRecorded/2);
 		if (Capturing && Loopback == FALSE)
@@ -641,6 +827,9 @@ VOID WriteDebugLog(int LogLevel, const char * format, ...)
 	char timebuf[128];
 	UCHAR Value[100];
 	SYSTEMTIME st;
+	int wavhh;
+	int wavmm;
+	float wavss;
 
 	
 	va_start(arglist, format);
@@ -677,8 +866,22 @@ VOID WriteDebugLog(int LogLevel, const char * format, ...)
 		if ((logfile[0] = fopen(Value, "ab")) == NULL)
 			return;
 	}
-	sprintf(timebuf, "%02d:%02d:%02d.%03d ",
-		st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+	if (DecodeWav[0])
+	{
+		// When decoding a WAV file, include an approximate reference to the time offset
+		// since the start of the WAV file.
+		wavhh = Now/3600000;
+		wavmm = ((Now/1000) - wavhh * 3600) / 60;
+		wavss = (Now % 60000) / 1000.0;
+		sprintf(timebuf, "%02d:%02d:%02d.%03d (WAV %02d:%02d:%05.2f) ",
+			st.wHour, st.wMinute, st.wSecond, st.wMilliseconds, 
+			wavhh, wavmm, wavss);
+	}
+	else
+	{
+		sprintf(timebuf, "%02d:%02d:%02d.%03d ",
+			st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+	}
 
 	fputs(timebuf, logfile[0]);
 
@@ -760,9 +963,15 @@ VOID Statsprintf(const char * format, ...)
 			return;
 		else
 		{
-			sprintf(timebuf, "%02d:%02d:%02d.%03d\r\n",
+			// Including the date is redundant with the filename for the session log
+			// file, but is useful for also writing it to the console.
+			sprintf(timebuf, "%04d/%02d/%02d %02d:%02d:%02d.%03dz\r\n",
+				st.wYear, st.wMonth, st.wDay,
 				st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
 			fputs(timebuf, statslogfile);
+			// Printing the UTC date and time to the console with the session stats
+			// may be useful if sessions are logged manually.
+			printf("%s\n", timebuf);
 		}
 	}
 
@@ -820,6 +1029,17 @@ void SoundFlush()
 //	WriteDebugLog(LOGDEBUG, "Now %d Now - dttNextPlay 1  = %d", Now, Now - dttNextPlay);
 
 	KeyPTT(FALSE);		 // Unkey the Transmitter
+	if (txwff != NULL)
+	{
+		CloseWav(txwff);
+		txwff = NULL;
+	}
+	// writing unfiltered tx audio to WAV disabled
+	// if (txwfu != NULL)
+	// {
+	// 	CloseWav(txwfu);
+	// 	txwfu = NULL;
+	// }
 
 	// Clear the capture buffers. I think this is only  needed when testing
 	// with audio loopback.
@@ -836,6 +1056,9 @@ void SoundFlush()
         //        stcStatus.ControlName = "lblRcvFrame" ' clear the Receive label
         //        queTNCStatus.Enqueue(stcStatus)
           
+	if (WriteRxWav)
+		// Start recording if not already recording, else extend the recording time.
+		StartRxWav();
 
 	return;
 }
@@ -983,7 +1206,7 @@ HANDLE OpenCOMPort(VOID * pPort, int speed, BOOL SetDTR, BOOL SetRTS, BOOL Quiet
 
 	// if Port Name starts COM, convert to \\.\COM or ports above 10 wont work
 
-	if ((unsigned int)pPort < 256)			// just a com port number
+	if (atoi(pPort) != 0)			// just a com port number
 		sprintf( szPort, "\\\\.\\COM%d", pPort);
 
 	else if (_memicmp(pPort, "COM", 3) == 0)
@@ -1008,8 +1231,8 @@ HANDLE OpenCOMPort(VOID * pPort, int speed, BOOL SetDTR, BOOL SetRTS, BOOL Quiet
 	{
 		if (Quiet == 0)
 		{
-			if (pPort < (VOID *)256)
-				sprintf(buf," COM%d could not be opened \r\n ", (unsigned int)pPort);
+			if (atoi(pPort) != 0)
+				sprintf(buf," COM%d could not be opened \r\n ", atoi(pPort));
 			else
 				sprintf(buf," %s could not be opened \r\n ", pPort);
 
@@ -1082,8 +1305,8 @@ HANDLE OpenCOMPort(VOID * pPort, int speed, BOOL SetDTR, BOOL SetRTS, BOOL Quiet
 	}
 	else
 	{
-		if ((unsigned int)pPort < 256)
-			sprintf(buf,"COM%d Setup Failed %d ", pPort, GetLastError());
+		if (atoi(pPort) != 0)
+			sprintf(buf,"COM%d Setup Failed %d ", atoi(pPort), GetLastError());
 		else
 			sprintf(buf,"%s Setup Failed %d ", pPort, GetLastError());
 

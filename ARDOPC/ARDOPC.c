@@ -1,7 +1,8 @@
 // ARDOPC.cpp : Defines the entry point for the console application.
 //
 
-const char ProductName[] = "ardopc";
+// ardopcf is a fork by pflarue of ardopc by John Wiseman
+const char ProductName[] = "ardopcf";
 
 // Version k  Fix conflicting definitions of bytDataToSend
 // Version m  Add CM108 PTT (Sept 2021)
@@ -17,7 +18,6 @@ const char ProductName[] = "ardopc";
 
 #ifdef WIN32
 #define _CRT_SECURE_NO_DEPRECATE
-#define _USE_32BIT_TIME_T
 
 #include <windows.h>
 #include <mmsystem.h>
@@ -110,8 +110,8 @@ BOOL AccumulateStats = TRUE;
 BOOL Use600Modes = FALSE;
 BOOL FSKOnly = FALSE;
 BOOL fastStart = TRUE;
-BOOL ConsoleLogLevel = LOGDEBUG;
-BOOL FileLogLevel = LOGDEBUG;
+int ConsoleLogLevel = LOGINFO;
+int FileLogLevel = LOGDEBUG;
 BOOL EnablePingAck = TRUE;
 
 BOOL gotGPIO = FALSE;
@@ -221,6 +221,7 @@ BOOL blnCodecStarted = FALSE;
 
 unsigned int dttNextPlay = 0;
 
+extern BOOL InitRXO;
 
 const UCHAR bytValidFrameTypesALL[]=
 {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
@@ -624,13 +625,6 @@ char * strlop(char * buf, char delim)
 	return ptr;
 }
 
-#ifdef WIN32
-float round(float x)
-{
-	return floorf(x + 0.5f);
-}
-#endif
-
 void GetSemaphore()
 {
 }
@@ -754,14 +748,42 @@ void testRS()
 	FrameOK = RSDecode(bytRawData, DataLen, intRSLen, &blnRSOK);
 }
 
-
+void setProtocolMode(char* strMode)
+{
+	if (strcmp(strMode, "ARQ") == 0)
+	{
+		WriteDebugLog(LOGINFO, "Setting ProtocolMode to ARQ.");
+		ProtocolMode = ARQ;
+	}
+	else
+	if (strcmp(strMode, "RXO") == 0)
+	{
+		WriteDebugLog(LOGINFO, "Setting ProtocolMode to RXO.");
+		ProtocolMode = RXO;
+	}
+	else
+	if (strcmp(strMode, "FEC") == 0)
+	{
+		WriteDebugLog(LOGINFO, "Setting ProtocolMode to FEC.");
+		ProtocolMode = FEC;
+	}
+	else
+	{
+		WriteDebugLog(LOGWARNING, "WARNING: Invalid argument to setProtocolMode.  %s given, but expected one of ARQ, RXO, or FEC.  Setting ProtocolMode to ARQ as a default.", strMode);
+		ProtocolMode = ARQ;
+	}
+}
 
 void ardopmain()
 {
 	blnTimeoutTriggered = FALSE;
 	SetARDOPProtocolState(DISC);
 
-	InitSound();
+	if (!InitSound())
+	{
+		WriteDebugLog(LOGCRIT, "Error in InitSound().  Stopping ardop.");
+		return;
+	}
 
 	if (SerialMode)
 		SerialHostInit();
@@ -780,17 +802,23 @@ void ardopmain()
 
 	tmrPollOBQueue = Now + 10000;
 
-	ProtocolMode = ARQ;
+	if (InitRXO)
+		setProtocolMode("RXO");
+	else
+		setProtocolMode("ARQ");
 
 	while(!blnClosing)
 	{
 		PollReceivedSamples();
-		CheckTimers();	
-		if (SerialMode)
-			SerialHostPoll();
-		else
-			TCPHostPoll();
-		MainPoll();
+		if (ProtocolMode != RXO)
+		{
+			CheckTimers();
+			if (SerialMode)
+				SerialHostPoll();
+			else
+				TCPHostPoll();
+			MainPoll();
+		}
 		PlatformSleep(10);
 	}
 
@@ -1278,9 +1306,8 @@ BOOL RSDecode(UCHAR * bytRcv, int Length, int CheckLen, BOOL * blnRSOK)
 {	
 #ifdef NEWRS
 
-	// Using a modified version of Henry Minsky's code
-	
-	//Copyright Henry Minsky (hqm@alum.mit.edu) 1991-2009
+	// Using a modified version of Henry Minsky's rscode library
+	// see ardop/lib/rscode
 
 	// Rick's Implementation processes the byte array in reverse. and also 
 	//	has the check bytes in the opposite order. I've modified the encoder
@@ -1912,7 +1939,7 @@ void SendID(BOOL blnEnableCWID)
 
 	p = bytEncodedBytes;
 
-	Debugprintf("%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x ",
+	WriteDebugLog(LOGDEBUG, "%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x ",
 		p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17]);
 
 
@@ -2329,7 +2356,7 @@ void CheckTimers()
 
 			//	Repeat mechanism for normal repeated FEC or ARQ frames
       
-			WriteDebugLog(LOGDEBUG, "Repeating Last Frame");
+			WriteDebugLog(LOGINFO, "[Repeating Last Frame]");
 			RemodulateLastFrame();
 		}
 		else
