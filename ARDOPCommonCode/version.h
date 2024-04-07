@@ -10,4 +10,4 @@
 //	Add --trailerlength command line parameter
 
 // v2.0.3.2.1 forked by Peter LaRue from v2.0.3.2 by John Wiseman
-const char ProductVersion[] = "2.0.3.2.1";
+const char ProductVersion[] = "2.0.3.2.1+develop";
