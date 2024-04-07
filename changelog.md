@@ -1,6 +1,6 @@
 # Changelog
 
-### 2024.03.28: [ardopcf](https://github.com/pflarue/ardop) v2.0.3.2.1 from [ardopc](https://github.com/g8bpq/ardop) v2.0.3.2
+### 2024.04.01: [ardopcf](https://github.com/pflarue/ardop) v2.0.3.2.1 from [ardopc](https://github.com/g8bpq/ardop) v2.0.3.2
 
 ##### Name change
 
