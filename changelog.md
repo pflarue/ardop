@@ -1,5 +1,15 @@
 # Changelog
 
+### Unreleased changes since v2.0.3.2.1 (changes in develop branch)
+
+##### Print Copyright
+
+Print a link to the github respository containing ardopcf, a copyright statement, and a link to the LICENSE file indicating that license details, including information about the authors of external libraries used and their licenses can be found there.  With the default ConsoleLogLevel and FileLogLevel settings, this will be written both to console and to the debug log file.
+
+##### Version bump
+
+Set version to `v2.0.3.2.1+develop` in develop branch.  This will be changed to a new number only when preparing for the next release.  Making this temporary change makes it more likely that anyone building ardopcf from the develop branch will produce a binary that can be distinguished from the released v2.0.3.2.1.  An earlier change was made to set this variable in its own file (ARDOPCommonCode/version.h).  This was done to make it easier to make a temporary edit to this version string before compiling, but never commit that change.  I typically add the date to the version number when building a binaries for testing purposes.
+
 ### 2024.04.01: [ardopcf](https://github.com/pflarue/ardop) v2.0.3.2.1 from [ardopc](https://github.com/g8bpq/ardop) v2.0.3.2
 
 ##### Name change
