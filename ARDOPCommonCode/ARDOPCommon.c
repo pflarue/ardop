@@ -241,7 +241,12 @@ void processargs(int argc, char * argv[])
 		{
 		case 'h':
 	
-			printf("%s Version %s\n", ProductName, ProductVersion);
+			printf("%s Version %s (https://www.github.com/pflarue/ardop)\n", ProductName, ProductVersion);
+			printf("Copyright (c) 2014-2024 Rick Muething, John Wiseman, Peter LaRue\n");
+			printf(
+				"See https://github.com/pflarue/ardop/blob/master/LICENSE for licence details including\n" 
+				"  information about authors of external libraries used and their licenses.\n"
+			);
 			printf(HelpScreen, ProductName);
 			exit (0);
 
