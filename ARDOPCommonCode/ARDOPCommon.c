@@ -518,6 +518,9 @@ int decode_wav()
 
 	nSamples = (wavHead[40] + (wavHead[41] << 8) + (wavHead[42] << 16) + (wavHead[43] << 24)) / 2;
 	WriteDebugLog(LOGDEBUG, "Reading %d 16-bit samples.", nSamples);
+	// Send blocksize silent samples to ProcessNewSamples() before start of WAV file data.
+	memset(samples, 0, sizeof(samples));
+	ProcessNewSamples(samples, blocksize);
 	while (nSamples >= blocksize)
 	{
 		readCount = fread(samples, 2, blocksize, wavf);
@@ -539,6 +542,13 @@ int decode_wav()
 	WavNow += nSamples * 1000 / 12000;
 	ProcessNewSamples(samples, nSamples);
 	nSamples = 0;
+	// Send additional silent samples to ProcessNewSamples() after end of WAV file data.
+	// Without this, a frame that too close to the end of the WAV file might not be decoded.
+	memset(samples, 0, sizeof(samples));
+	for (int i=0; i<10; i++) {
+		WavNow += blocksize * 1000 / 12000;
+		ProcessNewSamples(samples, blocksize);
+	}
 
 	fclose(wavf);
 	WriteDebugLog(LOGDEBUG, "Done decoding %s.", DecodeWav);

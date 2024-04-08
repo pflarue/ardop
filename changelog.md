@@ -2,6 +2,10 @@
 
 ### Unreleased changes since v2.0.3.2.1 (changes in develop branch)
 
+##### Pad WAV For Decode
+
+Simulate some silence at the start and end of a WAV file to be decoded with the --decodewav option.  Without the samples added to the end, a recorded frame that ended too close to the end of the WAV file might not be decoded.  Before this change, ardopcf would fail to decode WAV files created with the --writetxwav option.  Some silent samples were also added before the start of the WAV file, in case there might also be a problem identifying the start of the frame.
+  
 ##### Print Copyright
 
 Print a link to the github respository containing ardopcf, a copyright statement, and a link to the LICENSE file indicating that license details, including information about the authors of external libraries used and their licenses can be found there.  With the default ConsoleLogLevel and FileLogLevel settings, this will be written both to console and to the debug log file.
