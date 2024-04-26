@@ -3506,7 +3506,7 @@ BOOL Decode4FSKPing()
 
 	intSNdB = Compute4FSKSN();
 
-	if (ProtocolState == DISC)
+	if (ProtocolState == DISC || ProtocolMode == RXO)
 	{
 		char Msg[80];
 

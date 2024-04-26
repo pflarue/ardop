@@ -539,7 +539,12 @@ void main(int argc, char * argv[])
 
 	setlinebuf(stdout);				// So we can redirect output to file and tail
 
-	Debugprintf("%s Version %s", ProductName, ProductVersion);
+	Debugprintf("%s Version %s (https://www.github.com/pflarue/ardop)", ProductName, ProductVersion);
+	Debugprintf("Copyright (c) 2014-2024 Rick Muething, John Wiseman, Peter LaRue");
+	Debugprintf(
+		"See https://github.com/pflarue/ardop/blob/master/LICENSE for licence details including\n" 
+		"  information about authors of external libraries used and their licenses."
+	);
 	Debugprintf("ConsoleLogLevel = %d (%s)", ConsoleLogLevel, strLogLevels[ConsoleLogLevel]);
 	Debugprintf("FileLogLevel = %d (%s)", FileLogLevel, strLogLevels[FileLogLevel]);
 
@@ -1300,6 +1305,10 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 		else
 		{
 			// This branch is untested since a case where the configuration can't be fixed has not been found.
+			WriteDebugLog(LOGERROR, "After failed attempt to fix: intPeriodTime=%d, intRate=$d, periodSize=%d.",
+				intPeriodTime, intRate, periodSize);
+			WriteDebugLog(LOGERROR, "intPeriodTime * intRate == periodSize * 1000000?  %d == %d?",
+				intPeriodTime * intRate, periodSize * 1000000);
 			WriteDebugLog(LOGERROR, "Unable to fix inconsistent ALSA playback configuration.  Reverting to previous configuration.");
 			intSetPeriodTime = 0;
 			setPeriodSize = 0;
