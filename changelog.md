@@ -1,6 +1,18 @@
 # Changelog
 
-### Unreleased changes since v2.0.3.2.1 (changes in develop branch)
+### 2024.04.26: [ardopcf](https://github.com/pflarue/ardop) v1.0.4.1.1 from v2.0.3.2.1
+
+##### Version Fix
+
+Using version number v2.0.3.2.1 for the first release of **ardopcf** was a mistake.  This was due to a bug and misunderstanding of the ardop version numbering scheme.  So version v1.0.4.1.1 comes after and replaces v2.0.3.2.1.
+
+##### More ASLA Rate Fix Data to Log
+
+Write some additional information to the debug log (and console) if adjustments fail to correct ALSA configuration problems associated with symbol rate error when transmitting using certain hardware/OS combinations.  This may aid in fixing recently reported cases of some these adjustments failing.
+
+##### Log PING Data in RXO ProtocolMode
+
+Write data carried by PING frames to the debug log when in RXO (receive only) ProtocolMode, including when reading WAV files.  There appears to be a problem with either the encoding or decodeing of the data carried PING frames as described in a [message dated Apr 23, 2024](https://ardop.groups.io/g/users/message/5262) to the Ardop Users group.  This remains an open issue to be resolved.
 
 ##### Pad WAV For Decode
 
@@ -9,10 +21,6 @@ Simulate some silence at the start and end of a WAV file to be decoded with the 
 ##### Print Copyright
 
 Print a link to the github respository containing ardopcf, a copyright statement, and a link to the LICENSE file indicating that license details, including information about the authors of external libraries used and their licenses can be found there.  With the default ConsoleLogLevel and FileLogLevel settings, this will be written both to console and to the debug log file.
-
-##### Version bump
-
-Set version to `v2.0.3.2.1+develop` in develop branch.  This will be changed to a new number only when preparing for the next release.  Making this temporary change makes it more likely that anyone building ardopcf from the develop branch will produce a binary that can be distinguished from the released v2.0.3.2.1.  An earlier change was made to set this variable in its own file (ARDOPCommonCode/version.h).  This was done to make it easier to make a temporary edit to this version string before compiling, but never commit that change.  I typically add the date to the version number when building a binaries for testing purposes.
 
 ### 2024.04.01: [ardopcf](https://github.com/pflarue/ardop) v2.0.3.2.1 from [ardopc](https://github.com/g8bpq/ardop) v2.0.3.2
 
