@@ -835,52 +835,26 @@ VOID CloseDebugLog()
 	logfile[0] = NULL;
 }
 
-
-VOID WriteDebugLog(int LogLevel, const char * format, ...)
-{
-	char Mess[10000];
-	va_list(arglist);
-	char timebuf[128];
-	UCHAR Value[100];
+int WriteLog(char * msg, int log) {
 	SYSTEMTIME st;
+	UCHAR Value[100];
+	char timebuf[128];
 	int wavhh;
 	int wavmm;
 	float wavss;
 
-	
-	va_start(arglist, format);
-#ifdef LOGTOHOST
-	vsnprintf(&Mess[1], sizeof(Mess), format, arglist);
-	strcat(Mess, "\r\n");
-	Mess[0] = LogLevel + '0';
-	SendLogToHost(Mess, strlen(Mess));
-#else
-	vsnprintf(Mess, sizeof(Mess), format, arglist);
-	strcat(Mess, "\r\n");
-
-
-	if (LogLevel <= ConsoleLogLevel)
-		printf(Mess);
-
-	if (!DebugLog)
-		return;
-
-	if (LogLevel > FileLogLevel)
-		return;
-
 	GetSystemTime(&st);
-	
-	if (logfile[0] == NULL)
+	if (logfile[log] == NULL)
 	{
 		if (HostPort[0])
 			sprintf(Value, "%s%s_%04d%02d%02d.log",
-				&LogName[0], HostPort, st.wYear, st.wMonth, st.wDay);
+				&LogName[log], HostPort, st.wYear, st.wMonth, st.wDay);
 		else
 			sprintf(Value, "%s%d_%04d%02d%02d.log",
-				&LogName[0], port, st.wYear, st.wMonth, st.wDay);
-		
-		if ((logfile[0] = fopen(Value, "ab")) == NULL)
-			return;
+				&LogName[log], port, st.wYear, st.wMonth, st.wDay);
+
+		if ((logfile[log] = fopen(Value, "ab")) == NULL)
+			return -1;
 	}
 	if (DecodeWav[0])
 	{
@@ -898,51 +872,50 @@ VOID WriteDebugLog(int LogLevel, const char * format, ...)
 		sprintf(timebuf, "%02d:%02d:%02d.%03d ",
 			st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
 	}
+	fputs(timebuf, logfile[log]);
+	fputs(msg, logfile[log]);
+	return 0;
+}
 
-	fputs(timebuf, logfile[0]);
+VOID WriteDebugLog(int LogLevel, const char * format, ...)
+{
+	char Mess[10000];
+	va_list(arglist);
+	
+	va_start(arglist, format);
+#ifdef LOGTOHOST
+	vsnprintf(&Mess[1], sizeof(Mess), format, arglist);
+	strcat(Mess, "\r\n");
+	Mess[0] = LogLevel + '0';
+	SendLogToHost(Mess, strlen(Mess));
+#else
+	vsnprintf(Mess, sizeof(Mess), format, arglist);
+	strcat(Mess, "\r\n");
 
-	fputs(Mess, logfile[0]);
+	if (LogLevel <= ConsoleLogLevel)
+		printf(Mess);
+
+	if (!DebugLog)
+		return;
+
+	if (LogLevel > FileLogLevel)
+		return;
+	WriteLog(Mess, DEBUGLOG);
 #endif
-
-	return;
 }
 
 VOID WriteExceptionLog(const char * format, ...)
 {
 	char Mess[10000];
 	va_list(arglist);
-	char timebuf[32];
-	UCHAR Value[100];
 	FILE *logfile = NULL;
-	SYSTEMTIME st;
 	
 	va_start(arglist, format);
 	vsnprintf(Mess, sizeof(Mess), format, arglist);
 	strcat(Mess, "\r\n");
 
 	printf(Mess);
-
-	GetSystemTime(&st);
-
-	if (HostPort[0])
-		sprintf(Value, "%s%s_%04d%02d%02d.log",
-				"ARDOPException", HostPort, st.wYear, st.wMonth, st.wDay);
-	else	
-		sprintf(Value, "%s%d_%04d%02d%02d.log",
-				"ARDOPException", port, st.wYear, st.wMonth, st.wDay);
-	
-	if ((logfile = fopen(Value, "ab")) == NULL)
-		return;
-
-	sprintf(timebuf, "%02d:%02d:%02d.%03d ",
-		st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
-
-	fputs(timebuf, logfile);
-
-	fputs(Mess, logfile);
-	fclose(logfile);
-
-	return;
+	WriteLog(Mess, EXCEPTLOG);
 }
 
 FILE *statslogfile = NULL;
