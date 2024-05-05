@@ -14,6 +14,7 @@
 #include <signal.h>
 #include <termios.h>
 #include <sys/ioctl.h>
+#include <stdbool.h>
 #ifndef TEENSY
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -49,6 +50,10 @@ void displayLevel(int max);
 BOOL WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite);
 VOID processargs(int argc, char * argv[]);
 void Send5SecTwoTone();
+int wg_send_currentlevel(int cnum, unsigned char level);
+int wg_send_pttled(int cnum, bool isOn);
+int wg_send_pixels(int cnum, unsigned char *data, size_t datalen);
+void WebguiPoll();
 
 VOID WriteDebugLog(int Level, const char * format, ...);
 
@@ -444,8 +449,10 @@ void PlatformSleep(int mS)
 {
 	if (SerialMode)
 		SerialHostPoll();
-	else
+	else {
 		TCPHostPoll();
+		WebguiPoll();
+	}
 
 	Sleep(mS);
 		
@@ -764,8 +771,10 @@ void txSleep(int mS)
 
 	if (SerialMode)
 		SerialHostPoll();
-	else
+	else {
 		TCPHostPoll();
+		WebguiPoll();
+	}
 
 	Sleep(mS);
 
@@ -1552,7 +1561,7 @@ int SoundCardWrite(short * input, unsigned int nSamples)
 	if (avail < 0)
 	{
 		if (avail != -32)
-			Debugprintf("Playback Avail Recovering from %d ..", (int)avail);
+			Debugprintf("Playback Avail Recovering from %s ..", snd_strerror((int)avail));
 		snd_pcm_recover(playhandle, avail, 1);
 
 		avail = snd_pcm_avail_update(playhandle);
@@ -1685,7 +1694,7 @@ int SoundCardRead(short * input, unsigned int nSamples)
 
 	if (avail < 0)
 	{
-		Debugprintf("avail Recovering from %d ..", avail);
+		Debugprintf("avail Recovering from %s ..", snd_strerror((int)avail));
 		if (rechandle)
 		{
 			snd_pcm_close(rechandle);
@@ -1831,6 +1840,7 @@ void PollReceivedSamples()
 
 		displayLevel(max);
 		CurrentLevel = ((max - min) * 75) /32768;	// Scale to 150 max
+		wg_send_currentlevel(0, CurrentLevel);
 
 		if ((Now - lastlevelGUI) > 2000)	// 2 Secs
 		{
@@ -1941,10 +1951,10 @@ int WriteLog(char * msg, int Log)
 		if (vlen == -1 || vlen > sizeof(Value)) {
 			printf("ERROR: Unable to open log file.  Log path probably too long.\n");
 			FileLogLevel = 0;
-			return FALSE;
+			return -1;
 		}
 		if ((logfile[Log] = fopen(Value, "a")) == NULL)
-			return FALSE;
+			return -1;
 	}
 	ss = tp.tv_sec % 86400;		// Secs int day
 	hh = ss / 3600;
@@ -2154,6 +2164,7 @@ BOOL KeyPTT(BOOL blnPTT)
 
 	blnLastPTT = blnPTT;
 	SetLED(0, blnPTT);
+	wg_send_pttled(0, blnPTT);
 	return TRUE;
 }
 
@@ -2477,6 +2488,7 @@ void DrawAxes(int Qual, const char * Frametype, char * Mode)
 	// Teensy used Frame Type, GUI Mode
 	
 	SendtoGUI('C', Pixels, pixelPointer - Pixels);	
+	wg_send_pixels(0, Pixels, pixelPointer - Pixels);
 	pixelPointer = Pixels;
 
 	sprintf(Msg, "%s Quality: %d", Mode, Qual);

@@ -13,6 +13,7 @@
 
 #include <windows.h>
 #include <mmsystem.h>
+#include <stdbool.h>
 
 #include "wav.h"
 
@@ -124,6 +125,10 @@ void HostPoll();
 void TCPHostPoll();
 void SerialHostPoll();
 BOOL WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite);
+void WebguiPoll();
+int wg_send_currentlevel(int cnum, unsigned char level);
+int wg_send_pttled(int cnum, bool isOn);
+int wg_send_pixels(int cnum, unsigned char *data, size_t datalen);
 
 int Ticks;
 
@@ -543,8 +548,10 @@ void txSleep(int mS)
 	PollReceivedSamples();			// discard any received samples
 	if (SerialMode)
 		SerialHostPoll();
-	else
+	else {
 		TCPHostPoll();
+		WebguiPoll();
+	}
 
 	Sleep(mS);
 
@@ -741,6 +748,7 @@ void PollReceivedSamples()
 		}
 
 		CurrentLevel = ((max - min) * 75) /32768;	// Scale to 150 max
+		wg_send_currentlevel(0, CurrentLevel);
 
 		if ((Now - lastlevelGUI) > 2000)	// 2 Secs
 		{
@@ -1114,7 +1122,7 @@ BOOL KeyPTT(BOOL blnPTT)
 
 	blnLastPTT = blnPTT;
 	SetLED(0, blnPTT);
-
+	wg_send_pttled(0, blnPTT);
 	return TRUE;
 }
 
@@ -1441,6 +1449,7 @@ void DrawAxes(int Qual, const char * Frametype, char * Mode)
 	// Teensy used Frame Type, GUI Mode
 	
 	SendtoGUI('C', Pixels, pixelPointer - Pixels);	
+	wg_send_pixels(0, Pixels, pixelPointer - Pixels);
 	pixelPointer = Pixels;
 
 	sprintf(Msg, "%s Quality: %d", Mode, Qual);

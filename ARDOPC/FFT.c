@@ -101,7 +101,7 @@ int ReverseBits(int Index, int NumBits)
     return Rev;
 }
 
-void FourierTransform(int NumSamples, short * RealIn, float * RealOut, float * ImagOut, int InverseTransform)
+void FourierTransform(int NumSamples, float * RealIn, float * RealOut, float * ImagOut, int InverseTransform)
 {
 	float AngleNumerator;
 	unsigned char NumBits;

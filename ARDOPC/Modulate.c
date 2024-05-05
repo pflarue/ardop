@@ -21,6 +21,9 @@ FILE * fp1;
 extern short Dummy;
 extern int DriveLevel;
 extern BOOL WriteTxWav;
+
+int wg_send_txframet(int cnum, const char *frame);
+
 // writing unfiltered tx audio to WAV disabled
 // extern struct WavFile *txwfu;
 
@@ -140,6 +143,7 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 
 	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
+	wg_send_txframet(0, strType);
 
 	if (Type == PktFrameHeader)
 	{
@@ -391,6 +395,7 @@ void Mod8FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 
 	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
+	wg_send_txframet(0, strType);
 
 	initFilter(200,1500);
 
@@ -467,6 +472,7 @@ void Mod16FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int
 
 	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
+	wg_send_txframet(0, strType);
 
 	initFilter(500,1500);
 
@@ -536,6 +542,7 @@ void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len,
 
 	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
+	wg_send_txframet(0, strType);
 
 	initFilter(2000,1500);
 
@@ -688,6 +695,7 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 	
 	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
+	wg_send_txframet(0, strType);
 
 /*	// DOnt use PSK Header at the moment
 	if (Type == PktFrameHeader)
@@ -1370,8 +1378,11 @@ void sendCWID(char * strID, BOOL blnPlay)
 	char * index;
 	int intMask;
 	int idoffset;
+	char gui_frametype[15];
 
     strlop(strID, '-');		// Remove any SSID    
+	snprintf(gui_frametype, sizeof(gui_frametype), "CW.ID.%s", strID);
+	wg_send_txframet(0, gui_frametype);
 
 	// Generate the dot samples (high tone) and space samples (low tone) 
 
@@ -1392,7 +1403,7 @@ void sendCWID(char * strID, BOOL blnPlay)
 			dblLoPhase -= 2 * M_PI;
 	}
 	
-	initFilter(500,1500);
+	initFilter(500,1500);  // This keys PTT
    
 	//Generate leader for VOX 6 dots long
 
