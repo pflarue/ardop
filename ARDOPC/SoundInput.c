@@ -8,6 +8,7 @@
 #include "ARDOPC.h"
 #include "RXO.h"
 #include "sdft.h"
+#include "../lib/rockliff/rrs.h"
 
 #pragma warning(disable : 4244)		// Code does lots of float to int
 
@@ -56,7 +57,6 @@ int intLeaderRcvdMs = 1000;		// Leader length??
 extern int intLastRcvdFrameQuality;
 extern int intReceivedLeaderLen;
 extern UCHAR bytLastReceivedDataFrameType;
-extern int NErrors;
 extern BOOL blnBREAKCmd;
 extern UCHAR bytLastACKedDataFrameType;
 extern int intARQDefaultDlyMs;
@@ -765,9 +765,7 @@ void MixNCOFilter(short * intNewSamples, int Length, float dblOffsetHz)
 
 int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDataLen, int intRSLen, int bytFrameType, int Carrier)
 {
-	BOOL blnRSOK;
-	BOOL FrameOK;
-
+	int NErrors;
 	//Dim bytNoRS(1 + intDataLen + 2 - 1) As Byte  ' 1 byte byte Count, Data, 2 byte CRC 
 	//Array.Copy(bytRawData, 0, bytNoRS, 0, bytNoRS.Length)
 
@@ -796,38 +794,36 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 	}
 	
 	// Try correcting with RS Parity
+	NErrors = rs_correct(bytRawData, intDataLen + 3 + intRSLen, intRSLen, true, false);
 
-	FrameOK = RSDecode(bytRawData, intDataLen + 3 + intRSLen, intRSLen, &blnRSOK);
-
-	if (blnRSOK)
+	if (NErrors == 0)
 	{}
 //		WriteDebugLog(LOGDEBUG, "RS Says OK without correction");
 	else
-	if (FrameOK)
+	if (NErrors > 0)
 	{}
+	// Unfortunately, Reed Solomon correction will sometimes return a 
+	// non-negative result indicating that the data is OK when it is not.  
+	// This is most likely to occur if the number of errors exceeds 
+	// intRSLen.  However, espectially for small intRSLen, it may also 
+	// occur even if the number of errors is less than or equal to
+	// intRSLen.  The test for invalid corrections in the padding bytes 
+	// performed by rs_correct() can reduce the likelyhood of this, 
+	// occuring, but it cannot be eliminiated.
+	// For frames like this with a CRC, it provides a more reliable test
+	// to verify whether a frame is correctly decoded. 
 //		WriteDebugLog(LOGDEBUG, "RS Says OK after %d correction(s)", NErrors);
-	else
+	else // NErrors < 0
 	{
 		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] RS Says Can't Correct");
 		goto returnBad;
 	}
 
-    if (FrameOK &&  CheckCRC16FrameType(bytRawData, intDataLen + 1, bytFrameType)) // RS correction successful 
+    if (NErrors >= 0 && CheckCRC16FrameType(bytRawData, intDataLen + 1, bytFrameType)) // RS correction successful 
 	{
 		int intFailedByteCnt = 0;
-		
-		// need to fix this if we want to use it
-		//  test code just to determine how many corrections were applied  ...later remove
-        //for (j = 0 ; j < intDataLen + 3; j++)
-		//{
-		//	if (bytRawData[j] <> bytCorrectedData[j])
-		//		intFailedByteCnt++;
-		//}
-
         WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] OK with RS %d corrections", NErrors);
 		totalRSErrors += NErrors;
- 
-		// End of test code
 
 		memcpy(bytCorrectedData, &bytRawData[1], bytRawData[0]);  
 		CarrierOk[Carrier] = TRUE;
@@ -3361,28 +3357,31 @@ BOOL Decode4FSKConReq()
 	UCHAR strCaller[32];
 	UCHAR strTarget [32];
 	UCHAR bytCall[6];
-	BOOL blnRSOK;
 	BOOL FrameOK;
 
 	// Modified May 24, 2015 to use RS encoding vs CRC (similar to ID Frame)
  
-	FrameOK = RSDecode(bytFrameData1, 16, 4, &blnRSOK);
+	// Try correcting with RS Parity
+	int NErrors = rs_correct(bytFrameData1, 16, 4, true, false);
 
-	if (FrameOK && blnRSOK == FALSE)
-	{
-		// RS Claims to have corrected it, but check
-
+	FrameOK = TRUE;
+	if (NErrors > 0) {
+		// Unfortunately, Reed Solomon correction will sometimes return a 
+		// non-negative result indicating that the data is OK when it is not.  
+		// This is most likely to occur if the number of errors exceeds 
+		// intRSLen.  However, espectially for small intRSLen, it may also 
+		// occur even if the number of errors is less than or equal to
+		// intRSLen.  The test for invalid corrections in the padding bytes 
+		// performed by rs_correct() can reduce the likelyhood of this, 
+		// occuring, but it cannot be eliminiated.
+		// Without a CRC, it is not possible to be completely confident
+		// that the frame is correctly decoded. 
+		//
+		// Check for valid callsigns?
 		WriteDebugLog(LOGDEBUG, "CONREQ Frame Corrected by RS");
-
-		FrameOK = RSDecode(bytFrameData1, 16, 4, &blnRSOK);
-
-		// Should now be OK without connections, if not RS didn't fix it
-
-		if (blnRSOK == FALSE)
-		{
-			WriteDebugLog(LOGDEBUG, "CONREQ Still bad after RS");
-			FrameOK = FALSE;
-		}
+	} else if (NErrors < 0) {
+		WriteDebugLog(LOGDEBUG, "CONREQ Still bad after RS");
+		FrameOK = FALSE;
 	}
 	memcpy(bytCall, bytFrameData1, 6);
 	DeCompressCallsign(bytCall, strCaller);
@@ -3471,26 +3470,29 @@ BOOL Decode4FSKPing()
 	UCHAR strCaller[10];
 	UCHAR strTarget [10];
 	UCHAR bytCall[6];
-	BOOL blnRSOK;
 	BOOL FrameOK;
 
-	FrameOK = RSDecode(bytFrameData1, 16, 4, &blnRSOK);
-
-	if (FrameOK && blnRSOK == FALSE)
+	int NErrors = rs_correct(bytFrameData1, 16, 4, true, false);
+	FrameOK = TRUE;
+	
+	if (NErrors > 0)
 	{
-		// RS Claims to have corrected it, but check
-
+		// Unfortunately, Reed Solomon correction will sometimes return a 
+		// non-negative result indicating that the data is OK when it is not.  
+		// This is most likely to occur if the number of errors exceeds 
+		// intRSLen.  However, espectially for small intRSLen, it may also 
+		// occur even if the number of errors is less than or equal to
+		// intRSLen.  The test for invalid corrections in the padding bytes 
+		// performed by rs_correct() can reduce the likelyhood of this, 
+		// occuring, but it cannot be eliminiated.
+		// Without a CRC, it is not possible to be completely confident
+		// that the frame is correctly decoded. 
+		//
+		// Check for valid callsigns?
 		WriteDebugLog(LOGDEBUG, "PING Frame Corrected by RS");
-
-		FrameOK = RSDecode(bytFrameData1, 16, 4, &blnRSOK);
-
-		// Should now be OK without connections, if not RS didn't fix it
-
-		if (blnRSOK == FALSE)
-		{
-			WriteDebugLog(LOGDEBUG, "PING Still bad after RS");
-			FrameOK = FALSE;
-		}
+	} else if (NErrors < 0) {
+		WriteDebugLog(LOGDEBUG, "PING Still bad after RS");
+		FrameOK = FALSE;
 	}
 
 	memcpy(bytCall, bytFrameData1, 6);
@@ -3617,7 +3619,6 @@ BOOL Decode4FSKID(UCHAR bytFrameType, char * strCallID, char * strGridSquare)
 {
 	UCHAR bytCall[10];
 	UCHAR temp[20];
-	BOOL blnRSOK;
 	BOOL FrameOK;
 	unsigned char * p = bytFrameData1;
 
@@ -3625,24 +3626,27 @@ BOOL Decode4FSKID(UCHAR bytFrameType, char * strCallID, char * strGridSquare)
 	WriteDebugLog(LOGDEBUG, "%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x  %02x %02x %02x %02x ",
 		p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15]);
 
+	int NErrors = rs_correct(bytFrameData1, 16, 4, true, false);
+	FrameOK = TRUE;
 
-	FrameOK = RSDecode(bytFrameData1, 16, 4, &blnRSOK);
-
-	if (FrameOK && blnRSOK == FALSE)
+	if (NErrors > 0)
 	{
-		// RS Claims to have corrected it, but check
-
+		// Unfortunately, Reed Solomon correction will sometimes return a 
+		// non-negative result indicating that the data is OK when it is not.  
+		// This is most likely to occur if the number of errors exceeds 
+		// intRSLen.  However, espectially for small intRSLen, it may also 
+		// occur even if the number of errors is less than or equal to
+		// intRSLen.  The test for invalid corrections in the padding bytes 
+		// performed by rs_correct() can reduce the likelyhood of this, 
+		// occuring, but it cannot be eliminiated.
+		// Without a CRC, it is not possible to be completely confident
+		// that the frame is correctly decoded. 
+		//
+		// Check for valid callsigns?
 		WriteDebugLog(LOGDEBUG, "ID Frame Corrected by RS");
-
-		FrameOK = RSDecode(bytFrameData1, 16, 4, &blnRSOK);
-
-		// Should now be OK without connections, if not RS didn't fix it
-
-		if (blnRSOK == FALSE)
-		{
-			WriteDebugLog(LOGDEBUG, "ID Still bad after RS");
-			FrameOK = FALSE;
-		}
+	} else if (NErrors < 0) {
+		WriteDebugLog(LOGDEBUG, "ID Still bad after RS");
+		FrameOK = FALSE;
 	}
 
 	memcpy(bytCall, bytFrameData1, 6);

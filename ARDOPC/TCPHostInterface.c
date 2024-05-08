@@ -937,7 +937,7 @@ PktLost:
 			{
 				char Addr[32];
 				Format_Addr(&GUIHost, Addr);
-				WriteDebugLog(DEBUG, "GUI Connected from Address %s", Addr);
+				WriteDebugLog(LOGDEBUG, "GUI Connected from Address %s", Addr);
 				GUIActive = TRUE;
 			}
 
@@ -977,7 +977,7 @@ PktLost:
 			if ((Now - LastGUITime) > 15000)
 			{
 				if (GUIActive)
-					WriteDebugLog(DEBUG, "GUI Connection lost");
+					WriteDebugLog(LOGDEBUG, "GUI Connection lost");
 
 				GUIActive = FALSE;
 			}

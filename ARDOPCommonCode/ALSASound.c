@@ -25,6 +25,7 @@
 
 #include "ardopcommon.h"
 #include "wav.h"
+#include "../lib/rockliff/rrs.h"
 
 #define SHARECAPTURE		// if defined capture device is opened and closed for each transission
 
@@ -528,6 +529,9 @@ void main(int argc, char * argv[])
 	struct timespec tp;
 	struct sigaction act;
 	int lnlen;
+	// rslen_set[] must list all of the rslen values used.
+	int rslen_set[] = {2, 4, 8, 16, 32, 36, 50, 64};
+	init_rs(rslen_set, 8);
 
 //	Sleep(1000);	// Give LinBPQ time to complete init if exec'ed by linbpq
 
