@@ -255,6 +255,9 @@ int RcvdSamplesLen = 0;				// Samples in RX buffer
 int cumAdvances = 0;
 int symbolCnt = 0;
 
+int intSNdB = 0;
+int intQuality = 0;
+
 
 BOOL Acquire2ToneLeaderSymbolFraming();
 BOOL SearchFor2ToneLeader3(short * intNewSamples, int Length, float * dblOffsetHz, int * intSN);
@@ -1026,10 +1029,10 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			State = SearchingForLeader;
 			printtick("frame sync timeout");
 		}
+		memset(intToneMagsIndex, 0, sizeof(intToneMagsIndex));
 	}
 	
 	//	Acquire Frame Type
-	memset(intToneMagsIndex, 0, sizeof(intToneMagsIndex));
 	if (State == AcquireFrameType)
 	{
 //		printtick("getting frame type");
@@ -3422,7 +3425,7 @@ int Compute4FSKSN()
 	float dblAVGSNdB = 0;
 	int intDominateTones[64];
 	int intNonDominateToneSum;
-	float intAvgNonDominateTone;
+	float dblAvgNonDominateTone;
 	int i, j;
 	int SNcount = 0;
 
@@ -3441,16 +3444,16 @@ int Compute4FSKSN()
 			intNonDominateToneSum += intToneMags[0][4 * i + j];
 		}
 		
-		intAvgNonDominateTone = (intNonDominateToneSum - intDominateTones[i])/ 3; // subtract out the Dominate Tone from the sum
+		dblAvgNonDominateTone = (intNonDominateToneSum - intDominateTones[i])/ 3; // subtract out the Dominate Tone from the sum
 		
-		// Note subtract intAvgNonDominateTone below to compute S:N instead of (S+N):N
+		// Note subtract dblAvgNonDominateTone below to compute S:N instead of (S+N):N
 		// note 10 * log used since tone values are already voltage squared (avoids SQRT) 
 		// the S:N calculation is limited to a Max of + 50 dB to avoid distorting the average in very low noise environments 
             
-		dblAVGSNdB += min(50.0f, 10.0f * log10f((intDominateTones[i] - intAvgNonDominateTone) / intAvgNonDominateTone)); //  average in the S:N;
+		dblAVGSNdB += min(50.0f, 10.0f * log10f((intDominateTones[i] - dblAvgNonDominateTone) / dblAvgNonDominateTone)); //  average in the S:N;
 	}
 	intSNdB = (dblAVGSNdB / intNumSymbols) - 17.8f;	//  17.8 converts from nominal 50 Hz "bin" BW to standard 3 KHz BW (10* Log10(3000/50))
-	
+	printf("dblAVGSNdB=%f, intNumSymbols=%d, intSNdB=%d\n", dblAVGSNdB, intNumSymbols, intSNdB);
 	return intSNdB;
 }
 
@@ -3463,7 +3466,6 @@ BOOL Decode4FSKPing()
 	UCHAR bytCall[6];
 	BOOL blnRSOK;
 	BOOL FrameOK;
-	int intSNdB;
 
 	FrameOK = RSDecode(bytFrameData1, 16, 4, &blnRSOK);
 
@@ -3594,6 +3596,11 @@ BOOL Decode4FSKPingACK(UCHAR bytFrameType, int * intSNdB, int * intQuality)
 		blnPINGrepeating = False;
 		blnFramePending = False;	//  Cancels last repeat
 		return TRUE;
+	}
+	else {
+		*intSNdB = -1;
+		*intQuality = -1;
+		WriteDebugLog(LOGDEBUG, "[DemodDecode4FSKPingACK]  Unable to decode S:N and Quality.");
 	}
 	return FALSE;
 }
@@ -3846,7 +3853,6 @@ BOOL DecodeACKNAK(int intFrameType, int *  intQuality)
 }
 
 
-int intSNdB = 0, intQuality = 0;
 
 
 BOOL DecodeFrame(int xxx, UCHAR * bytData)
