@@ -3453,7 +3453,6 @@ int Compute4FSKSN()
 		dblAVGSNdB += min(50.0f, 10.0f * log10f((intDominateTones[i] - dblAvgNonDominateTone) / dblAvgNonDominateTone)); //  average in the S:N;
 	}
 	intSNdB = (dblAVGSNdB / intNumSymbols) - 17.8f;	//  17.8 converts from nominal 50 Hz "bin" BW to standard 3 KHz BW (10* Log10(3000/50))
-	printf("dblAVGSNdB=%f, intNumSymbols=%d, intSNdB=%d\n", dblAVGSNdB, intNumSymbols, intSNdB);
 	return intSNdB;
 }
 

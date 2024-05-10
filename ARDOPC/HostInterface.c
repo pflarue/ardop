@@ -18,6 +18,7 @@ int GetEEPROM(int Reg);
 void SaveEEPROM(int reg, int val);
 
 void Break();
+int sendframe(char * sendParams);
 
 extern BOOL NeedID;			// SENDID Command Flag
 extern BOOL NeedConReq;		// ARQCALL Command Flag
@@ -138,15 +139,18 @@ VOID DoTrueFalseCmd(char * strCMD, char * ptrParams, BOOL * Value)
 void ProcessCommandFromHost(char * strCMD)
 {
 	char * ptrParams;
-	char cmdCopy[80] = "";
+	// cmdCopy expanded from 80 to 2100 to accomodate
+	// _SEND with data up to 1024 bytes written as hex
+	// requiring 2 string chars per data byte
+	char cmdCopy[2100] = "";
 	char strFault[100] = "";
 	char cmdReply[1024];
 
 	strFault[0] = 0;
 
-	strCMD[79] = 0;				// in case cmd handler gets garbage
+	memcpy(cmdCopy, strCMD, sizeof(cmdCopy));	// save before we truncate or split it up
 
-	memcpy(cmdCopy, strCMD, 79);	// save before we split it up
+	strCMD[79] = 0;				// in case cmd handler gets garbage
 
 	_strupr(strCMD);
 
@@ -1609,6 +1613,29 @@ void ProcessCommandFromHost(char * strCMD)
 		goto cmddone;
 	} 
 	// RDY processed earlier Case "RDY" ' no response required for RDY
+
+	///////////////////////////////////////////////////////////////
+	// The _SEND command is intended for development and debugging.
+	// It is NOT intended for normal use by Host applications.
+	// It may be removed or modfied without notice in future
+	// versions of ardopcf.
+	///////////////////////////////////////////////////////////////
+	if (strcmp(strCMD, "_SEND") == 0)
+	{
+		if (ptrParams == 0)
+		{
+			sprintf(strFault, "Syntax Err: _SEND sendParams");
+			SendReplyToHost(cmdReply);
+			goto cmddone;
+		} else {
+			// cmdCopy starts with arbitrary caed "_send "
+			// and has a max length of 80
+			if(sendframe(cmdCopy) != 0)
+				sprintf(strFault, "FAILED _SEND");
+		}
+		goto cmddone;
+	}
+
 
 	sprintf(strFault, "CMD %s not recoginized", strCMD);
 
