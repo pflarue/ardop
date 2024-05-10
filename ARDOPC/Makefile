@@ -21,5 +21,5 @@ ardopcf: $(OBJS)
 -include *.d
 
 clean :
-	rm ardopcf $(OBJS)
+	rm ardopcf $(OBJS) $(OBJS:.o=.d) output.map
 
