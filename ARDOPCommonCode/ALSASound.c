@@ -1305,7 +1305,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 		else
 		{
 			// This branch is untested since a case where the configuration can't be fixed has not been found.
-			WriteDebugLog(LOGERROR, "After failed attempt to fix: intPeriodTime=%d, intRate=$d, periodSize=%d.",
+			WriteDebugLog(LOGERROR, "After failed attempt to fix: intPeriodTime=%d, intRate=%d, periodSize=%d.",
 				intPeriodTime, intRate, periodSize);
 			WriteDebugLog(LOGERROR, "intPeriodTime * intRate == periodSize * 1000000?  %d == %d?",
 				intPeriodTime * intRate, periodSize * 1000000);
