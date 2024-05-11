@@ -123,12 +123,8 @@ UCHAR bytLastCMD_DataSent[256];
 
 void TCPSendCommandToHost(char * strText)
 {
-	// This is from TNC side as identified by the leading "c:"   (Host side sends "C:")
-	// Subroutine to send a line of text (terminated with <Cr>) on the command port... All commands beging with "c:" and end with <Cr>
-	// A two byte CRC appended following the <Cr>
-	// The strText cannot contain a "c:" sequence or a <Cr>
-	// Returns TRUE if command sent successfully.
-	// Form byte array to send with CRC
+	//	This sends a command response to the Host.
+	//	It is simply a string terminated by a CR.
 
 	UCHAR bytToSend[1024];
 	int len;
@@ -148,8 +144,13 @@ void TCPSendCommandToHost(char * strText)
 }
 
 
-void TCPSendCommandToHostQuiet(char * strText)		// Higher Debug Level for PTT
+void TCPSendCommandToHostQuiet(char * strText)
 {
+	//	This sends a command response to the Host.
+	//	It is simply a string terminated by a CR.
+	//	Used for PTT commands and INPUTPEAKS notifications to Host.
+	//	Not logged to the Debug Log.
+
 	UCHAR bytToSend[256];
 	int len;
 	int ret;
@@ -166,16 +167,19 @@ void TCPSendCommandToHostQuiet(char * strText)		// Higher Debug Level for PTT
 	return;
 }
 
-//	Function to queue a text command to the Host used for all asynchronous Commmands (e.g. BUSY etc)
-
 void TCPQueueCommandToHost(char * strText)
 {
-	SendCommandToHost(strText);		// no queuing in lastest code
+	//	This wrapper sends a command response to the Host.
+	//	It is simply a string terminated by a CR.
+	//	Response queuing seems to be a legacy from the original ARDOP TNC, but is not used in ARDOPC.
+	//  Good canidate for removing and replacing with TCPSendCommandToHost.
+	SendCommandToHost(strText);
 }
 
 void TCPSendReplyToHost(char * strText)
 {
-	//	Used for replies to ARDOP commands. In TCP mode treat as SendCommandToHost
+	//  This wrapper sends a reply to the Host.
+	//  It is simply a string terminated by a CR.
 
 	SendCommandToHost(strText);
 }
@@ -216,15 +220,22 @@ void WriteFECLog(UCHAR * Msg, int Len)
 #endif
 }
 
-//  Subroutine to add a short 3 byte tag (ARQ, FEC, ERR, or IDF) to data and send to the host 
+
 
 void TCPAddTagToDataAndSendToHost(UCHAR * bytData, char * strTag, int Len)
 {
-	//  This is from TNC side as identified by the leading "d:"   (Host side sends data with leading  "D:")
-	// includes 16 bit CRC check on Data Len + Data (does not CRC the leading "d:")
-	// strTag has the type Tag to prepend to data  "ARQ", "FEC" or "ERR" which are examined and stripped by Host (optionally used by host for display)
-	// Max data size should be 2000 bytes or less for timing purposes
-	// I think largest apcet is about 1360 bytes
+	//  Subroutine to add a short 3 byte tag (ARQ, FEC, ERR, or IDF) to data and send to the host
+	//  The reason for this is to allow the host to determine the type of data and handle it appropriately.
+	//  An example for a FEC response is "<LENGTH><FEC><DATA>"
+	//  Sometimes this will end up replying with FECFEC instead of just FEC, but it is TBD if that is a bug or not.
+	//  I think the reason this happens, is when sending data, you need to prefix with FEC, and when the data
+	//  is received and sent to the host, it just tacks on an extra FEC.
+
+	//  strTag has the type Tag to prepend to data  "ARQ", "FEC" or "ERR"
+	//  The host is supposed to use this to determine how to handle the data, usually it is stripped off by the host.
+
+	//  Max data size should be 2000 bytes or less for timing purposes
+	//  I think largest apcet is about 1360 bytes
 
 	UCHAR * bytToSend;
 	UCHAR buff[1500];
@@ -241,7 +252,7 @@ void TCPAddTagToDataAndSendToHost(UCHAR * bytData, char * strTag, int Len)
 
 	bytToSend = buff;
 
-	Len += 3;					// Tag
+	Len += 3;					// Add 3 bytes for the tag (FEC, ARQ, ERR)
 	bytToSend[0] = Len >> 8;	//' MS byte of count  (Includes strDataType but does not include the two trailing CRC bytes)
 	bytToSend[1] = Len  & 0xFF;// LS Byte
 	memcpy(&bytToSend[2], strTag, 3);
@@ -265,7 +276,7 @@ VOID ARDOPProcessCommand(UCHAR * Buffer, int MsgLen)
 	
 	if (_memicmp(Buffer, "RDY", 3) == 0)
 	{
-		//	Command ACK. Remove from buffer and send next if a
+		//	Command ACK. Remove from buffer and send next if a ??????
 
 		return;
 	}
@@ -281,30 +292,24 @@ void ProcessReceivedControl()
 	char * ptr, * ptr2;
 	char Buffer[8192];
 
+	// shouldn't get several messages per packet, as each should need an ack
+	// May get message split over packets
 	if (InReceiveProcess)
 		return;
 
-	// shouldn't get several messages per packet, as each should need an ack
-	// May get message split over packets
+	//	This is the command port, which only listens on port 8515 or otherwise specified
+	//  as a command line arguemnt. It is used for all commands to the TNC, such as
+	//  setting parameters. 
 
-	//	Both command and data arrive here, which complicated things a bit
-
-	//	Commands start with c: and end with CR.
-	//	Data starts with d: and has a length field
-	//	"d:ARQ|FEC|ERR|, 2 byte count (Hex 0001 - FFFF), binary data, +2 Byte CRC"
-
-	//	As far as I can see, shortest frame is "c:RDY<Cr> + 2 byte CRC" = 8 bytes
-
-	//	I don't think it likely we will get packets this long, but be aware...
-
-	//	We can get pretty big ones in the faster 
+	//	The command format is expected to be "<COMMAND><CR>"
+	//  It is important for it to be an actual carriage return, as a newline will not be recognized
 				
 	Len = recv(TCPControlSock, &ARDOPBuffer[InputLen], 8192 - InputLen, 0);
 
+	//  A socket connection will periodically send a TCPKeepAlive packet
+	//  If we stop getting these, then we should close the connection.
 	if (Len == 0 || Len == SOCKET_ERROR)
 	{
-		// Does this mean closed?
-		
 		closesocket(TCPControlSock);
 		TCPControlSock = 0;
 
@@ -318,20 +323,29 @@ void ProcessReceivedControl()
 
 loop:
 
-
+	// Here we will wait for our input length to be at least 5 bytes before continuing processing,
+	// as we might have read the buffer while the message was being sent, and we need to wait for the whole message.
+	// A timeout may be a good idea here, but it is not implemented.
 	if (InputLen < 4)
-		return;					// Wait for more to arrive (?? timeout??)
+		return;	
 
-	// Command = look for CR
-
+	//  We are looking for a carriage return in our buffer, as that is the end of a command.
 	ptr = memchr(ARDOPBuffer, '\r', InputLen);
 
-	if (ptr == 0)	//  CR in buffer
-		return;		// Wait for it
+	// If there is no carriage return, we need to wait for more data
+	if (ptr == 0)
+		return;
 
-		ptr2 = &ARDOPBuffer[InputLen];
+	// since we found the carriage return, we look at the next byte
+	ptr2 = &ARDOPBuffer[InputLen];
 
-	if ((ptr2 - ptr) == 1)	// CR + CRC
+	// I am not sure why we are comparing the distance to the next byte in the buffer,
+	// since it should always evalute to 1, because ptr is the location of the carriage return,
+	// which is the end of that message, and the next byte, regardless of wherever it is, will
+	// always be 1. Maybe this is a holdover of processing DATA messages, which may be split over packets,
+	// but I am not sure. Would be cool to have someone look into this to see if the if is even required in
+	// the control port processing. All commands are short anyway.
+	if ((ptr2 - ptr) == 1)
 	{
 		// Usual Case - single meg in buffer
 	
@@ -352,7 +366,7 @@ loop:
 
 		//	I dont think this should happen, but...
 
-		MsgLen = InputLen - (ptr2-ptr) + 1;	// Include CR and CRC
+		MsgLen = InputLen - (ptr2-ptr) + 1;	// Include CR
 
 		memcpy(Buffer, ARDOPBuffer, MsgLen);
 
@@ -389,23 +403,22 @@ void ProcessReceivedData()
 	char Buffer[8192];
 	int DataLen;
 
+	// shouldn't get several messages per packet, as each should need an ack
+	// May get message split over packets
 	if (InReceiveProcess)
 		return;
 
-	// shouldn't get several messages per packet, as each should need an ack
-	// May get message split over packets
+	//	This is the data port, which only listens on port 8516 (8515+1) or otherwise specified (+1)
+	//  as a command line arguemnt. It is used for all data sent to the TNC, such as
+	//  for ARQ or FEC.
 
-	//	Both command and data arrive here, which complicated things a bit
-
-	//	Commands start with c: and end with CR.
-	//	Data starts with d: and has a length field
-	//	"d:ARQ|FEC|ERR|, 2 byte count (Hex 0001 - FFFF), binary data, +2 Byte CRC"
-
-	//	As far as I can see, shortest frame is "c:RDY<Cr> + 2 byte CRC" = 8 bytes
-
-	//	I don't think it likely we will get packets this long, but be aware...
-
-	//	We can get pretty big ones in the faster 
+	//	The command format is expected to be "<LENGTH><MODE><DATA>"
+	//  The LENGTH is a two-byte big-endian integer, followed by the text FEC or ARQ, followed by the data.
+	//  No carriage return is expected, as the data may contain binary data.
+	//  An example valid message is "0008FECHELLO"
+	//  This will load FECHELLO into the buffer.
+	//	Note that the MODE is included in the length, so the data length is the total length + 3
+	//  This behavior is a little strange, to keep the FEC, but right now it is simply what it does.
 				
 	Len = recv(TCPDataSock, &ARDOPDataBuffer[DataInputLen], 8192 - DataInputLen, 0);
 
@@ -424,23 +437,35 @@ void ProcessReceivedData()
 	DataInputLen += Len;
 
 loop:
-		
+	// this will repeat until the entire message is sent, which is controlled by the length of DataInputLen
+	
+	// Here we will wait for our input length to be at least 4 bytes before continuing processing,
+	// as we might have read the buffer while the message was being sent, and we need to wait for the whole message.
+	// A timeout may be a good idea here, but it is not implemented.
 	if (DataInputLen < 3)
-		return;					// Wait for more to arrive (?? timeout??)
+		return;
 
 	// check we have it all
 
-	DataLen = (ARDOPDataBuffer[0] << 8) + ARDOPDataBuffer[1]; // HI First
-			
+	// This gets the two bytes from the beginning of the buffer, which is the length of the data sent by the host
+	DataLen = (ARDOPDataBuffer[0] << 8) + ARDOPDataBuffer[1]; // HI First (Big Endian)
+	// I think these are Big Endian because it's readable to humans (a length of 9 is 0x00 0x09), but I am not sure.
+	
+	// Until we have recieved the amount of bytes specified in the length from the host, wait for more.
 	if (DataInputLen < DataLen + 2)
-		return;					// Wait for more
+		return;
 
-	MsgLen = DataLen + 2;		// Len
+	// We include our two bytes for the length, since we will be sending this over the air (I think)
+	MsgLen = DataLen + 2;
 
+	// Copy the data (except for the two length bytes at the beginning) into the buffer that will be sent by the TNC.
 	memcpy(Buffer, &ARDOPDataBuffer[2], DataLen);
 
+	// Subtract the data we are about to send to the Buffer from the ARDOPDataBuffer
 	DataInputLen -= MsgLen;
 
+	// Move the remaining data in the ARDOPDataBuffer to the beginning,
+	// so we can process the next part of the message if there is one.
 	if (DataInputLen > 0)
 		memmove(ARDOPDataBuffer, &ARDOPDataBuffer[MsgLen],  DataInputLen);
 
@@ -453,6 +478,8 @@ loop:
 	if (DataInputLen > 0)
 		goto loop;
 
+	// If we end up with a negative length because of MsgLen subtraction, reset it to 0
+	// we are done processing data to send.
 	if (DataInputLen < 0)
 		DataInputLen = 0;
 
@@ -461,6 +488,7 @@ loop:
 
 SOCKET OpenSocket4(int port)
 {
+	// This is very standard socket opening code for TCP, and is used for both the command and data ports.
 	struct sockaddr_in  local_sin;  /* Local socket - internet style */
 	struct sockaddr_in * psin;
 	SOCKET sock = 0;
@@ -505,6 +533,8 @@ SOCKET OpenSocket4(int port)
 
 SOCKET OpenUDPSocket(int port)
 {
+	// This is very standard socket opening code for UDP.
+	// This is used mostly for a GUI interface, I believe specifically for the waterfall display.
 	struct sockaddr_in  local_sin;  /* Local socket - internet style */
 	struct sockaddr_in * psin;
 	SOCKET sock = 0;
@@ -539,6 +569,7 @@ SOCKET OpenUDPSocket(int port)
 	return sock;
 }
 
+// As far as I can tell, this is no longer used. Its code is commented out.
 VOID InitQueue();
 
 BOOL TCPHostInit()
@@ -554,6 +585,7 @@ BOOL TCPHostInit()
 		WriteDebugLog(LOGALERT, "%s listening for KISS frames on port %d", ProductName, pktport);
 //	InitQueue();
 
+	// Here is where our listening ports for commands and data are opened.
 	ListenSock = OpenSocket4(port);
 	DataListenSock = OpenSocket4(port + 1);
 	if (UseKISS && pktport)
@@ -692,6 +724,7 @@ void TCPHostPoll()
 		}
 	}
 
+// if we are removing packet modes, we can remove this code
 NoARDOPTCP:
 
 	if (PktListenSock == 0)
@@ -881,9 +914,14 @@ PktLost:
 		CheckForPktData(0);
 	}
 
+	// the GUI code seems to mostly be for the waterfall display, because
+	// actual terminal control is done via the command port, and data is sent via the data port.
 	if (GUISock)
 	{
-		// Look fo datagram from GUI Client
+		// Look for datagram from GUI Client
+		// This almost definitely interfaces with ARDOP_GUI
+		// - avaliable at https://www.cantab.net/users/john.wiseman/Downloads/Beta/
+		// Source code also looks avaliable there. Would be cool to get it better documented.
 
 		int Len, addrLen = addrlen = sizeof(struct sockaddr_in);
 		char GUIMsg[256];
@@ -1107,6 +1145,8 @@ VOID * _GetBuff(char * File, int Line)
 
 int SendtoGUI(char Type, unsigned char * Msg, int Len)	
 {
+	// Again more ARDOP_GUI interfacing code.
+	// If we do not plan to support an official GUI, this code can be removed.
 	unsigned char GUIMsg[16384];
 
 	if (GUIActive == FALSE)
