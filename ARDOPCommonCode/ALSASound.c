@@ -1841,10 +1841,11 @@ void PollReceivedSamples()
 
 			if ((Now - lastlevelreport) > 10000)	// 10 Secs
 			{
+				lastlevelreport = Now;
+				// Report input peaks to host if in debug mode or if close to clipping
 				if (max >= 32000 || ConsoleLogLevel >= LOGDEBUG)
 				{
 					char HostCmd[64];
-					lastlevelreport = Now;
 
 					sprintf(HostCmd, "INPUTPEAKS %d %d", min, max);
 					SendCommandToHostQuiet(HostCmd);
@@ -1852,7 +1853,9 @@ void PollReceivedSamples()
 					// A user NOT in debug mode will see this message if they are clipping
 					if (ConsoleLogLevel <= LOGINFO)
 					{
-						WriteDebugLog(LOGINFO, "Your input signal is probably clipping. Turn down your RX volume control until this warning goes away.");
+						WriteDebugLog(LOGINFO, "Your input signal is probably clipping. \
+If you see this message repeated in the next 20-30 seconds, \
+Turn down your RX input until this message stops repeating.");
 					}
 				}
 			}
