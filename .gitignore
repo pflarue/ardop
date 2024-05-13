@@ -1,5 +1,6 @@
 # Executables
 /ARDOPC/ardopcf
+/ARDOPC/webgui/txt2c
 
 # Log files
 *.log

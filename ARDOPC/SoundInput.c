@@ -64,6 +64,9 @@ extern unsigned int tmrFinalID;
 extern BOOL PKTCONNECTED;
 void DrawDecode(char * Decode);
 
+int wg_send_rxframet(int cnum, unsigned char state, const char *frame);
+int wg_send_quality(int cnum, unsigned char quality);
+
 extern BOOL UseSDFT;
 int Corrections = 0;
 int intStdCenterFrqs[CARCNT][FRQCNT] = {
@@ -1098,6 +1101,8 @@ void ProcessNewSamples(short * Samples, int nSamples)
 				// See if IRStoISS shortcut can be invoked
 
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
+
 				
 				if (ProtocolState == IRStoISS && intFrameType >= 0xe0)
 				{
@@ -1136,6 +1141,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			}
 
 			DrawRXFrame(0, Name(intFrameType));
+			wg_send_rxframet(0, 0, Name(intFrameType));
 
 			if (intBaud == 25)
 				intSampPerSym = 480;
@@ -1337,13 +1343,15 @@ void ProcessNewSamples(short * Samples, int nSamples)
 
 ProcessFrame:	
 
-		if (!blnFrameDecodedOK)
+		if (!blnFrameDecodedOK) {
 			DrawRXFrame(2, Name(intFrameType));
+			wg_send_rxframet(0, 2, Name(intFrameType));
+		}
 
 		if (intFrameType == PktFrameData)
 		{
 			SetLED(PKTLED, TRUE);		// Flash LED
-			PKTLEDTimer = Now + 400;	// For 400 Ms	
+			PKTLEDTimer = Now + 400;	// For 400 Ms
 			return;
 		}
 
@@ -3503,7 +3511,7 @@ BOOL Decode4FSKPing()
 	}
 
 	DrawRXFrame(1, bytData);
-
+	wg_send_rxframet(0, 1, (char *)bytData);
 
 	intSNdB = Compute4FSKSN();
 
@@ -3877,10 +3885,13 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 	if ((intFrameType >= 0 && intFrameType <= 0x1F) || intFrameType >= 0xE0) // DataACK/NAK
 	{
 		blnDecodeOK = DecodeACKNAK(intFrameType, &intRcvdQuality);
-		if (blnDecodeOK)
+		if (blnDecodeOK) {
 			DrawRXFrame(1, Name(intFrameType));
-		else
+			wg_send_rxframet(0, 1, Name(intFrameType));
+		} else {
 			DrawRXFrame(2, Name(intFrameType));
+			wg_send_rxframet(0, 2, Name(intFrameType));
+		}
 
 		goto returnframe;
 	}
@@ -3888,6 +3899,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 	{
 		blnDecodeOK = TRUE;
 		DrawRXFrame(1, Name(intFrameType));
+		wg_send_rxframet(0, 1, Name(intFrameType));
 
 		goto returnframe;
 	}
@@ -3914,6 +3926,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			{
 				bytData[0] = intTiming / 10;
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
 			}
 
 		break;
@@ -3928,6 +3941,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 				SendCommandToHost(Reply);
 
 				DrawRXFrame(1, Reply);
+				wg_send_rxframet(0, 1, Reply);
 			}
  			break;
     
@@ -3938,8 +3952,10 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			
 			frameLen = sprintf(bytData, "ID:%s %s:" , strIDCallSign, strGridSQ);
 
-			if (blnDecodeOK)
+			if (blnDecodeOK) {
 				DrawRXFrame(1, bytData);
+				wg_send_rxframet(0, 1, (char *)bytData);
+			}
 
 			break;
 
@@ -3953,8 +3969,10 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 		case 0x38:
 
 			blnDecodeOK = Decode4FSKConReq();
-			if (blnDecodeOK)
+			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
+			}
 
 			break;
 
@@ -3975,8 +3993,10 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 
 			blnDecodeOK = CarrierOk[0];
 	
-			if (blnDecodeOK)
+			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
+			}
 
 			break;
 
@@ -3994,8 +4014,10 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			if (memcmp(CarrierOk, Good, intNumCar) == 0)
 				blnDecodeOK = TRUE;
 
-			if (blnDecodeOK)
+			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
+			}
 
 			break;
 
@@ -4011,8 +4033,10 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			frameLen = CorrectRawDataWithRS(bytFrameData1, bytData, intDataLen, intRSLen, intFrameType, 0);
 			blnDecodeOK = CarrierOk[0];
 
-			if (blnDecodeOK)
+			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
+			}
 			break;
 
 
@@ -4026,8 +4050,10 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 		if (CarrierOk[0] && CarrierOk[1])
 			blnDecodeOK = TRUE;
 
-			if (blnDecodeOK)
+			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
+			}
 
 			break;
 
@@ -4041,8 +4067,10 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			if (memcmp(CarrierOk, Good, intNumCar) == 0)
 				blnDecodeOK = TRUE;
 
-			if (blnDecodeOK)
+			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
+			}
 
 			break;
 	
@@ -4056,8 +4084,10 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			if (memcmp(CarrierOk, Good, intNumCar) == 0)
 				blnDecodeOK = TRUE;
 
-			if (blnDecodeOK)
+			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
+			}
 			break;
 
 		case 0x78:
@@ -4074,8 +4104,10 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			if (CarrierOk[0] && CarrierOk[1] && CarrierOk[2] && CarrierOk[3]) 
 				blnDecodeOK = TRUE;
 
-			if (blnDecodeOK)
+			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
+			}
 
 		case 0x7A:
 		case 0x7B:
@@ -4095,8 +4127,10 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			if (CarrierOk[0] && CarrierOk[1] && CarrierOk[2]) 
 				blnDecodeOK = TRUE;
 
-			if (blnDecodeOK)
+			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
+			}
 
 			break;
 
@@ -4109,8 +4143,10 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 
 			blnDecodeOK = CarrierOk[0];
 
-			if (blnDecodeOK)
+			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
+			}
 
 			break;
 
@@ -4129,6 +4165,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			if (CarrierOk[0])
 			{
 					DrawRXFrame(1, Name(intFrameType));
+					wg_send_rxframet(0, 1, Name(intFrameType));
 
 					pktRXMode = bytFrameData1[1] >> 2;
 					pktNumCar = pktCarriers[pktRXMode];
@@ -4153,6 +4190,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 				}
 
 				DrawRXFrame(0, Name(PktFrameData));
+				wg_send_rxframet(0, 0, Name(intFrameType));
 				
 				strcpy(strMod, &pktMod[pktRXMode][0]);
 
@@ -4211,6 +4249,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			{
 				blnDecodeOK = TRUE;
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
 
 				// Packet Data  - if KISS interface ias active
 				// Pass to Host as KISS frame, else pass to
@@ -4299,7 +4338,6 @@ void drawFastHLine(int x0, int y0, int length, int color);
 void Update4FSKConstellation(int * intToneMags, int * intQuality)
 {
 	// Subroutine to update bmpConstellation plot for 4FSK modes...
-        
 	int intToneSum = 0;
 	int intMagMax = 0;
 	float dblPi4  = 0.25 * M_PI;
@@ -4388,6 +4426,7 @@ void Update4FSKConstellation(int * intToneMags, int * intQuality)
 #ifdef PLOTCONSTELLATION
 	DrawAxes(*intQuality, shortName(intFrameType), strMod);
 #endif
+	wg_send_quality(0, *intQuality);
 
 	return;
 }
@@ -4470,6 +4509,7 @@ void Update16FSKConstellation(int * intToneMags, int * intQuality)
 #ifdef PLOTCONSTELLATION
 	DrawAxes(*intQuality, shortName(intFrameType), strMod);
 #endif
+	wg_send_quality(0, *intQuality);
 }
 
 //	Subroutine to udpate the 8FSK Constellation
@@ -4544,6 +4584,7 @@ void Update8FSKConstellation(int * intToneMags, int * intQuality)
 #ifdef PLOTCONSTELLATION
 	DrawAxes(*intQuality, shortName(intFrameType), strMod);
 #endif
+	wg_send_quality(0, *intQuality);
 	return;
 }
 
@@ -4682,6 +4723,7 @@ int UpdatePhaseConstellation(short * intPhases, short * intMag, char * strMod, B
 #ifdef PLOTCONSTELLATION
 	DrawAxes(intQuality, shortName(intFrameType), strMod);
 #endif
+	wg_send_quality(0, intQuality);
 	return intQuality;
 
 }

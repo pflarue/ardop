@@ -77,12 +77,14 @@ extern char PlaybackDevice[80];
 int extraDelay = 0;				// Used for long delay paths eg Satellite
 int	intARQDefaultDlyMs = 240;
 int TrailerLength = 20;
+int wg_port = 0;  // If not changed from 0, do not use WebGui
 BOOL InitRXO = FALSE;
 BOOL WriteRxWav = FALSE;
 BOOL WriteTxWav = FALSE;
 BOOL TwoToneAndExit = FALSE;
 BOOL UseSDFT = FALSE;
 BOOL FixTiming = TRUE;
+BOOL WG_DevMode = FALSE;
 char DecodeWav[256] = "";			// Pathname of WAV file to decode.
 
 int PTTMode = PTTRTS;				// PTT Control Flags.
@@ -164,6 +166,7 @@ static struct option long_options[] =
 	{"extradelay",  required_argument, 0 , 'e'},
 	{"leaderlength",  required_argument, 0 , 'x'},
 	{"trailerlength",  required_argument, 0 , 't'},
+	{"webgui",  required_argument, 0 , 'G'},
 	{"receiveonly", no_argument, 0, 'r'},
 	{"writewav",  no_argument, 0, 'w'},
 	{"writetxwav",  no_argument, 0, 'T'},
@@ -206,6 +209,7 @@ char HelpScreen[] =
 	"-e val or --extradelay val           Extend no response timeout for use on paths with long delay\n"
 	"--leaderlength val                   Sets Leader Length (mS)\n"
 	"--trailerlength val                  Sets Trailer Length (mS)\n"
+	"-G port or --webgui port             Enable WebGui and specify port number.\n"
 	"-r or --receiveonly                  Start in RXO (receive only) mode.\n"
 	"-w or --writewav                     Write WAV files of received audio for debugging.\n"
 	"-T or --writetxwav                   Write WAV files of sent audio for debugging.\n"
@@ -231,7 +235,7 @@ void processargs(int argc, char * argv[])
 	{		
 		int option_index = 0;
 
-		c = getopt_long(argc, argv, "l:v:V:c:p:g::k:u:e:hLRytrzwTd:nsA", long_options, &option_index);
+		c = getopt_long(argc, argv, "l:v:V:c:p:g::k:u:e:G:hLRytrzwTd:nsA", long_options, &option_index);
 
 		// Check for end of operation or error
 		if (c == -1)
@@ -370,6 +374,10 @@ void processargs(int argc, char * argv[])
 			extraDelay = atoi(optarg);
 			break;
 
+		case 'G':
+			wg_port = atoi(optarg);
+			break;
+
 		case 'x':
 			intARQDefaultDlyMs = LeaderLength = atoi(optarg);
 			break;
@@ -432,6 +440,40 @@ void processargs(int argc, char * argv[])
 		printf("%s Version %s\n", ProductName, ProductVersion);
 		printf("Only three positional parameters allowed\n");
 		printf ("%s", HelpScreen);
+		exit(0);
+	}
+
+	if (wg_port < 0) {
+		// This is an "undocumented" feature that may be discontinued in future releases
+		wg_port = -wg_port;
+		WG_DevMode = TRUE;
+	}
+	if (HostPort[0] != 0x00 && HostPort[0] != 'C' && HostPort[0] != 'c' && wg_port == atoi(HostPort)) {
+		WriteDebugLog(LOGERROR,
+			"WebGui port (%d) may not be the same as host port (%s)",
+			wg_port, HostPort);
+		exit(0);
+	}
+	else if (HostPort[0] != 0x00 && HostPort[0] != 'C' && HostPort[0] != 'c'  && wg_port == atoi(HostPort) + 1) {
+		WriteDebugLog(LOGERROR,
+			"WebGui port (%d) may not be one greater than host port (%s)"
+			" since that is used as the host data port.",
+			wg_port, HostPort);
+		exit(0);
+	}
+	else if (wg_port == 8515) {
+		WriteDebugLog(LOGERROR, 
+			"WebGui port (%d) may not be equal to the default host port (8515)"
+			" when an alternative host port is not specified.",
+			wg_port);
+		exit(0);
+	}
+	else if (wg_port == 8516) {
+		WriteDebugLog(LOGERROR, 
+			"WebGui port (%d) may not be equal to one greater than the default"
+			" host port (8515 + 1 = 8516) when an alternative host port is not"
+			" specified since that is used as the host data port.",
+			wg_port);
 		exit(0);
 	}
 }

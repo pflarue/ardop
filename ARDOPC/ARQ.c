@@ -1,6 +1,7 @@
 // ARDOP TNC ARQ Code
 //
 
+#include <stdbool.h>
 #ifdef WIN32
 #define WIN32_LEAN_AND_MEAN		// Exclude rarely-used stuff from Windows headers
 #define _CRT_SECURE_NO_DEPRECATE
@@ -31,6 +32,11 @@ extern int dttLastBusyTrip;
 extern int dttPriorLastBusyTrip;
 extern int dttLastBusyClear;
 
+int wg_send_state(int cnum);
+int wg_send_rcall(int cnum, char *call);
+int wg_send_irsled(int cnum, bool isOn);
+int wg_send_issled(int cnum, bool isOn);
+int wg_send_txframet(int cnum, const char *frame);
 
 int intLastFrameIDToHost = 0;
 int	intLastFailedFrameID = 0;
@@ -269,7 +275,9 @@ void SetARDOPProtocolState(int value)
 		SetLED(ISSLED, FALSE);
 		SetLED(IRSLED, FALSE);
 		displayCall(0x20, "");
-
+		wg_send_issled(0, false);
+		wg_send_irsled(0, false);
+		wg_send_rcall(0, "");
 		break;
 
 	case FECRcv:
@@ -295,7 +303,8 @@ void SetARDOPProtocolState(int value)
 		blnEnbARQRpt = FALSE;
 		SetLED(ISSLED, TRUE);
 		SetLED(IRSLED, FALSE);
-  
+		wg_send_irsled(0, false);
+		wg_send_issled(0, true);
         //        stcStatus.BackColor = System.Drawing.Color.LightSalmon
 
 		break;
@@ -305,6 +314,8 @@ void SetARDOPProtocolState(int value)
 
 		SetLED(IRSLED, TRUE);
 		SetLED(ISSLED, FALSE);
+		wg_send_issled(0, false);
+		wg_send_irsled(0, true);
 		bytLastACKedDataFrameType = 0;	// Clear on entry to IRS or IRS to ISS states. 3/15/2018
 
 		break;
@@ -319,6 +330,7 @@ void SetARDOPProtocolState(int value)
 
 	sprintf(HostCmd, "NEWSTATE %s ", ARDOPStates[ProtocolState]);
 	QueueCommandToHost(HostCmd);
+	wg_send_state(0);
 }
 
  
@@ -386,6 +398,7 @@ BOOL GetNextARQFrame()
 			intRepeatCount = 0;
 			blnPending = FALSE;
 			displayCall(0x20, "");
+			wg_send_rcall(0, "");
 
 			if (strRemoteCallsign[0])
 			{
@@ -1159,6 +1172,7 @@ int GetNextFrameData(int * intUpDn, UCHAR * bytFrameTypeToSend, UCHAR * strMod, 
 		bytCurrentFrameType = bytFrameTypesForBW[intFrameTypePtr];
 
 		DrawTXMode(shortName(bytCurrentFrameType));
+		wg_send_txframet(0, Name(bytCurrentFrameType));
 		updateDisplay();
 
 		if(DebugLog) WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.GetNextFrameData] Initial Frame Type: %s", Name(bytCurrentFrameType));
@@ -1173,6 +1187,7 @@ int GetNextFrameData(int * intUpDn, UCHAR * bytFrameTypeToSend, UCHAR * strMod, 
 			bytCurrentFrameType = bytFrameTypesForBW[intFrameTypePtr];
 
 			DrawTXMode(shortName(bytCurrentFrameType));
+			wg_send_txframet(0, Name(bytCurrentFrameType));
 			updateDisplay();
 
 			strShift = "Shift Down";
@@ -1187,6 +1202,7 @@ int GetNextFrameData(int * intUpDn, UCHAR * bytFrameTypeToSend, UCHAR * strMod, 
 			bytCurrentFrameType = bytFrameTypesForBW[intFrameTypePtr];
 
 			DrawTXMode(shortName(bytCurrentFrameType));
+			wg_send_txframet(0, shortName(bytCurrentFrameType));
 			updateDisplay();
 
 			strShift = "Shift Up";
@@ -1390,7 +1406,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				InitializeConnection();	
 				bytDataToSendLength = 0;
  				displayCall('<', bytData);
-				blnPending = TRUE;				
+				blnPending = TRUE;
 				blnEnbARQRpt = FALSE;
 
 				tmrIRSPendingTimeout = Now + 10000;  // Triggers a 10 second timeout before auto abort from pending
@@ -1409,6 +1425,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				strcpy(strRemoteCallsign, bytData);
 				strcpy(strLocalCallsign, strCallsign);
 				strcpy(strFinalIDCallsign, strCallsign);
+				wg_send_rcall(0, strRemoteCallsign);
 
 				intAvgQuality = 0;		// initialize avg quality 
 				intReceivedLeaderLen = intLeaderRcvdMs;		 // capture the received leader from the remote ISS's ConReq (used for timing optimization)
@@ -2411,13 +2428,13 @@ BOOL SendARQConnectRequest(char * strMycall, char * strTargetCall)
 	intRepeatCount = 1;
 
 	displayCall('>', strTargetCall);
-	
 	bytSessionID = GenerateSessionID(strMycall, strTargetCall);  // Now set bytSessionID to receive ConAck (note the calling staton is the first entry in GenerateSessionID) 
 	bytPendingSessionID = bytSessionID;
 
 	WriteDebugLog(LOGINFO, "[SendARQConnectRequest] strMycall=%s  strTargetCall=%s bytPendingSessionID=%x", strMycall, strTargetCall, bytPendingSessionID);
 	blnPending = TRUE;
 	blnARQConnected = FALSE;
+	wg_send_rcall(0, strTargetCall);
 	
 	intFrameRepeatInterval = 2000;  // ms ' Finn reported 7/4/2015 that 1600 was too short ...need further evaluation but temporarily moved to 2000 ms
 	blnEnbARQRpt = TRUE;

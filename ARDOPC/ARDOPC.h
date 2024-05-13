@@ -277,7 +277,7 @@ const char * Name(UCHAR bytID);
 const char * shortName(UCHAR bytID);
 int InitSound();
 void initFilter(int Width, int centerFreq);
-void FourierTransform(int NumSamples, short * RealIn, float * RealOut, float * ImagOut, int InverseTransform);
+void FourierTransform(int NumSamples, float * RealIn, float * RealOut, float * ImagOut, int InverseTransform);
 VOID ClosePacketSessions();
 VOID LostHost();
 VOID ProcessPacketHostBytes(UCHAR * RXBuffer, int Len);

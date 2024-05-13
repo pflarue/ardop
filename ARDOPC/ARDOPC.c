@@ -15,7 +15,7 @@ const char ProductName[] = "ardopcf";
 // Version p Leader timing changes (Jan 23)
 // Version q Fix extradelay (Jan 23)
 
-
+#include <stdbool.h>
 #ifdef WIN32
 #define _CRT_SECURE_NO_DEPRECATE
 
@@ -51,6 +51,12 @@ BOOL BusyDetect2(float * dblMag, int intStart, int intStop);
 BOOL IsPingToMe(char * strCallsign);
 void LookforPacket(float * dblMag, float dblMagAvg, int count, float * real, float * imag);
 void PktARDOPStartTX();
+void WebguiInit();
+void WebguiPoll();
+int wg_send_fftdata(float *mags, int magsLen);
+int wg_send_busy(int cnum, bool isBusy);
+int wg_send_protocolmode(int cnum);
+extern int WebGuiNumConnected;
 
 // Config parameters
 
@@ -167,7 +173,7 @@ BOOL blnLastPTT = FALSE;
 
 BOOL PlayComplete = FALSE;
 
-BOOL blnBusyStatus;
+BOOL blnBusyStatus = FALSE;
 BOOL newStatus;
 
 unsigned int tmrSendTimeout;
@@ -771,7 +777,9 @@ void setProtocolMode(char* strMode)
 	{
 		WriteDebugLog(LOGWARNING, "WARNING: Invalid argument to setProtocolMode.  %s given, but expected one of ARQ, RXO, or FEC.  Setting ProtocolMode to ARQ as a default.", strMode);
 		ProtocolMode = ARQ;
+		return;
 	}
+	wg_send_protocolmode(0);
 }
 
 void ardopmain()
@@ -787,8 +795,10 @@ void ardopmain()
 
 	if (SerialMode)
 		SerialHostInit();
-	else
+	else {
 		TCPHostInit();
+		WebguiInit();
+	}
 
 	if (UseKISS)
 	{
@@ -810,6 +820,7 @@ void ardopmain()
 	while(!blnClosing)
 	{
 		PollReceivedSamples();
+		WebguiPoll();
 		if (ProtocolMode != RXO)
 		{
 			CheckTimers();
@@ -829,11 +840,6 @@ void ardopmain()
 		closesocket(PktSock);
 	}
 	return;
-}
-
-
-void SendCWID(char * Callsign, BOOL x)
-{
 }
 
 // Subroutine to generate 1 symbol of leader
@@ -2790,8 +2796,21 @@ extern UCHAR Pixels[4096];
 extern UCHAR * pixelPointer;
 #endif
 
+float bhWindow[513];
+float wS1 = 0;
+void generateBH() {
+	for (int i = 0; i < 513; i++) {
+		bhWindow[i] = 0.35875 - 0.48829 * cos(2 * M_PI * i / 1024) 
+			+ 0.14128 * cos(4 * M_PI * i / 1024) - 0.01168 * cos(6 * M_PI * i / 1024);
+		wS1 += 2 * bhWindow[i];
+	}
+	// wS1 should only include one of terms , 512
+	wS1 -= bhWindow[0] + bhWindow[512];
+}
+
 void UpdateBusyDetector(short * bytNewSamples)
 {
+	float windowedSamples[1024];
 	float dblReF[1024];
 	float dblImF[1024];
 	float dblMag[206];
@@ -2815,7 +2834,7 @@ void UpdateBusyDetector(short * bytNewSamples)
 	{
 		// Dont do busy, but may need waterfall or spectrum
 
-		if ((WaterfallActive | SpectrumActive) == 0)
+		if ((WaterfallActive | SpectrumActive) == 0 && WebGuiNumConnected == 0)
 			return;					// No waterfall or spectrum 
 	}
 
@@ -2824,11 +2843,26 @@ void UpdateBusyDetector(short * bytNewSamples)
 
 	LastBusyCheck = Now;
 
-	FourierTransform(1024, bytNewSamples, &dblReF[0], &dblImF[0], FALSE);
+	// Apply a Blackman-Harris window before doing FFT
+	// The will decrease spectral leakage.  It also decreases the magnitude 
+	// of the FFT results by wS1/1024
+	if (wS1 == 0)
+		generateBH();
+	windowedSamples[0] = bytNewSamples[0]*bhWindow[0];
+	windowedSamples[512] = bytNewSamples[512]*bhWindow[512];
+	for(i = 1; i < 512; i++) {
+		windowedSamples[i] = bytNewSamples[i]*bhWindow[i];
+		windowedSamples[1024 - i] = bytNewSamples[1024 - i]*bhWindow[i];
+	}
+
+	FourierTransform(1024, windowedSamples, &dblReF[0], &dblImF[0], FALSE);
 
 	for (i = 0; i < 206; i++)
 	{
 		//	starting at ~300 Hz to ~2700 Hz Which puts the center of the signal in the center of the window (~1500Hz)
+		// bytNewSamples are sampled at 12000 samples per second, and a 1024 sample FFT was
+		// used.  So dblReF[j] and dblImF[j] correspond to a frequency of j * 12000 / 1024
+		// for 0 <= j < 512
             
 		dblMag[i] = powf(dblReF[i + 25], 2) + powf(dblImF[i + 25], 2);	 // first pass 
 		dblMagAvg += dblMag[i];
@@ -2863,6 +2897,7 @@ void UpdateBusyDetector(short * bytNewSamples)
 				Msg[0] = blnBusyStatus;
 				SendtoGUI('B', Msg, 1);
 			}	    
+			wg_send_busy(0, true);
 		}
 		//    stcStatus.Text = "True"
             //    queTNCStatus.Enqueue(stcStatus)
@@ -2879,13 +2914,15 @@ void UpdateBusyDetector(short * bytNewSamples)
 
 				Msg[0] = blnBusyStatus;
 				SendtoGUI('B', Msg, 1);
-			}	    
+			}
+			wg_send_busy(0, false);
 		} 
 		//    stcStatus.Text = "False"
         //    queTNCStatus.Enqueue(stcStatus)
         //    'Debug.WriteLine("BUSY FALSE @ " & Format(DateTime.UtcNow, "HH:mm:ss"))
 
 		blnLastBusyStatus = blnBusyStatus;
+
 	}
 	
 	if (BusyDet == 0) 
@@ -2974,6 +3011,7 @@ void UpdateBusyDetector(short * bytNewSamples)
 		SendtoGUI('X', Waterfall, 210);
 #endif
 	}
+	wg_send_fftdata(dblMag, 206);
 }
 
 void SendPING(char * strMycall, char * strTargetCall, int intRpt)

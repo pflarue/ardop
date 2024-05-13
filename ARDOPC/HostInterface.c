@@ -16,6 +16,7 @@ void SetupGPIOPTT();
 VOID ConvertCallstoAX25();
 int GetEEPROM(int Reg);
 void SaveEEPROM(int reg, int val);
+void setProtocolMode(char* strMode);
 
 void Break();
 int sendframe(char * sendParams);
@@ -29,7 +30,14 @@ extern enum _ARQBandwidth CallBandwidth;
 extern int PORTT1;			// L2 TIMEOUT
 extern int PORTN2;			// RETRIES
 extern int extraDelay ;		// Used for long delay paths eg Satellite
+extern BOOL WG_DevMode;
 
+unsigned char *utf8_check(unsigned char *s, size_t slen);
+int wg_send_mycall(int cnum, char *call);
+int wg_send_bandwidth(int cnum);
+int wg_send_hostmsg(int cnum, char msgtype, char *strText);
+int wg_send_hostdatab(int cnum, char *prefix, unsigned char *data, int datalen);
+int wg_send_hostdatat(int cnum, char *prefix, unsigned char *data, int datalen);int wg_send_drivelevel(int cnum);
 
 #define L2TICK 10			// Timer called every 1/10 sec
 
@@ -145,6 +153,8 @@ void ProcessCommandFromHost(char * strCMD)
 	char cmdCopy[2100] = "";
 	char strFault[100] = "";
 	char cmdReply[1024];
+	if (WG_DevMode)
+		wg_send_hostmsg(0, 'F', strCMD);
 
 	strFault[0] = 0;
 
@@ -188,6 +198,7 @@ void ProcessCommandFromHost(char * strCMD)
 			else
 			{
 				ARQBandwidth = i;
+				wg_send_bandwidth(0);
 				sprintf(cmdReply, "ARQBW now %s", ARQBandwidths[ARQBandwidth]);
 				SendReplyToHost(cmdReply);
 			}
@@ -584,6 +595,7 @@ void ProcessCommandFromHost(char * strCMD)
 				DriveLevel = i;
 				sprintf(cmdReply, "%s now %d", strCMD, DriveLevel);
 				SendReplyToHost(cmdReply);
+				wg_send_drivelevel(0);
 				goto cmddone;
 			}
 			else
@@ -936,6 +948,7 @@ void ProcessCommandFromHost(char * strCMD)
 			if (CheckValidCallsignSyntax(ptrParams))
 			{
 				strcpy(Callsign, ptrParams);
+				wg_send_mycall(0, Callsign);
 				sprintf(cmdReply, "%s now %s", strCMD, Callsign);
 				SendReplyToHost(cmdReply);
 				ConvertCallstoAX25();
@@ -1121,28 +1134,16 @@ void ProcessCommandFromHost(char * strCMD)
 			SendReplyToHost(cmdReply);
 			goto cmddone;
 		}
-		
-		if (strcmp(ptrParams, "ARQ") == 0)
-			ProtocolMode = ARQ;
-		else 
-		if (strcmp(ptrParams, "RXO") == 0)
-			ProtocolMode = RXO;
-		else
-		if (strcmp(ptrParams, "FEC") == 0)
-			ProtocolMode = FEC;
-		else
-		{
+
+		if (strcmp(ptrParams, "ARQ") != 0 && strcmp(ptrParams, "RXO") == 0
+			&& strcmp(ptrParams, "FEC") == 0
+		) {
 			sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
 			goto cmddone;
 		}
-		if (ProtocolMode == ARQ)
-			sprintf(cmdReply, "PROTOCOLMODE now ARQ");
-		else
-		if (ProtocolMode == RXO)
-			sprintf(cmdReply, "PROTOCOLMODE now RXO");
-		else
-			sprintf(cmdReply, "PROTOCOLMODE now FEC");
 
+		setProtocolMode(ptrParams);
+		sprintf(cmdReply, "PROTOCOLMODE now %s", ptrParams);
 		SendReplyToHost(cmdReply);
 
 		SetARDOPProtocolState(DISC);	// set state to DISC on any Protocol mode change. 
@@ -1658,6 +1659,8 @@ void SendCommandToHost(char * strText)
 		SCSSendCommandToHost(strText);
 	else
 		TCPSendCommandToHost(strText);
+	if (WG_DevMode)
+		wg_send_hostmsg(0, 'C', strText);
 }
 
 
@@ -1667,6 +1670,8 @@ void SendCommandToHostQuiet(char * strText)		// Higher Debug Level for PTT
 		SCSSendCommandToHostQuiet(strText);
 	else
 		TCPSendCommandToHostQuiet(strText);
+	if (WG_DevMode)
+		wg_send_hostmsg(0, 'T', strText);
 }
 
 void QueueCommandToHost(char * strText)
@@ -1675,13 +1680,19 @@ void QueueCommandToHost(char * strText)
 		SCSQueueCommandToHost(strText);
 	else
 		TCPQueueCommandToHost(strText);
+	if (WG_DevMode)
+		wg_send_hostmsg(0, 'Q', strText);
 }
 
 void SendReplyToHost(char * strText)
 {
-	if (SerialMode)
+	if (SerialMode) {
 		SCSSendReplyToHost(strText);
+		if (WG_DevMode)
+			wg_send_hostmsg(0, 'R', strText);
+	}
 	else
+		// This redirects to SendCommandToHost(), so don't do duplicate wg_send_hostmsg()
 		TCPSendReplyToHost(strText);
 }
 //  Subroutine to add a short 3 byte tag (ARQ, FEC, ERR, or IDF) to data and send to the host 
@@ -1692,7 +1703,12 @@ void AddTagToDataAndSendToHost(UCHAR * bytData, char * strTag, int Len)
 		SCSAddTagToDataAndSendToHost(bytData, strTag, Len);
 	else
 		TCPAddTagToDataAndSendToHost(bytData, strTag, Len);
-
+	if (WG_DevMode) {
+		if (utf8_check(bytData, Len) == NULL)
+			wg_send_hostdatat(0, strTag, bytData, Len);
+		else
+			wg_send_hostdatab(0, strTag, bytData, Len);
+	}
 }
 
 #ifdef TEENSY
