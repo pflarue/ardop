@@ -4,6 +4,10 @@
 
 extern UCHAR bytSessionID;
 extern UCHAR bytFrameData1[760];
+extern int stcLastPingintRcvdSN;  // defined in ARDOPC.c. updated in SoundInput.c
+extern int stcLastPingintQuality;  // defined in ARDOPC.c. updated in SoundInput.c
+extern int intSNdB;  // defined in SoundInput.c
+extern int intLastRcvdFrameQuality;  // defined in SoundInput.c
 
 // Use of RXO is assumed to indicate that the user is interested in observing all received traffic.
 // So LOGINFO, rather than a higher log level such as LOGDEBUG, is used for most positive results.
@@ -156,23 +160,33 @@ void ProcessRXOFrame(UCHAR bytFrameType, int frameLen, UCHAR * bytData, BOOL bln
 
 	if (blnFrameDecodedOK)
 	{
-		if (bytFrameType >= 0x31 && bytFrameType <= 0x38)
+		if (bytFrameType >= 0x31 && bytFrameType <= 0x38)  // ConReq####
 		{
 			// Is there a reason why frameLen is not defined for ConReq?
 			WriteDebugLog(LOGINFO, "    [RXO %02X] ConReq data is callerID targetID", bytSessionID);
 			frameLen = strlen((char*) bytData);
 		}
-		else if (bytFrameType >= 0x39 && bytFrameType <= 0x3C)
+		else if (bytFrameType >= 0x39 && bytFrameType <= 0x3C)  // ConAck####
 		{
 			WriteDebugLog(LOGINFO, "    [RXO %02X] ConAck data is the length (in tens of ms) of the received leader repeated 3 times: %d %d %d",
 				bytSessionID, bytFrameData1[0], bytFrameData1[1], bytFrameData1[2]);
 		}
-		else if (bytFrameType >= 0xE0)
+		else if (bytFrameType == 0x3D)  // PingAck
+		{
+			WriteDebugLog(LOGINFO, "    [RXO %02X] PingAck data is S:N=%d and Quality=%d of the Ping. (Any S:N > 20 is reorted as 21.)",
+				bytSessionID, intSNdB, intLastRcvdFrameQuality);
+		}
+		else if (bytFrameType == 0x3E)  // Ping
+		{
+			WriteDebugLog(LOGINFO, "    [RXO %02X] Ping data is caller and target callsigns: '%s'.  While this frame does uses FEC to improve likelihood of correct transmission, it does not include a CRC check with which to confirm correctness.  This Ping was received with S:N=%d, Q=%d.",
+				bytSessionID, bytData, stcLastPingintRcvdSN, stcLastPingintQuality);
+		}
+		else if (bytFrameType >= 0xE0)  // DataACK
 		{
 			WriteDebugLog(LOGINFO, "    [RXO %02X] DataAck FrameType (0x%02X) indicates decode quality (%d/100). 60+ typically required for decoding.",
 				bytSessionID, bytFrameType, 38 + (2 * (bytFrameType & 0x1F)));
 		}
-		else if (bytFrameType <= 0x1F)
+		else if (bytFrameType <= 0x1F)  // DataNAK
 		{
 			WriteDebugLog(LOGINFO, "    [RXO %02X] DataNak FrameType (0x%02X) indicates decode quality (%d/100). 60+ typically required for decoding.",
 				bytSessionID, bytFrameType, 38 + (2 * (bytFrameType & 0x1F)));
