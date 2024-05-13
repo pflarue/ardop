@@ -30,6 +30,7 @@ const char ProductName[] = "ardopcf";
 
 #include "ARDOPC.h"
 #include "getopt.h"
+#include "../lib/rockliff/rrs.h"
 
 void CompressCallsign(char * Callsign, UCHAR * Compressed);
 void CompressGridSquare(char * Square, UCHAR * Compressed);
@@ -736,24 +737,6 @@ extern LARGE_INTEGER NewTicks;
 
 extern int NErrors;
 
-void testRS()
-{
-	// feed random data into RS to check robustness
-
-	BOOL blnRSOK, FrameOK;
-	char bytRawData[256];
-	int DataLen = 128;
-	int intRSLen = 64;
-	int i;
-
-	for (i = 0; i < DataLen; i++)
-	{
-		bytRawData[i] = rand() % 256;
-	}
-
-	FrameOK = RSDecode(bytRawData, DataLen, intRSLen, &blnRSOK);
-}
-
 void setProtocolMode(char* strMode)
 {
 	if (strcmp(strMode, "ARQ") == 0)
@@ -1267,35 +1250,6 @@ int NPAR = -1;	// Number of Parity Bytes - used in RS Code
 
 int MaxErrors = 0;
 
-int RSEncode(UCHAR * bytToRS, UCHAR * RSBytes, int DataLen, int RSLen)
-{
-	// This just returns the Parity Bytes. I don't see the point
-	// in copying the message about
-
-	unsigned char Padded[256];		// The padded Data
-
-	int Length = DataLen + RSLen;	// Final Length of packet
-	int PadLength = 255 - Length;	// Padding bytes needed for shortened RS codes
-
-	//	subroutine to do the RS encode. For full length and shortend RS codes up to 8 bit symbols (mm = 8)
-
-	if (NPAR != RSLen)		// Changed RS Len, so recalc constants;
-	{
-		NPAR = RSLen;
-		MaxErrors = NPAR / 2;
-		initialize_ecc();
-	}
-
-	// Copy the supplied data to end of data array.
-
-	memset(Padded, 0, PadLength);
-	memcpy(&Padded[PadLength], bytToRS, DataLen); 
-
-	encode_data(Padded, 255-RSLen, RSBytes);
-
-	return RSLen;
-}
-
 //	Main RS decode function
 
 extern int index_of[];
@@ -1306,192 +1260,6 @@ extern int kk;		// Info Symbols
 
 BOOL blnErrorsCorrected;
 
-#define NEWRS
-
-BOOL RSDecode(UCHAR * bytRcv, int Length, int CheckLen, BOOL * blnRSOK)
-{	
-#ifdef NEWRS
-
-	// Using a modified version of Henry Minsky's rscode library
-	// see ardop/lib/rscode
-
-	// Rick's Implementation processes the byte array in reverse. and also 
-	//	has the check bytes in the opposite order. I've modified the encoder
-	//	to allow for this, but so far haven't found a way to mske the decoder
-	//	work, so I have to reverse the data and checksum to decode G8BPQ Nov 2015
-
-	//	returns TRUE if was ok or correction succeeded, FALSE if correction impossible
-
-	UCHAR intTemp[256];				// WOrk Area to pass to Decoder		
-	int i;
-	UCHAR * ptr2 = intTemp;
-	UCHAR * ptr1 = &bytRcv[Length - CheckLen -1]; // Last Byte of Data
-
-	int DataLen = Length - CheckLen;
-	int PadLength = 255 - Length;		// Padding bytes needed for shortened RS codes
-
-	*blnRSOK = FALSE;
-
-	if (Length > 255 || Length < (1 + CheckLen))		//Too long or too short 
-		return FALSE;
-
-	if (NPAR != CheckLen)		// Changed RS Len, so recalc constants;
-	{
-		NPAR = CheckLen;
-		MaxErrors = NPAR /2;
-
-		initialize_ecc();
-	}
-
-
-	//	We reverse the data while zero padding it to speed things up
-
-	//	We Need (Data Reversed) (Zero Padding) (Checkbytes Reversed)
-
-	// Reverse Data
-
-	for (i = 0; i < DataLen; i++)
-	{
-	  *(ptr2++) = *(ptr1--);
-	}
-
-	//	Clear padding
-
-	memset(ptr2, 0, PadLength);	
-
-	ptr2+= PadLength;
-	
-	// Error Bits
-
-	ptr1 = &bytRcv[Length - 1];			// End of check bytes
-
-	for (i = 0; i < CheckLen; i++)
-	{
-	  *(ptr2++) = *(ptr1--);
-	}
-	
-	decode_data(intTemp, 255);
-
-	// check if syndrome is all zeros 
-
-	if (check_syndrome() == 0)
-	{
-		// RS ok, so no need to correct
-
-		*blnRSOK = TRUE;
-		return TRUE;		// No Need to Correct
-	}
-
-    if (correct_errors_erasures (intTemp, 255, 0, 0) == 0) // Dont support erasures at the momnet
-
-		// Uncorrectable
-
-		return FALSE;
-
-	// Data has been corrected, so need to reverse again
-
-	ptr1 = &intTemp[DataLen - 1];
-	ptr2 = bytRcv; // Last Byte of Data
-
-	for (i = 0; i < DataLen; i++)
-	{
-	  *(ptr2++) = *(ptr1--);
-	}
-
-	// ?? Do we need to return the check bytes ??
-
-	// Yes, so we can redo RS Check on supposedly connected frame
-
-	ptr1 = &intTemp[254];	// End of Check Bytes
-
- 	for (i = 0; i < CheckLen; i++)
-	{
-	  *(ptr2++) = *(ptr1--);
-	}
-
-	return TRUE;
-}
-
-#else
-
-	// Old (Rick's) code
-
-	// Sets blnRSOK if OK without correction
-
-	// Returns TRUE if OK oe Corrected
-	// False if Can't correct
-
-
-	UCHAR intTemp[256];				// Work Area to pass to Decoder		
-	int i;
-	int intStartIndex;
-	UCHAR * ptr2 = intTemp;
-	UCHAR * ptr1 = bytRcv;
-	BOOL RSWasOK;
-
-	int DataLen = Length - CheckLen;
-	int PadLength = 255 - Length;		// Padding bytes needed for shortened RS codes
-
-	*blnRSOK = FALSE;
-
-	if (Length > 255 || Length < (1 + CheckLen))		//Too long or too short 
-		return FALSE;
-
-
-	if (NPAR != CheckLen)		// Changed RS Len, so recalc constants;
-	{
-		NPAR = CheckLen;
-		tt = sqrt(NPAR);
-		kk = 255-CheckLen; 
-		generate_gf();
-		gen_poly();
-	}
-	
-	intStartIndex =  255 - Length; // set the start point for shortened RS codes
-
-	//	We always work on a 255 byte buffer, prepending zeros if neccessary
-
- 	//	Clear padding
-
-	memset(ptr2, 0, PadLength);	
-	ptr2 += PadLength;
-
-	memcpy(ptr2, ptr1, Length);
-	
-	// convert to indexed form
-
-	for(i = 0; i < 256; i++)
-	{
-//		intIsave = i;
-//		intIndexSave = index_of[intTemp[i]];
-		recd[i] = index_of[intTemp[i]];
-	}
-
-//	printtick("entering decode_rs");
-
-	blnErrorsCorrected = FALSE;
-
-	RSWasOK = decode_rs();
-
-//	printtick("decode_rs Done");
-
-	*blnRSOK = RSWasOK;
-
-	if (RSWasOK)
-		return TRUE;
-
-	if(blnErrorsCorrected)
-	{
-		for (i = 0; i < DataLen; i++)
-		{
-			bytRcv[i] = recd[i + intStartIndex];
-		}
-		return TRUE;
-	}
-
-	return FALSE;
-}
-#endif
 
 // Function to encode data for all PSK frame types
 
@@ -1566,7 +1334,8 @@ int EncodePSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 		
 		GenCRC16FrameType(bytToRS, intDataLen + 1, bytFrameType); // calculate the CRC on the byte count + data bytes
 
-		RSEncode(bytToRS, bytToRS+intDataLen+3, intDataLen + 3, intRSLen);  // Generate the RS encoding ...now 14 bytes total
+		// Append Reed Solomon codes to end of frame data
+		rs_append(bytToRS, intDataLen + 3, intRSLen);
      
  		//  Need: (2 bytes for Frame Type) +( Data + RS + 1 byte byteCount + 2 Byte CRC per carrier)
 
@@ -1655,7 +1424,8 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 		
 			GenCRC16FrameType(bytToRS, intDataLen + 1, bytFrameType); // calculate the CRC on the byte count + data bytes
 
-			RSEncode(bytToRS, bytToRS+intDataLen+3, intDataLen + 3, intRSLen);  // Generate the RS encoding ...now 14 bytes total
+			// Append Reed Solomon codes to end of frame data
+			rs_append(bytToRS, intDataLen + 3, intRSLen);
 
  			//  Need: (2 bytes for Frame Type) +( Data + RS + 1 byte byteCount + 2 Byte CRC per carrier)
 
@@ -1695,7 +1465,9 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 		}
 		GenCRC16FrameType(bytToRS, intDataLen / 3 + 1, bytFrameType); // calculate the CRC on the byte count + data bytes
 
- 		RSEncode(bytToRS, bytToRS + intDataLen / 3 + 3, intDataLen / 3 + 3, intRSLen / 3);  // Generate the RS encoding ...now 14 bytes total
+		// Append Reed Solomon codes to end of frame data
+		rs_append(bytToRS, intDataLen / 3 + 3, intRSLen / 3 + 3);
+
 		intEncodedDataPtr += intDataLen / 3  + 3 + intRSLen / 3;
 		bytToRS += intDataLen / 3  + 3 + intRSLen / 3;
 	}		
@@ -1755,8 +1527,9 @@ BOOL EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, enum _A
 	CompressCallsign(strMyCallsign, &bytToRS[0]);
 	CompressCallsign(strTargetCallsign, &bytToRS[6]);  //this uses compression to accept 4, 6, or 8 character Grid squares.
 
-	RSEncode(bytToRS, &bytReturn[14], 12, 4);  // Generate the RS encoding ...now 14 bytes total
- 
+	// Append Reed Solomon codes to end of frame data
+	rs_append(bytToRS, 12, 4);
+
 	return 18;
 }
 
@@ -1777,7 +1550,9 @@ int EncodePing(char * strMyCallsign, char * strTargetCallsign, UCHAR * bytReturn
 	CompressCallsign(strMyCallsign, &bytToRS[0]);
 	CompressCallsign(strTargetCallsign, &bytToRS[6]);  //this uses compression to accept 4, 6, or 8 character Grid squares.
 
-	RSEncode(bytToRS, &bytReturn[14], 12, 4);  // Generate the RS encoding ...now 14 bytes total
+	// Append Reed Solomon codes to end of frame data
+	rs_append(bytToRS, 12, 4);
+
 	return 18;
 }
 
@@ -1808,7 +1583,8 @@ int Encode4FSKIDFrame(char * Callsign, char * Square, unsigned char * bytreturn)
     if (Square[0])
 		CompressGridSquare(Square, &bytToRS[6]);  //this uses compression to accept 4, 6, or 8 character Grid squares.
 
-	RSEncode(bytToRS, &bytreturn[14], 12, 4);  // Generate the RS encoding ...now 14 bytes total
+	// Append Reed Solomon codes to end of frame data
+	rs_append(bytToRS, 12, 4);
 
 	return 18;
 }

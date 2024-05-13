@@ -16,6 +16,7 @@
 #include <stdbool.h>
 
 #include "wav.h"
+#include "../lib/rockliff/rrs.h"
 
 #ifdef USE_DIREWOLF
 #include "direwolf/fsk_demod_state.h"
@@ -361,6 +362,9 @@ void main(int argc, char * argv[])
 	unsigned int     wTimerRes;
 	DWORD	t, lastt = 0;
 	int i = 0;
+	// rslen_set[] must list all of the rslen values used.
+	int rslen_set[] = {2, 4, 8, 16, 32, 36, 50, 64};
+	init_rs(rslen_set, 8);
 
 	SetConsoleCtrlHandler((PHANDLER_ROUTINE)CtrlHandler, TRUE);
 
