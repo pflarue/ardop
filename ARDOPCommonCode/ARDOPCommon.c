@@ -166,7 +166,7 @@ static struct option long_options[] =
 	{"extradelay",  required_argument, 0 , 'e'},
 	{"leaderlength",  required_argument, 0 , 'x'},
 	{"trailerlength",  required_argument, 0 , 't'},
-	{"webgui",  required_argument, 0 , 't'},
+	{"webgui",  required_argument, 0 , 'G'},
 	{"receiveonly", no_argument, 0, 'r'},
 	{"writewav",  no_argument, 0, 'w'},
 	{"writetxwav",  no_argument, 0, 'T'},
