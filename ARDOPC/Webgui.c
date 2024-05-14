@@ -498,7 +498,13 @@ int wg_send_busy(int cnum, bool isBusy) {
 }
 
 int wg_send_pixels(int cnum, unsigned char *data, size_t datalen) {
-	char msg[4098];
+	char msg[10000];  // Large enough for 4FSK.2000.600
+	if (datalen > sizeof(msg)) {
+		WriteDebugLog(LOGWARNING, 
+			"WARNING: Too much pixel data (%d bytes) provided to wg_send_pixels()",
+			datalen);
+		datalen = sizeof(msg) - 2;
+	}
 	msg[0] = 0x8E;
 	msg[1] = 0x7C;
 	memcpy(msg + 2, data, datalen);
