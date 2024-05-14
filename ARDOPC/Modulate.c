@@ -135,11 +135,23 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 	int intLeaderLenMS;
 	int k, m, n;
 
+	if (Len < 0) {
+		WriteDebugLog(LOGERROR, "ERROR: In Mod4FSKDataAndPlay() Invalid Len (%d).", Len);
+		return;
+	}
+
 	if (!FrameInfo(Type, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType))
 		return;
 
 	if (strcmp(strMod, "4FSK") != 0)
 		return;
+
+	if (intBaud == 600) {
+		WriteDebugLog(LOGERROR,
+			"ERROR: Mod4FSKDataAndPlay() cannot be used for 600 baud 4FSK Frames."
+			"Use Mod4FSK600BdDataAndPlay() instead.");
+		return;
+	}
 
 	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
@@ -181,13 +193,14 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
     switch(intBaud)
 	{		
 	case 50:
-		
 		intSampPerSym = 240;
 		break;
-                
 	case 100:
-		
 		intSampPerSym = 120;
+		break;
+	default:
+		WriteDebugLog(LOGERROR, "ERROR: Invalid baud rate (%d) in Mod4FSKDataAndPlay().", intBaud);
+		return;
 	}
 		
 	intDataBytesPerCar = (Len - 2) / intNumCar;		// We queue the samples here, so dont copy below
@@ -387,6 +400,11 @@ void Mod8FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 	int intMask = 0;
 	int k, m, n;
 
+	if (Len < 0) {
+		WriteDebugLog(LOGERROR, "ERROR: In Mod8FSKDataAndPlay() Invalid Len (%d).", Len);
+		return;
+	}
+
 	if (!FrameInfo(Type, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType))
 		return;
 
@@ -464,6 +482,11 @@ void Mod16FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int
 	int intMask = 0;
 	int k, m, n;
 
+	if (Len < 0) {
+		WriteDebugLog(LOGERROR, "ERROR: In Mod16FSKDataAndPlay() Invalid Len (%d).", Len);
+		return;
+	}
+
 	if (!FrameInfo(Type, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType))
 		return;
 
@@ -534,11 +557,23 @@ void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len,
 	int intMask = 0;
 	int k, m, n;
 
+	if (Len < 0) {
+		WriteDebugLog(LOGERROR, "ERROR: In Mod4FSK600BdDataAndPlay() Invalid Len (%d).", Len);
+		return;
+	}
+
 	if (!FrameInfo(Type, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType))
 		return;
 
 	if (strcmp(strMod, "4FSK") != 0)
 		return;
+
+	if (intBaud != 600) {
+		WriteDebugLog(LOGERROR,
+			"ERROR: Mod4FSK600BdDataAndPlay() is only for 600 baud 4FSK Frames."
+			"Use Mod4FSKDataAndPlay() instead.");
+		return;
+	}
 
 	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
@@ -637,7 +672,12 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 	int intCarIndex;
 
 	UCHAR bytLastSym[9]; // = {0}; // Holds the last symbol sent (per carrier). bytLastSym(4) is 1500 Hz carrier (only used on 1 carrier modes) 
- 
+
+	if (Len < 0) {
+		WriteDebugLog(LOGERROR, "ERROR: In ModPSKDataAndPlay() Invalid Len (%d).", Len);
+		return;
+	}
+
 	if (!FrameInfo(Type, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType))
 		return;
 

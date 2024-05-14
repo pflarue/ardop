@@ -1293,11 +1293,14 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			blnEnbARQRpt = TRUE;  // setup for repeats until changeover
 			WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.ProcessNewSamples] %d bytes to send in ProtocolState: %s: Send BREAK,  New state=IRStoISS (Rule 3.3)",
 					bytDataToSendLength,  ARDOPStates[ProtocolState]);
- 			EncLen = Encode4FSKControl(BREAK, bytSessionID, bytEncodedBytes);
-			Mod4FSKDataAndPlay(BREAK, &bytEncodedBytes[0], EncLen, intARQDefaultDlyMs);		// only returns when all sent
-
 			WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.ProcessNewSamples] Skip Data Decoding when blnBREAKCmd and ProtcolState=IRS");
 			blnBREAKCmd = FALSE;
+			if ((EncLen = Encode4FSKControl(BREAK, bytSessionID, bytEncodedBytes)) <= 0) {
+				WriteDebugLog(LOGERROR, "ERROR: In ProcessNewSamples() Invalid EncLen (%d).", EncLen);
+				goto skipDecode;
+			}
+			Mod4FSKDataAndPlay(BREAK, &bytEncodedBytes[0], EncLen, intARQDefaultDlyMs);		// only returns when all sent
+
 			goto skipDecode;
 		}
 						
@@ -1309,7 +1312,10 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.ProcessNewSamples] Skip Data Decoding when ProtcolState=IRStoISS, Answer with BREAK");
 			intFrameRepeatInterval = ComputeInterFrameInterval(1000 + rand() % 2000);
 			blnEnbARQRpt = TRUE;  // setup for repeats until changeover
- 			EncLen = Encode4FSKControl(BREAK, bytSessionID, bytEncodedBytes);
+			if ((EncLen = Encode4FSKControl(BREAK, bytSessionID, bytEncodedBytes)) <= 0) {
+				WriteDebugLog(LOGERROR, "ERROR: In ProcessNewSamples() Invalid EncLen (%d).", EncLen);
+				goto skipDecode;
+			}
 			Mod4FSKDataAndPlay(BREAK, &bytEncodedBytes[0], EncLen, intARQDefaultDlyMs);		// only returns when all sent
 			goto skipDecode;
 		}						
@@ -1393,8 +1399,11 @@ ProcessFrame:
 					tmrFinalID = Now + 3000;			
 					blnEnbARQRpt = FALSE;
 
-					EncLen = Encode4FSKControl(END, bytLastARQSessionID, bytEncodedBytes);
-					Mod4FSKDataAndPlay(END, &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
+					if ((EncLen = Encode4FSKControl(END, bytLastARQSessionID, bytEncodedBytes)) <= 0) {
+						WriteDebugLog(LOGERROR, "ERROR: In ProcessNewSamples() Invalid EncLen (%d).", EncLen);
+						goto skipDecode;
+					} else
+						Mod4FSKDataAndPlay(END, &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 
 					// Drop through
 				}
@@ -1410,13 +1419,14 @@ ProcessFrame:
 
 				// If still in DISC monitor it
 				
-				if (ProtocolState == DISC && Monitor)		  // allows ARQ mode to operate like FEC when not connected
+				if (ProtocolState == DISC && Monitor) {		  // allows ARQ mode to operate like FEC when not connected
 					if (intFrameType == 0x30)				
 						AddTagToDataAndSendToHost(bytData, "IDF", frameLen);			
 					else if (intFrameType >= 0x31 && intFrameType <= 0x38)
 						ProcessUnconnectedConReqFrame(intFrameType, bytData);			
 					else if (IsDataFrame(intFrameType)) // check to see if a data frame
 						ProcessRcvdFECDataFrame(intFrameType, bytData, blnFrameDecodedOK);			
+				}
 			}
 			else
 			{
@@ -1430,14 +1440,14 @@ ProcessFrame:
 			//	Bad decode
 
             if (AccumulateStats)
-				if (IsDataFrame(intFrameType))
+				if (IsDataFrame(intFrameType)) {
 					if (strstr (strMod, "PSK"))
 						intFailedPSKFrameDataDecodes++;
 					else if (strstr (strMod, "QAM"))
 						intFailedQAMFrameDataDecodes++;
 					else
 						intFailedFSKFrameDataDecodes++;
-
+				}
 
             // Debug.WriteLine("[DecodePSKData2] bytPass = " & Format(bytPass, "X"))
 	
@@ -2497,11 +2507,12 @@ int Acquire4FSKFrameType()
 	if (NewType >= 0 &&  IsShortControlFrame(NewType))		// update the constellation if a short frame (no data to follow)
 		Update4FSKConstellation(&intToneMags[0][0], &intLastRcvdFrameQuality);
 
-	if (AccumulateStats)
+	if (AccumulateStats) {
 		if (NewType >= 0)
 			intGoodFSKFrameTypes++;
 		else
 			intFailedFSKFrameTypes++;
+	}
 	
 	intMFSReadPtr += (240 * 10) + Corrections;	// advance to read pointer to the next symbol (if there is one)
 	Corrections = 0;
@@ -2771,7 +2782,9 @@ void DemodEachCar4FSK_SDFT(int Start, int * intCenterFrqs, BOOL blnGetFrameType)
             It also incremented intToneMagsIndex[cnum] to now point to the
             next free slot after the four values that must now be compared.
             */
-            intToneMags_sum = 0;
+            // Start at 1 instead of 0 so that if audio is total silence,
+            // later division by this value does not cause an error
+            intToneMags_sum = 1;
             for (frqNum = 0; frqNum < FRQCNT; frqNum++)
             {
                 intToneMags_sum += intToneMags[cnum][intToneMagsIndex[cnum] - (frqNum + 1)];
@@ -2864,7 +2877,9 @@ void Demod1Car4FSKChar(int Start, UCHAR * Decoded, int Carrier)
 	snprintf(DebugMess, sizeof(DebugMess), "4FSK_bytSym :");
 	for (j = 0; j < 4; j++)		// for each 4FSK symbol (2 bits) in a byte
 	{
-		dblMagSum = 0;
+        // Start at 1 instead of 0 so that if audio is total silence,
+        // later division by this value does not cause an error
+		dblMagSum = 1;
 		GoertzelRealImag(intFilteredMixedSamples, Start, intSampPerSym, dblSearchFreq / intBaud, &dblReal, &dblImag);
 		dblMag[0] = powf(dblReal,2) + powf(dblImag, 2);
 		dblMagSum += dblMag[0];
@@ -3661,11 +3676,12 @@ BOOL Decode4FSKID(UCHAR bytFrameType, char * strCallID, char * strGridSquare)
 	}
 	sprintf(strGridSquare, "[%s]", temp);
 
-	if (AccumulateStats)
+	if (AccumulateStats) {
 		if (FrameOK)
 			intGoodFSKFrameDataDecodes++;
 		else
 			intFailedFSKFrameDataDecodes++;
+	}
 
 	if (FrameOK)
 		memcpy(lastGoodID, strCallID, 10);
@@ -3951,7 +3967,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
     
 
 		case 0x30:		 // ID Frame, 
-						
+
 			blnDecodeOK = Decode4FSKID(0x30, strIDCallSign, strGridSQ);
 			
 			frameLen = sprintf(bytData, "ID:%s %s:" , strIDCallSign, strGridSQ);
@@ -4051,8 +4067,8 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 		case 0x52:
 		case 0x53:
 
-		if (CarrierOk[0] && CarrierOk[1])
-			blnDecodeOK = TRUE;
+			if (CarrierOk[0] && CarrierOk[1])
+				blnDecodeOK = TRUE;
 
 			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
