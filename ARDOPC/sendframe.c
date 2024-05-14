@@ -292,7 +292,8 @@ int sendframe(char * sendParams) {
 	} else if(strncmp(params[1], "ConReq", 6) == 0) {
 		// 0x31 to 0x38
 		// All have unique names indicating bandwidth.  If only 'ConReq' is given,
-		// default to value set with ARQBW Host Command
+		// accept a parameter in the form used for ARQBW, else default to value set
+		// with ARQBW Host Command
 		// Uses globals: Callsign. CallBandwidth, ARQBandwidth
 		char targetcallsign[10];
 		char callsign[10];
@@ -362,26 +363,41 @@ int sendframe(char * sendParams) {
 		// targetcallsign are not both entirely upper case.
 		strtoupper(callsign);
 		strtoupper(targetcallsign);
-		WriteDebugLog(LOGDEBUG, "_Send ConReq %s %s %s", targetcallsign, callsign, ARQBandwidths[bandwidth_num]);
+		WriteDebugLog(LOGDEBUG, "_Send ConReq%s %s %s", ARQBandwidths[bandwidth_num], targetcallsign, callsign);
 		if ((EncLen = EncodeARQConRequest(callsign, targetcallsign, bandwidth_num, bytEncodedBytes)) <= 0) {
 			WriteDebugLog(LOGERROR, "ERROR: In sendframe() ConReq Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
-	} else if(strcmp(params[1], "ConAck") == 0) {
+	} else if(strncmp(params[1], "ConAck", 6) == 0) {
 		// 0x39 to 0x3C
-		// All have unique names indicating bandwidth, but here use a param for bandwidth.
-		// Unlike ConReq, ConAck does not distinguish between MAX and FORCED.  So, bandwidth
-		// is specified by a number in Hz, though it will still fail if the bandwidth given
-		// is not 200, 500, 1000, or 2000.
-		// Uses globals: ARQBandwidth, intLeaderRcvdMs, bytSessionID
+		// All have unique names indicating bandwidth.  If only 'ConAck' is given, accept a
+		// number as a parameter since, unlike ConReq, ConAck does not distinguish between
+		// MAX and FORCED.  However, the number given must be one of 200, 500, 1000, or 2000.
+		// If none of these are provided, use the numerical portion of ARQBandwidth.
+		// Uses globals: intLeaderRcvdMs, bytSessionID, ARQBandwidth
 		// bandwidth from the set [200, 500, 1000, 2000].  Use of strtol() allows hex if
 		// prefixed with 0x of 0X (though this is unlikely to be useful here).
-		int bandwidth; // Bandwidth in Hz [200, 500, 1000, 2000]
 		int frametype;
 		int rcvdleaderlen;
+		int bandwidth; // Bandwidth in Hz [200, 500, 1000, 2000]
+		// Received leader length in MS.  Default to intLeaderRcvdMs if not provided.
+		// Use of strtol() allows hex if prefixed with 0x of 0X.
 		if (paramcount > 2 && strcmp(params[2], "_") != 0)
-			bandwidth = strtol(params[2], NULL, 0);
+			rcvdleaderlen = strtol(params[2], NULL, 0);
+		else
+			rcvdleaderlen = intLeaderRcvdMs;
+		// sessionid from 0 to 255.  Use of strtol() allows hex if prefixed with 0x of 0X
+		if (paramcount > 3 && strcmp(params[3], "_") != 0)
+			sessionid = strtol(params[3], NULL, 0);
+		else
+			sessionid = bytSessionID;
+		if (strlen(params[1]) > 6)
+			// Notice that the order here corresponds to ARQBandwidths defined in
+			// ARQ.c, the other order of the ConReq frames by frame type.
+			bandwidth = atoi(params[1] + 6);
+		else if (paramcount > 4 && strcmp(params[4], "_") != 0)
+			bandwidth = strtol(params[4], NULL, 0);
 		else if (ARQBandwidth != UNDEFINED)
 			bandwidth = strtol(ARQBandwidths[ARQBandwidth], NULL, 0);
 		if (bandwidth == 200)
@@ -397,17 +413,6 @@ int sendframe(char * sendParams) {
 				"_SEND ConAck requires an implicit or explicit bandwidth of 200, 500, 1000, or 2000");
 			return (1);
 		}
-		// Received leader length in MS.  Default to intLeaderRcvdMs if not provided.
-		// Use of strtol() allows hex if prefixed with 0x of 0X.
-		if (paramcount > 3 && strcmp(params[3], "_") != 0)
-			rcvdleaderlen = strtol(params[3], NULL, 0);
-		else
-			rcvdleaderlen = intLeaderRcvdMs;
-		// sessionid from 0 to 255.  Use of strtol() allows hex if prefixed with 0x of 0X
-		if (paramcount > 4 && strcmp(params[4], "_") != 0)
-			sessionid = strtol(params[4], NULL, 0);
-		else
-			sessionid = bytSessionID;
 		WriteDebugLog(LOGDEBUG, "_Send ConAck %d %d %02X (frame type = %02X)", bandwidth, rcvdleaderlen, sessionid, frametype);
 		if ((EncLen = EncodeConACKwTiming(frametype, rcvdleaderlen, sessionid, bytEncodedBytes)) <= 0) {
 			WriteDebugLog(LOGERROR, "ERROR: In sendframe() ConAck Invalid EncLen (%d).", EncLen);
@@ -427,7 +432,7 @@ int sendframe(char * sendParams) {
 			snr = strtol(params[2], NULL, 0);
 		else
 			snr = stcLastPingintRcvdSN;
-		// Quality in range of 0-100.  Default to stcLastPingintQuality if not provided.
+		// Quality in range of 30-100.  Default to stcLastPingintQuality if not provided.
 		// Use of strtol() allows hex if prefixed with 0x of 0X.
 		if (paramcount > 3 && strcmp(params[3], "_") != 0) {
 			quality = strtol(params[3], NULL, 0);
