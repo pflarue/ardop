@@ -7,6 +7,7 @@ extern UCHAR bytFrameData1[760];
 extern int stcLastPingintRcvdSN;  // defined in ARDOPC.c. updated in SoundInput.c
 extern int stcLastPingintQuality;  // defined in ARDOPC.c. updated in SoundInput.c
 extern int intSNdB;  // defined in SoundInput.c
+extern int intQuality;  // defined in SoundInput.c
 extern int intLastRcvdFrameQuality;  // defined in SoundInput.c
 extern BOOL WG_DevMode;
 int wg_send_hostdatat(int cnum, char *prefix, unsigned char *data, int datalen);
@@ -176,7 +177,7 @@ void ProcessRXOFrame(UCHAR bytFrameType, int frameLen, UCHAR * bytData, BOOL bln
 		else if (bytFrameType == 0x3D)  // PingAck
 		{
 			WriteDebugLog(LOGINFO, "    [RXO %02X] PingAck data is S:N=%d and Quality=%d of the Ping. (Any S:N > 20 is reorted as 21.)",
-				bytSessionID, intSNdB, intLastRcvdFrameQuality);
+				bytSessionID, intSNdB, intQuality);
 		}
 		else if (bytFrameType == 0x3E)  // Ping
 		{
