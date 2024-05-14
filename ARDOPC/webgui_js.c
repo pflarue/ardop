@@ -38,7 +38,7 @@ const char webgui_js[] = (
 "let devmode = false;\n"
 "let cmdhistory = [];\n"
 "let cmdhistory_index = -1;\n"
-"let cmdhistory_limit = 5;\n"
+"let cmdhistory_limit = 100;\n"
 "\n"
 "window.addEventListener(\"load\", function(evt) {\n"
 "    let txtlog = document.getElementById(\"text-log\");\n"

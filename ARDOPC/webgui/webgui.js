@@ -33,7 +33,7 @@ let isbusy = 0;
 let devmode = false;
 let cmdhistory = [];
 let cmdhistory_index = -1;
-let cmdhistory_limit = 5;
+let cmdhistory_limit = 100;
 
 window.addEventListener("load", function(evt) {
 	let txtlog = document.getElementById("text-log");
