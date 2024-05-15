@@ -379,7 +379,10 @@ BOOL GetNextARQFrame()
 			return FALSE;			 //indicates end repeat
 		}
 		WriteDebugLog(LOGINFO, "Repeating DISC %d", intRepeatCount);
-		EncLen = Encode4FSKControl(DISCFRAME, bytSessionID, bytEncodedBytes);
+		if ((EncLen = Encode4FSKControl(DISCFRAME, bytSessionID, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In GetNextARQFrame() Invalid EncLen (%d).", EncLen);
+			return FALSE;
+		}
 
 		return TRUE;			// continue with DISC repeats
 	}
@@ -1091,7 +1094,10 @@ void SendData()
 
 			if (strcmp(strMod, "4FSK") == 0)
 			{
-				EncLen = EncodeFSKData(bytCurrentFrameType, bytDataToSend, Len, bytEncodedBytes);
+				if ((EncLen = EncodeFSKData(bytCurrentFrameType, bytDataToSend, Len, bytEncodedBytes)) <= 0) {
+					WriteDebugLog(LOGERROR, "ERROR: In SendData() for 4FSK Invalid EncLen (%d).", EncLen);
+					return;
+				}
 				if (bytCurrentFrameType >= 0x7A && bytCurrentFrameType <= 0x7D)
 					Mod4FSK600BdDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame 
 				else
@@ -1099,17 +1105,27 @@ void SendData()
 			}
 			else if (strcmp(strMod, "16FSK") == 0)
 			{
-				EncLen = EncodeFSKData(bytCurrentFrameType, bytDataToSend, Len, bytEncodedBytes);
+				if ((EncLen = EncodeFSKData(bytCurrentFrameType, bytDataToSend, Len, bytEncodedBytes)) <= 0) {
+					WriteDebugLog(LOGERROR, "ERROR: In SendData() for 16FSK Invalid EncLen (%d).", EncLen);
+					return;
+				}
 				Mod16FSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame 
 			}
 			else if (strcmp(strMod, "8FSK") == 0)
 			{
-				EncLen = EncodeFSKData(bytCurrentFrameType, bytDataToSend, Len, bytEncodedBytes);          //      intCurrentFrameSamples = Mod8FSKData(bytFrameType, bytData);
+				if ((EncLen = EncodeFSKData(bytCurrentFrameType, bytDataToSend, Len, bytEncodedBytes)) <= 0) {
+					WriteDebugLog(LOGERROR, "ERROR: In SendData() for 8FSK Invalid EncLen (%d).", EncLen);
+					return;
+				}
+				//      intCurrentFrameSamples = Mod8FSKData(bytFrameType, bytData);
 				Mod8FSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame 
 			}
 			else		// This handles PSK and QAM
 			{
-				EncLen = EncodePSKData(bytCurrentFrameType, bytDataToSend, Len, bytEncodedBytes);
+				if ((EncLen = EncodePSKData(bytCurrentFrameType, bytDataToSend, Len, bytEncodedBytes)) <= 0) {
+					WriteDebugLog(LOGERROR, "ERROR: In SendData() for PSK and QAM Invalid EncLen (%d).", EncLen);
+					return;
+				}
 				ModPSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame 
 			}
 
@@ -1130,7 +1146,10 @@ void SendData()
 			intFrameRepeatInterval = ComputeInterFrameInterval(2000);  // keep IDLE repeats at 2 sec 
 			ClearDataToSend(); // ' 0.6.4.2 This insures new OUTOUND queue is updated (to value = 0)
 	
-			EncLen = Encode4FSKControl(IDLEFRAME, bytSessionID, bytEncodedBytes);
+			if ((EncLen = Encode4FSKControl(IDLEFRAME, bytSessionID, bytEncodedBytes)) <= 0) {
+				WriteDebugLog(LOGERROR, "ERROR: In SendData() for IDLE Invalid EncLen (%d).", EncLen);
+				return;
+			}
 			Mod4FSKDataAndPlay(IDLEFRAME, &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 	
 			WriteDebugLog(LOGINFO, "[ARDOPprotocol.SendData]  Send IDLE with Repeat, Set ProtocolState=IDLE ");
@@ -1327,11 +1346,13 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
     
 			WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame]  DISC frame received in ProtocolState DISC, Send END with SessionID= %XX Stay in DISC state", bytLastARQSessionID);
 
-			EncLen = Encode4FSKControl(0x2C, bytLastARQSessionID, bytEncodedBytes);
-
 			tmrFinalID = Now + 3000;			
 			blnEnbARQRpt = FALSE;
 
+			if ((EncLen = Encode4FSKControl(0x2C, bytLastARQSessionID, bytEncodedBytes)) <= 0) {
+				WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for DISC->END Invalid EncLen (%d).", EncLen);
+				return;
+			}
 			Mod4FSKDataAndPlay(0x2C, &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 			return;
 		}
@@ -1384,7 +1405,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 					// Clear out the busy detector. This necessary to keep the received frame and hold time from causing
 					// a continuous busy condition.
 
- 					EncLen = Encode4FSKControl(ConRejBusy, bytPendingSessionID, bytEncodedBytes);
+					if ((EncLen = Encode4FSKControl(ConRejBusy, bytPendingSessionID, bytEncodedBytes)) <= 0) {
+						WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for ConRejBusy Invalid EncLen (%d).", EncLen);
+						return;
+					}
 					Mod4FSKDataAndPlay(ConRejBusy, &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 
 					sprintf(HostCmd, "REJECTEDBUSY %s", strRemoteCallsign);
@@ -1430,7 +1454,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				intAvgQuality = 0;		// initialize avg quality 
 				intReceivedLeaderLen = intLeaderRcvdMs;		 // capture the received leader from the remote ISS's ConReq (used for timing optimization)
 
-				EncLen = EncodeConACKwTiming(intReply, intLeaderRcvdMs, bytPendingSessionID, bytEncodedBytes);
+				if ((EncLen = EncodeConACKwTiming(intReply, intLeaderRcvdMs, bytPendingSessionID, bytEncodedBytes)) <= 0) {
+					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for ConAck Invalid EncLen (%d).", EncLen);
+					return;
+				}
 				Mod4FSKDataAndPlay(intReply, &bytEncodedBytes[0], EncLen, intARQDefaultDlyMs);		// only returns when all sent
 			}
 			else
@@ -1445,7 +1472,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				sprintf(HostCmd, "STATUS ARQ CONNECTION REJECTED BY %s", strRemoteCallsign);
 				QueueCommandToHost(HostCmd);
 			
-				EncLen = Encode4FSKControl(intReply, bytPendingSessionID, bytEncodedBytes);
+				if ((EncLen = Encode4FSKControl(intReply, bytPendingSessionID, bytEncodedBytes)) <= 0) {
+					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for ConRejBW Invalid EncLen (%d).", EncLen);
+					return;
+				}
 				Mod4FSKDataAndPlay(intReply, &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 			}
 		}
@@ -1512,7 +1542,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 						strcpy(strLocalCallsign, strCallsign);
 						strcpy(strFinalIDCallsign, strCallsign);
 
-						EncLen = EncodeConACKwTiming(intReply, intLeaderRcvdMs, bytPendingSessionID, bytEncodedBytes);
+						if ((EncLen = EncodeConACKwTiming(intReply, intLeaderRcvdMs, bytPendingSessionID, bytEncodedBytes)) <= 0) {
+							WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for ConAck Invalid EncLen (%d).", EncLen);
+							return;
+						}
 						Mod4FSKDataAndPlay(intReply, &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 						// ' No delay to allow ISS to measure its TX>RX delay}
 						return;
@@ -1530,7 +1563,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 					sprintf(HostCmd, "STATUS ARQ CONNECTION FROM %s REJECTED, INCOMPATIBLE BANDWIDTHS.", strRemoteCallsign);
 					QueueCommandToHost(HostCmd);
 
-					EncLen = Encode4FSKControl(intReply, bytPendingSessionID, bytEncodedBytes);
+					if ((EncLen = Encode4FSKControl(intReply, bytPendingSessionID, bytEncodedBytes)) <= 0) {
+						WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for ConRejBW Invalid EncLen (%d).", EncLen);
+						return;
+					}
 					Mod4FSKDataAndPlay(intReply, &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 
 					return;
@@ -1588,7 +1624,11 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				sprintf(HostCmd, "STATUS ARQ CONNECTION FROM %s: SESSION BW = %d HZ", strRemoteCallsign, intSessionBW);
 				QueueCommandToHost(HostCmd);
 
-				EncLen = EncodeDATAACK(intLastRcvdFrameQuality, bytSessionID, bytEncodedBytes); // Send ACK
+				// Send ACK
+				if ((EncLen = EncodeDATAACK(intLastRcvdFrameQuality, bytSessionID, bytEncodedBytes)) <= 0) {
+					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for ConAck->DataACK Invalid EncLen (%d).", EncLen);
+					return;
+				}
 				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 
 				// Initialize the frame type and pointer based on bandwidth (added 0.3.1.3)
@@ -1633,7 +1673,11 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 				dttTimeoutTrip = Now;
 
-				EncLen = EncodeDATAACK(intLastRcvdFrameQuality, bytSessionID, bytEncodedBytes); // Send ACK
+				// Send ACK
+				if ((EncLen = EncodeDATAACK(intLastRcvdFrameQuality, bytSessionID, bytEncodedBytes)) <= 0) {
+					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for repeat ConAck->DataACK Invalid EncLen (%d).", EncLen);
+					return;
+				}
 				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 				return;
 			}
@@ -1660,7 +1704,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
                 InitializeConnection();
 				blnEnbARQRpt = FALSE;
 
-				EncLen = Encode4FSKControl(0x2C, bytSessionID, bytEncodedBytes);
+				if ((EncLen = Encode4FSKControl(0x2C, bytSessionID, bytEncodedBytes)) <= 0) {
+					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for END Invalid EncLen (%d).", EncLen);
+					return;
+				}
 				Mod4FSKDataAndPlay(0x2C, &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 				return;
 			}
@@ -1686,8 +1733,11 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				if (CheckValidCallsignSyntax(strLocalCallsign))
 				{
 					dttLastFECIDSent = Now;
-					EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes);
-					Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], 16, 0);		// only returns when all sent
+					if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes)) <= 0) {
+						WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
+						return;
+					}
+					Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], EncLen, 0);		// only returns when all sent
 				}
 				
 
@@ -1703,8 +1753,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				blnEnbARQRpt = FALSE; /// setup for no repeats
 
 				// Send ACK
-
-				EncLen = EncodeDATAACK(100, bytSessionID, bytEncodedBytes); // Send ACK
+				if ((EncLen = EncodeDATAACK(100, bytSessionID, bytEncodedBytes)) <= 0) {
+					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for repeat BREAK->DataACK Invalid EncLen (%d).", EncLen);
+					return;
+				}
 				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 				dttTimeoutTrip = Now;
 				return;
@@ -1728,15 +1780,20 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 						WriteDebugLog(LOGINFO, "[STATUS: QUEUE BREAK new Protocol State IRStoISS]");
 						SendCommandToHost("STATUS QUEUE BREAK new Protocol State IRStoISS");
 						blnEnbARQRpt = TRUE;  // setup for repeats until changeover
- 						EncLen = Encode4FSKControl(BREAK, bytSessionID, bytEncodedBytes);
+						if ((EncLen = Encode4FSKControl(BREAK, bytSessionID, bytEncodedBytes)) <= 0) {
+							WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for IDLE->BREAK Invalid EncLen (%d).", EncLen);
+							return;
+						}
 						Mod4FSKDataAndPlay(BREAK, &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 					}
 					else
 					{
 						// Send ACK
-
 						dttTimeoutTrip = Now;
-						EncLen = EncodeDATAACK(100, bytSessionID, bytEncodedBytes); // Send ACK
+						if ((EncLen = EncodeDATAACK(100, bytSessionID, bytEncodedBytes)) <= 0) {
+							WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for IDLE->DataACK Invalid EncLen (%d).", EncLen);
+							return;
+						}
 						Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 						dttTimeoutTrip = Now;
 					}
@@ -1775,7 +1832,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 					SetARDOPProtocolState(IRStoISS); // (ONLY IRS State where repeats are used)
 					WriteDebugLog(LOGINFO, "[STATUS: QUEUE BREAK new Protocol State IRStoISS]");
 					SendCommandToHost("STATUS QUEUE BREAK new Protocol State IRStoISS");
- 					EncLen = Encode4FSKControl(BREAK, bytSessionID, bytEncodedBytes);
+					if ((EncLen = Encode4FSKControl(BREAK, bytSessionID, bytEncodedBytes)) <= 0) {
+						WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for Rule 3.4 BREAK Invalid EncLen (%d).", EncLen);
+						return;
+					}
 					Mod4FSKDataAndPlay(BREAK, &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 					return;
 				}
@@ -1797,9 +1857,12 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 			
 
 				// Always ACK good data frame ...ISS may have missed last ACK
-
+				// Send ACK
 				blnEnbARQRpt = FALSE;
-				EncLen = EncodeDATAACK(intLastRcvdFrameQuality, bytSessionID, bytEncodedBytes); // Send ACK
+				if ((EncLen = EncodeDATAACK(intLastRcvdFrameQuality, bytSessionID, bytEncodedBytes)) <= 0) {
+					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for DataACK Invalid EncLen (%d).", EncLen);
+					return;
+				}
 				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 				bytLastACKedDataFrameType = intFrameType;
 				return;
@@ -1811,10 +1874,13 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
  
 			if ((!blnFrameDecodedOK) && intFrameType == bytLastACKedDataFrameType)
 			{
-				EncLen = EncodeDATAACK(intLastRcvdFrameQuality, bytSessionID, bytEncodedBytes); // Send ACK
-				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
+				// Send ACK
 				blnEnbARQRpt = FALSE;
-
+				if ((EncLen = EncodeDATAACK(intLastRcvdFrameQuality, bytSessionID, bytEncodedBytes)) <= 0) {
+					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for repeat DataACK Invalid EncLen (%d).", EncLen);
+					return;
+				}
+				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 				WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame] Data Decode Failed but Frame Type matched last ACKed. Send ACK, data already passed to host. ");
 
 				// handles Data frame which did not decode correctly (Failed CRC) and hasn't been acked before
@@ -1827,8 +1893,12 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 					ARQState = IRSData;  //This substate change is the final completion of ISS to IRS changeover and allows the new IRS to now break if desired (Rule 3.5) 
 				}
-				EncLen = EncodeDATANAK(intLastRcvdFrameQuality, bytSessionID, bytEncodedBytes); // Send NAK
+				// Send NAK
 				blnEnbARQRpt = FALSE;
+				if ((EncLen = EncodeDATANAK(intLastRcvdFrameQuality, bytSessionID, bytEncodedBytes)) <= 0) {
+					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for DataNAK Invalid EncLen (%d).", EncLen);
+					return;
+				}
 				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 
 				return;
@@ -1867,7 +1937,11 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 				dttTimeoutTrip = Now;
 				blnEnbARQRpt = FALSE;
-				EncLen = EncodeDATAACK(100, bytSessionID, bytEncodedBytes); // Send ACK
+				// Send ACK
+				if ((EncLen = EncodeDATAACK(100, bytSessionID, bytEncodedBytes)) <= 0) {
+					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for BREAK->DataACK Invalid EncLen (%d).", EncLen);
+					return;
+				}
 				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 
 				WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame] BREAK Rcvd from IDLE, Go to IRS, Substate IRSfromISS");
@@ -1895,7 +1969,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				QueueCommandToHost(HostCmd);
 				tmrFinalID = Now + 3000;
 				blnDISCRepeating = FALSE;
-				EncLen = Encode4FSKControl(END, bytSessionID, bytEncodedBytes);
+				if ((EncLen = Encode4FSKControl(END, bytSessionID, bytEncodedBytes)) <= 0) {
+					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for DISC->END Invalid EncLen (%d).", EncLen);
+					return;
+				}
 				Mod4FSKDataAndPlay(END, &bytEncodedBytes[0], EncLen, LeaderLength);	
                 bytLastARQSessionID = bytSessionID; // capture this session ID to allow answering DISC from DISC state
                 ClearDataToSend();
@@ -1916,8 +1993,11 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				if (CheckValidCallsignSyntax(strLocalCallsign))
 				{
 					dttLastFECIDSent = Now;
-					EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes);
-					Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], 16, 0);		// only returns when all sent
+					if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes)) <= 0) {
+						WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
+						return;
+					}
+					Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], EncLen, 0);		// only returns when all sent
 				}     
 				SetARDOPProtocolState(DISC); 
 				blnEnbARQRpt = FALSE;
@@ -1981,7 +2061,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				ARQState = ISSConAck;
 				dttLastFECIDSent = Now;
 
-				EncLen = EncodeConACKwTiming(intFrameType, intReceivedLeaderLen, bytSessionID, bytEncodedBytes);
+				if ((EncLen = EncodeConACKwTiming(intFrameType, intReceivedLeaderLen, bytSessionID, bytEncodedBytes)) <= 0) {
+					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for ConAck->ConAck Invalid EncLen (%d).", EncLen);
+					return;
+				}
 				Mod4FSKDataAndPlay(intFrameType, &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 
 				return;
@@ -2014,7 +2097,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 		}
 		if (ARQState == ISSConAck)
 		{
-			if (blnFrameDecodedOK && intFrameType >= 0xE0 || intFrameType == BREAK)  // if ACK received then IRS correctly received the ISS ConACK 
+			if ((blnFrameDecodedOK && intFrameType >= 0xE0) || intFrameType == BREAK)  // if ACK received then IRS correctly received the ISS ConACK 
 			{	
 				// Note BREAK added per input from John W. to handle case where IRS has data to send and ISS missed the IRS's ACK from the ISS's ConACK Rev 0.5.3.1
 				// Not sure about this. Not needed with AUTOBREAK but maybe with BREAK command
@@ -2058,8 +2141,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 					blnEnbARQRpt = FALSE;  // setup for no repeats
 
 					// Send ACK
-
-					EncLen = EncodeDATAACK(100, bytSessionID, bytEncodedBytes); // Send ACK
+					if ((EncLen = EncodeDATAACK(100, bytSessionID, bytEncodedBytes)) <= 0) {
+						WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for ConAck + BREAK->DataACK Invalid EncLen (%d).", EncLen);
+						return;
+					}
 					Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 
 					dttTimeoutTrip = Now;
@@ -2185,8 +2270,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				SendCommandToHost("STATUS BREAK received from Protocol State ISS, new state IRS");
 
 				// Send ACK
-
-				EncLen = EncodeDATAACK(100, bytSessionID, bytEncodedBytes); // Send ACK
+				if ((EncLen = EncodeDATAACK(100, bytSessionID, bytEncodedBytes)) <= 0) {
+					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for BREAK->DataACK Invalid EncLen (%d).", EncLen);
+					return;
+				}
 				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 
 				dttTimeoutTrip = Now;
@@ -2241,7 +2328,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				InitializeConnection();
 				blnEnbARQRpt = FALSE;
 
-				EncLen = Encode4FSKControl(END, bytSessionID, bytEncodedBytes);
+				if ((EncLen = Encode4FSKControl(END, bytSessionID, bytEncodedBytes)) <= 0) {
+					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for DISC->END Invalid EncLen (%d).", EncLen);
+					return;
+				}
 				Mod4FSKDataAndPlay(END, &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 				return;
 			}
@@ -2261,8 +2351,11 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				if (CheckValidCallsignSyntax(strLocalCallsign))
 				{
 					dttLastFECIDSent = Now;
-					EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes);
-					Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], 16, 0);		// only returns when all sent
+					if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes)) <= 0) {
+						WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
+						return;
+					}
+					Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], EncLen, 0);		// only returns when all sent
 				}
 					
 				SetARDOPProtocolState(DISC);
@@ -2409,14 +2502,18 @@ BOOL SendARQConnectRequest(char * strMycall, char * strTargetCall)
 	strcpy(strLocalCallsign, strMycall);
 	strcpy(strFinalIDCallsign, strLocalCallsign);
 
-	if (CallBandwidth == UNDEFINED)
-		EncLen = EncodeARQConRequest(strMycall, strTargetCall, ARQBandwidth, bytEncodedBytes);
-	else
-		EncLen = EncodeARQConRequest(strMycall, strTargetCall, CallBandwidth, bytEncodedBytes);
+	if (CallBandwidth == UNDEFINED) {
+		if ((EncLen = EncodeARQConRequest(strMycall, strTargetCall, ARQBandwidth, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In SendARQConnectRequest() with UNDEFINED BW Invalid EncLen (%d).", EncLen);
+			return FALSE;
+		}
+	} else {
+		if ((EncLen = EncodeARQConRequest(strMycall, strTargetCall, CallBandwidth, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In SendARQConnectRequest() Invalid EncLen (%d).", EncLen);
+			return FALSE;
+		}
+	}
 
-	if (EncLen == 0)
-		return FALSE;
-	
 	// generate the modulation with 2 x the default FEC leader length...Should insure reception at the target
 	// Note this is sent with session ID 0xFF
 
@@ -2466,8 +2563,11 @@ BOOL Send10MinID()
 		blnEnbARQRpt = FALSE;
 
 		dttLastFECIDSent = Now;
-		EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes);
-		Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], 16, 0);		// only returns when all sent		
+		if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In Send10MinID() Invalid EncLen (%d).", EncLen);
+			return FALSE;
+		}
+		Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], EncLen, 0);		// only returns when all sent
 		return TRUE;
 	}
 	return FALSE;
@@ -2496,7 +2596,10 @@ BOOL CheckForDisconnect()
 		if (SoundIsPlaying)
 			return TRUE;
 
-		EncLen = Encode4FSKControl(DISCFRAME, bytSessionID, bytEncodedBytes);
+		if ((EncLen = Encode4FSKControl(DISCFRAME, bytSessionID, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In CheckForDisconnect() Invalid EncLen (%d).", EncLen);
+			return FALSE;
+		}
 		Mod4FSKDataAndPlay(DISCFRAME, &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 		return TRUE;
 	}

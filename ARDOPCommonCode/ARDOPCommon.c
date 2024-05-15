@@ -588,7 +588,7 @@ int decode_wav()
 	// Send additional silent samples to ProcessNewSamples() after end of WAV file data.
 	// Without this, a frame that too close to the end of the WAV file might not be decoded.
 	memset(samples, 0, sizeof(samples));
-	for (int i=0; i<10; i++) {
+	for (int i=0; i<20; i++) {
 		WavNow += blocksize * 1000 / 12000;
 		ProcessNewSamples(samples, blocksize);
 	}

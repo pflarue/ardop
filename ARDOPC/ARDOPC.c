@@ -1308,6 +1308,7 @@ int EncodePSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 		
 	for (i = 0; i < intNumCar; i++)		//  across all carriers
 	{
+		memset(bytToRS, 0x69, intDataLen + 3 + intRSLen);
 		intCarDataCnt = Length - bytDataToSendLengthPtr;
 			
 		if (intCarDataCnt > intDataLen) // why not > ??
@@ -1335,7 +1336,10 @@ int EncodePSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 		GenCRC16FrameType(bytToRS, intDataLen + 1, bytFrameType); // calculate the CRC on the byte count + data bytes
 
 		// Append Reed Solomon codes to end of frame data
-		rs_append(bytToRS, intDataLen + 3, intRSLen);
+		if (rs_append(bytToRS, intDataLen + 3, intRSLen) != 0) {
+			WriteDebugLog(LOGERROR, "ERROR in EncodePSKData(): rs_append() failed.");
+			return (-1);
+		}
      
  		//  Need: (2 bytes for Frame Type) +( Data + RS + 1 byte byteCount + 2 Byte CRC per carrier)
 
@@ -1398,6 +1402,7 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 		
 		for (i = 0; i < intNumCar; i++)		//  across all carriers
 		{
+			memset(bytToRS, 0x66, intDataLen + 3 + intRSLen);
 			intCarDataCnt = Length - bytDataToSendLengthPtr;
 			
 			if (intCarDataCnt >= intDataLen) // why not > ??
@@ -1425,7 +1430,10 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 			GenCRC16FrameType(bytToRS, intDataLen + 1, bytFrameType); // calculate the CRC on the byte count + data bytes
 
 			// Append Reed Solomon codes to end of frame data
-			rs_append(bytToRS, intDataLen + 3, intRSLen);
+			if (rs_append(bytToRS, intDataLen + 3, intRSLen) != 0) {
+				WriteDebugLog(LOGERROR, "ERROR in EncodeFSKData(): rs_append() failed.");
+				return (-1);
+			}
 
  			//  Need: (2 bytes for Frame Type) +( Data + RS + 1 byte byteCount + 2 Byte CRC per carrier)
 
@@ -1440,6 +1448,7 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 
 	for (i = 0; i < 3; i++)		 // for three blocks of RS data
 	{
+		memset(bytToRS, 0x66, intDataLen / 3  + 3 + intRSLen / 3);
 		intCarDataCnt = Length - bytDataToSendLengthPtr;
 			
 		if (intCarDataCnt >= intDataLen /3 ) // why not > ??
@@ -1466,7 +1475,10 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 		GenCRC16FrameType(bytToRS, intDataLen / 3 + 1, bytFrameType); // calculate the CRC on the byte count + data bytes
 
 		// Append Reed Solomon codes to end of frame data
-		rs_append(bytToRS, intDataLen / 3 + 3, intRSLen / 3 + 3);
+		if (rs_append(bytToRS, intDataLen / 3 + 3, intRSLen / 3) != 0) {
+			WriteDebugLog(LOGERROR, "ERROR in EncodePSKData() for 600 baud frame: rs_append() failed.");
+			return (-1);
+		}
 
 		intEncodedDataPtr += intDataLen / 3  + 3 + intRSLen / 3;
 		bytToRS += intDataLen / 3  + 3 + intRSLen / 3;
@@ -1528,9 +1540,12 @@ BOOL EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, enum _A
 	CompressCallsign(strTargetCallsign, &bytToRS[6]);  //this uses compression to accept 4, 6, or 8 character Grid squares.
 
 	// Append Reed Solomon codes to end of frame data
-	rs_append(bytToRS, 12, 4);
+	if (rs_append(bytToRS, 12, 4) != 0) {
+		WriteDebugLog(LOGERROR, "ERROR in EncodeARQConRequest(): rs_append() failed.");
+		return (-1);
+	}
 
-	return 18;
+	return 18;  // 2 bytes for FrameType + 12 bytes data + 4 bytes RS
 }
 
 int EncodePing(char * strMyCallsign, char * strTargetCallsign, UCHAR * bytReturn)
@@ -1551,9 +1566,12 @@ int EncodePing(char * strMyCallsign, char * strTargetCallsign, UCHAR * bytReturn
 	CompressCallsign(strTargetCallsign, &bytToRS[6]);  //this uses compression to accept 4, 6, or 8 character Grid squares.
 
 	// Append Reed Solomon codes to end of frame data
-	rs_append(bytToRS, 12, 4);
+	if (rs_append(bytToRS, 12, 4) != 0) {
+		WriteDebugLog(LOGERROR, "ERROR in EncodePing(): rs_append() failed.");
+		return (-1);
+	}
 
-	return 18;
+	return 18;  // 2 bytes for FrameType + 12 bytes data + 4 bytes RS
 }
 
 
@@ -1584,9 +1602,12 @@ int Encode4FSKIDFrame(char * Callsign, char * Square, unsigned char * bytreturn)
 		CompressGridSquare(Square, &bytToRS[6]);  //this uses compression to accept 4, 6, or 8 character Grid squares.
 
 	// Append Reed Solomon codes to end of frame data
-	rs_append(bytToRS, 12, 4);
+	if (rs_append(bytToRS, 12, 4) != 0) {
+		WriteDebugLog(LOGERROR, "ERROR in Encode4FSKIDFrame(): rs_append() failed.");
+		return (-1);
+	}
 
-	return 18;
+	return 18;  // 2 bytes for FrameType + 12 bytes data + 4 bytes RS
 }
 
 //  Funtion to encodes a short 4FSK 50 baud Control frame  (2 bytes total) BREAK, END, DISC, IDLE, ConRejBusy, ConRegBW  
@@ -1704,12 +1725,18 @@ void SendID(BOOL blnEnableCWID)
 
     if (GridSquare[0] == 0)
 	{
-		EncLen = Encode4FSKIDFrame(Callsign, "No GS", bytEncodedBytes);
+		if ((EncLen = Encode4FSKIDFrame(Callsign, "No GS", bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In SendID() Invalid EncLen (%d).", EncLen);
+			return;
+		}
 		Len = sprintf(bytIDSent," %s:[No GS] ", Callsign);
 	}
 	else
 	{
-		EncLen = Encode4FSKIDFrame(Callsign, GridSquare, bytEncodedBytes);
+		if ((EncLen = Encode4FSKIDFrame(Callsign, GridSquare, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In SendID() Invalid EncLen (%d).", EncLen);
+			return;
+		}
 		Len = sprintf(bytIDSent," %s:[%s] ", Callsign, GridSquare);
 	}
 
@@ -2168,8 +2195,11 @@ void CheckTimers()
 			// Confirmed proper operation of this timeout and rule 4.0 May 18, 2015
 			// Send an ID frame (Handles protocol rule 4.0)
 		
-		EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes);
-		Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], 16, 0);		// only returns when all sent
+		if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In CheckTimers() sending IDFrame before DIC Invalid EncLen (%d).", EncLen);
+			return;
+		}
+		Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], EncLen, 0);		// only returns when all sent
 		dttLastFECIDSent = Now;
 			
 		if (AccumulateStats) LogStats();
@@ -2182,7 +2212,10 @@ void CheckTimers()
 		//Thread.Sleep(2000)
 		ClearDataToSend();
 
-		EncLen = Encode4FSKControl(0x29, bytSessionID, bytEncodedBytes);
+		if ((EncLen = Encode4FSKControl(0x29, bytSessionID, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In CheckTimers() sending DISC Invalid EncLen (%d).", EncLen);
+			return;
+		}
 		Mod4FSKDataAndPlay(0x29, &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 
 		intFrameRepeatInterval = 2000;
@@ -2236,8 +2269,11 @@ void CheckTimers()
    
 		if (CheckValidCallsignSyntax(strFinalIDCallsign))
 		{
-			EncLen = Encode4FSKIDFrame(strFinalIDCallsign, GridSquare, bytEncodedBytes);
-			Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], 16, 0);		// only returns when all sent
+			if ((EncLen = Encode4FSKIDFrame(strFinalIDCallsign, GridSquare, bytEncodedBytes)) <= 0) {
+				WriteDebugLog(LOGERROR, "ERROR: In CheckTimers() sending IDFrame  Invalid EncLen (%d).", EncLen);
+				return;
+			}
+			Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], EncLen, 0);		// only returns when all sent
 			dttLastFECIDSent = Now;
 		}
 	}
@@ -2792,10 +2828,10 @@ void UpdateBusyDetector(short * bytNewSamples)
 
 void SendPING(char * strMycall, char * strTargetCall, int intRpt)
 {   	
-	EncLen = EncodePing(strMycall, strTargetCall, bytEncodedBytes);
-
-	if (EncLen == 0)
+	if ((EncLen = EncodePing(strMycall, strTargetCall, bytEncodedBytes)) <= 0) {
+		WriteDebugLog(LOGERROR, "ERROR: In SendPING() Invalid EncLen (%d).", EncLen);
 		return;
+	}
 	
 	// generate the modulation with 2 x the default FEC leader length...Should insure reception at the target
 	// Note this is sent with session ID 0xFF
@@ -2833,7 +2869,10 @@ void ProcessPingFrame(char * bytData)
 		{
 			// Ack Ping
 
-			EncLen = EncodePingAck(PINGACK, stcLastPingintRcvdSN, stcLastPingintQuality, bytEncodedBytes);
+			if ((EncLen = EncodePingAck(PINGACK, stcLastPingintRcvdSN, stcLastPingintQuality, bytEncodedBytes)) <= 0) {
+				WriteDebugLog(LOGERROR, "ERROR: In ProcessPingFrame() Invalid EncLen (%d).", EncLen);
+				return;
+			}
 			Mod4FSKDataAndPlay(PINGACK, &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
                
 			WriteDebugLog(LOGDEBUG, "[ProcessPingFrame] PING from %s S:N=%d Qual=%d", bytData, stcLastPingintRcvdSN, stcLastPingintQuality);

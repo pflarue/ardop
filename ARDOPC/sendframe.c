@@ -15,6 +15,7 @@
 #define VOID void // defined in ARDOPC.h
 typedef unsigned char UCHAR; // defined in ARDOPC.h
 typedef int BOOL; // defined in ARDOPC.h
+#define LOGERROR 3 // defined in ARDOPC.h
 #define LOGWARNING 4 // defined in ARDOPC.h
 #define LOGDEBUG 7 // defined in ARDOPC.h
 
@@ -72,6 +73,7 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 BOOL FrameInfo(UCHAR bytFrameType, int * blnOdd, int * intNumCar, char * strMod, int * intBaud, int * intDataLen, int * intRSLen, UCHAR * bytQualThres, char * strType);  // defined in ARDOPC.c.  ref in ARDOPC.h
 
 void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen); // defined in Modulate.c. ref in ARDOPC.h
+void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen); // defined in Modulate.c. ref in ARDOPC.h
 void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen); // defined in Modulate.c. ref in ARDOPC.h
 
 
@@ -152,7 +154,10 @@ int sendframe(char * sendParams) {
 			sessionid = bytSessionID;
 		WriteDebugLog(LOGDEBUG, "_Send DataNAK %d 0x%02X", quality, sessionid);
 		// from ARQ.c/ProcessRcvdARQFrame()
-		EncLen = EncodeDATANAK(quality, sessionid, bytEncodedBytes);
+		if ((EncLen = EncodeDATANAK(quality, sessionid, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In sendframe() DataNAK Invalid EncLen (%d).", EncLen);
+			return 1;
+		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if (strcmp(params[1], "BREAK") == 0) {
 		// 0x20 - 0x22 unused
@@ -163,7 +168,10 @@ int sendframe(char * sendParams) {
 		else
 			sessionid = bytSessionID;
 		WriteDebugLog(LOGDEBUG, "_Send BREAK 0x%02X", sessionid);
-		EncLen = Encode4FSKControl(BREAK, sessionid, bytEncodedBytes);
+		if ((EncLen = Encode4FSKControl(BREAK, sessionid, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In sendframe() BREAK Invalid EncLen (%d).", EncLen);
+			return 1;
+		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if(strcmp(params[1], "IDLE") == 0) {
 		// 0x24 IDLE
@@ -174,7 +182,10 @@ int sendframe(char * sendParams) {
 		else
 			sessionid = bytSessionID;
 		WriteDebugLog(LOGDEBUG, "_Send IDLE 0x%02X", sessionid);
-		EncLen = Encode4FSKControl(IDLEFRAME, sessionid, bytEncodedBytes);
+		if ((EncLen = Encode4FSKControl(IDLEFRAME, sessionid, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In sendframe() IDLE Invalid EncLen (%d).", EncLen);
+			return 1;
+		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if(strcmp(params[1], "DISC") == 0) {
 		// 0x25 - 0x28 unused
@@ -186,7 +197,10 @@ int sendframe(char * sendParams) {
 		else
 			sessionid = bytSessionID;
 		WriteDebugLog(LOGDEBUG, "_Send DISC 0x%02X", sessionid);
-		EncLen = Encode4FSKControl(DISCFRAME, sessionid, bytEncodedBytes);
+		if ((EncLen = Encode4FSKControl(DISCFRAME, sessionid, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In sendframe() DISC Invalid EncLen (%d).", EncLen);
+			return 1;
+		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if(strcmp(params[1], "END") == 0) {
 		// 0x2A - 0x2B unused
@@ -198,7 +212,10 @@ int sendframe(char * sendParams) {
 		else
 			sessionid = bytSessionID;
 		WriteDebugLog(LOGDEBUG, "_Send END 0x%02X", sessionid);
-		EncLen = Encode4FSKControl(END, sessionid, bytEncodedBytes);
+		if ((EncLen = Encode4FSKControl(END, sessionid, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In sendframe() END Invalid EncLen (%d).", EncLen);
+			return 1;
+		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if(strcmp(params[1], "ConRejBusy") == 0) {
 		// 0x2D ConRejBusy
@@ -209,7 +226,10 @@ int sendframe(char * sendParams) {
 		else
 			sessionid = bytSessionID;
 		WriteDebugLog(LOGDEBUG, "_Send ConRejBusy 0x%02X", sessionid);
-		EncLen = Encode4FSKControl(ConRejBusy, sessionid, bytEncodedBytes);
+		if ((EncLen = Encode4FSKControl(ConRejBusy, sessionid, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In sendframe() ConRejBusy Invalid EncLen (%d).", EncLen);
+			return 1;
+		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if(strcmp(params[1], "ConRejBW") == 0) {
 		// 0x2E ConRejBW
@@ -220,7 +240,10 @@ int sendframe(char * sendParams) {
 		else
 			sessionid = bytSessionID;
 		WriteDebugLog(LOGDEBUG, "_Send ConRejBW 0x%02X", sessionid);
-		EncLen = Encode4FSKControl(ConRejBW, sessionid, bytEncodedBytes);
+		if ((EncLen = Encode4FSKControl(ConRejBW, sessionid, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In sendframe() ConRejBW Invalid EncLen (%d).", EncLen);
+			return 1;
+		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if(strcmp(params[1], "IDFrame") == 0) {
 		// 0x2F unused
@@ -251,7 +274,10 @@ int sendframe(char * sendParams) {
 		}
 		gridsquare[8] = 0x00;  // ensure NULL terminated
 		WriteDebugLog(LOGDEBUG, "_Send IDFrame %s %s", callsign, gridsquare);
-		EncLen = Encode4FSKIDFrame(callsign, gridsquare, bytEncodedBytes);
+		if ((EncLen = Encode4FSKIDFrame(callsign, gridsquare, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In sendframe() IDFrame Invalid EncLen (%d).", EncLen);
+			return 1;
+		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if(strcmp(params[1], "ConReq") == 0) {
 		// 0x31 to 0x38
@@ -307,7 +333,10 @@ int sendframe(char * sendParams) {
 			return (1);
 		}
 		WriteDebugLog(LOGDEBUG, "_Send ConReq %s %s %s", targetcallsign, callsign, ARQBandwidths[bandwidth_num]);
-		EncLen = EncodeARQConRequest(callsign, targetcallsign, bandwidth_num, bytEncodedBytes);
+		if ((EncLen = EncodeARQConRequest(callsign, targetcallsign, bandwidth_num, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In sendframe() ConReq Invalid EncLen (%d).", EncLen);
+			return 1;
+		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if(strcmp(params[1], "ConAck") == 0) {
 		// 0x39 to 0x3C
@@ -350,7 +379,10 @@ int sendframe(char * sendParams) {
 		else
 			sessionid = bytSessionID;
 		WriteDebugLog(LOGDEBUG, "_Send ConAck %d %d %02X (frame type = %02X)", bandwidth, rcvdleaderlen, sessionid, frametype);
-		EncLen = EncodeConACKwTiming(frametype, rcvdleaderlen, sessionid, bytEncodedBytes);
+		if ((EncLen = EncodeConACKwTiming(frametype, rcvdleaderlen, sessionid, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In sendframe() ConAck Invalid EncLen (%d).", EncLen);
+			return 1;
+		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if(strcmp(params[1], "PingAck") == 0) {
 		// 0x3D
@@ -376,7 +408,10 @@ int sendframe(char * sendParams) {
 		} else
 			quality = stcLastPingintQuality;
 		WriteDebugLog(LOGDEBUG, "_Send PingAck %d %d.", snr, quality);
-		EncLen = EncodePingAck(PINGACK, snr, quality, bytEncodedBytes);
+		if ((EncLen = EncodePingAck(PINGACK, snr, quality, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In sendframe() PingAck Invalid EncLen (%d).", EncLen);
+			return 1;
+		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if(strcmp(params[1], "Ping") == 0) {
 		// 0x3$
@@ -404,7 +439,10 @@ int sendframe(char * sendParams) {
 		}
 		callsign[9] = 0x00;  // ensure NULL terminated
 		WriteDebugLog(LOGDEBUG, "_Send Ping %s %s", targetcallsign, callsign);
-		EncLen = EncodePing(callsign, targetcallsign, bytEncodedBytes);
+		if ((EncLen = EncodePing(callsign, targetcallsign, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In sendframe() Ping Invalid EncLen (%d).", EncLen);
+			return 1;
+		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if (strcmp(params[1], "DataACK") == 0) {
 		// 0xE0 - 0xFF DataACK
@@ -421,12 +459,15 @@ int sendframe(char * sendParams) {
 		else
 			sessionid = bytSessionID;
 		WriteDebugLog(LOGDEBUG, "_Send DataACK %d 0x%02X", quality, sessionid);
-		EncLen = EncodeDATAACK(quality, sessionid, bytEncodedBytes);
+		if ((EncLen = EncodeDATAACK(quality, sessionid, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In sendframe() DataACK Invalid EncLen (%d).", EncLen);
+			return 1;
+		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else {
 		int frametype;
 		unsigned char sessionid_bak;
-		for (frametype = 0x40; frametype < 0x76; frametype ++ ) {
+		for (frametype = 0x40; frametype < 0x7E; frametype ++ ) {
 			if (strFrameType[frametype][0] == 0x00
 				|| strcmp(params[1], strFrameType[frametype]) != 0
 			)
@@ -508,13 +549,25 @@ int sendframe(char * sendParams) {
 			if (sessionid != bytSessionID)
 				bytSessionID = sessionid;
 			if (strcmp(modulation, "4FSK") == 0) {
-				EncLen = EncodeFSKData(frametype, data, datalen, bytEncodedBytes);
-				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
+				if ((EncLen = EncodeFSKData(frametype, data, datalen, bytEncodedBytes)) <= 0) {
+					WriteDebugLog(LOGERROR, "ERROR: In sendframe() 4FSK Invalid EncLen (%d).", EncLen);
+					return 1;
+				}
+				if (frametype >= 0x7A && frametype <= 0x7D)
+					Mod4FSK600BdDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
+				else
+					Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 			} else if (strcmp(modulation, "4PSK") == 0 || strcmp(modulation, "8PSK") == 0) {
-				EncLen = EncodePSKData(frametype, data, datalen, bytEncodedBytes);
+				if ((EncLen = EncodePSKData(frametype, data, datalen, bytEncodedBytes)) <= 0) {
+					WriteDebugLog(LOGERROR, "ERROR: In sendframe() 4PSK Invalid EncLen (%d).", EncLen);
+					return 1;
+				}
 				ModPSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 			} else if (strcmp(modulation, "16QAM") == 0) {
-				EncLen = EncodePSKData(frametype, data, datalen, bytEncodedBytes);
+				if ((EncLen = EncodePSKData(frametype, data, datalen, bytEncodedBytes)) <= 0) {
+					WriteDebugLog(LOGERROR, "ERROR: In sendframe() 16QAM Invalid EncLen (%d).", EncLen);
+					return 1;
+				}
 				ModPSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 			} else {
 				bytSessionID = sessionid_bak;
@@ -524,7 +577,7 @@ int sendframe(char * sendParams) {
 			bytSessionID = sessionid_bak;
 			return (0);
 		}
-		if (frametype == 0x76) {
+		if (frametype == 0x7E) {
 			WriteDebugLog(LOGWARNING, "_SEND: Unknown frame type=%s", params[1]);
 			return (1);
 		}
