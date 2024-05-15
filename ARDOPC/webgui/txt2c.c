@@ -4,7 +4,7 @@
 // Source file may have DOS style \r\n line endings or unix style \n line
 // endings, but destination file will always have only unix style line 
 // endings.  If tab characters are found in source, they will be replaced
-// with 4 spaces
+// with 2 spaces
 
 #include <stdio.h>
 #include <string.h>
@@ -54,8 +54,6 @@ int main(int argc, char *argv[]) {
             fputc('\"', dst);
             break;
         case '\t':
-        	fputc(' ', dst);
-        	fputc(' ', dst);
         	fputc(' ', dst);
         	fputc(' ', dst);
         	break;
