@@ -405,6 +405,10 @@ void ProcessCommandFromHost(char * strCMD)
 		goto cmddone;
 	}
 
+	// I'm not sure what CODEC is intended to do, but using it causes a
+	// segfault.  It doesn't seem to be required for normal use, so disable
+	// this command until it is better understood.  -LaRue May 2024
+	/*
 	if (strcmp(strCMD, "CODEC") == 0)
 	{
 		DoTrueFalseCmd(strCMD, ptrParams, &blnCodecStarted);
@@ -416,6 +420,7 @@ void ProcessCommandFromHost(char * strCMD)
 	
 		goto cmddone;
 	}
+	*/
 
 	if (strcmp(strCMD, "CONSOLELOG") == 0)
 	{
