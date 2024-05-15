@@ -779,7 +779,7 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 
 		memcpy(bytCorrectedData, &bytRawData[1], bytRawData[0]);    
 
-		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] Carrier %d already decoded", Carrier);
+		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] Carrier %d (%d bytes) already decoded", Carrier, intDataLen);
 		return bytRawData[0];			// don't do it again
 	}
 
@@ -788,7 +788,7 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 		// return the actual data
 		
 		memcpy(bytCorrectedData, &bytRawData[1], bytRawData[0]);    
-		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] OK without RS");
+		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] OK (%d bytes) without RS", intDataLen);
 		CarrierOk[Carrier] = TRUE;
 		return bytRawData[0];
 	}
@@ -815,14 +815,14 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 //		WriteDebugLog(LOGDEBUG, "RS Says OK after %d correction(s)", NErrors);
 	else // NErrors < 0
 	{
-		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] RS Says Can't Correct");
+		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] RS Says Can't Correct (%d bytes) (>%d max corrections)", intDataLen, intRSLen/2);
 		goto returnBad;
 	}
 
     if (NErrors >= 0 && CheckCRC16FrameType(bytRawData, intDataLen + 1, bytFrameType)) // RS correction successful 
 	{
 		int intFailedByteCnt = 0;
-        WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] OK with RS %d corrections", NErrors);
+        WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] OK (%d bytes) with RS %d (of max %d) corrections", intDataLen, NErrors, intRSLen/2);
 		totalRSErrors += NErrors;
 
 		memcpy(bytCorrectedData, &bytRawData[1], bytRawData[0]);  
@@ -830,7 +830,7 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 		return bytRawData[0];
 	}
 	else
-        WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] RS says ok but CRC still bad");
+        WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] RS says ok (%d bytes) but CRC still bad", intDataLen);
 	
 	// return uncorrected data without byte count or RS Parity
 
@@ -1171,7 +1171,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			PSKInitDone = 0;
 			
 			frameLen = 0;
-			totalRSErrors = 0;
+			totalRSErrors = 0;  // reset totalRSErrors just before AquireFrame
 
 			DummyCarrier = 0;	// pseudo carrier used for long 600 baud frames
 			Decode600Buffer = bytFrameData1;
@@ -3924,7 +3924,8 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 		goto returnframe;
 	}
 
-	totalRSErrors = 0;
+	// DON'T do this here.  RS correction for PSK and QAM frames already done.
+	// totalRSErrors = 0;
 			
 	if (CarrierOk[0] != 0 && CarrierOk[0] != 1)
 		CarrierOk[0] = 0;
@@ -4300,7 +4301,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 
 	if (blnDecodeOK)
 	{
-		WriteDebugLog(LOGINFO, "[DecodeFrame] Frame: %s Decode PASS,   Constellation Quality= %d", Name(intFrameType),  intLastRcvdFrameQuality);
+		WriteDebugLog(LOGINFO, "[DecodeFrame] Frame: %s Decode PASS,  Quality= %d,  RS fixed %d (of %d max).", Name(intFrameType),  intLastRcvdFrameQuality, totalRSErrors, (intRSLen / 2) * intNumCar);
 #ifdef PLOTCONSTELLATION
 		if (intFrameType >= 0x30 && intFrameType <= 0x38)
 			DrawDecode(lastGoodID);		// ID or CONREQ
@@ -4312,7 +4313,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 
 	else
 	{
-		WriteDebugLog(LOGINFO, "[DecodeFrame] Frame: %s Decode FAIL,   Constellation Quality= %d", Name(intFrameType),  intLastRcvdFrameQuality);
+		WriteDebugLog(LOGINFO, "[DecodeFrame] Frame: %s Decode FAIL,  Quality= %d", Name(intFrameType),  intLastRcvdFrameQuality);
 #ifdef PLOTCONSTELLATION
 		DrawDecode("FAIL");
 		updateDisplay();
