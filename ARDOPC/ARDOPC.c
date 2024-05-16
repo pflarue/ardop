@@ -2616,7 +2616,7 @@ void generateBH() {
 			+ 0.14128 * cos(4 * M_PI * i / 1024) - 0.01168 * cos(6 * M_PI * i / 1024);
 		wS1 += 2 * bhWindow[i];
 	}
-	// wS1 should only include one of terms , 512
+	// wS1 should only include one of terms 0, 512
 	wS1 -= bhWindow[0] + bhWindow[512];
 }
 
@@ -2656,7 +2656,7 @@ void UpdateBusyDetector(short * bytNewSamples)
 	LastBusyCheck = Now;
 
 	// Apply a Blackman-Harris window before doing FFT
-	// The will decrease spectral leakage.  It also decreases the magnitude 
+	// This will decrease spectral leakage.  It also decreases the magnitude 
 	// of the FFT results by wS1/1024
 	if (wS1 == 0)
 		generateBH();
