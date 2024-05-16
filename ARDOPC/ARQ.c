@@ -2457,6 +2457,7 @@ int IRSNegotiateBW(int intConReqFrameType)
 			intSessionBW = 1000;
 			return ConAck1000;
 		}
+		break;
            
 	case B2000MAX:
 
