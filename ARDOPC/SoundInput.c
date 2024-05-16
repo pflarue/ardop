@@ -4129,6 +4129,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 				DrawRXFrame(1, Name(intFrameType));
 				wg_send_rxframet(0, 1, Name(intFrameType));
 			}
+			break;
 
 		case 0x7A:
 		case 0x7B:
@@ -4247,6 +4248,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 
 				return 0;
 		}
+		break;
 
 					
 		case PktFrameData:
