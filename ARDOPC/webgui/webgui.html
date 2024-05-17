@@ -54,7 +54,7 @@
 		</div>
 		<div>
 			<canvas id="waterfall" width="205" height="100"></canvas>
-			<canvas id="constellation" width="84" height="84"></canvas>
+			<canvas id="constellation" width="90" height="90"></canvas>
 		</div>
 		<div>
 			<span id="quality">Quality: 0/100</span>
@@ -79,6 +79,10 @@
 			<span class="sltext">Plot Averaging:</span>
 			<input type="range" min="1" max="10" value="1" class="slider" id="avglenslider">
 			<span class="sltext" id="avglentext"></span>
+		</div>
+		<div>
+			<span class="sltext">Plot Scale:</span>
+			<input type="range" min="1" max="8" value="1" class="slider" id="plotscaleslider">
 		</div>
 		<div>
 			<button id="send2tone">Send2Tone</button>
@@ -150,6 +154,9 @@
 			that you can see or hear within the Ardop bandwidth you intend to use, you
 			should not attempt to establish a connection at this time on this frequency,
 			because you may interfere with the existing signal.
+			</p><p>
+			'Plot Scale' may be used to increase the size of all of the plots.  This does
+			not change the amount of data being used for the plots, it just magnifies them.
 			</p><p>
 			Scaling of data for plotting, include averaging, does NOT affect the 'Rcv Level'
 			indicator, the busy detector, or ardopcf's abilility to detect or decode data.

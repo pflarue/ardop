@@ -34,6 +34,7 @@ let devmode = false;
 let cmdhistory = [];
 let cmdhistory_index = -1;
 let cmdhistory_limit = 100;
+let plotscale = 1;
 
 window.addEventListener("load", function(evt) {
 	let txtlog = document.getElementById("text-log");
@@ -717,7 +718,7 @@ window.addEventListener("load", function(evt) {
 
 	document.getElementById("text-log").onkeydown = function(evt) {
 		// text-log is intended to be readonly, but rather than set it readonly
-		// in the html, just ignore all key presses except for cursor movement 
+		// in the html, just ignore all key presses except for cursor movement
 		// keys (to allow keyboard scrolling).
 		if (evt.keyCode < 33 || evt.keyCode > 40)
 			evt.preventDefault();
@@ -767,22 +768,22 @@ window.addEventListener("load", function(evt) {
 	};
 
 
-	const wfWidth = 410;
+	const wfWidth = 205;
 	const wfHeight = 100;
 	const wfCanvas = document.getElementById("waterfall");
 	const wfCtx = wfCanvas.getContext("2d");
 	wfCtx.fillStyle = "#000000";
 	wfCtx.fillRect(0, 0, wfWidth, wfHeight);
 
-	const spWidth = 410;
+	const spWidth = 205;
 	const spHeight = 50;
 	const spCanvas = document.getElementById("spectrum");
 	const spCtx = spCanvas.getContext("2d");
 	spCtx.fillStyle = "#000000";
 	spCtx.fillRect(0, 0, spWidth, spHeight);
 
-	const cnstWidth = 84;
-	const cnstHeight = 84;
+	const cnstWidth = 90;
+	const cnstHeight = 90;
 	const cnstCanvas = document.getElementById("constellation");
 	const cnstCtx = cnstCanvas.getContext("2d");
 	cnstCtx.fillStyle = "#000000";
@@ -790,26 +791,24 @@ window.addEventListener("load", function(evt) {
 
 	const drawSpectrum = (values) => {
 		spCtx.fillStyle = "#000";
-		spCtx.fillRect(0, 0, spWidth, spHeight);
+		spCtx.fillRect(0, 0, plotscale * spWidth, plotscale * spHeight);
 		spCtx.beginPath();
-		spCtx.moveTo(0, spHeight);
-		let min = 16;
-		let max = 0;
+		spCtx.moveTo(0, plotscale * spHeight);
 		for(var i=0; i<values.length; i++) {  // 2 frequency values per i
-			spCtx.lineTo(2*i, spHeight - (values[i] >> 4)*(spHeight/16));
-			spCtx.lineTo(2*i + 1, spHeight - (values[i] & 0x0F)*(spHeight/16));
+			spCtx.lineTo(plotscale*2*i, plotscale * (spHeight - (values[i] >> 4)*(spHeight/16)));
+			spCtx.lineTo(plotscale*(2*i + 1), plotscale * (spHeight - (values[i] & 0x0F)*(spHeight/16)));
 		}
-		spCtx.lineTo(spWidth, spHeight);
-		spCtx.moveTo(0, spHeight); // close for fill
+		spCtx.lineTo(plotscale * spWidth, plotscale * spHeight);
+		spCtx.moveTo(0, plotscale * spHeight); // close for fill
 		spCtx.fillStyle = "#CCC";
 		spCtx.strokeStyle = "#CCC";
 		spCtx.fill();
 		// draw bandwidth markers
 		spCtx.beginPath();
-		spCtx.moveTo(values.length - (bandwidth/2) / 11.719, 0);
-		spCtx.lineTo(values.length - (bandwidth/2) / 11.719, spHeight)
-		spCtx.moveTo(values.length + (bandwidth/2) / 11.719, spHeight);
-		spCtx.lineTo(values.length + (bandwidth/2) / 11.719, 0);
+		spCtx.moveTo(plotscale * (values.length - (bandwidth/2) / 11.719), 0);
+		spCtx.lineTo(plotscale * (values.length - (bandwidth/2) / 11.719), plotscale * spHeight)
+		spCtx.moveTo(plotscale * (values.length + (bandwidth/2) / 11.719), plotscale * spHeight);
+		spCtx.lineTo(plotscale * (values.length + (bandwidth/2) / 11.719), 0);
 		if (isbusy)
 			spCtx.strokeStyle = "#F0F";
 		else
@@ -818,16 +817,18 @@ window.addEventListener("load", function(evt) {
 	};
 
 	const addWaterfallLine = (values) => {
-		// shift the existing image down by 1 pixel
-		wfCtx.drawImage(wfCtx.canvas, 0, 0, wfWidth, wfHeight, 0, 1, wfWidth, wfHeight);
+		// shift the existing image down by plotscale pixels
+		wfCtx.drawImage(wfCtx.canvas, 0, 0, plotscale * wfWidth, plotscale * wfHeight, 0, plotscale, plotscale * wfWidth,  plotscale * wfHeight);
 		// expand values (4-bit uint per pixel) to colormap values (RGBA per pixel)
-		let colorValues = new Uint8ClampedArray((2 * values.length) * 4); // filled with 0
+		let colorValues = new Uint8ClampedArray(plotscale * (2 * values.length) * 4); // filled with 0
 		for(var i=0; i<values.length; i++) {  // 2 frequency values per i
-			for (var j=0; j<4; j++) {  // r, g, b
-				// first of two freqencies encoded in this byte
-				colorValues[(2*i) * 4 + j] = colormap[(values[i] >> 4)][j]; // RGBA
-				// second of two freqencies encoded in this byte
-				colorValues[(2*i + 1) * 4 + j] = colormap[(values[i] & 0x0F)][j]; // RGBA
+			for (var k=0; k<plotscale; k++) {
+				for (var j=0; j<4; j++) {  // r, g, b
+					// first of two freqencies encoded in this byte
+					colorValues[((plotscale*(2*i) + k) * 4) + j] = colormap[(values[i] >> 4)][j]; // RGBA
+					// second of two freqencies encoded in this byte
+					colorValues[((plotscale*(2*i + 1) + k) * 4) + j] = colormap[(values[i] & 0x0F)][j]; // RGBA
+				}
 			}
 		}
 		// overwrite centerline and bandwidth lines
@@ -837,34 +838,64 @@ window.addEventListener("load", function(evt) {
 		else
 			bwcolor = 17
 		for (var j=0; j<4; j++) {  // r, g, b
-			colorValues[values.length*4 + j] = colormap[16][j]; // black centerline
-			colorValues[Math.round((values.length + (bandwidth/2) / 11.719)) * 4 + j] = colormap[bwcolor][j];
-			colorValues[Math.round((values.length + (bandwidth/2) / 11.719) + 1) * 4 + j] = colormap[bwcolor][j];
-			colorValues[Math.round((values.length - (bandwidth/2) / 11.719)) * 4 + j] = colormap[bwcolor][j];
-			colorValues[Math.round((values.length - (bandwidth/2) / 11.719) + 1) * 4 + j] = colormap[bwcolor][j];
+			colorValues[plotscale * values.length*4 + j] = colormap[16][j]; // black centerline
+			colorValues[Math.round(plotscale * (values.length + (bandwidth/2) / 11.719)) * 4 + j] = colormap[bwcolor][j];
+			colorValues[Math.round(plotscale * (values.length + (bandwidth/2) / 11.719) + 1) * 4 + j] = colormap[bwcolor][j];
+			colorValues[Math.round(plotscale * (values.length - (bandwidth/2) / 11.719)) * 4 + j] = colormap[bwcolor][j];
+			colorValues[Math.round(plotscale * (values.length - (bandwidth/2) / 11.719) + 1) * 4 + j] = colormap[bwcolor][j];
 		}
-		let imageData = new ImageData(colorValues, 2 * values.length, 1);
-		wfCtx.putImageData(imageData, 0, 0);
+		let imageData = new ImageData(colorValues, plotscale * 2 * values.length, 1);
+		for (k=0; k<plotscale; k++) {
+			wfCtx.putImageData(imageData, 0, k);
+		}
 	};
 
+	const drawCnstGridlines = () => {
+		cnstCtx.beginPath();
+		cnstCtx.moveTo(0, plotscale * cnstHeight / 2);
+		cnstCtx.lineTo(plotscale * cnstWidth, plotscale * cnstHeight / 2);
+		cnstCtx.moveTo(plotscale * cnstWidth / 2, 0);
+		cnstCtx.lineTo(plotscale * cnstWidth / 2, plotscale * cnstHeight);
+		cnstCtx.strokeStyle = "#F0F";
+		cnstCtx.stroke();
+	}
 	const drawConstellation = (pixels) => {
 		cnstCtx.fillStyle = "#000000";
-		cnstCtx.fillRect(0, 0, cnstWidth, cnstHeight);
-		let imageData = cnstCtx.getImageData(0, 0, cnstWidth, cnstHeight);
+		cnstCtx.fillRect(0, 0, plotscale * cnstWidth, plotscale * cnstHeight);
+		let imageData = cnstCtx.getImageData(0, 0, plotscale * cnstWidth, plotscale * cnstHeight);
 		let data = imageData.data
 		for (var i=0; i<pixels.length/3; i++) {
-			for (var j=0; j<3; j++) {  // r, g, b
-				// ignore color data in pixels[3*i + 2], since this is an index
-				// to a palette not currently defined here. plot everything as white
-				// alpha is unchanged at 0xFF
-				data[(pixels[3*i] + (pixels[3*i+1] * cnstWidth)) * 4 + j] = 0xFF // white
+			for (var kx=0; kx<plotscale; kx++) {
+				for (var ky=0; ky<plotscale; ky++) {
+					for (var j=0; j<3; j++) {  // r, g, b
+						// ignore color data in pixels[3*i + 2], since this is an index
+						// to a palette not currently defined here. plot everything as white
+						// alpha is unchanged at 0xFF
+						data[(plotscale * pixels[3*i] + kx + ((plotscale * pixels[3*i+1] + ky) * plotscale * cnstWidth)) * 4 + j] = 0xFF // white
+					}
+				}
 			}
 		}
 		cnstCtx.putImageData(imageData, 0, 0);
+		drawCnstGridlines();
 	};
 
 	document.getElementById("avglenslider").oninput = function() {
 		throttlecontrol(setavglen, 250, avglencontroltimer);
+	}
+	document.getElementById("plotscaleslider").oninput = function() {
+		plotscale = document.getElementById("plotscaleslider").value;
+		document.getElementById("waterfall").width = plotscale * wfWidth;
+		document.getElementById("waterfall").height = plotscale * wfHeight;
+		wfCtx.fillStyle = "#000000";
+		wfCtx.fillRect(0, 0, plotscale * wfWidth, plotscale * wfHeight);
+		document.getElementById("spectrum").width = plotscale * spWidth;
+		document.getElementById("spectrum").height = plotscale * spHeight;
+		document.getElementById("constellation").width = plotscale * cnstWidth;
+		document.getElementById("constellation").height = plotscale * cnstHeight;
+		cnstCtx.fillStyle = "#000000";
+		cnstCtx.fillRect(0, 0, plotscale * cnstWidth, plotscale * cnstHeight);
+		drawCnstGridlines();
 	}
 	document.getElementById("drivelevelslider").oninput = function() {
 		throttledrivelevelcontrol(setdrivelevel, 250);
@@ -874,6 +905,9 @@ window.addEventListener("load", function(evt) {
 	document.getElementById("hostcommand").value = "";
 	txtlog.value = "[" + (new Date().toISOString()) + "]\n";
 	txtlog.scrollTo(0, 0);
+	plotscale = 1;
+	document.getElementById("plotscaleslider").value = 1;
 	wfCtx.fillStyle = "#000000";
 	wfCtx.fillRect(0, 0, wfWidth, wfHeight);
+	drawCnstGridlines();
 });
