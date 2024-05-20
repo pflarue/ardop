@@ -19,7 +19,7 @@ void SaveEEPROM(int reg, int val);
 void setProtocolMode(char* strMode);
 
 void Break();
-int sendframe(char * sendParams);
+int txframe(char * frameParams);
 
 extern BOOL NeedID;			// SENDID Command Flag
 extern BOOL NeedConReq;		// ARQCALL Command Flag
@@ -148,7 +148,7 @@ void ProcessCommandFromHost(char * strCMD)
 {
 	char * ptrParams;
 	// cmdCopy expanded from 80 to 2100 to accomodate
-	// _SEND with data up to 1024 bytes written as hex
+	// TXFRAME with data up to 1024 bytes written as hex
 	// requiring 2 string chars per data byte
 	char cmdCopy[2100] = "";
 	char strFault[100] = "";
@@ -1621,23 +1621,23 @@ void ProcessCommandFromHost(char * strCMD)
 	// RDY processed earlier Case "RDY" ' no response required for RDY
 
 	///////////////////////////////////////////////////////////////
-	// The _SEND command is intended for development and debugging.
+	// The TXFRAME command is intended for development and debugging.
 	// It is NOT intended for normal use by Host applications.
 	// It may be removed or modfied without notice in future
 	// versions of ardopcf.
 	///////////////////////////////////////////////////////////////
-	if (strcmp(strCMD, "_SEND") == 0)
+	if (strcmp(strCMD, "TXFRAME") == 0)
 	{
 		if (ptrParams == 0)
 		{
-			sprintf(strFault, "Syntax Err: _SEND sendParams");
+			sprintf(strFault, "Syntax Err: TXFRAME sendParams");
 			SendReplyToHost(cmdReply);
 			goto cmddone;
 		} else {
-			// cmdCopy starts with arbitrary caed "_send "
-			// and has a max length of 80
-			if(sendframe(cmdCopy) != 0)
-				sprintf(strFault, "FAILED _SEND");
+			// cmdCopy starts with arbitrary cased "txframe "
+			// and has a max length of 2100.
+			if(txframe(cmdCopy) != 0)
+				sprintf(strFault, "FAILED TXFRAME");
 		}
 		goto cmddone;
 	}
