@@ -59,7 +59,6 @@ int wg_send_busy(int cnum, bool isBusy);
 int wg_send_protocolmode(int cnum);
 extern int WebGuiNumConnected;
 extern char HostCommands[2048];
-char *nextHostCommand;
 void ProcessCommandFromHost(char * strCMD);
 
 // Config parameters
@@ -771,6 +770,7 @@ void setProtocolMode(char* strMode)
 
 void ardopmain()
 {
+	char *nextHostCommand = HostCommands;
 	blnTimeoutTriggered = FALSE;
 	SetARDOPProtocolState(DISC);
 
@@ -812,7 +812,6 @@ void ardopmain()
 			"* see those details                                                 *\n"
 			"*********************************************************************\n");
 	}
-	nextHostCommand = HostCommands;
 	while(!blnClosing)
 	{
 		if (nextHostCommand != NULL) {

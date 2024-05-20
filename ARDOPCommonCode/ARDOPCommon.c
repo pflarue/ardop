@@ -35,6 +35,8 @@
 #include "wav.h"
 #include "getopt.h"
 
+void ProcessCommandFromHost(char * strCMD);
+
 const char strLogLevels[9][13] =
 {
 	"LOGEMERGENCY", 
@@ -602,7 +604,26 @@ int decode_wav()
 	int sampleRate;
 	short samples[1024];
 	const unsigned int blocksize = 240;  // Number of 16-bit samples to read at a time
+	char *nextHostCommand = HostCommands;
 	WavNow = 0;
+
+	if (DeprecationWarningsIssued) {
+		WriteDebugLog(LOGERROR,
+			"*********************************************************************\n"
+			"* WARNING: DEPRECATED command line parameters used.  Details shown  *\n"
+			"* above.  You may need to scroll up or review the Debug Log file to *\n"
+			"* see those details                                                 *\n"
+			"*********************************************************************\n");
+	}
+	while (nextHostCommand != NULL) {
+		// Process the next host command from the --hostcommands
+		// command line argument.
+		char *thisHostCommand = nextHostCommand;
+		nextHostCommand = strlop(nextHostCommand, ';');
+		if (thisHostCommand[0] != 0x00)
+			// not an empty string
+			ProcessCommandFromHost(thisHostCommand);
+	}
 
 	// Regardless of whether this was set with a command line argument, proceed in
 	// RXO (receive only) protocol mode.  During normal operation, this is set
