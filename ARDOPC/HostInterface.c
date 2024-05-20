@@ -5,6 +5,7 @@
 
 BOOL blnHostRDY = FALSE;
 extern int intFECFramesSent;
+extern const char strLogLevels[9][13];
 
 void SendData();
 BOOL CheckForDisconnect();
@@ -31,6 +32,7 @@ extern int PORTT1;			// L2 TIMEOUT
 extern int PORTN2;			// RETRIES
 extern int extraDelay ;		// Used for long delay paths eg Satellite
 extern BOOL WG_DevMode;
+extern int intARQDefaultDlyMs;
 
 unsigned char *utf8_check(unsigned char *s, size_t slen);
 int wg_send_mycall(int cnum, char *call);
@@ -440,6 +442,7 @@ void ProcessCommandFromHost(char * strCMD)
 				ConsoleLogLevel = i;
 				sprintf(cmdReply, "%s now %d", strCMD, ConsoleLogLevel);
 				SendReplyToHost(cmdReply);
+				WriteDebugLog(LOGALERT, "ConsoleLogLevel = %d (%s)", ConsoleLogLevel, strLogLevels[ConsoleLogLevel]);
 			}
 			else
 				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);	
@@ -849,6 +852,9 @@ void ProcessCommandFromHost(char * strCMD)
 			{
 				LeaderLength = (i + 9) /10;
 				LeaderLength *= 10;				// round to 10 mS
+				// Also set this to intARQDefaultDlyMs to make this equivalent
+				// to the DEPRECATED --leaderlength command line option.
+				intARQDefaultDlyMs = LeaderLength;
 				sprintf(cmdReply, "%s now %d", strCMD, LeaderLength);
 				SendReplyToHost(cmdReply);
 			}
@@ -886,6 +892,7 @@ void ProcessCommandFromHost(char * strCMD)
 				FileLogLevel = i;
 				sprintf(cmdReply, "%s now %d", strCMD, FileLogLevel);
 				SendReplyToHost(cmdReply);
+				WriteDebugLog(LOGALERT, "FileLogLevel = %d (%s)", FileLogLevel, strLogLevels[FileLogLevel]);
 			}
 			else
 				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);	
@@ -1651,6 +1658,7 @@ cmddone:
 		//Logs.Exception("[ProcessCommandFromHost] Cmd Rcvd=" & strCommand & "   Fault=" & strFault)
 		sprintf(cmdReply, "FAULT %s", strFault);
 		SendReplyToHost(cmdReply);
+		WriteDebugLog(LOGWARNING, "Host Command Fault: %s", strFault);
 	}
 //	SendCommandToHost("RDY");		// signals host a new command may be sent
 }

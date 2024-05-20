@@ -556,8 +556,6 @@ void main(int argc, char * argv[])
 		"See https://github.com/pflarue/ardop/blob/master/LICENSE for licence details including\n" 
 		"  information about authors of external libraries used and their licenses."
 	);
-	Debugprintf("ConsoleLogLevel = %d (%s)", ConsoleLogLevel, strLogLevels[ConsoleLogLevel]);
-	Debugprintf("FileLogLevel = %d (%s)", FileLogLevel, strLogLevels[FileLogLevel]);
 
 	if (DecodeWav[0])
 	{
