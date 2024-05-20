@@ -1631,7 +1631,6 @@ void ProcessCommandFromHost(char * strCMD)
 		if (ptrParams == 0)
 		{
 			sprintf(strFault, "Syntax Err: TXFRAME sendParams");
-			SendReplyToHost(cmdReply);
 			goto cmddone;
 		} else {
 			// cmdCopy starts with arbitrary cased "txframe "
