@@ -58,6 +58,8 @@ int wg_send_fftdata(float *mags, int magsLen);
 int wg_send_busy(int cnum, bool isBusy);
 int wg_send_protocolmode(int cnum);
 extern int WebGuiNumConnected;
+extern char HostCommands[2048];
+void ProcessCommandFromHost(char * strCMD);
 
 // Config parameters
 
@@ -229,6 +231,7 @@ BOOL blnCodecStarted = FALSE;
 unsigned int dttNextPlay = 0;
 
 extern BOOL InitRXO;
+extern bool DeprecationWarningsIssued;
 
 const UCHAR bytValidFrameTypesALL[]=
 {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
@@ -767,6 +770,7 @@ void setProtocolMode(char* strMode)
 
 void ardopmain()
 {
+	char *nextHostCommand = HostCommands;
 	blnTimeoutTriggered = FALSE;
 	SetARDOPProtocolState(DISC);
 
@@ -800,8 +804,25 @@ void ardopmain()
 	else
 		setProtocolMode("ARQ");
 
+	if (DeprecationWarningsIssued) {
+		WriteDebugLog(LOGERROR,
+			"*********************************************************************\n"
+			"* WARNING: DEPRECATED command line parameters used.  Details shown  *\n"
+			"* above.  You may need to scroll up or review the Debug Log file to *\n"
+			"* see those details                                                 *\n"
+			"*********************************************************************\n");
+	}
 	while(!blnClosing)
 	{
+		if (nextHostCommand != NULL) {
+			// Process the next host command from the --hostcommands
+			// command line argument.
+			char *thisHostCommand = nextHostCommand;
+			nextHostCommand = strlop(nextHostCommand, ';');
+			if (thisHostCommand[0] != 0x00)
+				// not an empty string
+				ProcessCommandFromHost(thisHostCommand);
+		}
 		PollReceivedSamples();
 		WebguiPoll();
 		if (ProtocolMode != RXO)

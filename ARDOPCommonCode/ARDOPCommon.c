@@ -1,4 +1,3 @@
-
 //
 //	Code Common to all versions of ARDOP. 
 //
@@ -26,6 +25,7 @@
 #define HANDLE int
 #endif
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,6 +34,8 @@
 #include "ardopcommon.h"
 #include "wav.h"
 #include "getopt.h"
+
+void ProcessCommandFromHost(char * strCMD);
 
 const char strLogLevels[9][13] =
 {
@@ -86,6 +88,11 @@ BOOL UseSDFT = FALSE;
 BOOL FixTiming = TRUE;
 BOOL WG_DevMode = FALSE;
 char DecodeWav[256] = "";			// Pathname of WAV file to decode.
+// HostCommands may contain one or more semicolon separated host commands
+// provided as a command line parameter.  These are to be interpreted at
+// startup of ardopcf as if they were issued by a connected host program
+char HostCommands[2048] = "";
+bool DeprecationWarningsIssued = false;
 
 int PTTMode = PTTRTS;				// PTT Control Flags.
 
@@ -157,6 +164,7 @@ extern char LogDir[256];
 static struct option long_options[] =
 {
 	{"logdir",  required_argument, 0 , 'l'},
+	{"hostcommands",  required_argument, 0 , 'h'},
 	{"verboselog",  required_argument, 0 , 'v'},
 	{"verboseconsole",  required_argument, 0 , 'V'},
 	{"ptt",  required_argument, 0 , 'p'},
@@ -191,8 +199,19 @@ char HelpScreen[] =
 	"\n"
 	"Optional Paramters\n"
 	"-l path or --logdir path             Path for log files\n"
-	"-v path or --verboselog val          Increase (decr for val<0) file log level from default.\n"
-	"-V path or --verboseconsole val      Increase (decr for val<0) console log level from default.\n"
+	"-H string or --hostcommands string   String of semicolon separated host commands to apply\n"
+	"                                       to ardopcf during startup, as if they had come from\n"
+	"                                       a connected host.  Since this duplicates the\n"
+	"                                       functionality of several existing optional parameters,\n"
+	"                                       they are marked below as (D) for deprecated.\n"
+	"                                       This indicates that they will be removed in a future\n"
+	"                                       release of ardopcf, and that their use should immediately\n"
+	"                                       be discontinued.  Information about replacement host\n"
+	"                                       commands is given for all deprecated parameters.\n"
+	"(D) -v path or --verboselog val      Increase (decr for val<0) file log level from default.\n"
+	"-----> Use -H \"LOGLEVEL #\" instead, where # is an integer from 0 to 8.\n"
+	"(D) -V path or --verboseconsole val  Increase (decr for val<0) console log level from default.\n"
+	"-----> Use -H \"CONSOLELOG #\" instead, where # is an integer from 0 to 8.\n"
 	"-c device or --cat device            Device to use for CAT Control\n"
 	"-p device or --ptt device            Device to use for PTT control using RTS\n"
 #ifdef LINBPQ
@@ -207,14 +226,18 @@ char HelpScreen[] =
 	"-L use Left Channel of Soundcard for receive in stereo mode\n"
 	"-R use Right Channel of Soundcard for receive in stereo mode\n"
 	"-e val or --extradelay val           Extend no response timeout for use on paths with long delay\n"
-	"--leaderlength val                   Sets Leader Length (mS)\n"
-	"--trailerlength val                  Sets Trailer Length (mS)\n"
+	"(D) -x val or --leaderlength val     Sets Leader Length (mS)\n"
+	"-----> Use -H \"LEADER #\" instead, where # is an integer in the range or 120 to 2500 (mS)\n"
+	"(D) -t val or --trailerlength val    Sets Trailer Length (mS)\n"
+	"-----> Use -H \"TRAILER #\" instead, where # is an integer in the range or 0 to 200 (mS)\n"
 	"-G port or --webgui port             Enable WebGui and specify port number.\n"
-	"-r or --receiveonly                  Start in RXO (receive only) mode.\n"
+	"(D) -r or --receiveonly              Start in RXO (receive only) mode.\n"
+	"-----> Use -H \"PROTOCOLMODE RXO\" instead\n"
 	"-w or --writewav                     Write WAV files of received audio for debugging.\n"
 	"-T or --writetxwav                   Write WAV files of sent audio for debugging.\n"
 	"-d pathname or --decodewav pathname  Pathname of WAV file to decode instead of listening.\n"
-	"-n or --twotone                      Send a 5 second two tone signal and exit.\n"
+	"(D) -n or --twotone                  Send a 5 second two tone signal and exit.\n"
+	"-----> Use -H \"TWOTONETEST;CLOSE\" instead\n"
 	"-s or --sdft                         Use the alternative Sliding DFT based 4FSK decoder.\n"
 	"-A or --ignorealsaerror              Ignore ALSA config error that causes timing error.\n"
 	"                                       DO NOT use -A option except for testing/debugging,\n"
@@ -235,7 +258,7 @@ void processargs(int argc, char * argv[])
 	{		
 		int option_index = 0;
 
-		c = getopt_long(argc, argv, "l:v:V:c:p:g::k:u:e:G:hLRytrzwTd:nsA", long_options, &option_index);
+		c = getopt_long(argc, argv, "l:H:v:V:c:p:g::k:u:e:G:x:hLRyt:rzwTd:nsA", long_options, &option_index);
 
 		// Check for end of operation or error
 		if (c == -1)
@@ -255,11 +278,31 @@ void processargs(int argc, char * argv[])
 			printf(HelpScreen, ProductName);
 			exit (0);
 
+		case 'H':
+			if (strlen(optarg) >= sizeof(HostCommands)) {
+				printf("ERROR: --hostcommands (or -H) argument too long.  Ignoring this parameter.\r");
+				break;
+			}
+			strcpy(HostCommands, optarg);
+			break;
+
 		case 'l':
 			strcpy(LogDir, optarg);
 			break;
 
 		case 'v':
+			WriteDebugLog(LOGERROR,
+				"*********************************************************************\n"
+				"* WARNING: The -v and --verboselog parameters are DEPRECATED.  They *\n"
+				"* will be eliminated in a future release of ardopcf.  So, their use *\n"
+				"* should be immediately discontinued.  Use -H \"LOGLEVEL #\" where    *\n"
+				"* # must be an integer between 0 (to write only the most severe     *\n"
+				"* messages to the log file) and %d (to write all possible messages   *\n"
+				"* to the log file).  The default value is %d when this command is    *\n"
+				"* not used.                                                         *\n"
+				"*********************************************************************\n",
+				LOGDEBUGPLUS, FileLogLevel);
+			DeprecationWarningsIssued = true;
 			FileLogLevel += atoi(optarg);
 			if (FileLogLevel > LOGDEBUGPLUS)
 				FileLogLevel = LOGDEBUGPLUS;
@@ -268,6 +311,18 @@ void processargs(int argc, char * argv[])
 			break;
 
 		case 'V':
+			WriteDebugLog(LOGERROR,
+				"*********************************************************************\n"
+				"* WARNING: The -V and --verboseconsole parameters are DEPRECATED.   *\n"
+				"* They will be eliminated in a future release of ardopcf.  So,      *\n"
+				"* their use should be immediately discontinued.  Use                *\n"
+				"* -H \"CONSOLELOG #\" where # must be an integer between 0 (to        *\n"
+				"* print only the most severe messages to the console) and %d (to     *\n"
+				"* print all possible messages to the console).  The default value   *\n"
+				"* is %d when this command is not used.                               *\n"
+				"*********************************************************************\n",
+				LOGDEBUGPLUS, ConsoleLogLevel);
+			DeprecationWarningsIssued = true;
 			ConsoleLogLevel += atoi(optarg);
 			if (ConsoleLogLevel > LOGDEBUGPLUS)
 				ConsoleLogLevel = LOGDEBUGPLUS;
@@ -379,14 +434,40 @@ void processargs(int argc, char * argv[])
 			break;
 
 		case 'x':
+			WriteDebugLog(LOGERROR,
+				"*********************************************************************\n"
+				"* WARNING: The -x and --leaderlength parameters are DEPRECATED.     *\n"
+				"* They will be eliminated in a future release of ardopcf.  So,      *\n"
+				"* their use should be immediately discontinued.  Use                *\n"
+				"* -H \"LEADER #\" instead, where # is an integer in the range of      *\n"
+				"* 120 to 2500 (mS).                                                 *\n"
+				"*********************************************************************\n");
 			intARQDefaultDlyMs = LeaderLength = atoi(optarg);
+			DeprecationWarningsIssued = true;
 			break;
 
 		case 't':
+			WriteDebugLog(LOGERROR,
+				"*********************************************************************\n"
+				"* WARNING: The -t and --trailerlength parameters are DEPRECATED.    *\n"
+				"* They will be eliminated in a future release of ardopcf.  So,      *\n"
+				"* their use should be immediately discontinued.  Use                *\n"
+				"* -H \"TRAILER #\" instead, where # is an integer in the range of     *\n"
+				"* 0 to 200 (mS).                                                    *\n"
+				"*********************************************************************\n");
+			DeprecationWarningsIssued = true;
 			TrailerLength = atoi(optarg);
 			break;
 
 		case 'r':
+			WriteDebugLog(LOGERROR,
+				"*********************************************************************\n"
+				"* WARNING: The -r and --receiveonly parameters are DEPRECATED.      *\n"
+				"* They will be eliminated in a future release of ardopcf.  So,      *\n"
+				"* their use should be immediately discontinued.  Use                *\n"
+				"* -H \"PROTOCOLMODE RXO\" instead.                                    *\n"
+				"*********************************************************************\n");
+			DeprecationWarningsIssued = true;
 			InitRXO = TRUE;
 			break;
 
@@ -403,6 +484,14 @@ void processargs(int argc, char * argv[])
 			break;
 
 		case 'n':
+			WriteDebugLog(LOGERROR,
+				"*********************************************************************\n"
+				"* WARNING: The -n and --twotonetest parameters are DEPRECATED.      *\n"
+				"* They will be eliminated in a future release of ardopcf.  So,      *\n"
+				"* their use should be immediately discontinued.  Use                *\n"
+				"* -H \"TWOTONETEST;CLOSE\" instead.                                   *\n"
+				"*********************************************************************\n");
+			DeprecationWarningsIssued = true;
 			TwoToneAndExit = TRUE;
 			break;
 
@@ -515,7 +604,26 @@ int decode_wav()
 	int sampleRate;
 	short samples[1024];
 	const unsigned int blocksize = 240;  // Number of 16-bit samples to read at a time
+	char *nextHostCommand = HostCommands;
 	WavNow = 0;
+
+	if (DeprecationWarningsIssued) {
+		WriteDebugLog(LOGERROR,
+			"*********************************************************************\n"
+			"* WARNING: DEPRECATED command line parameters used.  Details shown  *\n"
+			"* above.  You may need to scroll up or review the Debug Log file to *\n"
+			"* see those details                                                 *\n"
+			"*********************************************************************\n");
+	}
+	while (nextHostCommand != NULL) {
+		// Process the next host command from the --hostcommands
+		// command line argument.
+		char *thisHostCommand = nextHostCommand;
+		nextHostCommand = strlop(nextHostCommand, ';');
+		if (thisHostCommand[0] != 0x00)
+			// not an empty string
+			ProcessCommandFromHost(thisHostCommand);
+	}
 
 	// Regardless of whether this was set with a command line argument, proceed in
 	// RXO (receive only) protocol mode.  During normal operation, this is set
