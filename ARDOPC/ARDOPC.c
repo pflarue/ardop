@@ -16,6 +16,7 @@ const char ProductName[] = "ardopcf";
 // Version q Fix extradelay (Jan 23)
 
 #include <stdbool.h>
+#include <sys/time.h>
 #ifdef WIN32
 #define _CRT_SECURE_NO_DEPRECATE
 
@@ -771,6 +772,19 @@ void setProtocolMode(char* strMode)
 void ardopmain()
 {
 	char *nextHostCommand = HostCommands;
+
+	// For testing purposes, it may be useful to run ardopcf repeatedly (and
+	// very quickly) to generate recordings of "random" test frames.  For
+	// these test frames to differ from each other, it is necessary to seed
+	// the pseudo-random number generator.  Typically, this is done using
+	// srand(time(0)).  However, this value changes only once per second, so
+	// running ardopcf more than once per second would produce duplicate
+	// values.  So, the following is used to for a more rapidly changing
+	// seed value.
+	struct timeval t1;
+	gettimeofday(&t1, NULL);
+	srand(t1.tv_usec * t1.tv_sec);
+
 	blnTimeoutTriggered = FALSE;
 	SetARDOPProtocolState(DISC);
 
