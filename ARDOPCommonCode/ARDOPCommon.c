@@ -164,7 +164,7 @@ extern char LogDir[256];
 static struct option long_options[] =
 {
 	{"logdir",  required_argument, 0 , 'l'},
-	{"hostcommands",  required_argument, 0 , 'h'},
+	{"hostcommands",  required_argument, 0 , 'H'},
 	{"verboselog",  required_argument, 0 , 'v'},
 	{"verboseconsole",  required_argument, 0 , 'V'},
 	{"ptt",  required_argument, 0 , 'p'},
