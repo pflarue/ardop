@@ -17,7 +17,7 @@ CC = gcc
 ifeq ($(OS),Windows_NT)
 OBJS += WinSerial.o Waveout.o hid.o
 LDLIBS += -lwsock32 -lwinmm -lsetupapi -lws2_32
-RM = cmd //C del //Q //F
+RM = del /Q /F
 else
 OBJS += LinSerial.o i2cDisplay.o ALSASound.o
 LDLIBS += -lrt -lasound
