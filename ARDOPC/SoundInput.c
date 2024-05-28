@@ -418,7 +418,8 @@ BOOL IsDataFrame(UCHAR intFrameType)
 {
 	const char * String = Name(intFrameType);
 
-	if (intFrameType == PktFrameHeader)
+	// Disabling Pkt support
+	if (FALSE) // intFrameType == PktFrameHeader)
 		return TRUE;
 	
 	if (String == NULL || String[0] == 0)
@@ -1195,7 +1196,8 @@ void ProcessNewSamples(short * Samples, int nSamples)
 
 //			if (IsDataFrame(intFrameType) && LastDataFrameType != intFrameType)
 
-			if (intFrameType == PktFrameHeader || intFrameType == PktFrameData)
+			// Disabling Pkt support
+			if (False) //intFrameType == PktFrameHeader || intFrameType == PktFrameData)
 			{
 				memset(CarrierOk, 0, sizeof(CarrierOk));
 				memset(intSumCounts, 0, sizeof(intSumCounts));
@@ -1350,7 +1352,8 @@ ProcessFrame:
 			wg_send_rxframet(0, 2, Name(intFrameType));
 		}
 
-		if (intFrameType == PktFrameData)
+		// Disabling Pkt support
+		if (FALSE) // intFrameType == PktFrameData)
 		{
 			SetLED(PKTLED, TRUE);		// Flash LED
 			PKTLEDTimer = Now + 400;	// For 400 Ms
@@ -2639,7 +2642,8 @@ BOOL Demod1Car4FSK()
 
 			// If variable length packet frame header we only have header - leave rx running
 		
-			if (intFrameType == PktFrameHeader)
+			// Disabling Pkt support
+			if (FALSE) // intFrameType == PktFrameHeader)
 			{
 				State = SearchingForLeader;
 			
@@ -3836,6 +3840,8 @@ void DemodulateFrame(int intFrameType)
 			Demod1Car4FSK600();
 			break;
 
+// Disabling Pkt support
+/*
 		case PktFrameHeader:	// Experimantal Variable Length Frame 
 
 			Demod1Car4FSK();
@@ -3850,7 +3856,7 @@ void DemodulateFrame(int intFrameType)
 			else
 				DemodPSK();
 			break;
-
+*/
 
   /*              ' Experimental Sounding frame
             Case 0xD0
@@ -4172,6 +4178,8 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 
 			break;
 
+// Disabling Pkt support
+/*
 		case PktFrameHeader:
 		{
 			// Variable Length Packet Frame Header
@@ -4291,7 +4299,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			}
 			break;
 		}
-
+*/
 
 
 //                ' Experimental Sounding frame
@@ -5425,7 +5433,8 @@ void DemodPSK()
 
 		// If variable length packet frame header we only have header - leave rx running
 		
-		if (intFrameType == PktFrameHeader)
+		// Disabling Pkt support
+		if (FALSE) // intFrameType == PktFrameHeader)
 		{
 			State = SearchingForLeader;
 			
