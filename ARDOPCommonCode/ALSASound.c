@@ -93,7 +93,8 @@ extern int useHamLib;
 
 void Sleep(int mS)
 {
-	usleep(mS * 1000);
+	if (strcmp(PlaybackDevice, "NOSOUND") != 0)
+		usleep(mS * 1000);
 	return;
 }
 
@@ -455,7 +456,8 @@ void PlatformSleep(int mS)
 		WebguiPoll();
 	}
 
-	Sleep(mS);
+	if (strcmp(PlaybackDevice, "NOSOUND") != 0)
+		Sleep(mS);
 		
 	if (PKTLEDTimer && Now > PKTLEDTimer)
     {
@@ -778,7 +780,8 @@ void txSleep(int mS)
 		WebguiPoll();
 	}
 
-	Sleep(mS);
+	if (strcmp(PlaybackDevice, "NOSOUND") != 0)
+		Sleep(mS);
 
 	if (PKTLEDTimer && Now > PKTLEDTimer)
     {
@@ -1810,6 +1813,8 @@ short loopbuff[1200];		// Temp for testing - loop sent samples to decoder
 
 int InitSound(BOOL Quiet)
 {
+	if (strcmp(PlaybackDevice, "NOSOUND") == 0)
+		return (1);
 	GetInputDeviceCollection();
 	GetOutputDeviceCollection();
 	return OpenSoundCard(CaptureDevice, PlaybackDevice, 12000, 12000, NULL);
@@ -1821,6 +1826,9 @@ UCHAR CurrentLevel = 0;		// Peak from current samples
 
 void PollReceivedSamples()
 {
+	if (strcmp(PlaybackDevice, "NOSOUND") == 0)
+		return;
+
 	// Process any captured samples
 	// Ideally call at least every 100 mS, more than 200 will loose data
 
@@ -1882,6 +1890,9 @@ Turn down your RX input until this message stops repeating.");
 void StopCapture()
 {
 	Capturing = FALSE;
+
+	if (strcmp(PlaybackDevice, "NOSOUND") == 0)
+		return;
 
 #ifdef SHARECAPTURE
 
@@ -2025,8 +2036,6 @@ void SoundFlush()
 
 	SendtoCard(&buffer[Index][0], Number);
 
-	usleep(200000);
-
 	// Wait for tx to complete
 
 	// samples sent is is in SampleNo, time started in mS is in pttOnTime.
@@ -2036,10 +2045,11 @@ void SoundFlush()
 
 	WriteDebugLog(LOGDEBUG, "Tx Time %d Time till end = %d", txlenMs, (pttOnTime + txlenMs) - Now);
 
-	while (Now < (pttOnTime + txlenMs))
-	{
-		usleep(2000);
-	}
+	if (strcmp(PlaybackDevice, "NOSOUND") != 0)
+		while (Now < (pttOnTime + txlenMs))
+		{
+			usleep(2000);
+		}
 
 /*
 
@@ -2078,10 +2088,12 @@ void SoundFlush()
 	// waiting for MainPoll
 
 #ifdef SHARECAPTURE
-	if (playhandle)
-	{
-		snd_pcm_close(playhandle);
-		playhandle = NULL;
+	if (strcmp(PlaybackDevice, "NOSOUND") != 0) {
+		if (playhandle)
+		{
+			snd_pcm_close(playhandle);
+			playhandle = NULL;
+		}
 	}
 #endif
 	SoundIsPlaying = FALSE;
@@ -2102,7 +2114,8 @@ void SoundFlush()
 	// 	txwfu = NULL;
 	// }
 
-	OpenSoundCapture(SavedCaptureDevice, SavedCaptureRate, strFault);
+	if (strcmp(PlaybackDevice, "NOSOUND") != 0)
+		OpenSoundCapture(SavedCaptureDevice, SavedCaptureRate, strFault);
 	StartCapture();
 
 	if (WriteRxWav)

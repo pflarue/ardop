@@ -555,7 +555,8 @@ void txSleep(int mS)
 		WebguiPoll();
 	}
 
-	Sleep(mS);
+	if (strcmp(PlaybackDevice, "NOSOUND") != 0)
+		Sleep(mS);
 
 	if (PKTLEDTimer && Now > PKTLEDTimer)
     {
@@ -576,13 +577,17 @@ BOOL DMARunning = FALSE;		// Used to start DMA on first write
 
 short * SendtoCard(unsigned short * buf, int n)
 {
-	header[Index].dwBufferLength = n * 2;
-
-	waveOutPrepareHeader(hWaveOut, &header[Index], sizeof(WAVEHDR));
-	waveOutWrite(hWaveOut, &header[Index], sizeof(WAVEHDR));
-
 	if (txwff != NULL)
 		WriteWav(&buffer[Index][0], n, txwff);
+
+	if (strcmp(PlaybackDevice, "NOSOUND") == 0) {
+		Index = !Index;
+		return &buffer[Index][0];
+	}
+
+	header[Index].dwBufferLength = n * 2;
+	waveOutPrepareHeader(hWaveOut, &header[Index], sizeof(WAVEHDR));
+	waveOutWrite(hWaveOut, &header[Index], sizeof(WAVEHDR));
 
 	// wait till previous buffer is complete
 
@@ -652,6 +657,8 @@ void GetSoundDevices()
 int InitSound(BOOL Report)
 {
 	int i, ret;
+	if (strcmp(PlaybackDevice, "NOSOUND") == 0)
+		return TRUE;
 
 	header[0].dwFlags = WHDR_DONE;
 	header[1].dwFlags = WHDR_DONE;
@@ -670,6 +677,15 @@ int InitSound(BOOL Report)
 				break;
 			}
 		}
+	}
+	if (PlayBackIndex == -1) {
+		WriteDebugLog(LOGERROR,
+			"ERROR: playbackdevice = '%s' not found.  Try using one of the names or"
+			" numbers (0-%d) listed above.",
+			PlaybackDevice,
+			PlaybackCount - 1
+		);
+		return FALSE;
 	}
 
     ret = waveOutOpen(&hWaveOut, PlayBackIndex, &wfx, 0, 0, CALLBACK_NULL); //WAVE_MAPPER
@@ -697,6 +713,15 @@ int InitSound(BOOL Report)
 				break;
 			}
 		}
+	}
+	if (CaptureIndex == -1) {
+		WriteDebugLog(LOGERROR,
+			"ERROR: capturedevice = '%s' not found.  Try using one of the names or"
+			" numbers (0-%d) listed above.",
+			CaptureDevice,
+			CaptureCount - 1
+		);
+		return FALSE;
 	}
 
     ret = waveInOpen(&hWaveIn, CaptureIndex, &wfx, 0, 0, CALLBACK_NULL); //WAVE_MAPPER
@@ -729,6 +754,8 @@ UCHAR CurrentLevel = 0;		// Peak from current samples
 
 void PollReceivedSamples()
 {
+	if (strcmp(PlaybackDevice, "NOSOUND") == 0)
+		return;
 	// Process any captured samples
 	// Ideally call at least every 100 mS, more than 200 will loose data
 
@@ -1007,11 +1034,12 @@ void SoundFlush()
 	SendtoCard(buffer[Index], Number);
 
 	//	Wait for all sound output to complete
-	
-	while (!(header[0].dwFlags & WHDR_DONE))
-		txSleep(10);
-	while (!(header[1].dwFlags & WHDR_DONE))
-		txSleep(10);
+	if (strcmp(PlaybackDevice, "NOSOUND") != 0) {
+		while (!(header[0].dwFlags & WHDR_DONE))
+			txSleep(10);
+		while (!(header[1].dwFlags & WHDR_DONE))
+			txSleep(10);
+	}
 
 	// I think we should turn round the link here. I dont see the point in
 	// waiting for MainPoll
@@ -1132,7 +1160,8 @@ void PlatformSleep(int mS)
 {
 	//	Sleep to avoid using all cpu
 
-	Sleep(mS);
+	if (strcmp(PlaybackDevice, "NOSOUND") != 0)
+		Sleep(mS);
 		
 	if (PKTLEDTimer && Now > PKTLEDTimer)
     {
