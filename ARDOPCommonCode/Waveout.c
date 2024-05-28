@@ -671,6 +671,15 @@ int InitSound(BOOL Report)
 			}
 		}
 	}
+	if (PlayBackIndex == -1) {
+		WriteDebugLog(LOGERROR,
+			"ERROR: playbackdevice = '%s' not found.  Try using one of the names or"
+			" numbers (0-%d) listed above.",
+			PlaybackDevice,
+			PlaybackCount - 1
+		);
+		return FALSE;
+	}
 
     ret = waveOutOpen(&hWaveOut, PlayBackIndex, &wfx, 0, 0, CALLBACK_NULL); //WAVE_MAPPER
 
@@ -697,6 +706,15 @@ int InitSound(BOOL Report)
 				break;
 			}
 		}
+	}
+	if (CaptureIndex == -1) {
+		WriteDebugLog(LOGERROR,
+			"ERROR: capturedevice = '%s' not found.  Try using one of the names or"
+			" numbers (0-%d) listed above.",
+			CaptureDevice,
+			CaptureCount - 1
+		);
+		return FALSE;
 	}
 
     ret = waveInOpen(&hWaveIn, CaptureIndex, &wfx, 0, 0, CALLBACK_NULL); //WAVE_MAPPER
