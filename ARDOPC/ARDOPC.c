@@ -74,7 +74,11 @@ BOOL NeedConReq = FALSE;	// ARQCALL Command Flag
 BOOL NeedPing = FALSE;		// PING Command Flag
 BOOL NeedTwoToneTest = FALSE;
 enum _ARQBandwidth CallBandwidth = UNDEFINED;
-BOOL UseKISS = TRUE;			// Enable Packet (KISS) interface
+// UseKISS set to FALSE May 2024 by LaRue
+// Pkt/KISS is no longer supported by ardopcf.
+// Setting UseKISS to FALSE is part of the first
+// phase of disabling and removing this support.
+BOOL UseKISS = FALSE;			// Enable Packet (KISS) interface
 int PingCount;
 
 BOOL blnPINGrepeating = False;
