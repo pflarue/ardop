@@ -645,7 +645,8 @@ VOID ProcessSCSHostFrame(UCHAR *  Buffer, int Length)
 			else
 				*(NextChan++) = 34;		// Native mode data channel
 
-		NextChan = PacketSessionPoll(NextChan);	// See if anythinkg from packet Sessions
+		// Disabling Pkt support
+		// NextChan = PacketSessionPoll(NextChan);	// See if anythinkg from packet Sessions
 
 #ifdef LOGTOHOST
 //		if (LogToHostBufferLen)	// only used in Native mode
@@ -804,13 +805,16 @@ VOID ProcessSCSHostFrame(UCHAR *  Buffer, int Length)
 
 //		WriteDebugLog(LOGDEBUG, "Data Frame Channel %d", Channel);
 
+		// Disabling Pkt support
+		/*
 		if (Channel < 11)			// Packet Data
 		{
 			ProcessPktData(Channel, &Buffer[3], Buffer[2] + 1);
 			return;
 		}
-
-		else if (Channel == 31)			// PTC Mode Data
+		else
+		*/
+		if (Channel == 31)			// PTC Mode Data
 			AddDataToDataToSend(&Buffer[3], Buffer[2] + 1);
 
 		else if (Channel == 32)		// Native Mode Command
@@ -843,6 +847,8 @@ VOID ProcessSCSHostFrame(UCHAR *  Buffer, int Length)
 
 	// Command Frame
 
+	// Disabling Pkt support
+	/*
 	if (Channel < 11 && Buffer[3] != 'G')
 	{
 		// Packet Channel Command
@@ -850,7 +856,7 @@ VOID ProcessSCSHostFrame(UCHAR *  Buffer, int Length)
 		ProcessPktCommand(Channel, &Buffer[3], Len);
 		return;
 	}
-
+	*/
 	switch (Buffer[3])
 	{
 	case 'J':				// JHOST
@@ -903,10 +909,12 @@ VOID ProcessSCSHostFrame(UCHAR *  Buffer, int Length)
 
 	case 'G':				// Specific Poll
 	
+		// Disabling Pkt support
+		/*
 		if (Channel > 0 && Channel < 11)
 			if (CheckForPktData(Channel))
 				return;				// It has sent reply
-	
+		*/
 		if (PTCMode)
 		{
 			if (CheckStatusChange())
@@ -1364,7 +1372,8 @@ VOID ProcessSCSPacket(UCHAR * rxbuffer, unsigned int Length)
 			return;
 		}
 
-		ProcessDEDModeFrame(rxbuffer, Length);
+		// Disabling Pkt support
+		// ProcessDEDModeFrame(rxbuffer, Length);
 		RXBPtr = 0;
 		return;		
 	}		
