@@ -63,6 +63,7 @@ const char webgui_html[] = (
 "    </div>\n"
 "    <div>\n"
 "      <span id=\"quality\">Quality: 0/100</span>\n"
+"      [<span id=\"rserrs\">RS Errors: 0/0</span>]\n"
 "      <span id=\"rcvoverflow\" class=\"dnone\">\n"
 "      WARNING: Audio from radio is too loud!\n"
 "      </span>\n"

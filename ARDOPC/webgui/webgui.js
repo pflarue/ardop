@@ -24,8 +24,8 @@ let colormap = [
 	// special values
 	[0x00, 0x00, 0x00, alpha], // 16 black
 	[0xFF, 0xFF, 0xFF, alpha], // 17 white
-	[0xD0, 0xD0, 0xD0, alpha], // 18 light gray (for bandwidth lines when isbusy false)
-	[0xFF, 0x00, 0xFF, alpha], // 19 fuscia (for bandwidth lines when isbusy true)
+	[0xD0, 0xD0, 0xD0, alpha], // 18 light gray (for bw lines when !isbusy)
+	[0xFF, 0x00, 0xFF, alpha], // 19 fuscia (for bw lines when isbusy)
 ];
 
 let bandwidth = -1;  // in Hz.  -1 = unknown
@@ -53,8 +53,8 @@ window.addEventListener("load", function(evt) {
 	document.getElementById("avglenslider").max = max_avglen;
 	let rdata = {
 		// Assuming a single message may have a length up to rsize, create buf
-		// large enough to hold up to two complete messages.  Thus, allowing for
-		// a single WebSocket frame to include the last few bytes of one message
+		// large enough to hold up to two complete messages.  Thus allowing
+		// for a single WS frame to include the last few bytes of one message
 		// as well as all of a following message.
 		buf: new Uint8Array(2 * rsize),
 		len: 0,  // number of bytes of data in buf
@@ -112,6 +112,48 @@ window.addEventListener("load", function(evt) {
 		}
 	};
 
+	// Decode a single byte (unsigned char)
+	// Return the decoded value and update rdata.offset.
+	// But, if no data is available (rdata.offset == rdata.len),
+	// then return -1 and make no changes to rdata.
+	// (To get a single byte as a string, use decodestr(rdata, 1))
+	const decodebyte = (rdata) => {
+		if (rdata.offset >= rdata.len)
+			// unable to decode value
+			return -1;
+		rdata.offset += 1;
+		return rdata.buf[rdata.offset - 1];
+	}
+
+	// Decode a string
+	// Return the decoded string and update rdata.offset.
+	// If strlen is -1, then return the remainder of the message.
+	// But, if strlen is not -1, and insufficient data is available,
+	// then return an empty string and make no changes to rdata.
+	const decodestr = (rdata, strlen) => {
+		if (strlen >= 0 && rdata.offset + strlen > rdata.len)
+			// unable to decode value
+			return "";
+		if (strlen == -1)
+			strlen = rdata.len - rdata.offset;
+		rdata.offset += strlen;
+		return decoder.decode(
+			rdata.buf.slice(rdata.offset - strlen, rdata.offset));
+	}
+
+	// Return a slice of rdata and update rdata.offset.
+	// If sllen is -1, then return the remainder of the message.
+	// But, if sllen is not -1, and insufficient data is available,
+	// then return null and make no changes to rdata.
+	const decodeslice = (rdata, sllen) => {
+		if (sllen >= 0 && rdata.offset + sllen > rdata.len)
+			return null;
+		if (sllen == -1)
+			sllen = rdata.len - rdata.offset;
+		rdata.offset += sllen;
+		return rdata.buf.slice(rdata.offset - sllen, rdata.offset);
+	}
+
 	var WebSocketClient = (function () {
 		var exports = {};
 		var is_connected = false;
@@ -124,9 +166,9 @@ window.addEventListener("load", function(evt) {
 			}
 
 			if (is_connected) {
-				console.log("WebSocket connection already open.  Do nothing.");
+				console.log("WS connection already open.  Do nothing.");
 			} else {
-				console.log("Open WebSocket connection to ", url);
+				console.log("Open WS connection to ", url);
 				ws = new WebSocket(url);
 			}
 			ws.binaryType = "arraybuffer"; // otherwise defaults to blob
@@ -153,16 +195,17 @@ window.addEventListener("load", function(evt) {
 
 			ws.onclose = function() {
 				if (is_closing) {
-					console.log("Response received from WebSocket server to notification of closing.");
+					console.log("Response to close received from WS server.");
 					is_closing = false;
 					is_connected = false;
 				} else if (is_connected) {
-					console.log("WebSocket server is closing connection.");
+					console.log("WS server is closing connection.");
 					// Respond with confirmation of close.
 					ws.close();
 					is_connected = false;
 				} else {
-					console.log("Received unexpected close msg from WebSocket server."); // already closed
+					// already closed
+					console.log("Received unexpected close from WS server.");
 				}
 				document.getElementById("lostcon").classList.remove("dnone");
 			};
@@ -179,14 +222,14 @@ window.addEventListener("load", function(evt) {
 
 		exports.close = function () {
 			if (is_closing) {
-				console.log("Already sent notification to WebSocket server of closing.  No response yet.");
+				console.log("Close already sent to server.  No response yet.");
 				document.getElementById("lostcon").classList.remove("dnone");
 			} else if (is_connected) {
-				console.log("Sending notification to WebSocket server of closing.");
+				console.log("Sending close to WS server.");
 				ws.close();
 				is_closing = true;
 			} else {
-				console.log("No open WebSocket connection to close.");
+				console.log("No open WS connection to close.");
 			}
 		};
 
@@ -196,14 +239,17 @@ window.addEventListener("load", function(evt) {
 	}());
 	// buffer is an ArrayBuffer.  Returns string
 	const buf2hex = (buffer) =>
-		[...new Uint8Array(buffer)].map(x => x.toString(16).padStart(2, '0')).join('');
+		[...new Uint8Array(buffer)].map(
+			x => x.toString(16).padStart(2, '0')
+		).join('');
 
 	// hexString is string.  Returns an Array of uint8 values
 	// Optional whitespace is removed before conversion.
 	// Terminate at end of hexString or upon encountering a
 	// character that is neither whitespace nor valid hex.
 	const fromHexString = (hexString) =>
-		hexString.replace(/\s+/g, "").match(/.{1,2}/g).map((byte) => parseInt(byte, 16));
+		hexString.replace(/\s+/g, "").match(/.{1,2}/g).map((byte) =>
+		parseInt(byte, 16));
 
 	// Process messages from Webgui clients
 	// Two protocol layers are defined for messages from Webgui clients.
@@ -216,11 +262,11 @@ window.addEventListener("load", function(evt) {
 	// character that is not widely used provides an imperfect but
 	// reasonably reliable way to detect a message handling error that
 	// has caused the start of a message to be incorrectly located.
-	// Each message type specifies the requried format for the remainder
+	// Each message type specifies the required format for the remainder
 	// of the message, if any.  Where a message includes a string, no
 	// terminating NULL will be included at the end of the string.  The
 	// length of the message provided by the lower level protocol shall
-	// be used to determine the length of a string or other variabl
+	// be used to determine the length of a string or other variable
 	// length data at the end of a message.
 	//
 	// To simplify the printing of raw messages for debugging purposes,
@@ -229,22 +275,22 @@ window.addEventListener("load", function(evt) {
 	// for messages whose entire raw content may be printed as human
 	// readable text (though they will not include a NULL terminator),
 	// while the remaining type bytes indicate that for logging
-	// purposes, the message should be displayed as a string of
+	// purposes, the message should be displayed as a sequence of
 	// hexidecimal values.
 	// "0~" no additional data: Client connected/reconnected
 	// "2~" no additional data: Request ardopcf to send 5 send two tone signal.
 	// "I~" no additional data: Request ardopcf to send ID frame.
 	// 0x8D7E followed by one additional byte interpreted as an unsigned
-	//     char in the range 0 to 100: Set DriveLevel
+	//   char in the range 0 to 100: Set DriveLevel
 	// 0x9A7E followed by one additional byte interpreted as an unsigned
-	//     char in the range 1 to max_avglen: Set display averaging length
+	//   char in the range 1 to max_avglen: Set display averaging length
 
 	// Send data of length data_len to the server.
 	// This function implements the lower level protocol of adding a
 	// uvint header to the start of each message indicating the
 	// length of its body (excluding the header length).
 	const send_msg = (data, data_len) => {
-		if (data[1] != "~".charCodeAt(0)) {
+		if (String.fromCharCode(data[1]) != "~") {
 			alert("ERROR: Invalid message.  second byte is not '~'.");
 			return (0);
 		}
@@ -275,10 +321,11 @@ window.addEventListener("load", function(evt) {
 		send_msg(encoder.encode("I~"), 2);
 	}
 
-	// Use a throttle to limit the number of updates sent to ardopcf in
-	// response to the user adjusting the AvgLen slider.
+	// Use throttles to limit the number of updates sent to ardopcf in
+	// response to the user adjusting the AvgLen or DriveLevel sliders.
 	let avglencontroltimer = false;
-	const throttlecontrol = (callback, time, controltimer) => {
+	let drivelevelcontroltimer = false;
+	const throttledcontrol = (callback, time, controltimer) => {
 		if (controltimer) return;
 		controltimer = true;
 		setTimeout(() => {
@@ -287,35 +334,26 @@ window.addEventListener("load", function(evt) {
 		}, time);
 	}
 	const setavglen = () => {
-		document.getElementById("avglentext").innerHTML = "" + document.getElementById("avglenslider").value;
-		let msgdata = new Uint8Array([0x9A, 0x7E, document.getElementById("avglenslider").value]);
+		document.getElementById("avglentext").innerHTML = ""
+			+ document.getElementById("avglenslider").value;
+		let msgdata = new Uint8Array(
+			[0x9A, 0x7E, document.getElementById("avglenslider").value]);
 		send_msg(msgdata, 3);
-	}
-
-	// Use a throttle to limit the number of updates sent to ardopcf in
-	// response to the user adjusting the DriveLevel slider.
-	let drivelevelcontroltimer = false;
-	const throttledrivelevelcontrol = (callback, time) => {
-		if (drivelevelcontroltimer) return;
-		drivelevelcontroltimer = true;
-		setTimeout(() => {
-			callback();
-			drivelevelcontroltimer = false;
-		}, time);
 	}
 	const setdrivelevel = () => {
-		document.getElementById("driveleveltext").innerHTML = "" + document.getElementById("drivelevelslider").value;
-		let msgdata = new Uint8Array([0x8D, 0x7E, document.getElementById("drivelevelslider").value]);
+		document.getElementById("driveleveltext").innerHTML =
+			"" + document.getElementById("drivelevelslider").value;
+		let msgdata = new Uint8Array(
+			[0x8D, 0x7E, document.getElementById("drivelevelslider").value]);
 		send_msg(msgdata, 3);
 	}
-
 
 	let clearrxtimer = null;
 	let rcvoverflowtimer = null;
 	let rcvunderflowtimer = null;
 	WebSocketClient.onOpen = function() {
 		// Connection to ardopcf established.
-		console.log("Websocket connection to ardopcf opened.  Notify ardopcf.");
+		console.log("WS connection to ardopcf opened.  Notify ardopcf.");
 		send_connected();
 	}
 	WebSocketClient.onMessage = function(wsdata) {
@@ -329,7 +367,7 @@ window.addEventListener("load", function(evt) {
 		// character that is not widely used provides an imperfect but
 		// reasonably reliable way to detect a message handling error that
 		// has caused the start of a message to be incorrectly located.
-		// Each message type specifies the requried format for the remainder
+		// Each message type specifies the required format for the remainder
 		// of the message, if any.  Where a message includes a string, no
 		// terminating NULL will be included at the end of the string.  The
 		// length of the message provided by the lower level protocol shall
@@ -342,23 +380,29 @@ window.addEventListener("load", function(evt) {
 		// for messages whose entire raw content may be printed as human
 		// readable text (though they will not include a NULL terminator),
 		// while the remaining type bytes indicate that for logging
-		// purposes, the message should be displayed as a string of
+		// purposes, the message should be displayed as a sequence of
 		// hexidecimal values.
 		// "a|" followed by string: Alert for user.
 		// "B|" no additional data: BUSY true
 		// "b|" no additional data: BUSY false
 		// "C|" followed by a string: My callsign
-		//     If string has zero length, clear my callsign.
+		//   If string has zero length, clear my callsign.
 		// "c|" followed by a string: remote callsign
-		//     If string has zero length, clear remote callsign.
+		//   If string has zero length, clear remote callsign.
 		// "D|" no additional data: Enable Dev Mode
 		// "F|" followed by a string: TX Frame type
-		// "f|" followed by a character 'P' for pending, 'O' for OK, or 'F' for fail,
-		//     followed by a string: RX Frame state and type
-		// "H|" followed by a character 'Q' for QueueCommandToHost,
-		//		'C' for SendCommandToHost, 'T' for SendCommandToHostQuiet,
-		//		'R' for SendReplyToHost, or 'F' for Command from Host.
-		//		followed by a string: Message to host
+		// "f|"
+		//   followed by a character:
+		//    'P' for pending, 'O' for OK, or 'F' for fail
+		//   followed by a string: RX Frame state and type
+		// "H|"
+		//   followed by a character:
+		//    'Q' for QueueCommandToHost
+		//    'C' for SendCommandToHost
+		//    'T' for SendCommandToHostQuiet
+		//	  'R' for SendReplyToHost
+		//    'F' for Command from Host.
+		//	 followed by a string: Message to host
 		// "h|" followed by a string: Host text data (to host)
 		// "m|" followed by a string: Protocol Mode
 		// "P|" no additional data: PTT true
@@ -368,21 +412,27 @@ window.addEventListener("load", function(evt) {
 		// "S|" no additional data: ISS true
 		// "s|" no additional data: ISS false
 		// "t|" followed by a string: Protocol State
-		// 0x817C followed by one additional byte interpreted as an unsgiend
-		//     char in the range of 0 to 150: Set CurrentLevel
-		// 0x8A7C followed by one unsigned char: Quality (0-100)
+		// 0x817C followed by one additional byte interpreted as an unsigned
+		//   char in the range of 0 to 150: Set CurrentLevel
+		// 0x8A7C
+		//   followed by an unsigned char: Quality (0-100)
+		//   followed by a uvint: The total number of errors detected by RS
+		//   followed by a uvint: The max number of errors correctable by RS
+		//   (For a failed decode, total will be set equal to max + 1)
 		// 0x8B7C followed by one unsigned char: Bandwidth in Hz divided by 10.
 		// 0x8C7C followed by 103 bytes of data: FFT power (dBfs 4 bits each).
 		// 0x8D7C followed by one additional byte interpreted as an unsigned
-		//     char in the range 0 to 100: Set DriveLevel
+		//   char in the range 0 to 100: Set DriveLevel
 		// 0x8E7C followed by unsigned char data: Pixel data (x, y, color)
-		//      color is 1, 2, or 3 for poor, ok, good.
+		//   color is 1, 2, or 3 for poor, ok, good.
 		// 0x8F7C followed by unsigned char data: Host non-text data (to host)
-		//		The first three characters of data are text data indicating
-		//		data type 'FEC', 'ARQ', 'RXO', 'ERR', etc.
+		//	 The first three characters of data are text data indicating
+		//	 data type 'FEC', 'ARQ', 'RXO', 'ERR', etc.
+		// 0x9A7C followed by one additional byte interpreted as an unsigned
+		//   char in the range 1 to MAX_AVGLEN: Set display averaging length
 
 		if(!(wsdata instanceof ArrayBuffer)) {
-			alert("Unexpected WebSocket data format.  Closing connection.");
+			alert("Unexpected WS data format.  Closing connection.");
 			WebSocketClient.close();
 			return;
 		}
@@ -394,9 +444,9 @@ window.addEventListener("load", function(evt) {
 		rdata.buf.set(new Uint8Array(wsdata), rdata.len);
 		rdata.len += wsdata.byteLength;
 		let msglen;
-		let startoffset = rdata.offset;
-		let tmptxt;
+		let startoffset = rdata.offset; // offset of msglen
 		while((msglen = decodeUvint(rdata)) >= 0) {
+			let msgoffset = rdata.offset; // offset after msglen
 			if (msglen == 0) {
 				// An empty message.  Do nothing.
 				// update startoffset before parsing next msglen
@@ -404,299 +454,398 @@ window.addEventListener("load", function(evt) {
 				continue;
 			}
 			if ((rdata.len - rdata.offset) < msglen) {
-				// The complete message has not yet been recieved.
+				// The complete message has not yet been received.
 				// rewind parsing of msglen
 				rdata.offset = startoffset;
 				break;
 			}
-			if (rdata.buf[rdata.offset + 1] != "|".charCodeAt(0)) {
-				console.log("no '|'", rdata.buf.slice(rdata.offset, rdata.offset + msglen));
+			// For readability, use equivalent string value for msgtype
+			// Using decodestr(rdata, 1) wouldn't work for non-text types.
+			let msgtype = String.fromCharCode(decodebyte(rdata));
+			if (msgtype == "\uffff") {
+				console.log("Message type not available.  Message too short.",
+					rdata.buf.slice(startoffset, msgoffset + msglen));
+				alert("Message type not available.  Closing connection.");
+				WebSocketClient.close();
+				return;
+			}
+			let pipe = decodestr(rdata, 1);
+			console.log("pipe", pipe);
+			if (pipe != "|") {
+				console.log("Expected '|' after message type byte not found.",
+					rdata.buf.slice(startoffset, msgoffset + msglen));
 				alert("Invalid message structure.  Closing connection.");
 				WebSocketClient.close();
 				return;
 			}
-			switch (rdata.buf[rdata.offset]) {
-				case "a".charCodeAt(0):
+			switch (msgtype) {
+				case "a": {
 					// Alert message (display)
-					alert(decoder.decode(rdata.buf.slice(rdata.offset + 2, rdata.offset + msglen)));
+					let str = decodestr(rdata, -1);
+					if (str == "")
+						str = "ERROR: Invalid 'Alert' message received."
+					alert(str);
 					break;
-				case "B".charCodeAt(0):
+				}
+				case "B":
 					// BUSY true
 					isbusy = 1;
 					// txtlog.value += "BUSY = true\n";
 					// txtlog.scrollTo(0, txtlog.scrollHeight);
 					document.getElementById("busy").classList.remove("hidden");
 					break;
-				case "b".charCodeAt(0):
+				case "b":
 					// BUSY false
 					isbusy = 0;
 					// txtlog.value += "BUSY = false\n";
 					// txtlog.scrollTo(0, txtlog.scrollHeight);
 					document.getElementById("busy").classList.add("hidden");
 					break;
-				case "C".charCodeAt(0):
+				case "C": {
 					// My callsign
-					if (msglen == 2) {
+					let mycall = decodestr(rdata, -1);
+					if (mycall == "") {
 						// clear mycall
 						txtlog.value += "Clear my callsign\n";
-						document.getElementById("mycall").innerHTML = "(MYCALL NOT SET)";
+						document.getElementById("mycall").innerHTML =
+							"(MYCALL NOT SET)";
 					} else {
-						tmptxt = decoder.decode(rdata.buf.slice(rdata.offset + 2, rdata.offset + msglen));
-						txtlog.value += "My callsign = " + tmptxt + "\n";
-						document.getElementById("mycall").innerHTML = tmptxt;
+						txtlog.value += "My callsign = " + mycall + "\n";
+						document.getElementById("mycall").innerHTML = mycall;
 					}
 					txtlog.scrollTo(0, txtlog.scrollHeight);
 					break;
-				case "c".charCodeAt(0):
+				}
+				case "c": {
 					// Remote callsign
-					if (msglen == 2) {
+					let rcall = decodestr(rdata, -1);
+					if (rcall == "") {
 						// clear rcall
-						txtlog.value += "[" + (new Date().toISOString()) + "]  Clear remote callsign.  Was "
-							+ document.getElementById("rcall").innerHTML + "\n";
+						txtlog.value += "[" + (new Date().toISOString()) + "]"
+							+ "  Clear remote callsign.  Was "
+							+ document.getElementById("rcall").innerHTML
+							+ "\n";
 						document.getElementById("rcall").innerHTML = "";
 					} else {
-						tmptxt = decoder.decode(rdata.buf.slice(rdata.offset + 2, rdata.offset + msglen));
-						txtlog.value += "[" + (new Date().toISOString()) + "]  Remote callsign = " + tmptxt + "\n";
-						document.getElementById("rcall").innerHTML = tmptxt;
+						txtlog.value += "[" + (new Date().toISOString()) + "]"
+							+ "  Remote callsign = " + rcall + "\n";
+						document.getElementById("rcall").innerHTML = rcall;
 					}
 					txtlog.scrollTo(0, txtlog.scrollHeight);
 					break;
-				case "D".charCodeAt(0):
+				}
+				case "D":
 					// Enable Dev Mode
 					devmode = true;
-					document.getElementById("devmode").classList.remove("dnone");
+					document.getElementById("devmode")
+						.classList.remove("dnone");
+					txtlog.value += "DevMode Enabled\n";
 					break;
-				case "F".charCodeAt(0):
+				case "F": {
 					// TX Frame type
-					tmptxt = decoder.decode(rdata.buf.slice(rdata.offset + 2, rdata.offset + msglen))
-					txtlog.value += "TX Frame Type = " + tmptxt + "\n";
-					txtlog.scrollTo(0, txtlog.scrollHeight);
-					document.getElementById("txtype").innerHTML = tmptxt;
-					if (tmptxt == "DataNAK")
-						document.getElementById("txtype").classList.add("txnak");
-					if (tmptxt == "DataACK")
-						document.getElementById("txtype").classList.add("txack");
+					let txfrtype = decodestr(rdata, -1);
+					let txe = document.getElementById("txtype");
+					if (txfrtype != "") {
+						txtlog.value += "TX Frame Type = " + txfrtype + "\n";
+						txtlog.scrollTo(0, txtlog.scrollHeight);
+					}
+					txe.innerHTML = txfrtype;
+					if (txfrtype == "DataNAK")
+						txe.classList.add("txnak");
+					if (txfrtype == "DataACK")
+						txe.classList.add("txack");
 					break;
-				case "f".charCodeAt(0):
+				}
+				case "f": {
 					// RX Frame type
-					tmptxt = decoder.decode(rdata.buf.slice(rdata.offset + 3, rdata.offset + msglen));
-					let rxt = document.getElementById("rxtype");
-					rxt.classList.remove("rxstate_pending");
-					rxt.classList.remove("rxstate_ok");
-					rxt.classList.remove("rxstate_fail");
-					rxt.classList.remove("rxstate_none");
-					clearTimeout(clearrxtimer);  // eliminate any existing timer to clear rx frame
-					switch (rdata.buf[rdata.offset + 2]) {
-					  case "P".charCodeAt(0):
-						rxt.classList.add("rxstate_pending");
+					let rxstatus = decodestr(rdata, 1);
+					let rxfrtype = decodestr(rdata, -1);
+					let rxe = document.getElementById("rxtype");
+					rxe.classList.remove("rxstate_pending");
+					rxe.classList.remove("rxstate_ok");
+					rxe.classList.remove("rxstate_fail");
+					rxe.classList.remove("rxstate_none");
+					clearTimeout(clearrxtimer);  // eliminate old timer
+					if (rxstatus == ""
+						|| "POF".indexOf(rxstatus) == -1
+					) {
+						alert("Invalid state for RX Frame Type.");
+						rxe.classList.add("rxstate_none");
+					}
+					switch (rxstatus) {
+					  case "P":
+						rxe.classList.add("rxstate_pending");
 						// Assume that this will always be folowed
 						// by a rxstate_ok or rxstate_fail, so don't
 						// set a timer to clear it.
 						// Don't write pending rx to txtlog
 						break;
-					  case "O".charCodeAt(0):
-						rxt.classList.add("rxstate_ok");
+					  case "O":
+						rxe.classList.add("rxstate_ok");
 						clearrxtimer = setTimeout(() => {
-							rxt.innerHTML = "";
-							rxt.classList.remove("rxstate_ok");
-							rxt.classList.add("rxstate_none");
+							rxe.innerHTML = "";
+							rxe.classList.remove("rxstate_ok");
+							rxe.classList.add("rxstate_none");
 						}, 5000);  /// clear after 5 seconds
-						txtlog.value += "RX: " + tmptxt + " PASS\n";
+						txtlog.value += "RX: " + rxfrtype + " PASS\n";
 						txtlog.scrollTo(0, txtlog.scrollHeight);
 						break;
-					  case "F".charCodeAt(0):
-						rxt.classList.add("rxstate_fail");
+					  case "F":
+						rxe.classList.add("rxstate_fail");
 						clearrxtimer = setTimeout(() => {
-							rxt.innerHTML = "";
-							rxt.classList.remove("rxstate_fail");
-							rxt.classList.add("rxstate_none");
+							rxe.innerHTML = "";
+							rxe.classList.remove("rxstate_fail");
+							rxe.classList.add("rxstate_none");
 						}, 5000);  /// clear after 5 seconds
-						txtlog.value += "RX: " + tmptxt + " FAIL\n";
+						txtlog.value += "RX: " + rxfrtype + " FAIL\n";
 						txtlog.scrollTo(0, txtlog.scrollHeight);
-						break;
-					  default:
-						alert("Invalid state for RX Frame Type.");
-						rxt.classList.add("rxstate_none");
 						break;
 					}
-					document.getElementById("rxtype").innerHTML = tmptxt;
+					rxe.innerHTML = rxfrtype;
 					break;
-				case "H".charCodeAt(0):
+				}
+				case "H": {
 					// Host message
 					if (!devmode)
-						console.log("WARNING: receiving Host messages when not in devmode");
-					tmptxt = decoder.decode(rdata.buf.slice(rdata.offset + 3, rdata.offset + msglen));
-					switch (rdata.buf[rdata.offset + 2]) {
-						case 'Q'.charCodeAt(0):
-							txtlog.value += "QueueCommandToHost(): " + tmptxt + "\n";
+						console.log(
+							"WARNING: receiving Host messages when not in"
+							+ " devmode");
+					let hostmsgtype = decodestr(rdata, 1);
+					let hostmsg = decodestr(rdata, -1);
+					let prefix = ""
+					switch (hostmsgtype) {
+						case 'Q':
+							prefix = "QueueCommandToHost(): ";
 							break;
-						case 'C'.charCodeAt(0):
-							txtlog.value += "SendCommandToHost(): " + tmptxt + "\n";
+						case 'C':
+							prefix = "SendCommandToHost(): ";
 							break;
-						case 'T'.charCodeAt(0):
-							txtlog.value += "SendCommandToHostQuiet(): " + tmptxt + "\n";
+						case 'T':
+							prefix = "SendCommandToHostQuiet(): ";
 							break;
-						case 'R'.charCodeAt(0):
-							txtlog.value += "SendReplyToHost(): " + tmptxt + "\n";
+						case 'R':
+							prefix = "SendReplyToHost(): ";
 							break;
-						case 'F'.charCodeAt(0):
-							txtlog.value += "CommandFromHost(): " + tmptxt + "\n";
-							break;
-						default:
-							txtlog.value += "Unknown msg to Host: " + tmptxt + "\n";
+						case 'F':
+							prefix = "CommandFromHost(): ";
 							break;
 					}
+					txtlog.value += prefix + hostmsg + "\n";
 					txtlog.scrollTo(0, txtlog.scrollHeight);
 					break;
-				case "h".charCodeAt(0):
+				}
+				case "h":
 					// Host text data
 					if (!devmode)
-						console.log("WARNING: receiving text data Host messages when not in devmode");
+						console.log(
+							"WARNING: receiving text data Host messages when"
+							+ " not in devmode");
 					txtlog.value += "Data (text) to Host: ("
-						+ decoder.decode(rdata.buf.slice(rdata.offset + 2, rdata.offset + 5))
-						+ ") " + decoder.decode(rdata.buf.slice(rdata.offset + 5, rdata.offset + msglen))
-						+ "\n";
+						+ decodestr(rdata, 3) + ") " + decodestr(rdata, -1) + "\n";
 					txtlog.scrollTo(0, txtlog.scrollHeight);
 					break;
-				case "m".charCodeAt(0):
+				case "m": {
 					// Protocol Mode
-					tmptxt = decoder.decode(rdata.buf.slice(rdata.offset + 2, rdata.offset + msglen));
-					txtlog.value += "Protocol Mode = " + tmptxt + "\n";
+					let mode = decodestr(rdata, -1);
+					txtlog.value += "Protocol Mode = " + mode + "\n";
 					txtlog.scrollTo(0, txtlog.scrollHeight);
-					document.getElementById("protocolmode").innerHTML = tmptxt;
+					document.getElementById("protocolmode").innerHTML = mode;
 					break;
-				case "P".charCodeAt(0):
+				}
+				case "P":
 					// PTT true
 					// txtlog.value += "PTT = true\n";
 					// txtlog.scrollTo(0, txtlog.scrollHeight);
 					document.getElementById("ptt").classList.remove("hidden");
 					break;
-				case "p".charCodeAt(0):
+				case "p": {
 					// PTT false
 					// txtlog.value += "PTT = false\n";
 					// txtlog.scrollTo(0, txtlog.scrollHeight);
 					document.getElementById("ptt").classList.add("hidden");
 					// Clear txtype when done transmitting
-					document.getElementById("txtype").innerHTML = "";
-					document.getElementById("txtype").classList.remove("txnak");
-					document.getElementById("txtype").classList.remove("txack");
+					let txe = document.getElementById("txtype");
+					txe.innerHTML = "";
+					txe.classList.remove("txnak");
+					txe.classList.remove("txack");
 					break;
-				case "R".charCodeAt(0):
+				}
+				case "R":
 					// IRS true
 					txtlog.value += "IRS = true\n";
 					txtlog.scrollTo(0, txtlog.scrollHeight);
 					document.getElementById("irs").classList.remove("dnone");
 					break;
-				case "r".charCodeAt(0):
+				case "r":
 					// IRS false
 					txtlog.value += "IRS = false\n";
 					txtlog.scrollTo(0, txtlog.scrollHeight);
 					document.getElementById("irs").classList.add("dnone");
 					break;
-				case "S".charCodeAt(0):
+				case "S":
 					// ISS true
 					txtlog.value += "ISS = true\n";
 					txtlog.scrollTo(0, txtlog.scrollHeight);
 					document.getElementById("iss").classList.remove("dnone");
 					break;
-				case "s".charCodeAt(0):
+				case "s":
 					// ISS false
 					txtlog.value += "ISS = false\n";
 					txtlog.scrollTo(0, txtlog.scrollHeight);
 					document.getElementById("iss").classList.add("dnone");
 					break;
-				case "t".charCodeAt(0):
-					tmptxt = decoder.decode(rdata.buf.slice(rdata.offset + 2, rdata.offset + msglen));
-					if (tmptxt == "DISC")
-						txtlog.value += "[" + (new Date().toISOString()) + "]  State = " + tmptxt + "\n";
+				case "t": {
+					let state = decodestr(rdata, -1);
+					if (state == "DISC")
+						txtlog.value += "[" + (new Date().toISOString()) + "]"
+							+ "  State = " + state + "\n";
 					else
-						txtlog.value += "State = " + tmptxt + "\n";
+						txtlog.value += "State = " + state + "\n";
 					txtlog.scrollTo(0, txtlog.scrollHeight);
-					document.getElementById("state").innerHTML = tmptxt;
+					document.getElementById("state").innerHTML = state;
 					break;
-				case 0x81:
+				}
+				case "\x81": {
 					// CurrentLevel update
-					// linear fraction of fullscale audio scale scaled to 0-150
-					document.getElementById("rcvlvl").value = rdata.buf[rdata.offset + 2];
-					if (rdata.buf[rdata.offset + 2] >= 148) {
-						clearTimeout(rcvoverflowtimer);  // eliminate existing timer
-						document.getElementById("rcvoverflow").classList.remove("dnone");
+					// linear fraction of recieved fullscale audio scale
+					// rescaled to 0-150
+					let rlevel = decodebyte(rdata);
+					document.getElementById("rcvlvl").value = rlevel;
+					if (rlevel >= 148) {
+						clearTimeout(rcvoverflowtimer);  // eliminate old timer
+						let rcvoe = document.getElementById("rcvoverflow");
+						rcvoe.classList.remove("dnone");
 						rcvoverflowtimer = setTimeout(() => {
-							document.getElementById("rcvoverflow").classList.add("dnone");
+							rcvoe.classList.add("dnone");
 						}, 5000);  /// display for 5 seconds
 					}
-					if (rdata.buf[rdata.offset + 2] <= 2) {
-						clearTimeout(rcvunderflowtimer);  // eliminate existing timer
-						document.getElementById("rcvunderflow").classList.remove("dnone");
+					if (rlevel <= 2) {
+						clearTimeout(rcvunderflowtimer); // eliminate old timer
+						let rcvue = document.getElementById("rcvunderflow");
+						rcvue.classList.remove("dnone");
 						rcvunderflowtimer = setTimeout(() => {
-							document.getElementById("rcvunderflow").classList.add("dnone");
+							rcvue.classList.add("dnone");
 						}, 1000);  /// display for 1 second
 					}
 					break;
-				case 0x8A:
+				}
+				case "\x8A": {
 					// Quality
-					txtlog.value += "Quality = " + rdata.buf[rdata.offset + 2] + "/100\n";
+					let quality = decodebyte(rdata);
+					let rserrors = decodeUvint(rdata);
+					let rsmax = decodeUvint(rdata);
+					if (rsmax < 0) {
+						alert("ERROR: Invalid quality data.");
+						break;
+					}
+					txtlog.value += "Quality = " + quality + "/100\n";
+					txtlog.value += "RS Errors = " + rserrors
+						+ "/" + rsmax + "\n";
 					txtlog.scrollTo(0, txtlog.scrollHeight);
-					document.getElementById("quality").innerHTML = "Quality: " + rdata.buf[rdata.offset + 2] + "/100";
+					document.getElementById("quality").innerHTML =
+						"Quality: " + quality + "/100";
+					document.getElementById("rserrs").innerHTML =
+						"RS Errors: " + rserrors + "/" + rsmax;
 					break;
-				case 0x8B:
+				}
+				case "\x8B": {
 					// Bandwidth update
-					bandwidth = 10 * rdata.buf[rdata.offset + 2];
-					txtlog.value += "Bandwidth = " + bandwidth + "\n";
+					let bw = decodebyte(rdata);
+					if (bw == -1) {
+						alert("Error: Invalid bandwidth.");
+						break;
+					}
+					bandwidth = 10 * bw;
+					txtlog.value += "Bandwidth = " + bw + "\n";
 					txtlog.scrollTo(0, txtlog.scrollHeight);
 					break;
-				case 0x8C:
+				}
+				case "\x8C": {
 					// 4-bit spectral data for waterfall plot
-					addWaterfallLine(rdata.buf.slice(rdata.offset + 2, rdata.offset + msglen));
-					drawSpectrum(rdata.buf.slice(rdata.offset + 2, rdata.offset + msglen));
+					let sdata = decodeslice(rdata, -1);
+					if (sdata == null) {
+						alert("ERROR: Invalid spectral data.");
+						break;
+					}
+					addWaterfallLine(sdata);
+					drawSpectrum(sdata);
 					break;
-				case 0x8D:
+				}
+				case "\x8D": {
 					// DriveLevel update
-					txtlog.value += "DriveLevel = " + rdata.buf[rdata.offset + 2] + "\n";
+					let dl = decodebyte(rdata);
+					txtlog.value += "DriveLevel = " + dl + "\n";
 					txtlog.scrollTo(0, txtlog.scrollHeight);
-					document.getElementById("driveleveltext").innerHTML = "" + rdata.buf[rdata.offset + 2];
-					document.getElementById("drivelevelslider").value = rdata.buf[rdata.offset + 2];
+					document.getElementById("driveleveltext").innerHTML =
+						"" + dl;
+					document.getElementById("drivelevelslider").value = dl;
 					break;
-				case 0x8E:
+				}
+				case "\x8E": {
 					// Pixel data for constellation plot (x, y, color)
-					drawConstellation(rdata.buf.slice(rdata.offset + 2, rdata.offset + msglen));
+					let pixeldata = decodeslice(rdata, -1);
+					drawConstellation(pixeldata);
 					break;
-				case 0x8F:
+				}
+				case "\x8F":
 					// Data non-text to Host
 					if (!devmode)
-						console.log("WARNING: receiving non-text data Host messages when not in devmode");
+						console.log(
+							"WARNING: receiving non-text data Host messages"
+							+ " when not in devmode");
 					txtlog.value += "Data (non-text) to Host: ("
-						+ decoder.decode(rdata.buf.slice(rdata.offset + 2, rdata.offset + 5))
-						+ ") " + buf2hex(rdata.buf.slice(rdata.offset + 5, rdata.offset + msglen))
+						+ decodestr(rdata, 3) + ") "
+						+ buf2hex(decodeslice(rdata, -1))
 						+ "\n";
 					txtlog.scrollTo(0, txtlog.scrollHeight);
 					break
-				case 0x9A:
+				case "\x9A": {
 					// AvgLen update
-					txtlog.value += "AvgLen = " + rdata.buf[rdata.offset + 2] + "\n";
+					let avglen = decodebyte(rdata);
+					txtlog.value += "AvgLen = " + avglen + "\n";
 					txtlog.scrollTo(0, txtlog.scrollHeight);
-					document.getElementById("avglentext").innerHTML = "" + rdata.buf[rdata.offset + 2];
-					document.getElementById("avglenslider").value = rdata.buf[rdata.offset + 2];
+					document.getElementById("avglentext").innerHTML =
+						"" + avglen;
+					document.getElementById("avglenslider").value = avglen;
 					break;
+				}
 				default:
-					txtlog.value += "WARNING: Received an unexpected message of type=" + rdata.buf[rdata.offset] + " and length=" + msglen + "\n";
-					if (rdata.buf[rdata.offset] >= 0x20 && rdata.buf[rdata.offset] <= 0x7D)
-						// This message can be printed as text (though it doesn't have a terminating NULL)
-						txtlog.value += "message (text): " + decoder.decode(rdata.buf.slice(rdata.offset, rdata.offset + msglen)) + "\n";
+					txtlog.value +=
+						"WARNING: Received an unexpected message of type="
+						+ msgtype + " and length=" + msglen + "\n";
+					if (typeof(msgtype) == "string")
+						// This message can be printed as text (though it
+						// doesn't have a terminating NULL)
+						txtlog.value +=
+							"message (text): " + decodestr(rdata, -1) + "\n";
 					else
-						// This message should be printed as a string of hex values.
-						txtlog.value += "message (hex): " + buf2hex(rdata.buf.slice(rdata.offset, rdata.offset + msglen)) + "\n";
+						// This message should be printed as a sequence of
+						// hex values.
+						txtlog.value +=
+							"message (hex): " + buf2hex(decodeslice(rdata, -1))
+							+ "\n";
 					break;
 			}
-			rdata.offset += msglen;
+			if (rdata.offset != msgoffset + msglen) {
+				console.log(
+					"WARNING: msg of type " + msgtype + " was not fully"
+					+ " parsed.");
+				rdata.offset == msgoffset + msglen;
+			}
 			// update startoffset before parsing next msglen
 			startoffset = rdata.offset;
 		}
 		rdata.condense();
 	}
-	document.getElementById("send2tone").onclick = function() {send_send2tone();};
-	document.getElementById("sendid").onclick = function() {send_sendid();};
-	document.getElementById("clearlog").onclick = function() {txtlog.value = "";};
+	document.getElementById("send2tone").onclick = function() {
+		send_send2tone();
+	};
+	document.getElementById("sendid").onclick = function() {
+		send_sendid();
+	};
+	document.getElementById("clearlog").onclick = function() {
+		txtlog.value = "";
+	};
 	document.getElementById("loghider").onclick = function() {
 		if (document.getElementById("loghider").innerHTML == "Show Log") {
 			document.getElementById("logdiv").classList.remove("dnone");
@@ -717,18 +866,20 @@ window.addEventListener("load", function(evt) {
 	};
 
 	document.getElementById("text-log").onkeydown = function(evt) {
-		// text-log is intended to be readonly, but rather than set it readonly
-		// in the html, just ignore all key presses except for cursor movement
-		// keys (to allow keyboard scrolling).
+		// text-log is intended to be readonly, but rather than set it
+		// readonly in the html, just ignore all key presses except for
+		// cursor movement keys (to allow keyboard scrolling).
 		if (evt.keyCode < 33 || evt.keyCode > 40)
 			evt.preventDefault();
 	};
 
 	document.getElementById("hostcommand").onkeydown = function(evt) {
 		if (!devmode)
-			// This function should only work in Dev Mode, which is enabled by a msg from ardopcf.
+			// This function should only work in Dev Mode, which is enabled
+			// by a msg from ardopcf.
 			return;
-		// Up and Down arrows can be used to scroll back and forward through past commands.
+		// Up and Down arrows can be used to scroll back and forward through
+		// past commands.
 		if (evt.keyCode == 38) { // up arrow
 			if (cmdhistory.length == 0)
 				return;
@@ -795,8 +946,12 @@ window.addEventListener("load", function(evt) {
 		spCtx.beginPath();
 		spCtx.moveTo(0, plotscale * spHeight);
 		for(var i=0; i<values.length; i++) {  // 2 frequency values per i
-			spCtx.lineTo(plotscale*2*i, plotscale * (spHeight - (values[i] >> 4)*(spHeight/16)));
-			spCtx.lineTo(plotscale*(2*i + 1), plotscale * (spHeight - (values[i] & 0x0F)*(spHeight/16)));
+			spCtx.lineTo(
+				plotscale*2*i,
+				plotscale * (spHeight - (values[i] >> 4)*(spHeight/16)));
+			spCtx.lineTo(
+				plotscale*(2*i + 1),
+				plotscale * (spHeight - (values[i] & 0x0F)*(spHeight/16)));
 		}
 		spCtx.lineTo(plotscale * spWidth, plotscale * spHeight);
 		spCtx.moveTo(0, plotscale * spHeight); // close for fill
@@ -805,10 +960,18 @@ window.addEventListener("load", function(evt) {
 		spCtx.fill();
 		// draw bandwidth markers
 		spCtx.beginPath();
-		spCtx.moveTo(plotscale * (values.length - (bandwidth/2) / 11.719), 0);
-		spCtx.lineTo(plotscale * (values.length - (bandwidth/2) / 11.719), plotscale * spHeight)
-		spCtx.moveTo(plotscale * (values.length + (bandwidth/2) / 11.719), plotscale * spHeight);
-		spCtx.lineTo(plotscale * (values.length + (bandwidth/2) / 11.719), 0);
+		spCtx.moveTo(
+			plotscale * (values.length - (bandwidth/2) / 11.719),
+			0);
+		spCtx.lineTo(
+			plotscale * (values.length - (bandwidth/2) / 11.719),
+			plotscale * spHeight)
+		spCtx.moveTo(
+			plotscale * (values.length + (bandwidth/2) / 11.719),
+			plotscale * spHeight);
+		spCtx.lineTo(
+			plotscale * (values.length + (bandwidth/2) / 11.719),
+			0);
 		if (isbusy)
 			spCtx.strokeStyle = "#F0F";
 		else
@@ -818,16 +981,30 @@ window.addEventListener("load", function(evt) {
 
 	const addWaterfallLine = (values) => {
 		// shift the existing image down by plotscale pixels
-		wfCtx.drawImage(wfCtx.canvas, 0, 0, plotscale * wfWidth, plotscale * wfHeight, 0, plotscale, plotscale * wfWidth,  plotscale * wfHeight);
+		wfCtx.drawImage(
+			wfCtx.canvas,
+			0,
+			0,
+			plotscale * wfWidth,
+			plotscale * wfHeight,
+			0,
+			plotscale,
+			plotscale * wfWidth,
+			plotscale * wfHeight);
 		// expand values (4-bit uint per pixel) to colormap values (RGBA per pixel)
-		let colorValues = new Uint8ClampedArray(plotscale * (2 * values.length) * 4); // filled with 0
+		let colorValues = new Uint8ClampedArray(
+			plotscale * (2 * values.length) * 4); // filled with 0
 		for(var i=0; i<values.length; i++) {  // 2 frequency values per i
 			for (var k=0; k<plotscale; k++) {
 				for (var j=0; j<4; j++) {  // r, g, b
 					// first of two freqencies encoded in this byte
-					colorValues[((plotscale*(2*i) + k) * 4) + j] = colormap[(values[i] >> 4)][j]; // RGBA
+					colorValues[
+						((plotscale*(2*i) + k) * 4) + j
+					] = colormap[(values[i] >> 4)][j]; // RGBA
 					// second of two freqencies encoded in this byte
-					colorValues[((plotscale*(2*i + 1) + k) * 4) + j] = colormap[(values[i] & 0x0F)][j]; // RGBA
+					colorValues[
+						((plotscale*(2*i + 1) + k) * 4) + j
+					] = colormap[(values[i] & 0x0F)][j]; // RGBA
 				}
 			}
 		}
@@ -838,13 +1015,32 @@ window.addEventListener("load", function(evt) {
 		else
 			bwcolor = 17
 		for (var j=0; j<4; j++) {  // r, g, b
-			colorValues[plotscale * values.length*4 + j] = colormap[16][j]; // black centerline
-			colorValues[Math.round(plotscale * (values.length + (bandwidth/2) / 11.719)) * 4 + j] = colormap[bwcolor][j];
-			colorValues[Math.round(plotscale * (values.length + (bandwidth/2) / 11.719) + 1) * 4 + j] = colormap[bwcolor][j];
-			colorValues[Math.round(plotscale * (values.length - (bandwidth/2) / 11.719)) * 4 + j] = colormap[bwcolor][j];
-			colorValues[Math.round(plotscale * (values.length - (bandwidth/2) / 11.719) + 1) * 4 + j] = colormap[bwcolor][j];
+			colorValues[
+				plotscale * values.length*4 + j
+			] = colormap[16][j]; // black centerline
+			colorValues[
+				Math.round(
+					plotscale * (values.length + (bandwidth/2) / 11.719)
+				) * 4 + j
+			] = colormap[bwcolor][j];
+			colorValues[
+				Math.round(
+					plotscale * (values.length + (bandwidth/2) / 11.719) + 1
+				) * 4 + j
+			] = colormap[bwcolor][j];
+			colorValues[
+				Math.round(
+					plotscale * (values.length - (bandwidth/2) / 11.719)
+				) * 4 + j
+			] = colormap[bwcolor][j];
+			colorValues[
+				Math.round(
+					plotscale * (values.length - (bandwidth/2) / 11.719) + 1
+				) * 4 + j
+			] = colormap[bwcolor][j];
 		}
-		let imageData = new ImageData(colorValues, plotscale * 2 * values.length, 1);
+		let imageData = new ImageData(
+			colorValues, plotscale * 2 * values.length, 1);
 		for (k=0; k<plotscale; k++) {
 			wfCtx.putImageData(imageData, 0, k);
 		}
@@ -862,16 +1058,21 @@ window.addEventListener("load", function(evt) {
 	const drawConstellation = (pixels) => {
 		cnstCtx.fillStyle = "#000000";
 		cnstCtx.fillRect(0, 0, plotscale * cnstWidth, plotscale * cnstHeight);
-		let imageData = cnstCtx.getImageData(0, 0, plotscale * cnstWidth, plotscale * cnstHeight);
+		let imageData = cnstCtx.getImageData(
+			0, 0, plotscale * cnstWidth, plotscale * cnstHeight);
 		let data = imageData.data
 		for (var i=0; i<pixels.length/3; i++) {
 			for (var kx=0; kx<plotscale; kx++) {
 				for (var ky=0; ky<plotscale; ky++) {
 					for (var j=0; j<3; j++) {  // r, g, b
-						// ignore color data in pixels[3*i + 2], since this is an index
-						// to a palette not currently defined here. plot everything as white
+						// ignore color data in pixels[3*i + 2], since this
+						// is an index to a palette not currently defined
+						//  here. plot everything as white.
 						// alpha is unchanged at 0xFF
-						data[(plotscale * pixels[3*i] + kx + ((plotscale * pixels[3*i+1] + ky) * plotscale * cnstWidth)) * 4 + j] = 0xFF // white
+						data[
+							(plotscale * pixels[3*i] + kx
+							+ ((plotscale * pixels[3*i+1] + ky) * plotscale
+							* cnstWidth)) * 4 + j] = 0xFF // white
 					}
 				}
 			}
@@ -881,24 +1082,24 @@ window.addEventListener("load", function(evt) {
 	};
 
 	document.getElementById("avglenslider").oninput = function() {
-		throttlecontrol(setavglen, 250, avglencontroltimer);
+		throttledcontrol(setavglen, 250, avglencontroltimer);
 	}
 	document.getElementById("plotscaleslider").oninput = function() {
 		plotscale = document.getElementById("plotscaleslider").value;
-		document.getElementById("waterfall").width = plotscale * wfWidth;
-		document.getElementById("waterfall").height = plotscale * wfHeight;
+		wfCanvas.width = plotscale * wfWidth;
+		wfCanvas.height = plotscale * wfHeight;
 		wfCtx.fillStyle = "#000000";
 		wfCtx.fillRect(0, 0, plotscale * wfWidth, plotscale * wfHeight);
-		document.getElementById("spectrum").width = plotscale * spWidth;
-		document.getElementById("spectrum").height = plotscale * spHeight;
-		document.getElementById("constellation").width = plotscale * cnstWidth;
-		document.getElementById("constellation").height = plotscale * cnstHeight;
+		spCanvas.width = plotscale * spWidth;
+		spCanvas.height = plotscale * spHeight;
+		cnstCanvas.width = plotscale * cnstWidth;
+		cnstCanvas.height = plotscale * cnstHeight;
 		cnstCtx.fillStyle = "#000000";
 		cnstCtx.fillRect(0, 0, plotscale * cnstWidth, plotscale * cnstHeight);
 		drawCnstGridlines();
 	}
 	document.getElementById("drivelevelslider").oninput = function() {
-		throttledrivelevelcontrol(setdrivelevel, 250);
+		throttledcontrol(setdrivelevel, 250, drivelevelcontroltimer);
 	}
 
 	WebSocketClient.init("ws://" + document.location.host + "/ws");
