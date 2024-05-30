@@ -32,11 +32,11 @@ Previously, "Input peaks" values indicating the recent peak received audio level
 
 ##### Fixed bug for TX of 1-carrier PSK frame types.
 
-A bug which made 1-carrier PSK frame types transmitted by prior versions of ardopc and ardopcf was corrected.
+A bug which made 1-carrier PSK frame types transmitted by prior versions of ardopc and ardopcf harder to decode was corrected.
 
 ##### Fixed bug relating to 1000MAX bandwidth setting.
 
-A bug was corrected which had allowed a 2000 Hz bandwidth connection request to be accepted when a 1000 Hz maximum bandwith was set.
+A bug was corrected which had allowed a 2000 Hz bandwidth connection request to be accepted when a 1000 Hz maximum bandwidth was set.
 
 ##### Fixed rare but serious PTT stuck on bug
 
@@ -44,15 +44,15 @@ A bug was identified and corrected that could cause ardopcf to lock up with PTT 
 
 ##### Improved fix for ALSA TX Symbol Rate Error
 
-Earlier releases fixed an ALSA problem that caused an incorrect symbol rate when transmitting with certain combinations of hardware and operating system.  A better, more reliable fix for this problem is now implemented.
+Earlier releases fixed an ALSA problem that caused an incorrect symbol rate when transmitting with certain combinations of hardware and operating system.  A better and more reliable fix for this problem is now implemented.
 
 ##### Improved handling of Ping and PingAck
 
-Fixed a bug in the calcultion of S:N ratio for received Ping frames.  This is used in the responding PingAck frames.  Data related to both of these frame types are now reported better in RXO ProtocolMode.
+Fixed a bug in the calculation of S:N ratio for received Ping frames.  This is used in the responding PingAck frames.  Data related to both of these frame types are now reported better in RXO ProtocolMode.
 
-##### New nosound audio interface option
+##### New `nosound` audio interface option
 
-nosound may be specified for the capture and playback audio devices to be used by ardopcf.  This is intended only for diagnostic/devlopment purposes.  Using these dummy devices prevent ardopcf from actually transmitting or receiving any audio, but still allows audio that would have been transmitted to be written to audio files using the `-T` or `--writetxwav` options.  When nosound is used for the playback device, none of the delays normally used to give the soundcard time to play the audio produced are implemented.  This, along with host commands provided via the `--hostcommands` option provide a way to quickly and efficiently produce WAV files of transmitted frames for testing purposes.
+`nosound` may be specified for the capture and playback audio devices to be used by ardopcf.  This is intended only for diagnostic/devlopment purposes.  Using these dummy devices prevent ardopcf from actually transmitting or receiving any audio, but still allows audio that would have been transmitted to be written to audio files using the `-T` or `--writetxwav` options.  When `nosound` is used for the playback device, none of the delays normally used to give the soundcard time to play the audio produced are implemented.  This, along with host commands provided via the `--hostcommands` option provide a way to quickly and efficiently produce WAV files of transmitted frames for testing purposes.
 
 While implementing this feature, a bug was found and corrected that previously resulted in incorrect behavior if an invalid named sound device was specified.
 
