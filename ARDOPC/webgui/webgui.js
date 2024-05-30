@@ -470,7 +470,6 @@ window.addEventListener("load", function(evt) {
 				return;
 			}
 			let pipe = decodestr(rdata, 1);
-			console.log("pipe", pipe);
 			if (pipe != "|") {
 				console.log("Expected '|' after message type byte not found.",
 					rdata.buf.slice(startoffset, msgoffset + msglen));
@@ -672,26 +671,34 @@ window.addEventListener("load", function(evt) {
 				}
 				case "R":
 					// IRS true
-					txtlog.value += "IRS = true\n";
-					txtlog.scrollTo(0, txtlog.scrollHeight);
+					if (devmode) {
+						// Some messages are written to the log only in devmode
+						txtlog.value += "IRS = true\n";
+						txtlog.scrollTo(0, txtlog.scrollHeight);
+					}
 					document.getElementById("irs").classList.remove("dnone");
 					break;
 				case "r":
 					// IRS false
-					txtlog.value += "IRS = false\n";
-					txtlog.scrollTo(0, txtlog.scrollHeight);
+					// This is normally accompanied by ISS true, so don't log
+					// txtlog.value += "IRS = false\n";
+					// txtlog.scrollTo(0, txtlog.scrollHeight);
 					document.getElementById("irs").classList.add("dnone");
 					break;
 				case "S":
 					// ISS true
-					txtlog.value += "ISS = true\n";
-					txtlog.scrollTo(0, txtlog.scrollHeight);
+					if (devmode) {
+						// Some messages are written to the log only in devmode
+						txtlog.value += "ISS = true\n";
+						txtlog.scrollTo(0, txtlog.scrollHeight);
+					}
 					document.getElementById("iss").classList.remove("dnone");
 					break;
 				case "s":
 					// ISS false
-					txtlog.value += "ISS = false\n";
-					txtlog.scrollTo(0, txtlog.scrollHeight);
+					// This is normally accompanied by IRS true, so don't log
+					// txtlog.value += "ISS = false\n";
+					// txtlog.scrollTo(0, txtlog.scrollHeight);
 					document.getElementById("iss").classList.add("dnone");
 					break;
 				case "t": {
@@ -738,8 +745,8 @@ window.addEventListener("load", function(evt) {
 						alert("ERROR: Invalid quality data.");
 						break;
 					}
-					txtlog.value += "Quality = " + quality + "/100\n";
-					txtlog.value += "RS Errors = " + rserrors
+					txtlog.value += "RX Quality = " + quality + "/100\n";
+					txtlog.value += "RX RS Errors = " + rserrors
 						+ "/" + rsmax + "\n";
 					txtlog.scrollTo(0, txtlog.scrollHeight);
 					document.getElementById("quality").innerHTML =
@@ -774,8 +781,11 @@ window.addEventListener("load", function(evt) {
 				case "\x8D": {
 					// DriveLevel update
 					let dl = decodebyte(rdata);
-					txtlog.value += "DriveLevel = " + dl + "\n";
-					txtlog.scrollTo(0, txtlog.scrollHeight);
+					if (devmode) {
+						// Some messages are written to the log only in devmode
+						txtlog.value += "DriveLevel = " + dl + "\n";
+						txtlog.scrollTo(0, txtlog.scrollHeight);
+					}
 					document.getElementById("driveleveltext").innerHTML =
 						"" + dl;
 					document.getElementById("drivelevelslider").value = dl;
@@ -802,8 +812,11 @@ window.addEventListener("load", function(evt) {
 				case "\x9A": {
 					// AvgLen update
 					let avglen = decodebyte(rdata);
-					txtlog.value += "AvgLen = " + avglen + "\n";
-					txtlog.scrollTo(0, txtlog.scrollHeight);
+					if (devmode) {
+						// Some messages are written to the log only in devmode
+						txtlog.value += "AvgLen = " + avglen + "\n";
+						txtlog.scrollTo(0, txtlog.scrollHeight);
+					}
 					document.getElementById("avglentext").innerHTML =
 						"" + avglen;
 					document.getElementById("avglenslider").value = avglen;
