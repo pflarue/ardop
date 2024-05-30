@@ -356,7 +356,7 @@ BOOL CtrlHandler(DWORD fdwCtrlType)
 
 
 
-void main(int argc, char * argv[])
+int main(int argc, char * argv[])
 {
 	TIMECAPS tc;
 	unsigned int     wTimerRes;
@@ -397,7 +397,7 @@ void main(int argc, char * argv[])
 	if (DecodeWav[0])
 	{
 		decode_wav();
-		return;
+		return (0);
 	}
 
 	if (HostPort[0])
@@ -515,13 +515,14 @@ void main(int argc, char * argv[])
 		if (!InitSound(TRUE))
 		{
 			WriteDebugLog(LOGCRIT, "Error in InitSound().  Stopping ardop.");
-			return;
+			return (0);
 		}
 		WriteDebugLog(LOGINFO, "Sending a 5 second 2-tone signal. Then exiting ardop.");
 		Send5SecTwoTone();
-		return;
+		return (0);
 	}
 	ardopmain();
+	return (0);
 }
 
 unsigned int getTicks()

@@ -526,7 +526,7 @@ static void sigint_handler(int sig)
 char * PortString = NULL;
 
 
-void main(int argc, char * argv[])
+int main(int argc, char * argv[])
 {
 	struct timespec tp;
 	struct sigaction act;
@@ -562,7 +562,7 @@ void main(int argc, char * argv[])
 	if (DecodeWav[0])
 	{
 		decode_wav();
-		return;
+		return (0);
 	}
 
 	if (HostPort[0])
@@ -752,11 +752,11 @@ void main(int argc, char * argv[])
 		if (!InitSound())
 		{
 			WriteDebugLog(LOGCRIT, "Error in InitSound().  Stopping ardop.");
-			return;
+			return (0);
 		}
 		WriteDebugLog(LOGINFO, "Sending a 5 second 2-tone signal. Then exiting ardop.");
 		Send5SecTwoTone();
-		return;
+		return (0);
 	}
 
 	ardopmain();
@@ -766,6 +766,7 @@ void main(int argc, char * argv[])
 	if (SerialMode)
 		unlink (HostPort);
 
+	return (0);
 }
 
 void txSleep(int mS)
