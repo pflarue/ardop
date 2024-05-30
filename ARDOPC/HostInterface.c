@@ -14,7 +14,6 @@ int ComputeInterFrameInterval(int intRequestedIntervalMS);
 HANDLE OpenCOMPort(VOID * pPort, int speed, BOOL SetDTR, BOOL SetRTS, BOOL Quiet, int Stopbits);
 BOOL WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite);
 void SetupGPIOPTT();
-VOID ConvertCallstoAX25();
 int GetEEPROM(int Reg);
 void SaveEEPROM(int reg, int val);
 void setProtocolMode(char* strMode);
@@ -943,7 +942,6 @@ void ProcessCommandFromHost(char * strCMD)
 		}
 		cmdReply[len - 1] = 0;	// remove trailing space or ,
 		SendReplyToHost(cmdReply);	
-		ConvertCallstoAX25();
 
 		goto cmddone;
 	}
@@ -963,7 +961,6 @@ void ProcessCommandFromHost(char * strCMD)
 				wg_send_mycall(0, Callsign);
 				sprintf(cmdReply, "%s now %s", strCMD, Callsign);
 				SendReplyToHost(cmdReply);
-				ConvertCallstoAX25();
 			}
 			else
 				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);

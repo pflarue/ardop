@@ -581,8 +581,6 @@ void LostHost()
 
 	if (ProtocolState == IDLE || ProtocolState == IRS || ProtocolState == ISS || ProtocolState == IRStoISS)
 		blnARQDisconnect = 1;
-
-	ClosePacketSessions();
 }
 
 #endif
