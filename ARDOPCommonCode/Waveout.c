@@ -13,8 +13,10 @@
 
 #include <windows.h>
 #include <mmsystem.h>
+#include <stdbool.h>
 
 #include "wav.h"
+#include "../lib/rockliff/rrs.h"
 
 #ifdef USE_DIREWOLF
 #include "direwolf/fsk_demod_state.h"
@@ -124,6 +126,10 @@ void HostPoll();
 void TCPHostPoll();
 void SerialHostPoll();
 BOOL WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite);
+void WebguiPoll();
+int wg_send_currentlevel(int cnum, unsigned char level);
+int wg_send_pttled(int cnum, bool isOn);
+int wg_send_pixels(int cnum, unsigned char *data, size_t datalen);
 
 int Ticks;
 
@@ -350,12 +356,15 @@ BOOL CtrlHandler(DWORD fdwCtrlType)
 
 
 
-void main(int argc, char * argv[])
+int main(int argc, char * argv[])
 {
 	TIMECAPS tc;
 	unsigned int     wTimerRes;
 	DWORD	t, lastt = 0;
 	int i = 0;
+	// rslen_set[] must list all of the rslen values used.
+	int rslen_set[] = {2, 4, 8, 16, 32, 36, 50, 64};
+	init_rs(rslen_set, 8);
 
 	SetConsoleCtrlHandler((PHANDLER_ROUTINE)CtrlHandler, TRUE);
 
@@ -384,13 +393,11 @@ void main(int argc, char * argv[])
 		"See https://github.com/pflarue/ardop/blob/master/LICENSE for licence details including\n" 
 		"  information about authors of external libraries used and their licenses."
 	);
-	WriteDebugLog(LOGALERT, "ConsoleLogLevel = %d (%s)", ConsoleLogLevel, strLogLevels[ConsoleLogLevel]);
-	WriteDebugLog(LOGALERT, "FileLogLevel = %d (%s)", FileLogLevel, strLogLevels[FileLogLevel]);
 
 	if (DecodeWav[0])
 	{
 		decode_wav();
-		return;
+		return (0);
 	}
 
 	if (HostPort[0])
@@ -508,13 +515,14 @@ void main(int argc, char * argv[])
 		if (!InitSound(TRUE))
 		{
 			WriteDebugLog(LOGCRIT, "Error in InitSound().  Stopping ardop.");
-			return;
+			return (0);
 		}
 		WriteDebugLog(LOGINFO, "Sending a 5 second 2-tone signal. Then exiting ardop.");
 		Send5SecTwoTone();
-		return;
+		return (0);
 	}
 	ardopmain();
+	return (0);
 }
 
 unsigned int getTicks()
@@ -543,10 +551,13 @@ void txSleep(int mS)
 	PollReceivedSamples();			// discard any received samples
 	if (SerialMode)
 		SerialHostPoll();
-	else
+	else {
 		TCPHostPoll();
+		WebguiPoll();
+	}
 
-	Sleep(mS);
+	if (strcmp(PlaybackDevice, "NOSOUND") != 0)
+		Sleep(mS);
 
 	if (PKTLEDTimer && Now > PKTLEDTimer)
     {
@@ -567,13 +578,17 @@ BOOL DMARunning = FALSE;		// Used to start DMA on first write
 
 short * SendtoCard(unsigned short * buf, int n)
 {
-	header[Index].dwBufferLength = n * 2;
-
-	waveOutPrepareHeader(hWaveOut, &header[Index], sizeof(WAVEHDR));
-	waveOutWrite(hWaveOut, &header[Index], sizeof(WAVEHDR));
-
 	if (txwff != NULL)
 		WriteWav(&buffer[Index][0], n, txwff);
+
+	if (strcmp(PlaybackDevice, "NOSOUND") == 0) {
+		Index = !Index;
+		return &buffer[Index][0];
+	}
+
+	header[Index].dwBufferLength = n * 2;
+	waveOutPrepareHeader(hWaveOut, &header[Index], sizeof(WAVEHDR));
+	waveOutWrite(hWaveOut, &header[Index], sizeof(WAVEHDR));
 
 	// wait till previous buffer is complete
 
@@ -643,6 +658,8 @@ void GetSoundDevices()
 int InitSound(BOOL Report)
 {
 	int i, ret;
+	if (strcmp(PlaybackDevice, "NOSOUND") == 0)
+		return TRUE;
 
 	header[0].dwFlags = WHDR_DONE;
 	header[1].dwFlags = WHDR_DONE;
@@ -661,6 +678,15 @@ int InitSound(BOOL Report)
 				break;
 			}
 		}
+	}
+	if (PlayBackIndex == -1) {
+		WriteDebugLog(LOGERROR,
+			"ERROR: playbackdevice = '%s' not found.  Try using one of the names or"
+			" numbers (0-%d) listed above.",
+			PlaybackDevice,
+			PlaybackCount - 1
+		);
+		return FALSE;
 	}
 
     ret = waveOutOpen(&hWaveOut, PlayBackIndex, &wfx, 0, 0, CALLBACK_NULL); //WAVE_MAPPER
@@ -688,6 +714,15 @@ int InitSound(BOOL Report)
 				break;
 			}
 		}
+	}
+	if (CaptureIndex == -1) {
+		WriteDebugLog(LOGERROR,
+			"ERROR: capturedevice = '%s' not found.  Try using one of the names or"
+			" numbers (0-%d) listed above.",
+			CaptureDevice,
+			CaptureCount - 1
+		);
+		return FALSE;
 	}
 
     ret = waveInOpen(&hWaveIn, CaptureIndex, &wfx, 0, 0, CALLBACK_NULL); //WAVE_MAPPER
@@ -720,6 +755,8 @@ UCHAR CurrentLevel = 0;		// Peak from current samples
 
 void PollReceivedSamples()
 {
+	if (strcmp(PlaybackDevice, "NOSOUND") == 0)
+		return;
 	// Process any captured samples
 	// Ideally call at least every 100 mS, more than 200 will loose data
 
@@ -741,6 +778,7 @@ void PollReceivedSamples()
 		}
 
 		CurrentLevel = ((max - min) * 75) /32768;	// Scale to 150 max
+		wg_send_currentlevel(0, CurrentLevel);
 
 		if ((Now - lastlevelGUI) > 2000)	// 2 Secs
 		{
@@ -751,12 +789,23 @@ void PollReceivedSamples()
 
 			if ((Now - lastlevelreport) > 10000)	// 10 Secs
 			{
-				char HostCmd[64];
 				lastlevelreport = Now;
+				// Report input peaks to host if in debug mode or if close to clipping
+				if (max >= 32000 || ConsoleLogLevel >= LOGDEBUG)
+				{
+					char HostCmd[64];
 
-				sprintf(HostCmd, "INPUTPEAKS %d %d", min, max);
-				WriteDebugLog(LOGINFO, "Input peaks = %d, %d", min, max);
-				SendCommandToHostQuiet(HostCmd);
+					sprintf(HostCmd, "INPUTPEAKS %d %d", min, max);
+					SendCommandToHostQuiet(HostCmd);
+					WriteDebugLog(LOGINFO, "Input peaks = %d, %d", min, max);
+					// A user NOT in debug mode will see this message if they are clipping
+					if (ConsoleLogLevel <= LOGINFO)
+					{
+						WriteDebugLog(LOGINFO, "Your input signal is probably clipping. \
+If you see this message repeated in the next 20-30 seconds, \
+Turn down your RX input until this message stops repeating.");
+					}
+				}
 
 			}
 			min = max = 0;
@@ -824,52 +873,26 @@ VOID CloseDebugLog()
 	logfile[0] = NULL;
 }
 
-
-VOID WriteDebugLog(int LogLevel, const char * format, ...)
-{
-	char Mess[10000];
-	va_list(arglist);
-	char timebuf[128];
-	UCHAR Value[100];
+int WriteLog(char * msg, int log) {
 	SYSTEMTIME st;
+	UCHAR Value[100];
+	char timebuf[128];
 	int wavhh;
 	int wavmm;
 	float wavss;
 
-	
-	va_start(arglist, format);
-#ifdef LOGTOHOST
-	vsnprintf(&Mess[1], sizeof(Mess), format, arglist);
-	strcat(Mess, "\r\n");
-	Mess[0] = LogLevel + '0';
-	SendLogToHost(Mess, strlen(Mess));
-#else
-	vsnprintf(Mess, sizeof(Mess), format, arglist);
-	strcat(Mess, "\r\n");
-
-
-	if (LogLevel <= ConsoleLogLevel)
-		printf(Mess);
-
-	if (!DebugLog)
-		return;
-
-	if (LogLevel > FileLogLevel)
-		return;
-
 	GetSystemTime(&st);
-	
-	if (logfile[0] == NULL)
+	if (logfile[log] == NULL)
 	{
 		if (HostPort[0])
 			sprintf(Value, "%s%s_%04d%02d%02d.log",
-				&LogName[0], HostPort, st.wYear, st.wMonth, st.wDay);
+				&LogName[log], HostPort, st.wYear, st.wMonth, st.wDay);
 		else
 			sprintf(Value, "%s%d_%04d%02d%02d.log",
-				&LogName[0], port, st.wYear, st.wMonth, st.wDay);
-		
-		if ((logfile[0] = fopen(Value, "ab")) == NULL)
-			return;
+				&LogName[log], port, st.wYear, st.wMonth, st.wDay);
+
+		if ((logfile[log] = fopen(Value, "ab")) == NULL)
+			return -1;
 	}
 	if (DecodeWav[0])
 	{
@@ -887,51 +910,50 @@ VOID WriteDebugLog(int LogLevel, const char * format, ...)
 		sprintf(timebuf, "%02d:%02d:%02d.%03d ",
 			st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
 	}
+	fputs(timebuf, logfile[log]);
+	fputs(msg, logfile[log]);
+	return 0;
+}
 
-	fputs(timebuf, logfile[0]);
+VOID WriteDebugLog(int LogLevel, const char * format, ...)
+{
+	char Mess[10000];
+	va_list(arglist);
+	
+	va_start(arglist, format);
+#ifdef LOGTOHOST
+	vsnprintf(&Mess[1], sizeof(Mess), format, arglist);
+	strcat(Mess, "\r\n");
+	Mess[0] = LogLevel + '0';
+	SendLogToHost(Mess, strlen(Mess));
+#else
+	vsnprintf(Mess, sizeof(Mess), format, arglist);
+	strcat(Mess, "\r\n");
 
-	fputs(Mess, logfile[0]);
+	if (LogLevel <= ConsoleLogLevel)
+		printf(Mess);
+
+	if (!DebugLog)
+		return;
+
+	if (LogLevel > FileLogLevel)
+		return;
+	WriteLog(Mess, DEBUGLOG);
 #endif
-
-	return;
 }
 
 VOID WriteExceptionLog(const char * format, ...)
 {
 	char Mess[10000];
 	va_list(arglist);
-	char timebuf[32];
-	UCHAR Value[100];
 	FILE *logfile = NULL;
-	SYSTEMTIME st;
 	
 	va_start(arglist, format);
 	vsnprintf(Mess, sizeof(Mess), format, arglist);
 	strcat(Mess, "\r\n");
 
 	printf(Mess);
-
-	GetSystemTime(&st);
-
-	if (HostPort[0])
-		sprintf(Value, "%s%s_%04d%02d%02d.log",
-				"ARDOPException", HostPort, st.wYear, st.wMonth, st.wDay);
-	else	
-		sprintf(Value, "%s%d_%04d%02d%02d.log",
-				"ARDOPException", port, st.wYear, st.wMonth, st.wDay);
-	
-	if ((logfile = fopen(Value, "ab")) == NULL)
-		return;
-
-	sprintf(timebuf, "%02d:%02d:%02d.%03d ",
-		st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
-
-	fputs(timebuf, logfile);
-
-	fputs(Mess, logfile);
-	fclose(logfile);
-
-	return;
+	WriteLog(Mess, EXCEPTLOG);
 }
 
 FILE *statslogfile = NULL;
@@ -1013,11 +1035,12 @@ void SoundFlush()
 	SendtoCard(buffer[Index], Number);
 
 	//	Wait for all sound output to complete
-	
-	while (!(header[0].dwFlags & WHDR_DONE))
-		txSleep(10);
-	while (!(header[1].dwFlags & WHDR_DONE))
-		txSleep(10);
+	if (strcmp(PlaybackDevice, "NOSOUND") != 0) {
+		while (!(header[0].dwFlags & WHDR_DONE))
+			txSleep(10);
+		while (!(header[1].dwFlags & WHDR_DONE))
+			txSleep(10);
+	}
 
 	// I think we should turn round the link here. I dont see the point in
 	// waiting for MainPoll
@@ -1130,7 +1153,7 @@ BOOL KeyPTT(BOOL blnPTT)
 
 	blnLastPTT = blnPTT;
 	SetLED(0, blnPTT);
-
+	wg_send_pttled(0, blnPTT);
 	return TRUE;
 }
 
@@ -1138,7 +1161,8 @@ void PlatformSleep(int mS)
 {
 	//	Sleep to avoid using all cpu
 
-	Sleep(mS);
+	if (strcmp(PlaybackDevice, "NOSOUND") != 0)
+		Sleep(mS);
 		
 	if (PKTLEDTimer && Now > PKTLEDTimer)
     {
@@ -1457,6 +1481,7 @@ void DrawAxes(int Qual, const char * Frametype, char * Mode)
 	// Teensy used Frame Type, GUI Mode
 	
 	SendtoGUI('C', Pixels, pixelPointer - Pixels);	
+	wg_send_pixels(0, Pixels, pixelPointer - Pixels);
 	pixelPointer = Pixels;
 
 	sprintf(Msg, "%s Quality: %d", Mode, Qual);

@@ -14,6 +14,7 @@
 #include <signal.h>
 #include <termios.h>
 #include <sys/ioctl.h>
+#include <stdbool.h>
 #ifndef TEENSY
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -24,6 +25,7 @@
 
 #include "ardopcommon.h"
 #include "wav.h"
+#include "../lib/rockliff/rrs.h"
 
 #define SHARECAPTURE		// if defined capture device is opened and closed for each transission
 
@@ -49,6 +51,10 @@ void displayLevel(int max);
 BOOL WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite);
 VOID processargs(int argc, char * argv[]);
 void Send5SecTwoTone();
+int wg_send_currentlevel(int cnum, unsigned char level);
+int wg_send_pttled(int cnum, bool isOn);
+int wg_send_pixels(int cnum, unsigned char *data, size_t datalen);
+void WebguiPoll();
 
 VOID WriteDebugLog(int Level, const char * format, ...);
 
@@ -87,7 +93,8 @@ extern int useHamLib;
 
 void Sleep(int mS)
 {
-	usleep(mS * 1000);
+	if (strcmp(PlaybackDevice, "NOSOUND") != 0)
+		usleep(mS * 1000);
 	return;
 }
 
@@ -444,10 +451,13 @@ void PlatformSleep(int mS)
 {
 	if (SerialMode)
 		SerialHostPoll();
-	else
+	else {
 		TCPHostPoll();
+		WebguiPoll();
+	}
 
-	Sleep(mS);
+	if (strcmp(PlaybackDevice, "NOSOUND") != 0)
+		Sleep(mS);
 		
 	if (PKTLEDTimer && Now > PKTLEDTimer)
     {
@@ -516,11 +526,14 @@ static void sigint_handler(int sig)
 char * PortString = NULL;
 
 
-void main(int argc, char * argv[])
+int main(int argc, char * argv[])
 {
 	struct timespec tp;
 	struct sigaction act;
 	int lnlen;
+	// rslen_set[] must list all of the rslen values used.
+	int rslen_set[] = {2, 4, 8, 16, 32, 36, 50, 64};
+	init_rs(rslen_set, 8);
 
 //	Sleep(1000);	// Give LinBPQ time to complete init if exec'ed by linbpq
 
@@ -545,13 +558,11 @@ void main(int argc, char * argv[])
 		"See https://github.com/pflarue/ardop/blob/master/LICENSE for licence details including\n" 
 		"  information about authors of external libraries used and their licenses."
 	);
-	Debugprintf("ConsoleLogLevel = %d (%s)", ConsoleLogLevel, strLogLevels[ConsoleLogLevel]);
-	Debugprintf("FileLogLevel = %d (%s)", FileLogLevel, strLogLevels[FileLogLevel]);
 
 	if (DecodeWav[0])
 	{
 		decode_wav();
-		return;
+		return (0);
 	}
 
 	if (HostPort[0])
@@ -741,11 +752,11 @@ void main(int argc, char * argv[])
 		if (!InitSound())
 		{
 			WriteDebugLog(LOGCRIT, "Error in InitSound().  Stopping ardop.");
-			return;
+			return (0);
 		}
 		WriteDebugLog(LOGINFO, "Sending a 5 second 2-tone signal. Then exiting ardop.");
 		Send5SecTwoTone();
-		return;
+		return (0);
 	}
 
 	ardopmain();
@@ -755,6 +766,7 @@ void main(int argc, char * argv[])
 	if (SerialMode)
 		unlink (HostPort);
 
+	return (0);
 }
 
 void txSleep(int mS)
@@ -764,10 +776,13 @@ void txSleep(int mS)
 
 	if (SerialMode)
 		SerialHostPoll();
-	else
+	else {
 		TCPHostPoll();
+		WebguiPoll();
+	}
 
-	Sleep(mS);
+	if (strcmp(PlaybackDevice, "NOSOUND") != 0)
+		Sleep(mS);
 
 	if (PKTLEDTimer && Now > PKTLEDTimer)
     {
@@ -1120,28 +1135,14 @@ int GetNextInputDevice(char * dest, int max, int n)
 	return strlen(dest);
 }
 
-// A problem has been observed in which period_time * rate != period_size in
-// OpenSoundPlayback() for certain hardware configurations.  The result is that
-// the effective TX audio rate does not match the stated/desired rate.  The
-// problem appears to be in the ALSA library.  A workaround is implemented to
-// mitigate the problem.  If this problem is identified the first time that
-// OpenSoundPlayback() is executed, then intPeriodTime or periodSize will be
-// set to a suitable non-zero value allowing the fix to be reapplied each
-// additional time OpenSoundPlayback() is executed.
-unsigned int intSetPeriodTime = 0; // If !=0, explicitly set duration of one period in microseconds.
-snd_pcm_uframes_t setPeriodSize = 0;  // If != 0, explicitly set number of frames per period
-
-// If ALSA configuration is not valid on first execution of
-// OpenSoundPlayback(), then try to fix it.  If it is invalid
-// after that, ignore it.  In a previous implementation, OpenSoundPlayback()
-// would return false (fail) if the fix did not work.  Now it is ignored, thus
-// reverting to the behavior before this problem was found, since that behavior
-// may still be usable.
-BOOL blnFirstOpenSoundPlayback = true;
+int blnFirstOpenSoundPlayback = True;  // used to only log warning about -A option once.
 
 int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, char * ErrorMsg)
 {
-	unsigned int intRate;  // number of frames per second
+	unsigned int intRate;  // reported number of frames per second
+	unsigned int intPeriodTime = 0; // reported duration of one period in microseconds.
+	snd_pcm_uframes_t periodSize = 0;  // reported number of frames per period
+
 	int intDir;
 
 	int err = 0;
@@ -1149,8 +1150,11 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 	char buf1[100];
 	char * ptr;
 
-	unsigned int intPeriodTime = 0; // reported duration of one period in microseconds.
-	snd_pcm_uframes_t periodSize = 0;  // reported number of frames per period
+	// Choose the number of frames per period.  This avoids possible ALSA misconfiguration 
+	// errors that may result in a TX symbol timing error if the default value is accepted.
+	// The value chosen is a tradeoff between avoiding excessive CPU load caused by too 
+	// small of a value and increased latency associated with too large a value.
+	snd_pcm_uframes_t setPeriodSize = m_sampleRate / 100;
 
 	if (playhandle)
 	{
@@ -1177,21 +1181,34 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 	}
 		   
 	if ((err = snd_pcm_hw_params_malloc (&hw_params)) < 0) {
-		Debugprintf("cannot allocate hardware parameter structure (%s)", snd_strerror(err));
+		if (ErrorMsg)
+			sprintf (ErrorMsg, "cannot allocate hardware parameter structure (%s)", snd_strerror(err));
+		else
+			Debugprintf("cannot allocate hardware parameter structure (%s)", snd_strerror(err));
 		return false;
 	}
 				 
 	if ((err = snd_pcm_hw_params_any (playhandle, hw_params)) < 0) {
-		Debugprintf("cannot initialize hardware parameter structure (%s)", snd_strerror(err));
+		if (ErrorMsg)
+			sprintf (ErrorMsg, "cannot initialize hardware parameter structure (%s)", snd_strerror(err));
+		else
+			Debugprintf("cannot initialize hardware parameter structure (%s)", snd_strerror(err));
 		return false;
 	}
 	
 	if ((err = snd_pcm_hw_params_set_access (playhandle, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED)) < 0) {
+		if (ErrorMsg)
+			sprintf (ErrorMsg, "cannot set playback access type (%s)", snd_strerror (err));
+		else
 			Debugprintf("cannot set playback access type (%s)", snd_strerror (err));
 		return false;
 	}
+
 	if ((err = snd_pcm_hw_params_set_format (playhandle, hw_params, SND_PCM_FORMAT_S16_LE)) < 0) {
-		Debugprintf("cannot setplayback  sample format (%s)", snd_strerror(err));
+		if (ErrorMsg)
+			sprintf (ErrorMsg, "cannot setplayback  sample format (%s)", snd_strerror(err));
+		else
+			Debugprintf("cannot setplayback  sample format (%s)", snd_strerror(err));
 		return false;
 	}
 
@@ -1221,24 +1238,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 		}
 	}
 	
-//	Debugprintf("Play using %d channels", channels);
-
-	if (intSetPeriodTime)
-	{
-		// Explicitly set duration of one period in microseconds to correct ALSA's
-		// misconfiguration that would result in a TX symbol timing error.
-		if ((err = snd_pcm_hw_params_set_period_time (playhandle, hw_params, intSetPeriodTime, 0)) < 0) {
-			if (ErrorMsg)
-				sprintf (ErrorMsg, "cannot set playback period time (%s)", snd_strerror(err));
-			else
-				Debugprintf("cannot set playback period time (%s)", snd_strerror(err));
-			return false;
-		}
-	}
-	else if (setPeriodSize)
-	{
-		// Explicitly set the number of frames per period to correct ALSA's
-		// misconfiguration that would result in a TX symbol timing error.
+	if (FixTiming) {
 		if ((err = snd_pcm_hw_params_set_period_size (playhandle, hw_params, setPeriodSize, 0)) < 0) {
 			if (ErrorMsg)
 				sprintf (ErrorMsg, "cannot set playback period size (%s)", snd_strerror(err));
@@ -1249,80 +1249,95 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 	}
 
 	if ((err = snd_pcm_hw_params (playhandle, hw_params)) < 0) {
-		Debugprintf("cannot set parameters (%s)", snd_strerror(err));
+		if (ErrorMsg)
+			sprintf (ErrorMsg, "cannot set parameters (%s)", snd_strerror(err));
+		else
+			Debugprintf("cannot set parameters (%s)", snd_strerror(err));
 		return false;
 	}
 
+	// Verify that key values were set as expected
 	if ((err = snd_pcm_hw_params_get_rate(hw_params, &intRate, &intDir)) < 0) {
 		if (ErrorMsg)
-			sprintf (ErrorMsg, "cannot get playback rate (%s)", snd_strerror(err));
+			sprintf (ErrorMsg, "cannot verify playback rate (%s)", snd_strerror(err));
 		else
-			Debugprintf("cannot get playback rate (%s)", snd_strerror(err));
+			Debugprintf("cannot verify playback rate (%s)", snd_strerror(err));
+		return false;
+	}
+	if (m_sampleRate != intRate) {
+		if (ErrorMsg)
+			sprintf (ErrorMsg, "Unable to correctly set playback rate.  Got %d instead of %d.", 
+				intRate, m_sampleRate);
+		else
+			Debugprintf("Unable to correctly set playback rate.  Got %d instead of %d.", 
+				intRate, m_sampleRate);
 		return false;
 	}
 	// WriteDebugLog(LOGINFO, "snd_pcm_hw_params_get_rate(hw_params, &intRate, &intDir) intRate=%d intDir=%d", intRate, intDir);
 
+	if ((err = snd_pcm_hw_params_get_period_size(hw_params, &periodSize, &intDir)) < 0) {
+		if (ErrorMsg)
+			sprintf (ErrorMsg, "cannot verify playback period size (%s)", snd_strerror(err));
+		else
+			Debugprintf("cannot verify playback period size (%s)", snd_strerror(err));
+		return false;
+	}
+	if (FixTiming && (setPeriodSize != periodSize)) {
+		if (ErrorMsg)
+			sprintf (ErrorMsg, "Unable to correctly set playback period size.  Got %lu instead of %lu.", 
+				periodSize, setPeriodSize);
+		else
+			Debugprintf("Unable to correctly set playback period size.  Got %d instead of %d.", 
+				periodSize, setPeriodSize);
+		return false;
+	}
+	// WriteDebugLog(LOGINFO, "snd_pcm_hw_params_get_period_size(hw_params, &periodSize, &intDir) periodSize=%d intDir=%d", periodSize, intDir
+
 	if ((err = snd_pcm_hw_params_get_period_time(hw_params, &intPeriodTime, &intDir)) < 0) {
 		if (ErrorMsg)
-			sprintf (ErrorMsg, "cannot get playback period time (%s)", snd_strerror(err));
+			sprintf (ErrorMsg, "cannot verify playback period time (%s)", snd_strerror(err));
 		else
-			Debugprintf("cannot get playback period time (%s)", snd_strerror(err));
+			Debugprintf("cannot verify playback period time (%s)", snd_strerror(err));
+		return false;
+	}
+
+	if (FixTiming && (intPeriodTime * intRate != periodSize * 1000000)) {
+		if (ErrorMsg)
+			sprintf (ErrorMsg, 
+				"\n\nERROR: Inconsistent playback settings: %d * %d != %lu * 1000000."
+				"  Please report this error to the ardop users group at ardop.groups.io"
+				" or by creating an issue at www.github.com/pflarue/ardop."
+				"  You may find that ardopcf is usable with your hardware/operating"
+				" system by using the -A command line option.\n\n",
+				intPeriodTime, intRate, periodSize);
+		else
+			Debugprintf(
+				"\n\nERROR: Inconsistent playback settings: %d * %d != %lu * 1000000."
+				"  Please report this error with a message to the ardop users group"
+				" at ardop.groups.io or by creating an issue at github.com/pflarue/ardop."
+				"  You may find that ardopcf is usable with your hardware/operating"
+				" system by using the -A command line option.\n\n",
+				intPeriodTime, intRate, periodSize);
 		return false;
 	}
 	// WriteDebugLog(LOGINFO, "snd_pcm_hw_params_get_period_time(hw_params, &intPeriodTime, &intDir) intPeriodTime=%d intDir=%d", intPeriodTime, intDir);
 
-	if ((err = snd_pcm_hw_params_get_period_size(hw_params, &periodSize, &intDir)) < 0) {
-		if (ErrorMsg)
-			sprintf (ErrorMsg, "cannot get playback period size (%s)", snd_strerror(err));
-		else
-			Debugprintf("cannot get playback period size (%s)", snd_strerror(err));
-		return false;
-	}
-	// WriteDebugLog(LOGINFO, "snd_pcm_hw_params_get_period_size(hw_params, &periodSize, &intDir) periodSize=%d intDir=%d", periodSize, intDir);
-
-	if (intPeriodTime * intRate != periodSize * 1000000 && (blnFirstOpenSoundPlayback || intSetPeriodTime || setPeriodSize) && FixTiming) {
-		snd_pcm_close(playhandle);
-		playhandle = NULL;
-		snd_pcm_hw_params_free(hw_params);
-
-		if (blnFirstOpenSoundPlayback)
-		{
-			// It should be possible to fix this problem by Decreasing either intPeriodTime or periodSize.
-			blnFirstOpenSoundPlayback = false;
-			WriteDebugLog(LOGWARNING, "WARNING: Inconsistent ALSA playback configuration: %d * %d != %d * 1000000.",
-				intPeriodTime, intRate, periodSize);
-			WriteDebugLog(LOGWARNING, "Attempting to reconfigure...");
-			if (intPeriodTime * intRate > periodSize * 1000000) {
-				intSetPeriodTime = periodSize * 1000000 / intRate;
-				WriteDebugLog(LOGWARNING, "Setting playback period time to %d.", intSetPeriodTime);
-			}
-			else
-			{
-				setPeriodSize = intPeriodTime * intRate / 1000000;
-				WriteDebugLog(LOGWARNING, "Setting playback period size to %d.", setPeriodSize);
-			}
-		}
-		else
-		{
-			// This branch is untested since a case where the configuration can't be fixed has not been found.
-			WriteDebugLog(LOGERROR, "After failed attempt to fix: intPeriodTime=%d, intRate=%d, periodSize=%d.",
-				intPeriodTime, intRate, periodSize);
-			WriteDebugLog(LOGERROR, "intPeriodTime * intRate == periodSize * 1000000?  %d == %d?",
-				intPeriodTime * intRate, periodSize * 1000000);
-			WriteDebugLog(LOGERROR, "Unable to fix inconsistent ALSA playback configuration.  Reverting to previous configuration.");
-			intSetPeriodTime = 0;
-			setPeriodSize = 0;
-		}
-
-		// Do OpenSoundPlayback() again using the new value of intPeriodTime or periodSize.
-		return OpenSoundPlayback(PlaybackDevice, m_sampleRate, channels, ErrorMsg);
-	}
-	else if (intPeriodTime * intRate != periodSize * 1000000 && blnFirstOpenSoundPlayback && !FixTiming) {
+	if (!FixTiming && (intPeriodTime * intRate != periodSize * 1000000) && blnFirstOpenSoundPlayback) {
 		WriteDebugLog(LOGWARNING, "WARNING: Inconsistent ALSA playback configuration: %d * %d != %d * 1000000.",
 			intPeriodTime, intRate, periodSize);
-		WriteDebugLog(LOGWARNING, "WARNING: The -A option was specified.  So, ALSA misconfiguration will be ignored.  This option is ONLY intended for testing/debuging.  It IS NOT INTENDED FOR NORMAL USE.");
+		WriteDebugLog(LOGWARNING, "This will result in a playblack sample rate of %f instead of %d.",
+			periodSize * 1000000.0 / intPeriodTime, intRate);
+		WriteDebugLog(LOGWARNING, 
+			"This is an error of about %fppm.  Per the Ardop spec +/-100ppm should work well and +/-1000 ppm"
+			" should work with some performance degredation.",
+			(intRate - (periodSize * 1000000.0 / intPeriodTime))/intRate * 1000000);
+		WriteDebugLog(LOGWARNING, 
+			"\n\nWARNING: The -A option was specified.  So, ALSA misconfiguration will be accepted and ignored."
+			"  This option is primarily intended for testing/debuging.  However, it may also be useful if"
+			" ardopcf will not run without it.  In this case, please report this problem to the ardop users"
+			" group at ardop.groups.io or by creating an issue at www.github.com/pflarue/ardop.\n\n");
 	}
-	blnFirstOpenSoundPlayback = false;
+	blnFirstOpenSoundPlayback = False;
 	// WriteDebugLog(LOGINFO, "Period time=%d (microsecond). Sample Rate=%d (Hz).  Period Size=%d (samples).",
 	//	intPeriodTime, intRate, periodSize);
 	
@@ -1552,7 +1567,7 @@ int SoundCardWrite(short * input, unsigned int nSamples)
 	if (avail < 0)
 	{
 		if (avail != -32)
-			Debugprintf("Playback Avail Recovering from %d ..", (int)avail);
+			Debugprintf("Playback Avail Recovering from %s ..", snd_strerror((int)avail));
 		snd_pcm_recover(playhandle, avail, 1);
 
 		avail = snd_pcm_avail_update(playhandle);
@@ -1685,7 +1700,7 @@ int SoundCardRead(short * input, unsigned int nSamples)
 
 	if (avail < 0)
 	{
-		Debugprintf("avail Recovering from %d ..", avail);
+		Debugprintf("avail Recovering from %s ..", snd_strerror((int)avail));
 		if (rechandle)
 		{
 			snd_pcm_close(rechandle);
@@ -1799,6 +1814,8 @@ short loopbuff[1200];		// Temp for testing - loop sent samples to decoder
 
 int InitSound(BOOL Quiet)
 {
+	if (strcmp(PlaybackDevice, "NOSOUND") == 0)
+		return (1);
 	GetInputDeviceCollection();
 	GetOutputDeviceCollection();
 	return OpenSoundCard(CaptureDevice, PlaybackDevice, 12000, 12000, NULL);
@@ -1810,6 +1827,9 @@ UCHAR CurrentLevel = 0;		// Peak from current samples
 
 void PollReceivedSamples()
 {
+	if (strcmp(PlaybackDevice, "NOSOUND") == 0)
+		return;
+
 	// Process any captured samples
 	// Ideally call at least every 100 mS, more than 200 will loose data
 
@@ -1831,6 +1851,7 @@ void PollReceivedSamples()
 
 		displayLevel(max);
 		CurrentLevel = ((max - min) * 75) /32768;	// Scale to 150 max
+		wg_send_currentlevel(0, CurrentLevel);
 
 		if ((Now - lastlevelGUI) > 2000)	// 2 Secs
 		{
@@ -1841,13 +1862,23 @@ void PollReceivedSamples()
 
 			if ((Now - lastlevelreport) > 10000)	// 10 Secs
 			{
-				char HostCmd[64];
 				lastlevelreport = Now;
+				// Report input peaks to host if in debug mode or if close to clipping
+				if (max >= 32000 || ConsoleLogLevel >= LOGDEBUG)
+				{
+					char HostCmd[64];
 
-				sprintf(HostCmd, "INPUTPEAKS %d %d", min, max);
-				SendCommandToHostQuiet(HostCmd);
-
-				WriteDebugLog(LOGINFO, "Input peaks = %d, %d", min, max);
+					sprintf(HostCmd, "INPUTPEAKS %d %d", min, max);
+					SendCommandToHostQuiet(HostCmd);
+					WriteDebugLog(LOGINFO, "Input peaks = %d, %d", min, max);
+					// A user NOT in debug mode will see this message if they are clipping
+					if (ConsoleLogLevel <= LOGINFO)
+					{
+						WriteDebugLog(LOGINFO, "Your input signal is probably clipping. \
+If you see this message repeated in the next 20-30 seconds, \
+Turn down your RX input until this message stops repeating.");
+					}
+				}
 			}
 			min = max = 0;							// Every 2 secs
 		}
@@ -1860,6 +1891,9 @@ void PollReceivedSamples()
 void StopCapture()
 {
 	Capturing = FALSE;
+
+	if (strcmp(PlaybackDevice, "NOSOUND") == 0)
+		return;
 
 #ifdef SHARECAPTURE
 
@@ -1931,10 +1965,10 @@ int WriteLog(char * msg, int Log)
 		if (vlen == -1 || vlen > sizeof(Value)) {
 			printf("ERROR: Unable to open log file.  Log path probably too long.\n");
 			FileLogLevel = 0;
-			return FALSE;
+			return -1;
 		}
 		if ((logfile[Log] = fopen(Value, "a")) == NULL)
-			return FALSE;
+			return -1;
 	}
 	ss = tp.tv_sec % 86400;		// Secs int day
 	hh = ss / 3600;
@@ -2003,8 +2037,6 @@ void SoundFlush()
 
 	SendtoCard(&buffer[Index][0], Number);
 
-	usleep(200000);
-
 	// Wait for tx to complete
 
 	// samples sent is is in SampleNo, time started in mS is in pttOnTime.
@@ -2014,10 +2046,11 @@ void SoundFlush()
 
 	WriteDebugLog(LOGDEBUG, "Tx Time %d Time till end = %d", txlenMs, (pttOnTime + txlenMs) - Now);
 
-	while (Now < (pttOnTime + txlenMs))
-	{
-		usleep(2000);
-	}
+	if (strcmp(PlaybackDevice, "NOSOUND") != 0)
+		while (Now < (pttOnTime + txlenMs))
+		{
+			usleep(2000);
+		}
 
 /*
 
@@ -2056,10 +2089,12 @@ void SoundFlush()
 	// waiting for MainPoll
 
 #ifdef SHARECAPTURE
-	if (playhandle)
-	{
-		snd_pcm_close(playhandle);
-		playhandle = NULL;
+	if (strcmp(PlaybackDevice, "NOSOUND") != 0) {
+		if (playhandle)
+		{
+			snd_pcm_close(playhandle);
+			playhandle = NULL;
+		}
 	}
 #endif
 	SoundIsPlaying = FALSE;
@@ -2080,7 +2115,8 @@ void SoundFlush()
 	// 	txwfu = NULL;
 	// }
 
-	OpenSoundCapture(SavedCaptureDevice, SavedCaptureRate, strFault);
+	if (strcmp(PlaybackDevice, "NOSOUND") != 0)
+		OpenSoundCapture(SavedCaptureDevice, SavedCaptureRate, strFault);
 	StartCapture();
 
 	if (WriteRxWav)
@@ -2144,6 +2180,7 @@ BOOL KeyPTT(BOOL blnPTT)
 
 	blnLastPTT = blnPTT;
 	SetLED(0, blnPTT);
+	wg_send_pttled(0, blnPTT);
 	return TRUE;
 }
 
@@ -2467,6 +2504,7 @@ void DrawAxes(int Qual, const char * Frametype, char * Mode)
 	// Teensy used Frame Type, GUI Mode
 	
 	SendtoGUI('C', Pixels, pixelPointer - Pixels);	
+	wg_send_pixels(0, Pixels, pixelPointer - Pixels);
 	pixelPointer = Pixels;
 
 	sprintf(Msg, "%s Quality: %d", Mode, Qual);

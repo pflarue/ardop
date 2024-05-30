@@ -15,7 +15,8 @@ const char ProductName[] = "ardopcf";
 // Version p Leader timing changes (Jan 23)
 // Version q Fix extradelay (Jan 23)
 
-
+#include <stdbool.h>
+#include <sys/time.h>
 #ifdef WIN32
 #define _CRT_SECURE_NO_DEPRECATE
 
@@ -30,6 +31,7 @@ const char ProductName[] = "ardopcf";
 
 #include "ARDOPC.h"
 #include "getopt.h"
+#include "../lib/rockliff/rrs.h"
 
 void CompressCallsign(char * Callsign, UCHAR * Compressed);
 void CompressGridSquare(char * Square, UCHAR * Compressed);
@@ -51,6 +53,14 @@ BOOL BusyDetect2(float * dblMag, int intStart, int intStop);
 BOOL IsPingToMe(char * strCallsign);
 void LookforPacket(float * dblMag, float dblMagAvg, int count, float * real, float * imag);
 void PktARDOPStartTX();
+void WebguiInit();
+void WebguiPoll();
+int wg_send_fftdata(float *mags, int magsLen);
+int wg_send_busy(int cnum, bool isBusy);
+int wg_send_protocolmode(int cnum);
+extern int WebGuiNumConnected;
+extern char HostCommands[2048];
+void ProcessCommandFromHost(char * strCMD);
 
 // Config parameters
 
@@ -64,7 +74,11 @@ BOOL NeedConReq = FALSE;	// ARQCALL Command Flag
 BOOL NeedPing = FALSE;		// PING Command Flag
 BOOL NeedTwoToneTest = FALSE;
 enum _ARQBandwidth CallBandwidth = UNDEFINED;
-BOOL UseKISS = TRUE;			// Enable Packet (KISS) interface
+// UseKISS set to FALSE May 2024 by LaRue
+// Pkt/KISS is no longer supported by ardopcf.
+// Setting UseKISS to FALSE is part of the first
+// phase of disabling and removing this support.
+BOOL UseKISS = FALSE;			// Enable Packet (KISS) interface
 int PingCount;
 
 BOOL blnPINGrepeating = False;
@@ -167,7 +181,7 @@ BOOL blnLastPTT = FALSE;
 
 BOOL PlayComplete = FALSE;
 
-BOOL blnBusyStatus;
+BOOL blnBusyStatus = FALSE;
 BOOL newStatus;
 
 unsigned int tmrSendTimeout;
@@ -222,6 +236,7 @@ BOOL blnCodecStarted = FALSE;
 unsigned int dttNextPlay = 0;
 
 extern BOOL InitRXO;
+extern bool DeprecationWarningsIssued;
 
 const UCHAR bytValidFrameTypesALL[]=
 {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
@@ -730,24 +745,6 @@ extern LARGE_INTEGER NewTicks;
 
 extern int NErrors;
 
-void testRS()
-{
-	// feed random data into RS to check robustness
-
-	BOOL blnRSOK, FrameOK;
-	char bytRawData[256];
-	int DataLen = 128;
-	int intRSLen = 64;
-	int i;
-
-	for (i = 0; i < DataLen; i++)
-	{
-		bytRawData[i] = rand() % 256;
-	}
-
-	FrameOK = RSDecode(bytRawData, DataLen, intRSLen, &blnRSOK);
-}
-
 void setProtocolMode(char* strMode)
 {
 	if (strcmp(strMode, "ARQ") == 0)
@@ -771,11 +768,27 @@ void setProtocolMode(char* strMode)
 	{
 		WriteDebugLog(LOGWARNING, "WARNING: Invalid argument to setProtocolMode.  %s given, but expected one of ARQ, RXO, or FEC.  Setting ProtocolMode to ARQ as a default.", strMode);
 		ProtocolMode = ARQ;
+		return;
 	}
+	wg_send_protocolmode(0);
 }
 
 void ardopmain()
 {
+	char *nextHostCommand = HostCommands;
+
+	// For testing purposes, it may be useful to run ardopcf repeatedly (and
+	// very quickly) to generate recordings of "random" test frames.  For
+	// these test frames to differ from each other, it is necessary to seed
+	// the pseudo-random number generator.  Typically, this is done using
+	// srand(time(0)).  However, this value changes only once per second, so
+	// running ardopcf more than once per second would produce duplicate
+	// values.  So, the following is used to for a more rapidly changing
+	// seed value.
+	struct timeval t1;
+	gettimeofday(&t1, NULL);
+	srand(t1.tv_usec * t1.tv_sec);
+
 	blnTimeoutTriggered = FALSE;
 	SetARDOPProtocolState(DISC);
 
@@ -787,8 +800,10 @@ void ardopmain()
 
 	if (SerialMode)
 		SerialHostInit();
-	else
+	else {
 		TCPHostInit();
+		WebguiInit();
+	}
 
 	if (UseKISS)
 	{
@@ -807,9 +822,27 @@ void ardopmain()
 	else
 		setProtocolMode("ARQ");
 
+	if (DeprecationWarningsIssued) {
+		WriteDebugLog(LOGERROR,
+			"*********************************************************************\n"
+			"* WARNING: DEPRECATED command line parameters used.  Details shown  *\n"
+			"* above.  You may need to scroll up or review the Debug Log file to *\n"
+			"* see those details                                                 *\n"
+			"*********************************************************************\n");
+	}
 	while(!blnClosing)
 	{
+		if (nextHostCommand != NULL) {
+			// Process the next host command from the --hostcommands
+			// command line argument.
+			char *thisHostCommand = nextHostCommand;
+			nextHostCommand = strlop(nextHostCommand, ';');
+			if (thisHostCommand[0] != 0x00)
+				// not an empty string
+				ProcessCommandFromHost(thisHostCommand);
+		}
 		PollReceivedSamples();
+		WebguiPoll();
 		if (ProtocolMode != RXO)
 		{
 			CheckTimers();
@@ -829,11 +862,6 @@ void ardopmain()
 		closesocket(PktSock);
 	}
 	return;
-}
-
-
-void SendCWID(char * Callsign, BOOL x)
-{
 }
 
 // Subroutine to generate 1 symbol of leader
@@ -1261,35 +1289,6 @@ int NPAR = -1;	// Number of Parity Bytes - used in RS Code
 
 int MaxErrors = 0;
 
-int RSEncode(UCHAR * bytToRS, UCHAR * RSBytes, int DataLen, int RSLen)
-{
-	// This just returns the Parity Bytes. I don't see the point
-	// in copying the message about
-
-	unsigned char Padded[256];		// The padded Data
-
-	int Length = DataLen + RSLen;	// Final Length of packet
-	int PadLength = 255 - Length;	// Padding bytes needed for shortened RS codes
-
-	//	subroutine to do the RS encode. For full length and shortend RS codes up to 8 bit symbols (mm = 8)
-
-	if (NPAR != RSLen)		// Changed RS Len, so recalc constants;
-	{
-		NPAR = RSLen;
-		MaxErrors = NPAR / 2;
-		initialize_ecc();
-	}
-
-	// Copy the supplied data to end of data array.
-
-	memset(Padded, 0, PadLength);
-	memcpy(&Padded[PadLength], bytToRS, DataLen); 
-
-	encode_data(Padded, 255-RSLen, RSBytes);
-
-	return RSLen;
-}
-
 //	Main RS decode function
 
 extern int index_of[];
@@ -1300,192 +1299,6 @@ extern int kk;		// Info Symbols
 
 BOOL blnErrorsCorrected;
 
-#define NEWRS
-
-BOOL RSDecode(UCHAR * bytRcv, int Length, int CheckLen, BOOL * blnRSOK)
-{	
-#ifdef NEWRS
-
-	// Using a modified version of Henry Minsky's rscode library
-	// see ardop/lib/rscode
-
-	// Rick's Implementation processes the byte array in reverse. and also 
-	//	has the check bytes in the opposite order. I've modified the encoder
-	//	to allow for this, but so far haven't found a way to mske the decoder
-	//	work, so I have to reverse the data and checksum to decode G8BPQ Nov 2015
-
-	//	returns TRUE if was ok or correction succeeded, FALSE if correction impossible
-
-	UCHAR intTemp[256];				// WOrk Area to pass to Decoder		
-	int i;
-	UCHAR * ptr2 = intTemp;
-	UCHAR * ptr1 = &bytRcv[Length - CheckLen -1]; // Last Byte of Data
-
-	int DataLen = Length - CheckLen;
-	int PadLength = 255 - Length;		// Padding bytes needed for shortened RS codes
-
-	*blnRSOK = FALSE;
-
-	if (Length > 255 || Length < (1 + CheckLen))		//Too long or too short 
-		return FALSE;
-
-	if (NPAR != CheckLen)		// Changed RS Len, so recalc constants;
-	{
-		NPAR = CheckLen;
-		MaxErrors = NPAR /2;
-
-		initialize_ecc();
-	}
-
-
-	//	We reverse the data while zero padding it to speed things up
-
-	//	We Need (Data Reversed) (Zero Padding) (Checkbytes Reversed)
-
-	// Reverse Data
-
-	for (i = 0; i < DataLen; i++)
-	{
-	  *(ptr2++) = *(ptr1--);
-	}
-
-	//	Clear padding
-
-	memset(ptr2, 0, PadLength);	
-
-	ptr2+= PadLength;
-	
-	// Error Bits
-
-	ptr1 = &bytRcv[Length - 1];			// End of check bytes
-
-	for (i = 0; i < CheckLen; i++)
-	{
-	  *(ptr2++) = *(ptr1--);
-	}
-	
-	decode_data(intTemp, 255);
-
-	// check if syndrome is all zeros 
-
-	if (check_syndrome() == 0)
-	{
-		// RS ok, so no need to correct
-
-		*blnRSOK = TRUE;
-		return TRUE;		// No Need to Correct
-	}
-
-    if (correct_errors_erasures (intTemp, 255, 0, 0) == 0) // Dont support erasures at the momnet
-
-		// Uncorrectable
-
-		return FALSE;
-
-	// Data has been corrected, so need to reverse again
-
-	ptr1 = &intTemp[DataLen - 1];
-	ptr2 = bytRcv; // Last Byte of Data
-
-	for (i = 0; i < DataLen; i++)
-	{
-	  *(ptr2++) = *(ptr1--);
-	}
-
-	// ?? Do we need to return the check bytes ??
-
-	// Yes, so we can redo RS Check on supposedly connected frame
-
-	ptr1 = &intTemp[254];	// End of Check Bytes
-
- 	for (i = 0; i < CheckLen; i++)
-	{
-	  *(ptr2++) = *(ptr1--);
-	}
-
-	return TRUE;
-}
-
-#else
-
-	// Old (Rick's) code
-
-	// Sets blnRSOK if OK without correction
-
-	// Returns TRUE if OK oe Corrected
-	// False if Can't correct
-
-
-	UCHAR intTemp[256];				// Work Area to pass to Decoder		
-	int i;
-	int intStartIndex;
-	UCHAR * ptr2 = intTemp;
-	UCHAR * ptr1 = bytRcv;
-	BOOL RSWasOK;
-
-	int DataLen = Length - CheckLen;
-	int PadLength = 255 - Length;		// Padding bytes needed for shortened RS codes
-
-	*blnRSOK = FALSE;
-
-	if (Length > 255 || Length < (1 + CheckLen))		//Too long or too short 
-		return FALSE;
-
-
-	if (NPAR != CheckLen)		// Changed RS Len, so recalc constants;
-	{
-		NPAR = CheckLen;
-		tt = sqrt(NPAR);
-		kk = 255-CheckLen; 
-		generate_gf();
-		gen_poly();
-	}
-	
-	intStartIndex =  255 - Length; // set the start point for shortened RS codes
-
-	//	We always work on a 255 byte buffer, prepending zeros if neccessary
-
- 	//	Clear padding
-
-	memset(ptr2, 0, PadLength);	
-	ptr2 += PadLength;
-
-	memcpy(ptr2, ptr1, Length);
-	
-	// convert to indexed form
-
-	for(i = 0; i < 256; i++)
-	{
-//		intIsave = i;
-//		intIndexSave = index_of[intTemp[i]];
-		recd[i] = index_of[intTemp[i]];
-	}
-
-//	printtick("entering decode_rs");
-
-	blnErrorsCorrected = FALSE;
-
-	RSWasOK = decode_rs();
-
-//	printtick("decode_rs Done");
-
-	*blnRSOK = RSWasOK;
-
-	if (RSWasOK)
-		return TRUE;
-
-	if(blnErrorsCorrected)
-	{
-		for (i = 0; i < DataLen; i++)
-		{
-			bytRcv[i] = recd[i + intStartIndex];
-		}
-		return TRUE;
-	}
-
-	return FALSE;
-}
-#endif
 
 // Function to encode data for all PSK frame types
 
@@ -1534,6 +1347,7 @@ int EncodePSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 		
 	for (i = 0; i < intNumCar; i++)		//  across all carriers
 	{
+		memset(bytToRS, 0x69, intDataLen + 3 + intRSLen);
 		intCarDataCnt = Length - bytDataToSendLengthPtr;
 			
 		if (intCarDataCnt > intDataLen) // why not > ??
@@ -1560,7 +1374,11 @@ int EncodePSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 		
 		GenCRC16FrameType(bytToRS, intDataLen + 1, bytFrameType); // calculate the CRC on the byte count + data bytes
 
-		RSEncode(bytToRS, bytToRS+intDataLen+3, intDataLen + 3, intRSLen);  // Generate the RS encoding ...now 14 bytes total
+		// Append Reed Solomon codes to end of frame data
+		if (rs_append(bytToRS, intDataLen + 3, intRSLen) != 0) {
+			WriteDebugLog(LOGERROR, "ERROR in EncodePSKData(): rs_append() failed.");
+			return (-1);
+		}
      
  		//  Need: (2 bytes for Frame Type) +( Data + RS + 1 byte byteCount + 2 Byte CRC per carrier)
 
@@ -1623,6 +1441,7 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 		
 		for (i = 0; i < intNumCar; i++)		//  across all carriers
 		{
+			memset(bytToRS, 0x66, intDataLen + 3 + intRSLen);
 			intCarDataCnt = Length - bytDataToSendLengthPtr;
 			
 			if (intCarDataCnt >= intDataLen) // why not > ??
@@ -1649,7 +1468,11 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 		
 			GenCRC16FrameType(bytToRS, intDataLen + 1, bytFrameType); // calculate the CRC on the byte count + data bytes
 
-			RSEncode(bytToRS, bytToRS+intDataLen+3, intDataLen + 3, intRSLen);  // Generate the RS encoding ...now 14 bytes total
+			// Append Reed Solomon codes to end of frame data
+			if (rs_append(bytToRS, intDataLen + 3, intRSLen) != 0) {
+				WriteDebugLog(LOGERROR, "ERROR in EncodeFSKData(): rs_append() failed.");
+				return (-1);
+			}
 
  			//  Need: (2 bytes for Frame Type) +( Data + RS + 1 byte byteCount + 2 Byte CRC per carrier)
 
@@ -1664,6 +1487,7 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 
 	for (i = 0; i < 3; i++)		 // for three blocks of RS data
 	{
+		memset(bytToRS, 0x66, intDataLen / 3  + 3 + intRSLen / 3);
 		intCarDataCnt = Length - bytDataToSendLengthPtr;
 			
 		if (intCarDataCnt >= intDataLen /3 ) // why not > ??
@@ -1689,7 +1513,12 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 		}
 		GenCRC16FrameType(bytToRS, intDataLen / 3 + 1, bytFrameType); // calculate the CRC on the byte count + data bytes
 
- 		RSEncode(bytToRS, bytToRS + intDataLen / 3 + 3, intDataLen / 3 + 3, intRSLen / 3);  // Generate the RS encoding ...now 14 bytes total
+		// Append Reed Solomon codes to end of frame data
+		if (rs_append(bytToRS, intDataLen / 3 + 3, intRSLen / 3) != 0) {
+			WriteDebugLog(LOGERROR, "ERROR in EncodePSKData() for 600 baud frame: rs_append() failed.");
+			return (-1);
+		}
+
 		intEncodedDataPtr += intDataLen / 3  + 3 + intRSLen / 3;
 		bytToRS += intDataLen / 3  + 3 + intRSLen / 3;
 	}		
@@ -1749,9 +1578,13 @@ BOOL EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, enum _A
 	CompressCallsign(strMyCallsign, &bytToRS[0]);
 	CompressCallsign(strTargetCallsign, &bytToRS[6]);  //this uses compression to accept 4, 6, or 8 character Grid squares.
 
-	RSEncode(bytToRS, &bytReturn[14], 12, 4);  // Generate the RS encoding ...now 14 bytes total
- 
-	return 18;
+	// Append Reed Solomon codes to end of frame data
+	if (rs_append(bytToRS, 12, 4) != 0) {
+		WriteDebugLog(LOGERROR, "ERROR in EncodeARQConRequest(): rs_append() failed.");
+		return (-1);
+	}
+
+	return 18;  // 2 bytes for FrameType + 12 bytes data + 4 bytes RS
 }
 
 int EncodePing(char * strMyCallsign, char * strTargetCallsign, UCHAR * bytReturn)
@@ -1771,8 +1604,13 @@ int EncodePing(char * strMyCallsign, char * strTargetCallsign, UCHAR * bytReturn
 	CompressCallsign(strMyCallsign, &bytToRS[0]);
 	CompressCallsign(strTargetCallsign, &bytToRS[6]);  //this uses compression to accept 4, 6, or 8 character Grid squares.
 
-	RSEncode(bytToRS, &bytReturn[14], 12, 4);  // Generate the RS encoding ...now 14 bytes total
-	return 18;
+	// Append Reed Solomon codes to end of frame data
+	if (rs_append(bytToRS, 12, 4) != 0) {
+		WriteDebugLog(LOGERROR, "ERROR in EncodePing(): rs_append() failed.");
+		return (-1);
+	}
+
+	return 18;  // 2 bytes for FrameType + 12 bytes data + 4 bytes RS
 }
 
 
@@ -1802,9 +1640,13 @@ int Encode4FSKIDFrame(char * Callsign, char * Square, unsigned char * bytreturn)
     if (Square[0])
 		CompressGridSquare(Square, &bytToRS[6]);  //this uses compression to accept 4, 6, or 8 character Grid squares.
 
-	RSEncode(bytToRS, &bytreturn[14], 12, 4);  // Generate the RS encoding ...now 14 bytes total
+	// Append Reed Solomon codes to end of frame data
+	if (rs_append(bytToRS, 12, 4) != 0) {
+		WriteDebugLog(LOGERROR, "ERROR in Encode4FSKIDFrame(): rs_append() failed.");
+		return (-1);
+	}
 
-	return 18;
+	return 18;  // 2 bytes for FrameType + 12 bytes data + 4 bytes RS
 }
 
 //  Funtion to encodes a short 4FSK 50 baud Control frame  (2 bytes total) BREAK, END, DISC, IDLE, ConRejBusy, ConRegBW  
@@ -1922,12 +1764,18 @@ void SendID(BOOL blnEnableCWID)
 
     if (GridSquare[0] == 0)
 	{
-		EncLen = Encode4FSKIDFrame(Callsign, "No GS", bytEncodedBytes);
+		if ((EncLen = Encode4FSKIDFrame(Callsign, "No GS", bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In SendID() Invalid EncLen (%d).", EncLen);
+			return;
+		}
 		Len = sprintf(bytIDSent," %s:[No GS] ", Callsign);
 	}
 	else
 	{
-		EncLen = Encode4FSKIDFrame(Callsign, GridSquare, bytEncodedBytes);
+		if ((EncLen = Encode4FSKIDFrame(Callsign, GridSquare, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In SendID() Invalid EncLen (%d).", EncLen);
+			return;
+		}
 		Len = sprintf(bytIDSent," %s:[%s] ", Callsign, GridSquare);
 	}
 
@@ -2386,8 +2234,11 @@ void CheckTimers()
 			// Confirmed proper operation of this timeout and rule 4.0 May 18, 2015
 			// Send an ID frame (Handles protocol rule 4.0)
 		
-		EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes);
-		Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], 16, 0);		// only returns when all sent
+		if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In CheckTimers() sending IDFrame before DIC Invalid EncLen (%d).", EncLen);
+			return;
+		}
+		Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], EncLen, 0);		// only returns when all sent
 		dttLastFECIDSent = Now;
 			
 		if (AccumulateStats) LogStats();
@@ -2400,7 +2251,10 @@ void CheckTimers()
 		//Thread.Sleep(2000)
 		ClearDataToSend();
 
-		EncLen = Encode4FSKControl(0x29, bytSessionID, bytEncodedBytes);
+		if ((EncLen = Encode4FSKControl(0x29, bytSessionID, bytEncodedBytes)) <= 0) {
+			WriteDebugLog(LOGERROR, "ERROR: In CheckTimers() sending DISC Invalid EncLen (%d).", EncLen);
+			return;
+		}
 		Mod4FSKDataAndPlay(0x29, &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 
 		intFrameRepeatInterval = 2000;
@@ -2454,8 +2308,11 @@ void CheckTimers()
    
 		if (CheckValidCallsignSyntax(strFinalIDCallsign))
 		{
-			EncLen = Encode4FSKIDFrame(strFinalIDCallsign, GridSquare, bytEncodedBytes);
-			Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], 16, 0);		// only returns when all sent
+			if ((EncLen = Encode4FSKIDFrame(strFinalIDCallsign, GridSquare, bytEncodedBytes)) <= 0) {
+				WriteDebugLog(LOGERROR, "ERROR: In CheckTimers() sending IDFrame  Invalid EncLen (%d).", EncLen);
+				return;
+			}
+			Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], EncLen, 0);		// only returns when all sent
 			dttLastFECIDSent = Now;
 		}
 	}
@@ -2790,8 +2647,21 @@ extern UCHAR Pixels[4096];
 extern UCHAR * pixelPointer;
 #endif
 
+float bhWindow[513];
+float wS1 = 0;
+void generateBH() {
+	for (int i = 0; i < 513; i++) {
+		bhWindow[i] = 0.35875 - 0.48829 * cos(2 * M_PI * i / 1024) 
+			+ 0.14128 * cos(4 * M_PI * i / 1024) - 0.01168 * cos(6 * M_PI * i / 1024);
+		wS1 += 2 * bhWindow[i];
+	}
+	// wS1 should only include one of terms 0, 512
+	wS1 -= bhWindow[0] + bhWindow[512];
+}
+
 void UpdateBusyDetector(short * bytNewSamples)
 {
+	float windowedSamples[1024];
 	float dblReF[1024];
 	float dblImF[1024];
 	float dblMag[206];
@@ -2815,7 +2685,7 @@ void UpdateBusyDetector(short * bytNewSamples)
 	{
 		// Dont do busy, but may need waterfall or spectrum
 
-		if ((WaterfallActive | SpectrumActive) == 0)
+		if ((WaterfallActive | SpectrumActive) == 0 && WebGuiNumConnected == 0)
 			return;					// No waterfall or spectrum 
 	}
 
@@ -2824,11 +2694,26 @@ void UpdateBusyDetector(short * bytNewSamples)
 
 	LastBusyCheck = Now;
 
-	FourierTransform(1024, bytNewSamples, &dblReF[0], &dblImF[0], FALSE);
+	// Apply a Blackman-Harris window before doing FFT
+	// This will decrease spectral leakage.  It also decreases the magnitude 
+	// of the FFT results by wS1/1024
+	if (wS1 == 0)
+		generateBH();
+	windowedSamples[0] = bytNewSamples[0]*bhWindow[0];
+	windowedSamples[512] = bytNewSamples[512]*bhWindow[512];
+	for(i = 1; i < 512; i++) {
+		windowedSamples[i] = bytNewSamples[i]*bhWindow[i];
+		windowedSamples[1024 - i] = bytNewSamples[1024 - i]*bhWindow[i];
+	}
+
+	FourierTransform(1024, windowedSamples, &dblReF[0], &dblImF[0], FALSE);
 
 	for (i = 0; i < 206; i++)
 	{
 		//	starting at ~300 Hz to ~2700 Hz Which puts the center of the signal in the center of the window (~1500Hz)
+		// bytNewSamples are sampled at 12000 samples per second, and a 1024 sample FFT was
+		// used.  So dblReF[j] and dblImF[j] correspond to a frequency of j * 12000 / 1024
+		// for 0 <= j < 512
             
 		dblMag[i] = powf(dblReF[i + 25], 2) + powf(dblImF[i + 25], 2);	 // first pass 
 		dblMagAvg += dblMag[i];
@@ -2863,6 +2748,7 @@ void UpdateBusyDetector(short * bytNewSamples)
 				Msg[0] = blnBusyStatus;
 				SendtoGUI('B', Msg, 1);
 			}	    
+			wg_send_busy(0, true);
 		}
 		//    stcStatus.Text = "True"
             //    queTNCStatus.Enqueue(stcStatus)
@@ -2879,13 +2765,15 @@ void UpdateBusyDetector(short * bytNewSamples)
 
 				Msg[0] = blnBusyStatus;
 				SendtoGUI('B', Msg, 1);
-			}	    
+			}
+			wg_send_busy(0, false);
 		} 
 		//    stcStatus.Text = "False"
         //    queTNCStatus.Enqueue(stcStatus)
         //    'Debug.WriteLine("BUSY FALSE @ " & Format(DateTime.UtcNow, "HH:mm:ss"))
 
 		blnLastBusyStatus = blnBusyStatus;
+
 	}
 	
 	if (BusyDet == 0) 
@@ -2974,14 +2862,15 @@ void UpdateBusyDetector(short * bytNewSamples)
 		SendtoGUI('X', Waterfall, 210);
 #endif
 	}
+	wg_send_fftdata(dblMag, 206);
 }
 
 void SendPING(char * strMycall, char * strTargetCall, int intRpt)
 {   	
-	EncLen = EncodePing(strMycall, strTargetCall, bytEncodedBytes);
-
-	if (EncLen == 0)
+	if ((EncLen = EncodePing(strMycall, strTargetCall, bytEncodedBytes)) <= 0) {
+		WriteDebugLog(LOGERROR, "ERROR: In SendPING() Invalid EncLen (%d).", EncLen);
 		return;
+	}
 	
 	// generate the modulation with 2 x the default FEC leader length...Should insure reception at the target
 	// Note this is sent with session ID 0xFF
@@ -3019,7 +2908,10 @@ void ProcessPingFrame(char * bytData)
 		{
 			// Ack Ping
 
-			EncLen = EncodePingAck(PINGACK, stcLastPingintRcvdSN, stcLastPingintQuality, bytEncodedBytes);
+			if ((EncLen = EncodePingAck(PINGACK, stcLastPingintRcvdSN, stcLastPingintQuality, bytEncodedBytes)) <= 0) {
+				WriteDebugLog(LOGERROR, "ERROR: In ProcessPingFrame() Invalid EncLen (%d).", EncLen);
+				return;
+			}
 			Mod4FSKDataAndPlay(PINGACK, &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
                
 			WriteDebugLog(LOGDEBUG, "[ProcessPingFrame] PING from %s S:N=%d Qual=%d", bytData, stcLastPingintRcvdSN, stcLastPingintQuality);
