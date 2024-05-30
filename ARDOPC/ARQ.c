@@ -36,7 +36,6 @@ int wg_send_state(int cnum);
 int wg_send_rcall(int cnum, char *call);
 int wg_send_irsled(int cnum, bool isOn);
 int wg_send_issled(int cnum, bool isOn);
-int wg_send_txframet(int cnum, const char *frame);
 
 int intLastFrameIDToHost = 0;
 int	intLastFailedFrameID = 0;
@@ -1191,7 +1190,6 @@ int GetNextFrameData(int * intUpDn, UCHAR * bytFrameTypeToSend, UCHAR * strMod, 
 		bytCurrentFrameType = bytFrameTypesForBW[intFrameTypePtr];
 
 		DrawTXMode(shortName(bytCurrentFrameType));
-		wg_send_txframet(0, Name(bytCurrentFrameType));
 		updateDisplay();
 
 		if(DebugLog) WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.GetNextFrameData] Initial Frame Type: %s", Name(bytCurrentFrameType));
@@ -1206,7 +1204,6 @@ int GetNextFrameData(int * intUpDn, UCHAR * bytFrameTypeToSend, UCHAR * strMod, 
 			bytCurrentFrameType = bytFrameTypesForBW[intFrameTypePtr];
 
 			DrawTXMode(shortName(bytCurrentFrameType));
-			wg_send_txframet(0, Name(bytCurrentFrameType));
 			updateDisplay();
 
 			strShift = "Shift Down";
@@ -1221,7 +1218,6 @@ int GetNextFrameData(int * intUpDn, UCHAR * bytFrameTypeToSend, UCHAR * strMod, 
 			bytCurrentFrameType = bytFrameTypesForBW[intFrameTypePtr];
 
 			DrawTXMode(shortName(bytCurrentFrameType));
-			wg_send_txframet(0, shortName(bytCurrentFrameType));
 			updateDisplay();
 
 			strShift = "Shift Up";

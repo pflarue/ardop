@@ -238,17 +238,23 @@ char* toHex(char *outputStr, size_t count, unsigned char *data, size_t datalen) 
 // "B|" no additional data: BUSY true
 // "b|" no additional data: BUSY false
 // "C|" followed by a string: My callsign
-//     If string has zero length, clear my callsign.
+//   If string has zero length, clear my callsign.
 // "c|" followed by a string: remote callsign
-//     If string has zero length, clear remote callsign.
+//   If string has zero length, clear remote callsign.
 // "D|" no additional data: Enable Dev Mode
 // "F|" followed by a string: TX Frame type
-// "f|" followed by a character 'P' for pending, 'O' for OK, or 'F' for fail,
-//     followed by a string: RX Frame state and type
-// "H|" followed by a character 'Q' for QueueCommandToHost,
-//		'C' for SendCommandToHost, 'T' for SendCommandToHostQuiet,
-//		'R' for SendReplyToHost, or 'F' for Command from Host.
-//		followed by a string: Message to host
+// "f|"
+//   followed by a character:
+//    'P' for pending, 'O' for OK, or 'F' for fail
+//   followed by a string: RX Frame state and type
+// "H|"
+//   followed by a character:
+//    'Q' for QueueCommandToHost
+//    'C' for SendCommandToHost
+//    'T' for SendCommandToHostQuiet
+//	  'R' for SendReplyToHost
+//    'F' for Command from Host.
+//	 followed by a string: Message to host
 // "h|" followed by a string: Host text data (to host)
 // "m|" followed by a string: Protocol Mode
 // "P|" no additional data: PTT true
@@ -258,20 +264,24 @@ char* toHex(char *outputStr, size_t count, unsigned char *data, size_t datalen) 
 // "S|" no additional data: ISS true
 // "s|" no additional data: ISS false
 // "t|" followed by a string: Protocol State
-// 0x817C followed by one additional byte interpreted as an unsgiend
-//     char in the range of 0 to 150: Set CurrentLevel
-// 0x8A7C followed by one unsigned char: Quality (0-100)
+// 0x817C followed by one additional byte interpreted as an unsigned
+//   char in the range of 0 to 150: Set CurrentLevel
+// 0x8A7C
+//   followed by an unsigned char: Quality (0-100)
+//   followed by a uvint: The total number of errors detected by RS
+//   followed by a uvint: The max number of errors correctable by RS
+//   (For a failed decode, total will be set equal to max + 1)
 // 0x8B7C followed by one unsigned char: Bandwidth in Hz divided by 10.
 // 0x8C7C followed by 103 bytes of data: FFT power (dBfs 4 bits each).
 // 0x8D7C followed by one additional byte interpreted as an unsigned
-//     char in the range 0 to 100: Set DriveLevel
+//   char in the range 0 to 100: Set DriveLevel
 // 0x8E7C followed by unsigned char data: Pixel data (x, y, color)
-//      color is 1, 2, or 3 for poor, ok, good.
+//   color is 1, 2, or 3 for poor, ok, good.
 // 0x8F7C followed by unsigned char data: Host non-text data (to host)
-//		The first three characters of data are text data indicating
-//		data type 'FEC', 'ARQ', 'RXO', 'ERR', etc.
+//	 The first three characters of data are text data indicating
+//	 data type 'FEC', 'ARQ', 'RXO', 'ERR', etc.
 // 0x9A7C followed by one additional byte interpreted as an unsigned
-//     char in the range 1 to MAX_AVGLEN: Set display averaging length
+//   char in the range 1 to MAX_AVGLEN: Set display averaging length
 
 // For all of wg_send_*
 // cnum = 0 to send to all Webgui clients.
@@ -398,12 +408,30 @@ int wg_send_currentlevel(int cnum, unsigned char level) {
 	return wg_send_msg(cnum, msg, 3);
 }
 
-int wg_send_quality(int cnum, unsigned char quality) {
-	char msg[3];
+int wg_send_quality(int cnum, unsigned char quality,
+	unsigned int totalRSErrors, unsigned int maxRSErrors)
+{
+	// msg has enough capacity for totalRSErrors and maxRSErrors to each
+	// require two bytes
+	char msg[7];
+	int msglen = 3;  // length before adding two Uvint values
+	int thislen;
 	msg[0] = 0x8A;
 	msg[1] = 0x7C;
 	msg[2] = quality;  // 0 to 100
-	return wg_send_msg(cnum, msg, 3);
+	if ((thislen = encodeUvint(msg + msglen, 2, totalRSErrors)) == -1) {
+		WriteDebugLog(LOGERROR,
+			"ERROR: Failure encoding totalRSErrors=%d for Webgui.",
+			totalRSErrors);
+	}
+	msglen += thislen;
+	if ((thislen = encodeUvint(msg + msglen, 2, maxRSErrors)) == -1) {
+		WriteDebugLog(LOGERROR,
+			"ERROR: Failure encoding maxRSErrors=%d for Webgui.",
+			maxRSErrors);
+	}
+	msglen += thislen;
+	return wg_send_msg(cnum, msg, msglen);
 }
 
 int wg_send_drivelevel(int cnum) {
@@ -500,7 +528,7 @@ int wg_send_busy(int cnum, bool isBusy) {
 int wg_send_pixels(int cnum, unsigned char *data, size_t datalen) {
 	char msg[10000];  // Large enough for 4FSK.2000.600
 	if (datalen > sizeof(msg)) {
-		WriteDebugLog(LOGWARNING, 
+		WriteDebugLog(LOGWARNING,
 			"WARNING: Too much pixel data (%d bytes) provided to wg_send_pixels()",
 			datalen);
 		datalen = sizeof(msg) - 2;
@@ -675,12 +703,11 @@ void WebguiPoll() {
 	// hexidecimal values.
 	// "0~" no additional data: Client connected/reconnected
 	// "2~" no additional data: Request ardopcf to send 5 send two tone signal.
-	// "H~" followed by string: Host command
 	// "I~" no additional data: Request ardopcf to send ID frame.
 	// 0x8D7E followed by one additional byte interpreted as an unsigned
-	//     char in the range 0 to 100: Set DriveLevel
+	//   char in the range 0 to 100: Set DriveLevel
 	// 0x9A7E followed by one additional byte interpreted as an unsigned
-	//     char in the range 1 to MAX_AVGLEN: Set display averaging length
+	//   char in the range 1 to max_avglen: Set display averaging length
 
 	startoffset = rdata->offset;
 	while((msglen = decodeUvint(rdata)) >= 0) {

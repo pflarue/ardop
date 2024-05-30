@@ -65,7 +65,8 @@ extern BOOL PKTCONNECTED;
 void DrawDecode(char * Decode);
 
 int wg_send_rxframet(int cnum, unsigned char state, const char *frame);
-int wg_send_quality(int cnum, unsigned char quality);
+int wg_send_quality(int cnum, unsigned char quality,
+	unsigned int totalRSErrors, unsigned int maxRSErrors);
 
 extern BOOL UseSDFT;
 int Corrections = 0;
@@ -1344,7 +1345,6 @@ void ProcessNewSamples(short * Samples, int nSamples)
 		blnFrameDecodedOK = DecodeFrame(intFrameType, bytData);
 
 ProcessFrame:	
-
 		if (!blnFrameDecodedOK) {
 			DrawRXFrame(2, Name(intFrameType));
 			wg_send_rxframet(0, 2, Name(intFrameType));
@@ -4304,6 +4304,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 	if (blnDecodeOK)
 	{
 		WriteDebugLog(LOGINFO, "[DecodeFrame] Frame: %s Decode PASS,  Quality= %d,  RS fixed %d (of %d max).", Name(intFrameType),  intLastRcvdFrameQuality, totalRSErrors, (intRSLen / 2) * intNumCar);
+		wg_send_quality(0, intLastRcvdFrameQuality, totalRSErrors, (intRSLen / 2) * intNumCar);
 #ifdef PLOTCONSTELLATION
 		if (intFrameType >= 0x30 && intFrameType <= 0x38)
 			DrawDecode(lastGoodID);		// ID or CONREQ
@@ -4316,6 +4317,9 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 	else
 	{
 		WriteDebugLog(LOGINFO, "[DecodeFrame] Frame: %s Decode FAIL,  Quality= %d", Name(intFrameType),  intLastRcvdFrameQuality);
+		// For a failure to decode, send max + 1 as the number of 
+		// RS errors.
+		wg_send_quality(0, intLastRcvdFrameQuality, (intRSLen / 2) * intNumCar + 1, (intRSLen / 2) * intNumCar);
 #ifdef PLOTCONSTELLATION
 		DrawDecode("FAIL");
 		updateDisplay();
@@ -4449,7 +4453,6 @@ void Update4FSKConstellation(int * intToneMags, int * intQuality)
 #ifdef PLOTCONSTELLATION
 	DrawAxes(*intQuality, shortName(intFrameType), strMod);
 #endif
-	wg_send_quality(0, *intQuality);
 
 	return;
 }
@@ -4532,7 +4535,6 @@ void Update16FSKConstellation(int * intToneMags, int * intQuality)
 #ifdef PLOTCONSTELLATION
 	DrawAxes(*intQuality, shortName(intFrameType), strMod);
 #endif
-	wg_send_quality(0, *intQuality);
 }
 
 //	Subroutine to udpate the 8FSK Constellation
@@ -4607,7 +4609,6 @@ void Update8FSKConstellation(int * intToneMags, int * intQuality)
 #ifdef PLOTCONSTELLATION
 	DrawAxes(*intQuality, shortName(intFrameType), strMod);
 #endif
-	wg_send_quality(0, *intQuality);
 	return;
 }
 
@@ -4746,7 +4747,6 @@ int UpdatePhaseConstellation(short * intPhases, short * intMag, char * strMod, B
 #ifdef PLOTCONSTELLATION
 	DrawAxes(intQuality, shortName(intFrameType), strMod);
 #endif
-	wg_send_quality(0, intQuality);
 	return intQuality;
 
 }
