@@ -17,13 +17,14 @@
 			.dnone {display: none;}
 			.quality {background-color: lime;}
 			.rxstate_none {background-color: white;}
-			.rxstate_pending, #rcvunderflow {background-color:yellow;}
+			.rxstate_pending, #rcvunderflow {background-color: yellow;}
 			.rxstate_ok {background-color: lime;}
-			.rxstate_fail {background-color:red;}
-			.txnak {background-color:red;}
-			.txack {background-color:lime;}
+			.rxstate_fail {background-color: red;}
+			.txnak {background-color: lightpink;}
+			.txack {background-color: aquamarine;}
 			.state {background-color: #D0D0D0;}
 			.sltext {vertical-align: top;}
+			dt {font-weight: bold;}
 		</style>
 		<script src="webgui.js"></script>
 	</head>
@@ -58,6 +59,7 @@
 		</div>
 		<div>
 			<span id="quality">Quality: 0/100</span>
+			[<span id="rserrs">RS Errors: 0/0</span>]
 			<span id="rcvoverflow" class="dnone">
 			WARNING: Audio from radio is too loud!
 			</span>
@@ -98,13 +100,13 @@
 		</div>
 		<div id="info" class="dnone">
 			<p>
-			If you see a bright pink box at the top of the page saying 'Connection to
-			ardopcf lost. Try reloading this page.', then this page is unable to establish
+			If you see a bright pink box at the top of the page saying <b>'Connection to
+			ardopcf lost. Try reloading this page.'</b>, then this page is unable to establish
 			a connection with ardopcf, or that connection has been closed.  This can occur
 			for a number of reasons.  This will be displayed if the ardopcf program is
 			terminated (intentionally or not).  If you are displaying this page on a
 			device (computer, table, phone, etc.) other that the one that is running the
-			ardopcf program, then this can be caused by a problem with the network (often
+			ardopcf program, then this can also be caused by a problem with the network (often
 			WiFi) connection between them.  It is normal for this message to very briefly
 			flash at the top of this page when it first loads.
 			</p><p>
@@ -112,8 +114,8 @@
 			ardopcf instance.  However, ardopcf will refuse additional connections if too
 			many copies try to connect simultaneously.
 			</p><p>
-			The top of this page shows the current 'ProtocolMode'.  This will be one of
-			'ARQ', 'FEC', or 'RXO'.  Next is shown the current Ardop protocol 'State'
+			The top of this page shows the current <b>'ProtocolMode'</b>.  This will be one of
+			'ARQ', 'FEC', or 'RXO'.  Next is shown the current Ardop protocol <b>'State'</b>
 			This may be:
 			<dl>
 				<dt>'DISC'</dt><dd>disconnected</dd>
@@ -125,29 +127,29 @@
 				<dt>'IDLE'</dt><dd>idle</dd>
 			</dl>
 			</p><p>
-			The next blank line will show 'PTT' when transmitting and 'Channel Busy' when
+			The next blank line will show <b>'PTT'</b> when transmitting and <b>'Channel Busy'</b> when
 			the busy detector detects a signal within Ardop's current bandwidth settings.
 			</p><p>
-			The next line shows the value of MYCALL and the callsign of the station you
+			The next line shows the value of <b>MYCALL</b> and the callsign of the station you
 			are connected to or sending Connection Requests (ConReq) to.  MYCALL is
 			normally set by the Host program such as Pat Winlink or gARIM.  This should
-			be your callsign.  If it has not been set, then it will show '(MYCALL NOT
-			SET)'.
+			be your callsign.  If it has not been set, then it will show <b>'(MYCALL NOT
+			SET)'</b>.
 			</p><p>
-			The spectrum and waterfall plots show from about 300 to 2700 Hz.  If this is
+			The <b>spectrum and waterfall plots</b> show from about 300 to 2700 Hz.  If this is
 			narrower than the receive filter of your radio, high and/or low pitched audio
 			that you hear from your radio may not be visible on these plots.  The thin
 			black line in the center of the waterfall display is at 1500 Hz, the center
 			frequency for Ardop signals.  The gray or pink lines on each side of the plots
-			indicate the aproximate edges of the currently selected ARQ bandwidth (200,
+			indicate the approximate edges of the currently selected ARQ bandwidth (200,
 			500, 1000, or 2000 Hz wide).  These lines are not labeled, but their location
-			relative to the total bandwidth make it obvious which of these bandwidths they
-			represent.
+			relative to the total bandwidth should make it obvious which of these bandwidths
+			they represent.
 			</p><p>
 			The levels shown in the spectrum and waterfall displays are log scale (dB),
 			and a very slow automatic gain control is used to try to clearly show the
 			relative power levels of signals and noise detected in the available audio.
-			User adjustable 'Plot Averaging' may optionally be applied.  Averaging smooths
+			User adjustable <b>'Plot Averaging'</b> may optionally be applied.  Averaging smooths
 			out the appearance of noise, which may make it easier to distinguish low
 			power signals.  However, it also makes the plots less responsive to quickly
 			changing received signals.  If the busy detector fails to recognize a signal
@@ -155,18 +157,39 @@
 			should not attempt to establish a connection at this time on this frequency,
 			because you may interfere with the existing signal.
 			</p><p>
-			'Plot Scale' may be used to increase the size of all of the plots.  This does
-			not change the amount of data being used for the plots, it just magnifies them.
+			<b>'Plot Scale'</b> may be used to increase the size of all of the plots.  This does
+			not change the amount of data being used for the plots.  It just magnifies them.
 			</p><p>
 			Scaling of data for plotting, include averaging, does NOT affect the 'Rcv Level'
 			indicator, the busy detector, or ardopcf's abilility to detect or decode data.
 			These adjustments are purely for display purposes.
 			</p><p>
-			The constellation plot provides a visual indicator of the quality of the most
+			The <b>constellation plot</b> provides a visual indicator of the quality of the most
 			recently received PSK/QAM frame.  The display shown for FSK frames provides
 			less information, but may still be somewhat useful.
 			</p><p>
-			The 'Rcv Level' graph shows the percentage of full scale used by the received
+			The <b>'Quality'</b> value provides an indication of the quality of the most recently
+			received frame, whether correctly decoded or not.  Ideally, this value would be
+			independent of ardopcf's ability to demodulate and decode the signal, but since it uses
+			intermediate values from the demodulators, this is not the case.  Some frame types
+			typically require higher 'Quality' values than others to ensure correct decoding.
+			</p><p>
+			The <b>'RS Errors'</b> value provides a measure of ardopcf's level of success in
+			accurately demodulating and decoding the most recently received frame.  All data frame
+			types, as well as some control frame types, use Reed Solomon (RS) error correction to
+			allow the frame to be correctly decoded even if a limited number of bytes were
+			initially decoded incorrectly.  By reporting how many bytes of the frame had to be
+			corrected in this way, compared to the maximum number of such corrections the frame
+			type supports, the level of success of the demodulators can be inferred.  A small
+			number of errors indicates a high level of success at demodulating the raw signal.
+			When a frame cannot be correctly decoded, the number of RS errors shown will always be
+			one more than the nuumber that could have been corrected.  At least this many errors
+			were present, or else they would have been corrected.  It is not possible to determine
+			how many additional errors may have been present.  A high number of RS Errors may be an
+			indication of poor quality of the received signal, a deficiency in ardopcf's
+			demodulators and decoders, or some combination of the two.
+			</p><p>
+			The <b>'Rcv Level'</b> graph shows the percentage of full scale used by the received
 			audio on a linear scale.  If this level is too high, the audio will be clipped,
 			making it harder for ardopcf to decode received signals.  The 'Rcv Level'
 			indicates the combined amplitude of everything in your radio's receive
@@ -174,66 +197,76 @@
 			on the spectrum and waterfall plots.  A strong signal outside of the Ardop
 			bandwidth can still cause audio clipping.
 			</p><p>
-			A warning message is shown when excessive audio levels are detected.  This
-			message will disappear a few seconds after signal levels drop to more reasonable
-			levels.  Low to moderate signal levels seem to usually work well.  Audio levels
-			that are too low may also make it more difficult for ardopcf to decode received
-			signals.  A warning message is shown when received audio is very low.  However,
-			if noise levels are low, the 'Low Audio' warning may be ignored when no signals
-			are present.  If the 'Low Audio' warning remains on when ardop signals are being
-			received, then increasing the audio level may improve decoding.  Increasing your
-			received audio level may also help if you see faint indication of possible ardop
-			signals centered on the waterfall display, but ardopcf is not decoding these
-			signals.
+			A warning message is shown when <b>excessive audio levels</b> are detected.  This
+			message will disappear a few seconds after audio amplitudes drop to more reasonable
+			levels.  Low to moderate audio levels seem to usually work well.  However, audio
+			levels that are too low may also make it more difficult for ardopcf to decode received
+			signals.  A warning message is shown when received audio is very low.  However, if
+			noise levels are low, <u>the <b>'Low Audio'</b> warning may be ignored when no signals
+			are present.</u>  If the 'Low Audio' warning remains on when ardop signals are present,
+			then increasing the audio level may improve decoding.  Increasing your received audio
+			level may also help if you see faint indication of possible ardop signals centered on
+			the waterfall display, but ardopcf does not appear to be detecting these signals.
 			</p><p>
-			Received audio levels are dependent on the strength of the received signal, on
-			your radio's settings as well as on the 'microphone' settings for your computer's
-			soundcard.  Details of how to make these adjustments depend on the model of radio
-			you are using and on what operating system your computer uses.
+			Received audio levels are dependent on the actual strength of the received signal,
+			on some of your radio's settings, and on the 'microphone' settings for your computer's
+			soundcard.  Details of how to adjust these various settings depends on the model of
+			radio you are using and on what operating system your computer uses.
 			</p><p>
-			The 'RX Frame Type' and 'TX Frame Type' displays show what Ardop frame is
-			currently being received or sent respectively.  While receiving, the 'RX Frame
-			Type' is initially shown with a yellow background.  If this frame is not
-			successfully decoded, the background will change to red.  If it is successfully
-			decoded, the background will change to green.  The 'TX Frame Type' is normally
-			shown with a white background, but a green background is used when sending
-			a DataACK frame telling the other station that you correctly received some data.
-			A red background is used when sending a DataNAK frame telling the other station
-			that you were unable to decode some received data.
+			The <b>'RX Frame Type'</b> and <b>'TX Frame Type'</b> displays show what Ardop frame
+			type is being received or sent respectively.  These values also persist for a short
+			time after a frame has been received or sent.  <u>In some cases, ardopcf attempts to
+			decode a frame that is not really there.</u>  This is most likely to occur when your
+			radio is receiving a lot of noise or a non-ardop digital signal.  While receiving,
+			the 'RX Frame Type' is initially shown with a yellow background.  If this frame is
+			not successfully decoded, the background will change to red.  If it is successfully
+			decoded, the background will change to green.  The 'TX Frame Type' is normally shown
+			with a white background, but a light green background is used when sending a DataACK
+			frame telling the other station that you correctly received some data.  A light pink
+			background is used when sending a DataNAK frame telling the other station that you
+			were unable to decode some received data.
 			</p><p>
-			The 'TX DriveLevel' slider linearly scales the amplitude of the audio sent to
+			The <b>'TX DriveLevel'</b> slider linearly scales the amplitude of the audio sent to
 			your radio by ardopcf.  This, along with your radio's settings and the 'speaker'
-			settings for your computer's soundcard influence the strength and quality of
-			your transmitted radio signal.  This slider control will always be set to to
-			100 when ardopcf is first started.  You may want to adjust your radio and
+			settings for your computer's soundcard, influences the strength and quality of
+			your transmitted radio signal.  By default, this slider control will be set to to
+			100 when ardopcf is first started, though the --hostcommands option may be used to
+			specify a different initial DRIVELEVEL.  You may want to adjust your radio and
 			soudcard settings to levels that allow you to use this convenient slider control
-			to make final adjustments to this audio output level.
+			to make final adjustments to your transmit audio level.
 			</p><p>
-			Reduced audio amplitude can be used to decrease the power of your transmitted
-			signals.  In addition to limiting your power to only what is required to carry
-			out the desired communications [for US Amateur operator this is required by
-			Part 97.313(a)], reducing your power output may also be necessary if your radio
-			cannot handle transmitting at its full rated power when using high duty cycle
-			digital modes.  While sending data, Ardop can have a very high duty cycle as it
-			sends long data frames with only brief breaks to hear short DataACK or DataNAK
-			frames from the other station.
+			Reduced audio amplitude can be used to <b>decrease the RF power</b> of your
+			transmitted signals when using a single sideband radio transmitter.  In addition to
+			limiting your power to only what is required to carry out the desired communications
+			[for US Amateur operators this is required by Part 97.313(a)], reducing your power
+			output may also be necessary if your radio cannot handle extended transmissions at
+			its full rated power when using high duty cycle digital modes.  While sending data,
+			Ardop can have a very high duty cycle as it sends long data frames with only brief
+			breaks to hear short DataACK or DataNAK frames from the other station.
 			</p><p>
-			If the output audio is too loud, your radio's Automatic Level Control (ALC) will
-			adjust this audio before using it to modulate the RF signal.  This adjustment may
-			distort the signal making it more difficult for other stations to correctly
-			receive your transmissions.
+			If the output audio is too loud, your radio's <b>Automatic Level Control (ALC)</b>
+			will adjust this audio before using it to modulate the RF signal.  This adjustment
+			may distort the signal making it more difficult for other stations to correctly
+			receive your transmissions.  Some frame types used by Ardop may be more sensitive
+			to these distortions than others.
 			</p><p>
 			Details of how to monitor the action of your radio's ALC, and how to adjust
 			your radio and soundcard settings depend on the model of radio you are using
-			and on what operating system your computer uses.
+			and on what operating system your computer uses.  On some radios, the maximum
+			output audio levels that can be used without causing problems may depend on the
+			band of operation as well as other radio settings.  So, ALC action should be
+			checked after changing frequencies or making other changes to the radio's settings.
+			On some radios, appropriate audio levels are highly dependent on the power output
+			settings of the radio, while on other radios they are mostly independent of these
+			settings.
 			</p><p>
-			The 'Send2Tone' button causes ardopcf to transmit a 5 second two tone signal
+			The <b>'Send2Tone'</b> button causes ardopcf to transmit a 5 second two tone signal
 			similar, but longer than what is used as the leader at the start of all Ardop
 			frames.  This will not be sent if the Protocol 'STATE', as shown near the top
 			of this page, is not 'DISC' for disconnected.  An alert is displayed for this
 			failure.
 			</p><p>
-			The 'SendID' button causes ardopcf to transmit an ID frame containing your
+			The <b>'SendID'</b> button causes ardopcf to transmit an ID frame containing your
 			callsign.  If MYCALL has not been set, such that '(MYCALL NOT SET)', then this
 			frame cannot be sent, and an alert is displayed instead.  Similarly, this will
 			not be sent if the Protocol 'STATE', as shown near the top of this page, is
@@ -241,19 +274,26 @@
 			If a Maidenhead grid square indicating your location has been set by the Host
 			program, this is also included in an ID frame.
 			</p><p>
+			Either of these transmissions may be useful for antenna tuning or for making
+			initial adjustments to DRIVELEVEL settings.  However, <u>the various frame types
+			sent by ardopcf do not all produce the same audio power levels.</u>  This is a
+			known issue that will hopefully be improved in a future release.  For now, this
+			means that additional adjustments may be useful based on actual data transmissions.
+			</p><p>
 			The various items displayed here can change quickly during an Ardop ARQ
 			connection.  The debug log file created by ardopcf contains most of this same
-			information and more.  Reviewing its content may be of interest after an
-			exchange that failed, or during which you saw something that seemed unusual.
-			The 'Show Log' button also provides a list of most of what has been displayed.
-			This low window shows less detail than the debug log file, but provides a
+			information and more, though it does not contain data comparable to the waterfall
+			or constellation plots.  Reviewing the contents of the log file may be of interest
+			after an exchange that failed, or during which you saw something that seemed unusual.
+			The <b>'Show Log'</b> button also provides a list of most of what has been displayed.
+			This log window shows less detail than the debug log file, but provides a
 			convenient way to review what has occured.  Some entries in the log window are
 			timestamped.  These timestamps use the clock of the device you are viewing this
 			page on, which may be different from the clock on the device that is running
-			the ardopcf program.  Due to this, times shown in the log window may be
-			differnt from those written to the debug log file.
+			the ardopcf program.  Due to this, times shown in the log window may be slightly
+			different from those written to the debug log file.
 			</p><p>
-			The 'Clear Log' button (visible only when the log window is visible) may be used
+			The <b>'Clear Log'</b> button (visible only when the log window is visible) may be used
 			to discard the contents of this window.  This might be useful before initiating
 			a new connection.  The 'Clear Log' button does not influence what is written to
 			the debug log file.
