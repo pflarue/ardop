@@ -13,13 +13,7 @@
 
 #include "ARDOPC.h"
 
-#ifdef TEENSY
-#define PKTLED LED3		// flash when packet received
-
 extern unsigned int PKTLEDTimer;
-#endif
-
-
 extern UCHAR bytData[];
 extern int intLastRcvdFrameQuality;
 extern int intRmtLeaderMeasure;
