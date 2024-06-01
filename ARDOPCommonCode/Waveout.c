@@ -3,8 +3,6 @@
 
 //	Windows uses WaveOut
 
-//	Nucleo uses DMA
-
 //	Linux will use ALSA
 
 //	This is the Windows Version

@@ -8,7 +8,6 @@
 
 //	This is ALSASound.c for Linux
 //	Windows Version is Waveout.c
-//	Nucleo Version is NucleoSound.c
 
 #include <alsa/asoundlib.h>
 #include <signal.h>
