@@ -12,9 +12,7 @@
 
 #pragma warning(disable : 4244)		// Code does lots of float to int
 
-#ifndef TEENSY
 #define MEMORYARQ
-#endif
 
 #undef PLOTWATERFALL
 
@@ -31,14 +29,10 @@
 #endif
 
 
-#ifdef TEENSY
-#define PKTLED LED3		// flash when packet received
 extern unsigned int PKTLEDTimer;
-#endif
 
 void SendFrametoHost(unsigned char *data, unsigned dlen);
 
-void CheckandAdjustRXLevel(int maxlevel, int minlevel, BOOL Force);
 void clearDisplay();
 void updateDisplay();
 
@@ -1333,11 +1327,6 @@ ProcessFrame:
 
 		if (blnFrameDecodedOK)
 		{
-			// Set input level if supported
-			
-#ifdef HASPOTS
-			CheckandAdjustRXLevel(lastmax, lastmin, TRUE);
-#endif
 			if (AccumulateStats)
 				if (IsDataFrame(intFrameType))
 					if (strstr (strMod, "PSK"))
