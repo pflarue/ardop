@@ -1225,12 +1225,7 @@ void SampleSink(short Sample)
 		else if (intFilteredSample < -32700)
 			intFilteredSample = -32700;
 
-#ifdef TEENSY	
-		int work = (short)(intFilteredSample);
-		DMABuffer[Number++] = (work + 32768) >> 4; // 12 bit left justify
-#else
 		DMABuffer[Number++] = (short)intFilteredSample;
-#endif
 		if (Number == SendSize)
 		{
 			// send this buffer to sound interface
