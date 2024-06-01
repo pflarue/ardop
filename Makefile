@@ -40,6 +40,9 @@ OBJS = \
 	src/common/gen-webgui.js.o \
 	src/common/Webgui.o \
 
+OBJS_EXE = \
+	src/common/ardopcf.o \
+
 # Configuration:
 CPPFLAGS += -Isrc -Ilib
 CFLAGS = -g -MMD
@@ -64,7 +67,7 @@ endif
 
 all: ardopcf
 
-ardopcf: $(OBJS)
+ardopcf: $(OBJS_EXE) $(OBJS)
 	$(CC) $(LDFLAGS) $^ -o $@ $(LOADLIBES) $(LDLIBS)
 
 # if txt2c is not provided, build it
@@ -93,7 +96,14 @@ src/common/gen-%.c:: webgui/% | $(TXT2C)
 # 'make clean' before running 'make' to produce a successful build.  Failure
 # to run 'make clean' before using git checkout may sometimes leave build
 # related files that must then be manually deleted.
-CLEAN += ardopcf ardopcf.exe $(OBJS) $(OBJS:.o=.d) output.map
+CLEAN += \
+	ardopcf \
+	ardopcf.exe \
+	$(OBJS) \
+	$(OBJS:.o=.d) \
+	$(OBJS_EXE) \
+	$(OBJS_EXE:.o=.d) \
+	output.map \
 
 ifeq ($(OS),Windows_NT)
 # on Windows, del requires backslash paths

@@ -513,7 +513,7 @@ static void sigint_handler(int sig)
 char * PortString = NULL;
 
 
-int main(int argc, char * argv[])
+int platform_main(int argc, char * argv[])
 {
 	struct timespec tp;
 	struct sigaction act;
