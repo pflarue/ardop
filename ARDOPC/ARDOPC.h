@@ -269,13 +269,9 @@ const char * shortName(UCHAR bytID);
 int InitSound();
 void initFilter(int Width, int centerFreq);
 void FourierTransform(int NumSamples, float * RealIn, float * RealOut, float * ImagOut, int InverseTransform);
-VOID ClosePacketSessions();
 VOID LostHost();
-VOID ProcessPacketHostBytes(UCHAR * RXBuffer, int Len);
 int ReadCOMBlock(HANDLE fd, char * Block, int MaxLength);
 VOID ProcessDEDModeFrame(UCHAR * rxbuffer, unsigned int Length);
-BOOL CheckForPktMon();
-BOOL CheckForPktData();
 
 int SendtoGUI(char Type, unsigned char * Msg, int Len);	
 void DrawTXFrame(const char * Frame);
@@ -399,9 +395,6 @@ extern struct SEM Semaphore;
 #define ConAck2000 0x3C
 #define PINGACK 0x3D
 #define PING 0x3E
-#define PktFrameHeader 0xC0		// Variable length frame Header
-#define PktFrameData 0xC1		// Variable length frame Data (Virtual Frsme Type)
-
 
 extern const short intTwoToneLeaderTemplate[120];  // holds just 1 symbol (0 ms) of the leader
 extern const short int50BaudTwoToneLeaderTemplate[240];  // holds just 1 symbol (20 ms) of the leader
@@ -434,7 +427,6 @@ extern char CaptureDevice[];
 extern char PlaybackDevice[];
 extern int port;
 extern char HostPort[80];
-extern int pktport;
 extern BOOL RadioControl;
 extern BOOL SlowCPU;
 extern BOOL AccumulateStats;
@@ -616,19 +608,6 @@ extern int LastBusyOn;
 extern int LastBusyOff;
 extern int dttLastLeaderDetect;
 
-extern int pktDataLen;
-extern int pktRSLen;
-extern const char pktMod[16][12];
-extern int pktMode;
-extern int pktModeLen;
-extern const int pktBW[16];
-extern const int pktCarriers[16];
-extern const int defaultPacLen[16];
-extern const BOOL pktFSK[16];
-
-extern int pktMaxFrame;
-extern int pktMaxBandwidth;
-extern int pktPacLen;
 extern int initMode;		 // 0 - 4PSK 1 - 8PSK 2 = 16QAM
 
 extern BOOL SerialMode;			// Set if using SCS Mode, Unset for TCP Mode
