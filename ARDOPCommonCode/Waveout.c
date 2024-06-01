@@ -48,8 +48,6 @@ int LogToHostBufferLen;
 #endif
 
 // Windows works with signed samples +- 32767
-// STM32 DAC uses unsigned 0 - 4095
-
 // Currently use 1200 samples for TX but 480 for RX to reduce latency
 
 short buffer[2][SendSize];		// Two Transfer/DMA buffers of 0.1 Sec
@@ -1464,12 +1462,9 @@ void updateDisplay()
 {
 //	 SendtoGUI('C', Pixels, pixelPointer - Pixels);	
 }
-void DrawAxes(int Qual, const char * Frametype, char * Mode)
+void DrawAxes(int Qual, char * Mode)
 {
 	UCHAR Msg[80];
-
-	// Teensy used Frame Type, GUI Mode
-	
 	SendtoGUI('C', Pixels, pixelPointer - Pixels);	
 	wg_send_pixels(0, Pixels, pixelPointer - Pixels);
 	pixelPointer = Pixels;

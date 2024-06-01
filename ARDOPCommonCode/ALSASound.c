@@ -15,11 +15,9 @@
 #include <termios.h>
 #include <sys/ioctl.h>
 #include <stdbool.h>
-#ifndef TEENSY
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#endif
 
 #define HANDLE int
 
@@ -99,8 +97,6 @@ void Sleep(int mS)
 
 
 // Windows and ALSA work with signed samples +- 32767
-// STM32 and Teensy DAC uses unsigned 0 - 4095
-
 short buffer[2][1200];			// Two Transfer/DMA buffers of 0.1 Sec
 short inbuffer[2][1200];		// Two Transfer/DMA buffers of 0.1 Sec
 
@@ -2488,12 +2484,9 @@ void updateDisplay()
 {
 //	 SendtoGUI('C', Pixels, pixelPointer - Pixels);	
 }
-void DrawAxes(int Qual, const char * Frametype, char * Mode)
+void DrawAxes(int Qual, char * Mode)
 {
 	UCHAR Msg[80];
-
-	// Teensy used Frame Type, GUI Mode
-	
 	SendtoGUI('C', Pixels, pixelPointer - Pixels);	
 	wg_send_pixels(0, Pixels, pixelPointer - Pixels);
 	pixelPointer = Pixels;

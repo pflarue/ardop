@@ -42,7 +42,7 @@ void CheckandAdjustRXLevel(int maxlevel, int minlevel, BOOL Force);
 void clearDisplay();
 void updateDisplay();
 
-void DrawAxes(int Qual, const char * FrameType, char * Mode);
+void DrawAxes(int Qual, char * Mode);
 
 extern int lastmax, lastmin;		// Sample Levels
 
@@ -4271,7 +4271,7 @@ void Update4FSKConstellation(int * intToneMags, int * intQuality)
 	}
 
 #ifdef PLOTCONSTELLATION
-	DrawAxes(*intQuality, shortName(intFrameType), strMod);
+	DrawAxes(*intQuality, strMod);
 #endif
 
 	return;
@@ -4353,7 +4353,7 @@ void Update16FSKConstellation(int * intToneMags, int * intQuality)
 		int16FSKQuality += *intQuality;
 	}
 #ifdef PLOTCONSTELLATION
-	DrawAxes(*intQuality, shortName(intFrameType), strMod);
+	DrawAxes(*intQuality, strMod);
 #endif
 }
 
@@ -4427,7 +4427,7 @@ void Update8FSKConstellation(int * intToneMags, int * intQuality)
 		int8FSKQuality += *intQuality;
 	}
 #ifdef PLOTCONSTELLATION
-	DrawAxes(*intQuality, shortName(intFrameType), strMod);
+	DrawAxes(*intQuality, strMod);
 #endif
 	return;
 }
@@ -4565,7 +4565,7 @@ int UpdatePhaseConstellation(short * intPhases, short * intMag, char * strMod, B
 		}
 	}	
 #ifdef PLOTCONSTELLATION
-	DrawAxes(intQuality, shortName(intFrameType), strMod);
+	DrawAxes(intQuality, strMod);
 #endif
 	return intQuality;
 
