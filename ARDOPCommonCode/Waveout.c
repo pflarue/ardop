@@ -110,8 +110,6 @@ WAVEHDR inheader[5] =
 WAVEOUTCAPS pwoc;
 WAVEINCAPS pwic;
 
-unsigned int RTC = 0;
-
 int InitSound(BOOL Quiet);
 void HostPoll();
 void TCPHostPoll();
