@@ -17,9 +17,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
-#ifndef TEENSY
 #include <sys/socket.h>
-#endif
 #define SOCKET int
 #define closesocket close
 #define HANDLE int
@@ -96,9 +94,7 @@ bool DeprecationWarningsIssued = false;
 
 int PTTMode = PTTRTS;				// PTT Control Flags.
 
-#ifndef TEENSY
 struct sockaddr HamlibAddr;		// Dest for above
-#endif
 int useHamLib = 0;
 
 
@@ -150,8 +146,6 @@ unsigned short int compute_crc(unsigned char *buf,int len)
 
 	return fcs;
 }
-
-#ifndef TEENSY
 
 extern BOOL UseLeftRX;
 extern BOOL UseRightRX;
@@ -582,8 +576,6 @@ void LostHost()
 	if (ProtocolState == IDLE || ProtocolState == IRS || ProtocolState == ISS || ProtocolState == IRStoISS)
 		blnARQDisconnect = 1;
 }
-
-#endif
 
 // When decoding a WAV file, WavNow will be set to the offset from the
 // start of that file to the end of the data about to be passed to
