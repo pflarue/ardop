@@ -60,16 +60,13 @@ VOID ProcessPacketBytes(UCHAR * RXBuffer, int Read);
 int ReadCOMBlock(HANDLE fd, char * Block, int MaxLength );
 
 extern int port;
-extern int pktport;
-
-extern BOOL UseKISS;			// Enable Packet (KISS) interface
 
 extern BOOL NeedID;				// SENDID Command Flag
 extern BOOL NeedCWID;			// SENDCWID Command Flag
 extern BOOL NeedTwoToneTest;
 
-SOCKET TCPControlSock = 0, TCPDataSock = 0, PktSock = 0;
-SOCKET ListenSock = 0, DataListenSock = 0, PktListenSock = 0;
+SOCKET TCPControlSock = 0, TCPDataSock = 0;
+SOCKET ListenSock = 0, DataListenSock = 0;
 SOCKET GUISock = 0;				// UDP socket for GUI interface
 
 int GUIActive = 0;
@@ -81,7 +78,6 @@ struct sockaddr_in GUIHost;
 
 BOOL CONNECTED = FALSE;
 BOOL DATACONNECTED = FALSE;
-BOOL PKTCONNECTED = FALSE;
 
 // Host to TNC RX Buffer
 
@@ -581,15 +577,11 @@ BOOL TCPHostInit()
 #endif
 
 	WriteDebugLog(LOGALERT, "%s listening on port %d", ProductName, port);
-	if (UseKISS && pktport)
-		WriteDebugLog(LOGALERT, "%s listening for KISS frames on port %d", ProductName, pktport);
 //	InitQueue();
 
 	// Here is where our listening ports for commands and data are opened.
 	ListenSock = OpenSocket4(port);
 	DataListenSock = OpenSocket4(port + 1);
-	if (UseKISS && pktport)
-		PktListenSock = OpenSocket4(pktport);
 
 	GUISock = OpenUDPSocket(port);
 
@@ -724,49 +716,7 @@ void TCPHostPoll()
 		}
 	}
 
-// if we are removing packet modes, we can remove this code
 NoARDOPTCP:
-
-	if (PktListenSock == 0)
-		goto NoPkt;
-
-	FD_ZERO(&readfs);	
-	FD_ZERO(&errorfs);
-	FD_SET(PktListenSock,&readfs);
-
-	timeout.tv_sec = 0;				// No wait
-	timeout.tv_usec = 0;	
-
-	ret = select(PktListenSock + 1, &readfs, NULL, NULL, &timeout);
-
-	if (ret == -1)
-	{
-		ret = WSAGetLastError();
-		WriteDebugLog(LOGDEBUG, "%d ", ret);
-		perror("pkt listen select");
-	}
-	else
-	{
-		if (ret)
-		{
-			if (FD_ISSET(PktListenSock, &readfs))
-			{
-				PktSock = accept(PktListenSock, (struct sockaddr * )&sin, &addrlen);
-	    
-				if (PktSock == INVALID_SOCKET)
-				{
-					WriteDebugLog(LOGDEBUG, "accept() pkt failed error %d", WSAGetLastError());
-					return;
-				}
-				WriteDebugLog(LOGINFO, "Packet Session Connected");
-					
-				ioctl(PktSock, FIONBIO, &param);
-				PKTCONNECTED = TRUE;
-			}
-		}
-	}
-
-NoPkt:
 
 	if (CONNECTED)
 	{
@@ -851,67 +801,6 @@ Lost:
 				return;
 			}
 		}
-	}
-
-	if (PKTCONNECTED)
-	{
-		FD_ZERO(&readfs);	
-		FD_ZERO(&errorfs);
-
-		FD_SET(PktSock,&readfs);
-		FD_SET(PktSock,&errorfs);
-
-		timeout.tv_sec = 0;				// No wait
-		timeout.tv_usec = 0;	
-		
-		ret = select(PktSock + 1, &readfs, NULL, &errorfs, &timeout);
-
-		if (ret == SOCKET_ERROR)
-		{
-			WriteDebugLog(LOGDEBUG, "Pkt Select failed %d ", WSAGetLastError());
-			goto PktLost;
-		}
-		if (ret > 0)
-		{
-			//	See what happened
-
-			if (FD_ISSET(PktSock, &readfs))
-			{
-				unsigned long Read;
-				unsigned char RXBuffer[4096];
-				
-				Read = recv(PktSock, RXBuffer, 4096, 0);
-
-				if (Read == 0 || Read == SOCKET_ERROR)
-				{
-					// Does this mean closed?
-		
-					closesocket(PktSock);
-					PktSock = 0;
-
-					PKTCONNECTED = FALSE;
-					LostHost();					
-				}
-				else
-					ProcessPacketBytes(RXBuffer, Read);		// Process all in buffer
-			}
-										
-			if (FD_ISSET(PktSock, &errorfs))
-			{
-PktLost:	
-				WriteDebugLog(LOGDEBUG, "Pkt Data Connection lost");
-			
-				PKTCONNECTED = FALSE;
-
-				closesocket(PktSock);
-				PktSock = 0;
-				return;
-			}
-		}
-		// Look for anything to send on packet sessions
-
-		CheckForPktMon();
-		CheckForPktData(0);
 	}
 
 	// the GUI code seems to mostly be for the waterfall display, because
