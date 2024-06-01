@@ -77,26 +77,14 @@ BOOL blnPINGrepeating = False;
 BOOL blnFramePending = False;	//  Cancels last repeat
 int intPINGRepeats = 0;
 
-#ifdef TEENSY
-int WaterfallActive = 0;		// Waterfall display off
-int SpectrumActive = 0;			// Spectrum display off
-#else
 int WaterfallActive = 1;		// Waterfall display on
 int SpectrumActive = 0;			// Spectrum display off
-#endif
 
 char ConnectToCall[16] = "";
 
-#ifdef TEENSY
-int LeaderLength = 500;
-#else
 int LeaderLength = 240;
-#endif
 unsigned int ARQTimeout = 120;
 int TuningRange = 100;
-int TXLevel = 300;				// 300 mV p-p Used on Teensy
-int RXLevel = 0;				// Configured Level - zero means auto tune
-int autoRXLevel = 1500;			// calculated level
 int ARQConReqRepeats = 5;
 BOOL DebugLog = TRUE;
 BOOL CommandTrace = TRUE;
