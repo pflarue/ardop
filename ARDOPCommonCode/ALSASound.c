@@ -44,7 +44,6 @@ VOID SerialHostPoll();
 VOID TCPHostPoll();
 int CloseSoundCard();
 int PackSamplesAndSend(short * input, int nSamples);
-void displayLevel(int max);
 BOOL WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite);
 VOID processargs(int argc, char * argv[]);
 void Send5SecTwoTone();
@@ -54,8 +53,6 @@ int wg_send_pixels(int cnum, unsigned char *data, size_t datalen);
 void WebguiPoll();
 
 VOID WriteDebugLog(int Level, const char * format, ...);
-
-int initdisplay();
 
 extern BOOL blnDISCRepeating;
 
@@ -700,8 +697,6 @@ int main(int argc, char * argv[])
 		RadioControl = TRUE;
 	}	
 
-
-	initdisplay();
 
 	if (SerialMode)
 		Debugprintf("ARDOPC Using a pseudotty symlinked to %s", HostPort);
@@ -1835,7 +1830,6 @@ void PollReceivedSamples()
 			ptr++;
 		}
 
-		displayLevel(max);
 		CurrentLevel = ((max - min) * 75) /32768;	// Scale to 150 max
 		wg_send_currentlevel(0, CurrentLevel);
 

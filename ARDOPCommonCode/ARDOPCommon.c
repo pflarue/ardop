@@ -577,6 +577,21 @@ void LostHost()
 		blnARQDisconnect = 1;
 }
 
+void displayState(const char * State)
+{
+	char Msg[80];
+	strcpy(Msg, State); 
+	SendtoGUI('S', Msg, strlen(Msg) + 1);		// Protocol State
+}
+
+
+void displayCall(int dirn, char * Call)
+{
+	char Msg[32];
+	sprintf(Msg, "%c%s", dirn, Call);
+	SendtoGUI('I', Msg, strlen(Msg));
+}
+
 // When decoding a WAV file, WavNow will be set to the offset from the
 // start of that file to the end of the data about to be passed to
 // ProcessNewSamples() in ms.  Thus, it serves as a proxy for Now()

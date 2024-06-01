@@ -1155,15 +1155,6 @@ void PlatformSleep(int mS)
     }
 }
 
-void displayState(const char * State)
-{
-	char Msg[80];
-
-	strcpy(Msg, State); 
-	SendtoGUI('S', Msg, strlen(Msg) + 1);		// Protocol State
-	// Dummy for i2c display
-}
-
 void DrawTXMode(const char * Mode)
 {
 	char Msg[80];
@@ -1198,13 +1189,6 @@ void SetLED(int LED, int State)
 
 	Leds[LED] = State;
 	SendtoGUI('D', Leds, 8);
-}
-
-void displayCall(int dirn, char * call)
-{
-	char Msg[32];
-	sprintf(Msg, "%c%s", dirn, call);
-	SendtoGUI('I', Msg, strlen(Msg));
 }
 
 HANDLE OpenCOMPort(VOID * pPort, int speed, BOOL SetDTR, BOOL SetRTS, BOOL Quiet, int Stopbits)
