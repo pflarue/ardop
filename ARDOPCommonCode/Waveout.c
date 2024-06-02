@@ -18,11 +18,6 @@
 #include "wav.h"
 #include "../lib/rockliff/rrs.h"
 
-#ifdef USE_DIREWOLF
-#include "direwolf/fsk_demod_state.h"
-#include "direwolf/demod_afsk.h"
-#endif
-
 #pragma comment(lib, "winmm.lib")
 void printtick(char * msg);
 void PollReceivedSamples();
