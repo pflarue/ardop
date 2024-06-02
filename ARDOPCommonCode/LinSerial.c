@@ -24,7 +24,6 @@
 
 HANDLE hDevice;
 
-void ProcessSCSPacket(unsigned char * rxbuffer, unsigned int Length);
 int WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite);
 
 extern HANDLE hCATDevice;		// port for Rig Control
@@ -106,19 +105,6 @@ int SerialSendData(unsigned char * Message,int MsgLen)
 int xSerialGetData(unsigned char * Message, unsigned int BufLen, unsigned long * MsgLen)
 {
 	return 0;
-}
-
-
-int SerialHostInit()
-{
-	hDevice = LinuxOpenPTY(HostPort);
-
-	if (hDevice)
-	{
-		printf("PTY Handle %d\n", hDevice);
-		// Set up buffer pointers
-	}
-	return 1;
 }
 
 
@@ -291,23 +277,6 @@ void COMClearRTS(HANDLE fd)
 		perror("ARDOP PTT TIOCMSET");
 }
 
-
-unsigned char RXBUFFER[500]; // Long enough for stuffed Host Mode frame
-
-static int RXBPtr = 0;
-
-void SerialHostPoll()
-{
-	unsigned long Read = 0;
-
-	Read = ReadCOMBlock(hDevice, &RXBUFFER[RXBPtr], 499 - RXBPtr);
-
-	if (Read)
-	{		
-		RXBPtr += Read;
-		ProcessSCSPacket(RXBUFFER, RXBPtr);
-	}
-}
 
 void PutString(unsigned char * Msg)
 {

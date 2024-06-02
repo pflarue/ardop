@@ -33,6 +33,9 @@ const char ProductName[] = "ardopcf";
 #include "getopt.h"
 #include "../lib/rockliff/rrs.h"
 
+UCHAR bytDataToSend[DATABUFFERSIZE];
+int bytDataToSendLength = 0;
+
 void CompressCallsign(char * Callsign, UCHAR * Compressed);
 void CompressGridSquare(char * Square, UCHAR * Compressed);
 void  ASCIIto6Bit(char * Padded, UCHAR * Compressed);
@@ -777,12 +780,8 @@ void ardopmain()
 		return;
 	}
 
-	if (SerialMode)
-		SerialHostInit();
-	else {
-		TCPHostInit();
-		WebguiInit();
-	}
+	TCPHostInit();
+	WebguiInit();
 
 	tmrPollOBQueue = Now + 10000;
 
@@ -815,20 +814,14 @@ void ardopmain()
 		if (ProtocolMode != RXO)
 		{
 			CheckTimers();
-			if (SerialMode)
-				SerialHostPoll();
-			else
-				TCPHostPoll();
+			TCPHostPoll();
 			MainPoll();
 		}
 		PlatformSleep(10);
 	}
 
-	if (!SerialMode)
-	{
-		closesocket(TCPControlSock);
-		closesocket(TCPDataSock);
-	}
+	closesocket(TCPControlSock);
+	closesocket(TCPDataSock);
 	return;
 }
 
@@ -2076,13 +2069,6 @@ void SaveQueueOnBreak()
 }
 
 
-extern UCHAR bytEchoData[1280];		// has to be at least max packet size (?1280)
-
-extern int bytesEchoed;
-
-extern UCHAR DelayedEcho;
-
-
 void RemoveDataFromQueue(int Len)
 {
 	char HostCmd[32];
@@ -2091,14 +2077,6 @@ void RemoveDataFromQueue(int Len)
 		return;
 
 	// Called when ACK received, or on FEC send
-
-	//	If using PTC Serial Interface and delayed echo requested, send it
-
-	if (DelayedEcho == '1')
-	{
-		memcpy(bytEchoData, bytDataToSend, Len);
-		bytesEchoed = Len;
-	}
 
 	GetSemaphore();
 

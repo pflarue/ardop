@@ -390,15 +390,7 @@ int main(int argc, char * argv[])
 	}
 
 	if (HostPort[0])
-	{		
-		if (_memicmp(HostPort, "COM", 3) == 0)
-		{
-			SerialMode = 1;
-			port = atoi(HostPort + 3);
-		}
-		else
-			port = atoi(HostPort);
-	}
+		port = atoi(HostPort);
 
 	_strupr(CaptureDevice);
 	_strupr(PlaybackDevice);
@@ -533,12 +525,8 @@ void txSleep(int mS)
 	// called while waiting for next TX buffer. Run background processes
 
 	PollReceivedSamples();			// discard any received samples
-	if (SerialMode)
-		SerialHostPoll();
-	else {
-		TCPHostPoll();
-		WebguiPoll();
-	}
+	TCPHostPoll();
+	WebguiPoll();
 
 	if (strcmp(PlaybackDevice, "NOSOUND") != 0)
 		Sleep(mS);
@@ -1407,13 +1395,6 @@ void CatWrite(char * Buffer, int Len)
 		WriteCOMBlock(hCATDevice, Buffer, Len);
 }
 
-extern unsigned char CatRXbuffer[256];
-extern int CatRXLen;
-
-int RadioPoll()
-{
-	return CatRXLen;
-}
 
 UCHAR Pixels[16384];
 UCHAR * pixelPointer = Pixels;

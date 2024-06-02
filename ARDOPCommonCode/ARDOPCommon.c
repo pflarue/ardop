@@ -186,10 +186,7 @@ char HelpScreen[] =
 	"defaults are port = 8515, capture device ARDOP playback device ARDOP\n"
 	"If you need to specify capture and playback devices you must specify port\n"
 	"\n"
-	"For TCP Host connection, port is TCP Port Number\n"
-	"For Serial Host Connection port must start with \"COM\" or \"com\"\n"
-	"  On Windows use the name of the BPQ Virtual COM Port, eg COM4\n"
-	"  On Linux the program will create a pty and symlink it to the specified name.\n"
+	"port is TCP Port Number\n"
 	"\n"
 	"Optional Paramters\n"
 	"-l path or --logdir path             Path for log files\n"
@@ -531,13 +528,13 @@ void processargs(int argc, char * argv[])
 		wg_port = -wg_port;
 		WG_DevMode = TRUE;
 	}
-	if (HostPort[0] != 0x00 && HostPort[0] != 'C' && HostPort[0] != 'c' && wg_port == atoi(HostPort)) {
+	if (HostPort[0] != 0x00 && wg_port == atoi(HostPort)) {
 		WriteDebugLog(LOGERROR,
 			"WebGui port (%d) may not be the same as host port (%s)",
 			wg_port, HostPort);
 		exit(0);
 	}
-	else if (HostPort[0] != 0x00 && HostPort[0] != 'C' && HostPort[0] != 'c'  && wg_port == atoi(HostPort) + 1) {
+	else if (HostPort[0] != 0x00 && wg_port == atoi(HostPort) + 1) {
 		WriteDebugLog(LOGERROR,
 			"WebGui port (%d) may not be one greater than host port (%s)"
 			" since that is used as the host data port.",

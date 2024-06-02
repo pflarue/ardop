@@ -4,11 +4,10 @@
 
 OBJS = ARDOPCommon.o BusyDetect.o \
 ARDOPC.o ardopSampleArrays.o ARQ.o FFT.o FEC.o HostInterface.o Modulate.o rrs.o txframe.o \
-SoundInput.o TCPHostInterface.o SCSHostInterface.o wav.o RXO.o sdft.o rawhid.o \
+SoundInput.o TCPHostInterface.o wav.o RXO.o sdft.o rawhid.o \
 ws_server.o Webgui.o webgui_html.o webgui_js.o
 
 # Configuration:
-CPPFLAGS = -DLINBPQ
 CFLAGS = -g -MMD
 LDLIBS = -lm -lpthread
 LDFLAGS = -Xlinker -Map=output.map
