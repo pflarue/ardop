@@ -9,8 +9,8 @@
 
 #include "common/ARDOPC.h"
 
-void DeCompressCallsign(char *bytCallsign, char *returned);
-void CompressCallsign(char *Callsign, UCHAR *Compressed);
+void DeCompressCallsign(const char *bytCallsign, char *returned, size_t returnlen);
+void CompressCallsign(const char *Callsign, UCHAR *Compressed);
 
 /*
  * Check that the given `call`sign (with optional SSID) has the given
@@ -19,7 +19,6 @@ void CompressCallsign(char *Callsign, UCHAR *Compressed);
  */
 static void assert_callsign_wireline_is(const char *call, const char *hexstr)
 {
-	char inbuf[32];
 	UCHAR compressed[6];
 	char compressed_hex[2*sizeof(compressed) + 1];
 	compressed_hex[2 * sizeof(compressed)] = '\0';
@@ -27,9 +26,7 @@ static void assert_callsign_wireline_is(const char *call, const char *hexstr)
 	// check string must be exactly 12 characters long
 	assert_int_equal(strlen(hexstr), 2 * sizeof(compressed));
 
-	snprintf(inbuf, sizeof(inbuf), "%s", call);
-
-	CompressCallsign(inbuf, compressed);
+	CompressCallsign(call, compressed);
 
 	for (size_t i = 0; i < sizeof(compressed); ++i) {
 		snprintf(&compressed_hex[2*i], 3, "%02x", (unsigned int)compressed[i]);
@@ -44,14 +41,11 @@ static void assert_callsign_wireline_is(const char *call, const char *hexstr)
  */
 static void assert_callsign_inout(const char *call_in, const char *call_out)
 {
-	char inbuf[32];
 	char out[11];
 	UCHAR compressed[6];
 
-	snprintf(inbuf, sizeof(inbuf), "%s", call_in);
-
-	CompressCallsign(inbuf, compressed);
-	DeCompressCallsign(compressed, out);
+	CompressCallsign(call_in, compressed);
+	DeCompressCallsign(compressed, out, sizeof(out));
 	assert_string_equal(call_out, out);
 }
 
@@ -95,7 +89,7 @@ static void test_decompress_callsign(void **state)
 	assert_callsign_inout("N0CALL", "N0CALL");
 	assert_callsign_inout("N0CALL-A", "N0CALL-A");
 	assert_callsign_inout("N0CALL-Z", "N0CALL-Z");
-	// assert_callsign_inout("LONGCAL-15", "LONGCAL-15"); /* ASAN */
+	assert_callsign_inout("LONGCAL-15", "LONGCAL-15");
 
 	// non-canonical representation
 	assert_callsign_inout("N0CALL-0", "N0CALL");

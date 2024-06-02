@@ -2692,9 +2692,9 @@ BOOL Decode4FSKConReq()
 		FrameOK = FALSE;
 	}
 	memcpy(bytCall, bytFrameData1, 6);
-	DeCompressCallsign(bytCall, strCaller);
+	DeCompressCallsign(bytCall, strCaller, sizeof(strCaller));
 	memcpy(bytCall, &bytFrameData1[6], 6);
-	DeCompressCallsign(bytCall, strTarget);
+	DeCompressCallsign(bytCall, strTarget, sizeof(strTarget));
 
 //	printtick(strCaller);
 //	printtick(strTarget);
@@ -2804,9 +2804,9 @@ BOOL Decode4FSKPing()
 	}
 
 	memcpy(bytCall, bytFrameData1, 6);
-	DeCompressCallsign(bytCall, strCaller);
+	DeCompressCallsign(bytCall, strCaller, sizeof(strCaller));
 	memcpy(bytCall, &bytFrameData1[6], 6);
-	DeCompressCallsign(bytCall, strTarget);
+	DeCompressCallsign(bytCall, strTarget, sizeof(strTarget));
 
 //	printtick(strCaller);
 //	printtick(strTarget);
@@ -2923,7 +2923,7 @@ BOOL Decode4FSKPingACK(UCHAR bytFrameType, int * intSNdB, int * intQuality)
 }
 
 
-BOOL Decode4FSKID(UCHAR bytFrameType, char * strCallID, char * strGridSquare)
+BOOL Decode4FSKID(UCHAR bytFrameType, char * strCallID, size_t strCallIDLen, char * strGridSquare)
 {
 	UCHAR bytCall[10];
 	UCHAR temp[20];
@@ -2958,7 +2958,7 @@ BOOL Decode4FSKID(UCHAR bytFrameType, char * strCallID, char * strGridSquare)
 	}
 
 	memcpy(bytCall, bytFrameData1, 6);
-	DeCompressCallsign(bytCall, strCallID);
+	DeCompressCallsign(bytCall, strCallID, strCallIDLen);
 	memcpy(bytCall, &bytFrameData1[6], 6);
 	DeCompressGridSquare(bytCall, temp);
 
@@ -3241,7 +3241,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 
 		case 0x30:  // ID Frame,
 
-			blnDecodeOK = Decode4FSKID(0x30, strIDCallSign, strGridSQ);
+			blnDecodeOK = Decode4FSKID(0x30, strIDCallSign, sizeof(strIDCallSign), strGridSQ);
 
 			frameLen = sprintf(bytData, "ID:%s %s:" , strIDCallSign, strGridSQ);
 
