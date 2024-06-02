@@ -30,7 +30,6 @@ const char ProductName[] = "ardopcf";
 #endif
 
 #include "ARDOPC.h"
-#include "getopt.h"
 #include "../lib/rockliff/rrs.h"
 
 UCHAR bytDataToSend[DATABUFFERSIZE];
