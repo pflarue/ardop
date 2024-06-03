@@ -4,6 +4,14 @@
 
 extern UCHAR bytSessionID;
 extern UCHAR bytFrameData1[760];
+extern int stcLastPingintRcvdSN;  // defined in ARDOPC.c. updated in SoundInput.c
+extern int stcLastPingintQuality;  // defined in ARDOPC.c. updated in SoundInput.c
+extern int intSNdB;  // defined in SoundInput.c
+extern int intQuality;  // defined in SoundInput.c
+extern int intLastRcvdFrameQuality;  // defined in SoundInput.c
+extern BOOL WG_DevMode;
+int wg_send_hostdatat(int cnum, char *prefix, unsigned char *data, int datalen);
+int wg_send_hostdatab(int cnum, char *prefix, unsigned char *data, int datalen);
 
 // Use of RXO is assumed to indicate that the user is interested in observing all received traffic.
 // So LOGINFO, rather than a higher log level such as LOGDEBUG, is used for most positive results.
@@ -152,27 +160,36 @@ void ProcessRXOFrame(UCHAR bytFrameType, int frameLen, UCHAR * bytData, BOOL bln
 {
 	char strMsg[4096];
 	int intMsgLen;
-	UCHAR * notUtf8;
 
 	if (blnFrameDecodedOK)
 	{
-		if (bytFrameType >= 0x31 && bytFrameType <= 0x38)
+		if (bytFrameType >= 0x31 && bytFrameType <= 0x38)  // ConReq####
 		{
 			// Is there a reason why frameLen is not defined for ConReq?
 			WriteDebugLog(LOGINFO, "    [RXO %02X] ConReq data is callerID targetID", bytSessionID);
 			frameLen = strlen((char*) bytData);
 		}
-		else if (bytFrameType >= 0x39 && bytFrameType <= 0x3C)
+		else if (bytFrameType >= 0x39 && bytFrameType <= 0x3C)  // ConAck####
 		{
 			WriteDebugLog(LOGINFO, "    [RXO %02X] ConAck data is the length (in tens of ms) of the received leader repeated 3 times: %d %d %d",
 				bytSessionID, bytFrameData1[0], bytFrameData1[1], bytFrameData1[2]);
 		}
-		else if (bytFrameType >= 0xE0)
+		else if (bytFrameType == 0x3D)  // PingAck
+		{
+			WriteDebugLog(LOGINFO, "    [RXO %02X] PingAck data is S:N=%d and Quality=%d of the Ping. (Any S:N > 20 is reorted as 21.)",
+				bytSessionID, intSNdB, intQuality);
+		}
+		else if (bytFrameType == 0x3E)  // Ping
+		{
+			WriteDebugLog(LOGINFO, "    [RXO %02X] Ping data is caller and target callsigns: '%s'.  While this frame does uses FEC to improve likelihood of correct transmission, it does not include a CRC check with which to confirm correctness.  This Ping was received with S:N=%d, Q=%d.",
+				bytSessionID, bytData, stcLastPingintRcvdSN, stcLastPingintQuality);
+		}
+		else if (bytFrameType >= 0xE0)  // DataACK
 		{
 			WriteDebugLog(LOGINFO, "    [RXO %02X] DataAck FrameType (0x%02X) indicates decode quality (%d/100). 60+ typically required for decoding.",
 				bytSessionID, bytFrameType, 38 + (2 * (bytFrameType & 0x1F)));
 		}
-		else if (bytFrameType <= 0x1F)
+		else if (bytFrameType <= 0x1F)  // DataNAK
 		{
 			WriteDebugLog(LOGINFO, "    [RXO %02X] DataNak FrameType (0x%02X) indicates decode quality (%d/100). 60+ typically required for decoding.",
 				bytSessionID, bytFrameType, 38 + (2 * (bytFrameType & 0x1F)));
@@ -180,7 +197,6 @@ void ProcessRXOFrame(UCHAR bytFrameType, int frameLen, UCHAR * bytData, BOOL bln
 
 		WriteDebugLog(LOGINFO, "    [RXO %02X] %s frame received OK.  frameLen = %d", 
 				bytSessionID, Name(bytFrameType), frameLen);
-		bytData[frameLen] = 0;
 		if (frameLen > 0)
 		{
 			sprintf(strMsg, "    [RXO %02X] %d bytes of data as hex values:\n", bytSessionID, frameLen);
@@ -191,18 +207,24 @@ void ProcessRXOFrame(UCHAR bytFrameType, int frameLen, UCHAR * bytData, BOOL bln
 				intMsgLen += 3;
 			}
 			WriteDebugLog(LOGINFO, "%s", strMsg);
-			notUtf8 = utf8_check(bytData);
-			if (notUtf8 == NULL)
-			{
+			// If there is a Null (0x00) anywhere other than as the last byte
+			// of bytData, or if utf8_check() indicates that it is not valid
+			// utf8, then bytData should not be displayed as text.
+			if (memchr(bytData, 0x00, frameLen - 1) == NULL && utf8_check(bytData, frameLen) == NULL) {
 				for (int i = 0; i < frameLen; i++)
 				{
 					if (bytData[i] == 0x0D && bytData[i + 1] != 0x0A)
 						bytData[i] = 0x0A;
 				}
-				WriteDebugLog(LOGINFO, "    [RXO %02X] %d bytes of data as UTF-8 text:\n%s", bytSessionID, frameLen, bytData);
+				WriteDebugLog(LOGINFO, "    [RXO %02X] %d bytes of data as UTF-8 text:\n%.*s", bytSessionID, frameLen, frameLen, bytData);
+				if (WG_DevMode)
+					wg_send_hostdatat(0, "RXO", bytData, frameLen);
 			}
-			else
+			else {
 				WriteDebugLog(LOGINFO, "    [RXO %02X] Data does not appear to be valid UTF-8 text.", bytSessionID);			
+				if (WG_DevMode)
+					wg_send_hostdatab(0, "RXO", bytData, frameLen);
+			}
 		}
 		sprintf(strMsg, "STATUS [RXO %02X] %s frame received OK.", bytSessionID, Name(bytFrameType));
 		SendCommandToHost(strMsg);
@@ -221,7 +243,7 @@ void ProcessRXOFrame(UCHAR bytFrameType, int frameLen, UCHAR * bytData, BOOL bln
 
 
 /*
- * The utf8_check() function scans the '\0'-terminated string starting
+ * The utf8_check() function scans the data of length slen starting
  * at s. It returns a pointer to the first byte of the first malformed
  * or overlong UTF-8 sequence found, or NULL if the string contains
  * only correct UTF-8. It also spots UTF-8 sequences that could cause
@@ -240,12 +262,12 @@ void ProcessRXOFrame(UCHAR bytFrameType, int frameLen, UCHAR * bytData, BOOL bln
  *
  * The above license URL indicates that the following code is licensed
  * by Markus Kuhn under the users choice of multiple licenses including
- * Apache, BSD, GPL, LGPL, MIT, amd CC0.
+ * Apache, BSD, GPL, LGPL, MIT, and CC0.
  */
 
-unsigned char *utf8_check(unsigned char *s)
+unsigned char *utf8_check(unsigned char *s, size_t slen)
 {
-  while (*s) {
+  for (size_t i = 0; i < slen; i++) {
     if (*s < 0x80)
       /* 0xxxxxxx */
       s++;

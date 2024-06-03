@@ -1,25 +1,39 @@
 #	ardopcf Makefile
 
-OBJS = ARDOPCommon.o LinSerial.o KISSModule.o pktARDOP.o pktSession.o BusyDetect.o i2cDisplay.o ALSASound.o \
-ARDOPC.o ardopSampleArrays.o ARQ.o FFT.o FEC.o HostInterface.o Modulate.o rs.o \
-berlekamp.o galois.o SoundInput.o TCPHostInterface.o SCSHostInterface.o wav.o RXO.o sdft.o rawhid.o
+.PHONY: all
+
+OBJS = ARDOPCommon.o KISSModule.o pktARDOP.o BusyDetect.o \
+ARDOPC.o ardopSampleArrays.o ARQ.o FFT.o FEC.o HostInterface.o Modulate.o rrs.o txframe.o \
+SoundInput.o TCPHostInterface.o SCSHostInterface.o wav.o RXO.o sdft.o rawhid.o \
+ws_server.o Webgui.o webgui_html.o webgui_js.o dummypkt.o
 
 # Configuration:
-CFLAGS = -DLINBPQ -MMD -g 
+CPPFLAGS = -DLINBPQ
+CFLAGS = -g -MMD
+LDLIBS = -lm -lpthread
+LDFLAGS = -Xlinker -Map=output.map
 CC = gcc
 
-vpath %.c ../ARDOPCommonCode ../lib/rscode ../lib/hid ../lib/bpq32 ../lib/rawhid
-vpath %.h ../ARDOPCommonCode
-vpath %.o ./
-			                       
-all: ardopcf
-			
-ardopcf: $(OBJS)
-	gcc $(OBJS) -Xlinker -Map=output.map -lrt -lm -lpthread -lasound -o ardopcf
+ifeq ($(OS),Windows_NT)
+OBJS += WinSerial.o Waveout.o hid.o
+LDLIBS += -lwsock32 -lwinmm -lsetupapi -lws2_32
+RM = del /Q /F
+else
+OBJS += LinSerial.o i2cDisplay.o ALSASound.o
+LDLIBS += -lrt -lasound
+RM = rm -f --
+endif
 
+vpath %.c ../ARDOPCommonCode ../lib/rockliff ../lib/hid ../lib/rawhid ../lib/ws_server ../lib/dummypkt
+vpath %.h ../ARDOPCommonCode ../lib/rockliff
+vpath %.o ./
+
+all: ardopcf
+
+ardopcf: $(OBJS)
+	$(CC) $(LDFLAGS) $^ -o $@ $(LOADLIBES) $(LDLIBS)
 
 -include *.d
 
 clean :
-	rm ardopcf $(OBJS)
-
+	$(RM) ardopcf ardopcf $(OBJS) $(OBJS:.o=.d) output.map

@@ -123,11 +123,6 @@ extern unsigned int pttOnTime;
 #define Goldenrod 12
 #define Fuchsia 13
 
-
-
-
-#include "../lib/rscode/ecc.h"				// RS Constants
-
 typedef int BOOL;
 typedef unsigned char UCHAR;
 
@@ -255,10 +250,6 @@ extern BOOL blnDISCRepeating;
 BOOL DemodDecode4FSKID(UCHAR bytFrameType, char * strCallID, char * strGridSquare);
 void DeCompressCallsign(char * bytCallsign, char * returned);
 void DeCompressGridSquare(char * bytGS, char * returned);
-
-int RSEncode(UCHAR * bytToRS, UCHAR * bytRSEncoded, int MaxErr, int Len);
-BOOL RSDecode(UCHAR * bytRcv, int Length, int CheckLen, BOOL * blnRSOK);
-
 void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDecodedOK);
 void ProcessUnconnectedConReqFrame(int intFrameType, UCHAR * bytData);
 void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL blnFrameDecodedOK);
@@ -277,7 +268,7 @@ const char * Name(UCHAR bytID);
 const char * shortName(UCHAR bytID);
 int InitSound();
 void initFilter(int Width, int centerFreq);
-void FourierTransform(int NumSamples, short * RealIn, float * RealOut, float * ImagOut, int InverseTransform);
+void FourierTransform(int NumSamples, float * RealIn, float * RealOut, float * ImagOut, int InverseTransform);
 VOID ClosePacketSessions();
 VOID LostHost();
 VOID ProcessPacketHostBytes(UCHAR * RXBuffer, int Len);

@@ -53,6 +53,8 @@
 */
 
 #include <math.h>
+#include <stdbool.h>
+#include <stdlib.h>
 
 #ifdef M_PI
 #undef M_PI
@@ -101,7 +103,7 @@ int ReverseBits(int Index, int NumBits)
     return Rev;
 }
 
-void FourierTransform(int NumSamples, short * RealIn, float * RealOut, float * ImagOut, int InverseTransform)
+void FourierTransform(int NumSamples, float * RealIn, float * RealOut, float * ImagOut, int InverseTransform)
 {
 	float AngleNumerator;
 	unsigned char NumBits;
@@ -175,5 +177,79 @@ void FourierTransform(int NumSamples, short * RealIn, float * RealOut, float * I
 		}
 	}
 }
- 
 
+
+// Return the the fundamental frequency (in Hz) of a set of (float) data.
+// This is intended for diagnostic or debugging purposes, not to be called
+// repeatedly for real time signal processing.  So, it was not created to be
+// particularly fast or efficient.  To be more efficient, srclen would be
+// a fixed value so that the Blackman-Harris window coefficients could be
+// calculated only once.  A fixed fftlen would also avoid the need for
+// dynamic memory allocation.
+//
+// If srclen is greater than fftlen, only the first fftlen samples of src
+// will be considered,
+float peakFrequency(const float *src, int srclen, int fftlen) {
+	float *samples;
+	float *re;
+	float *im;
+	float mag;
+	float maxmag;
+	int i;
+	int maxindex;
+
+	samples = (float *) malloc(3 * fftlen * sizeof(float));
+	re = samples + fftlen;
+	im = re + fftlen;
+
+	if (srclen > fftlen)
+		srclen = fftlen;
+	if (srclen % 2 == 1)
+		srclen--;
+
+	for(i = 0; i < srclen; i++) {
+		// Apply a Blackman-Harris window before doing FFT
+		// This will decrease spectral leakage.  It also decreases the magnitude
+		// of the FFT results, but this is OK since the goal is only to find
+		// which bin is largest, without caring about scale.
+		samples[i] = src[i] * (
+			0.35875 - 0.48829 * cos(2 * M_PI * i / srclen)
+			+ 0.14128 * cos(4 * M_PI * i / srclen)
+			- 0.01168 * cos(6 * M_PI * i / srclen));
+	}
+	// zero pad to increase length to fftlen (which controls frequency resolution).
+	// Like the window, this makes magnitudes less meaningful, but that is OK for
+	// this application.
+	for (; i < fftlen; i++)
+		samples[i] = 0.0;
+	FourierTransform(fftlen, samples, re, im, false);
+	// Find Peak
+	// samples are assumed to have been sampled at 12000 samples per second.
+	// So re[i] and im[i] correspond to a frequency of i * 12000 / fftlen
+	// for 0 <= i < fftlen/2.  Thus, error is about +/- 12000 / fftlen;
+	maxmag = 0.0;
+	maxindex = 0;
+	for (i = 1; i < fftlen/ 2; i++)
+	{
+		mag = powf(re[i], 2) + powf(im[i], 2);  // magnitude squared
+		if (mag > maxmag) {
+			maxmag = mag;
+			maxindex = i;
+		}
+	}
+	free(samples);
+	return (maxindex * 12000.0 / fftlen);
+}
+
+// A wrapper for peakFrequency to take 16-bit signed short ints as input
+// rather than floats.
+float peakFrequencyShorts(const short *src, int srclen, int fftlen) {
+	float *samples;
+	float result;
+	samples = (float *) malloc(fftlen * sizeof(float));
+	for(int i = 0; i < srclen; i++)
+		samples[i] = (float) src[i];
+	result = peakFrequency(samples, srclen, fftlen);
+	free(samples);
+	return (result);
+}
