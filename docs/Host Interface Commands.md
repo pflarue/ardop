@@ -49,9 +49,9 @@ These are all commands that the host application can send to ardopcf, and what t
 
 ##### ABORT (or DD)
 
-This is a "dirty disconnect" from a current session. It will clear the current buffer, set ardopcf state to `DISC`, and reset the internal state. 
+This is a "dirty disconnect" from a current ARQ session. It will clear the current buffer, set ardopcf state to `DISC`, and reset the internal state. The current frame will complete transmission.
 
-- Mode: ANY
+- Mode: ARQ
 - Arguments: None
 - Example: `ABORT` returns `ABORT`
 
@@ -99,6 +99,15 @@ Valid arguments is an integer between 30 and 240
 - `ARQTIMEOUT 30` returns `ARQTIMEOUT now 30`
 
 
+#### AUTOBREAK
+
+Setting this to `TRUE` (default) will allow ardopcf ARQ session to automatically handle the ARQ flow control. Disabling this requires that the host application on each side implement application level flow control with the `BREAK` command. Not recommended to set to `FALSE`
+
+- Mode: ARQ
+- Arguments: `TRUE` or `FALSE`
+- `AUTOBREAK` returns `AUTOBREAK TRUE`
+- `AUTOBREAK FALSE` returns `AUTOBREAK now FALSE`
+
 #### BREAK
 
 Normally in ARQ mode, ardopcf will automatically `BREAK` to make sure both stations can send any data they have in their buffers.
@@ -112,7 +121,7 @@ If this command is sent, it means that this station wants to send data right now
 
 #### BUFFER
 
-Queries ardopcf for how many bytes of data are currently in the outgoing data buffer.
+Queries ardopcf for how many bytes of data are currently in the outgoing data buffer. ARDOPCF automatically sends a buffer report whenever a host application loads data into the buffer.
 
 - Mode: ANY
 - Arguments: None
@@ -121,7 +130,7 @@ Queries ardopcf for how many bytes of data are currently in the outgoing data bu
 
 #### BUSYBLOCK
 
-Enabling this will reject any incoming ARQ connection requests, and respond with a `CONREJBUSY` frame.
+Enabling this will reject any incoming ARQ connection requests, and respond with a `CONREJBUSY` frame if there is not enough time between the channel being 'busy' and the incoming ARQ connection request.
 
 - Mode: ARQ
 - Arguments: `TRUE` or `FALSE`
@@ -131,7 +140,7 @@ Enabling this will reject any incoming ARQ connection requests, and respond with
 
 #### BUSYDET
 
-Selects the sensitivity of busy channel detection.
+Selects the sensitivity of, or disables, busy channel detection.
 
 - Mode: ANY
 - Arguments: Integer 0-9, with 0 being disabled, 1 being most sensitive, and 9 being least sensitive.
@@ -140,6 +149,7 @@ Selects the sensitivity of busy channel detection.
   
 #### CALLBW
 
+Needs Developer review.
 
 - Mode: ARQ
 - Arguments: Optional desired bandwith postfixed with MAX/FORCE.
@@ -172,7 +182,7 @@ Same as `PURGEBUFFER` but as a SCS/Pactor modem emulation adapter. To be removed
 
 #### CLOSE
 
-Kills ardopcf.
+Kills ardopcf properly.
   
 #### CMDTRACE
 
@@ -205,16 +215,24 @@ Two 'truthy' settings:
   
 #### DATATOSEND
 
-Same as the `BUFFER` command.
+Same as the `BUFFER` command, except passing a `0` arguement will clear the current buffer.
+
+- Mode: ANY
+- Arguments: None, or `0`
+- `DATATOSEND` returns `DATATOSEND 0`
   
 #### DEBUGLOG
+
+Enable or disable writing the debug log to disk.
+
 - Mode: ANY
-- Arguments: None
-- Returns: None
-  
+- Arguments: None, `TRUE` or `FALSE`
+- `DEBUGLOG` returns `DEBUGLOG TRUE`
+- `DEBUGLOG FALSE` returns `DEBUGLOG now FALSE`
+
 #### DISCONNECT
 
-If in a ARQ session, commands ardopcf to gracefully end the session and places the `STATE` into `DISC`
+If in a ARQ session, commands ardopcf to gracefully end the session and places the `STATE` into `DISC`, otherwise ignored.
 
 - Mode: ANY
 - Arguments: None
@@ -249,8 +267,6 @@ Adds extra time in between reception and transmission for high-latency signal pa
   
 #### FASTSTART
 
-Unknown, but causes the radio to key, and will not unkey, when invoked.
-
 Needs developer review.
 
 - Mode: ANY
@@ -259,7 +275,7 @@ Needs developer review.
   
 #### FECID
 
-Automatically transmits an ID frame after every FEC transmission. Will automatically transmit an ID every 10 minutes to comply with FCC identification rules.
+Automatically transmits an ID frame with every FEC transmission.
 
 - Mode: FEC
 - Arguments: None, `TRUE` or `FALSE`
@@ -305,7 +321,7 @@ FEC mode relies on multiple repeated frames because there is no automatic reques
   
 #### FECSEND
 
-If there is data in the `BUFFER`, ardopcf will await for a clear channel and then transmit the selected `FECMODE` frame `FECREPEATS` amount of times. If there is no data in the buffer, it will wait for data to be loaded. You cannot query this to see if `FECSEND` is true or not.
+If there is data in the `BUFFER`, ardopcf will await for a clear channel and then transmit the selected `FECMODE` frame `FECREPEATS` amount of times. If there is no data in the buffer, it will wait for data to be loaded. You cannot query this to see if `FECSEND` is true or not. If sending many FEC frames, setting this to `FALSE` will stop transmission.
 
 - Mode: FEC
 - Arguments: `TRUE` or `FALSE`
@@ -339,7 +355,7 @@ Performs initialization of the modem. The first command that needs to be issued 
   
 #### LEADER
 
-Synchronization leader length in milliseconds, the longer this is the easier it is for the listener to decode the frame, but the more overhead there is.
+Synchronization leader length in milliseconds, the longer this is the easier it is for the listener to decode the frame, but the more overhead there is. In ARQ mode this is automatically adjusted.
 
 - Mode: ANY
 - Arguments: None, integer 120-2500
@@ -348,7 +364,7 @@ Synchronization leader length in milliseconds, the longer this is the easier it 
   
 #### LISTEN
 
-Actively attempts to find an decode any frames in the audio passband.
+When enabled, allows processing of any decodeded ARQ or PING frames addressed to `MYCALL` or `MYAUX`.
 
 - Mode: ANY
 - Arguments: None, `TRUE` or `FALSE`
@@ -368,6 +384,10 @@ Sets the loglevel for the debug log that is generated when the program is run. L
 
 Source code comment says "allows ARQ mode to operate like FEC when not connected"
 SoundInput.c:1425
+
+Enables/disables monitoring of FEC or ARQ Data Frames, ID frames, or Connect request in disconnected ARQ state.
+
+Does this make that data avaliable to a host application? I think funcationality confusion around this is why RX0 was implemented.
 
 - Mode: ANY
 - Arguments: None, `TRUE`or `FALSE`
@@ -389,16 +409,15 @@ Sets auxillary (tactical) callsigns that the modem will respond to in addition t
 Sets operator callsign, used in `IDFRAME` and `CONREQ` frames, and for engaging in ARQ mode.
 
 - Mode: ANY
-- Arguments: None
-- Returns: None
-
-#### PAC
-
-Packet mode subcommands - to be removed.
+- Arguments: None or CALLSIGN
+- `MYCALL` returns `MYCALL K7CALL` (or `MYCALL `+ empty string)
+- `MYCALL K7CALL` returns `MYCALL now K7CALL`
 
 #### PING
 
 Encodes a 4FSK 200 Hz BW Ping frame ( ~ 1950 ms with default leader/trailer) with double FEC leader length for extra robust decoding.
+
+If the pinged station responds with a `PINGACK` frame, this station will stop pinging.
 
 ** this needs more research on how to use with a host.
 ** Check function ProcessPingFrame in ARDOPC.c
@@ -445,13 +464,15 @@ Empties all data from the outgoing data buffer. Will stop any data transmissions
 
 Presumably a CAT string that would get or set the radio's current frequency. Possibly an embedded device specific command.
 
+Currently only used for setting GUI Freq field
+
 - Mode: ANY
 - Arguments: None
 - Returns: None
 
 #### RADIOHEX
 
-Define CAT hex string to send to a radio. Possibly embedded device specific.
+Send a CAT hex string to the connected radio.
 
 - Mode: ANY
 - Arguments: None
@@ -491,7 +512,7 @@ Transmits one `IDFRAME` with the callsign set with `MYCALL`
 
 #### SQUELCH
 
-Sets the minimum audio level. 1 is basically open squelch, and 10 requires a strong audio baseband to trigger. An open squelch will often lead to false frames beign decoded and possibly passing ERR data frames to the host.
+Sets the sensitivity of the frame leader detector. 1 is basically open squelch, and 10 requires a strong audio baseband to trigger. An open squelch will often lead to false frames beign decoded and possibly passing ERR data frames to the host.
 
 - Mode: ANY
 - Arguments: Integer value between 1 and 10
@@ -520,7 +541,7 @@ Valid states are:
 
 #### TRAILER
 
-How long after transmission does the PTT remain ON.
+How long after transmission does the PTT remain ON. Used for radios with processing delays, such as SDR based radios.
 
 - Mode: ANY
 - Arguments: Integer value between 0 and 200
@@ -536,17 +557,17 @@ How many hertz from center frequency (1500Hz) an incoming signal can be decoded.
 - `TUNINGRANGE` returns `TUNINGRANGE 100`
 - `TUNINGRANGE 110` returns `TUNINGRANGE now 110`
 
-#### TXLEVEL
+#### TWOTONETEST
 
-Embedded platform control of ADC output volume.
+Transmits a pair of tones at the normal leader amplitude. May be used in adjusting drive level to the radio.
 
 - Mode: ANY
 - Arguments: None
 - Returns: None
 
-#### TWOTONETEST
+#### TXLEVEL
 
-Transmits a pair of carriers for testing modulation quality.
+Embedded platform control of ADC output volume.
 
 - Mode: ANY
 - Arguments: None
@@ -569,23 +590,51 @@ Returns the version of ardopcf.
 - Arguments: None
 - `VERSION` returns `VERSION ardopcf_1.0.4.1.2`
 
-
-
 ## ARDOPCF Command Socket Messages
 
 These are messages that ardopcf can send to the host at any time.
 
 There are more than are listed here! If you find a different message, please let us know.
 
-#### REJECTEDBUSY
+#### BUFFER
 
-This message can appear for several reasons.
+The `BUFFER` message is recieved whenever data is added to the data buffer. It is a verification opportunity for the host to be sure that the data that was sent to ardopcf is the same length that it received.
 
-In ARQ Mode:
-- In a 600ms gap between disconnecting from another station, or when the receiving station detects that the current channel is busy? (Would like a 2nd opinion: ARQ.c:1391, in ProcessRcvdARQFrame)
-  - Sends `REJECTEDBUSY` to host
-- When calling a remote station and they say they are busy
-  - Sends `REJECTEDBUSY CALLSIGN` to host
+Example: sending to the ardopcf data port `<2 length bytes><mode>Hello` would return a `BUFFER 5` - the length of the acutal data.
+The `2 length bytes` is a big endian representation of the length of the data to load into the data buffer.
+The `mode` is either `FEC` or `ARQ`.
+
+
+#### BUSY TRUE
+
+If in `DISC` state, tells the host application there is a busy channel.
+
+#### BUSY FALSE
+
+If in `DISC` state, tells the host application there is a clear channel.
+
+
+#### CANCELPENDING
+
+This is used primarially when your station is scanning multiple frequencies for connection requests, it begins decoding a heard frame, but finds that it is not addressed to `MYCALL` or `MYAUX`
+
+`CANCELPENDING` occurs in the following situations:
+- A `PING` frame header has been decoded but ardopcf:
+  - is not in `DISC` state
+  - `LISTEN` is set to `FALSE`
+  - `PING` is not addressed to `MYCALL` or `MYAUX`
+  - `ENABLEPINGACK` is set to `FALSE`
+- An `ARQ` frame header is not intended for this station
+- A `CONREQ` frame header is recognized but decoded improperly
+- A `PING` frame header is recognized but decoded improperly
+- A `PING` frame header is received but not decoded when ardopcf is not in `DISC` state or `RX0` mode. (duplicate?)
+
+
+#### CONNECTED
+
+When connected to a remote station, this message includes the remote callsign and the session bandwith.
+Such as: `CONNECTED K7CALL 500`
+
 
 #### DISCONNECTED
 
@@ -598,13 +647,16 @@ A `DISCONNECTED` host message will be sent on any of the following conditions
 - If Information Receiving Station sends a `DISC` frame
 - If Information Receiving Station sends an `END` frame
 
-#### BUFFER
+#### FAULT
 
-The `BUFFER` message is recieved whenever data is added to the data buffer. It is a verification opportunity for the host to be sure that the data that was sent to ardopcf is the same length that it received.
+This will usually occur when a command syntax error is made.
+`FAULT <fault info>`
 
-Example: sending to the ardopcf data port `<2 length bytes><mode>Hello` would return a `BUFFER 5` - the length of the acutal data.
-The `2 length bytes` is a big endian representation of the length of the data to load into the data buffer.
-The `mode` is either `FEC` or `ARQ`.
+#### NEWSTATE
+
+Will tell the host application if there is a protocol state change.
+See `STATE` above for definitions.
+
 
 #### PING caller>target SNdB Quality
 
@@ -617,6 +669,32 @@ The `mode` is either `FEC` or `ARQ`.
 
 If ardopcf has `ENABLEPINGBACK` set to `TRUE` and the target is this station, it will respond with `PINGACK`
 
+#### PENDING
+
+`PENDING`
+
+Indicates to the host application a Connect Request or PING frame type has been detected. Used if a radio is scanning multiple frequencies and needs to pause to see if the frame is addressed to `MYCALL` or `MYAUX`.
+
+If improperly decoded, or not addressed to this station, the next command will be `CANCELPENDING`
+
+
+#### PING
+
+`PING SenderCallsign>TargetCallsign S:NdB DecodeQuality`
+
+If the TNC receives a `PING` and is in the `DISC` state it reports the decoded Sender’s `callsign>TargetCallsign`, S:N (in dB relative to 3 KHz noise bandwidth) and the decoded constellation quality (30-100)
+
+Example: `PING N7CAII>K6CALL 10 95`
+
+#### PINGACK SNdB Quality
+
+`PINGACK SNdB Quality`
+
+Sent to the host when ardopcf has sent a `PING` to another station and receives a `PINGACK` in response.
+
+It includes the Signal-to-Noise ratio expressed in deciBells, and the decoded frame's constellation quality
+
+
 #### PINGREPLY
 
 `PINGREPLY` is sent to the host when ardopcf has transmitted a `PINGACK` frame to the station that has pinged it.
@@ -626,137 +704,68 @@ A `PINGACK` frame will only be sent if:
 - ardopcf has decoded a `PING` frame directed at the station (`MYCALL` or `MYAUX`)
 - `ENABLEPINGACK` is set to `TRUE`
 
-#### PINGACK SNdB Quality
+#### PTT TRUE or FALSE
 
-`PINGACK {SNdB} {Quality}` is sent to the host when ardopcf has sent a `PING` to another station and receives a `PINGACK` in response.
+`PTT TRUE` is sent to the host when ardopcf is generating frame data and is ready for the transmitter to key. Between this command being sent, and the radio being keyed, should be less than 50 milliseconds.
 
-It includes the Signal-to-Noise ratio expressed in deciBells, and the decoded frame's "quality"
+`PTT FALSE` is sent to the host when ardopcf is finished sending frame data and the radio needs to be receiving.
 
-#### CANCELPENDING
+#### REJECTEDBW
 
-`CANCELPENDING` occurs in the following situations:
-- A `PING` has been decoded but ardopcf:
-  - is not in `DISC` state
-  - `LISTEN` is set to `FALSE`
-  - `PING` is not addressed to `MYCALL`
-  - `ENABLEPINGACK` is set to `FALSE`
-- An `ARQ` frame is not intended for this station
-- A `CONREQ` frame is recognized but decoded improperly
-- A `PING` frame is recognized but decoded improperly
-- A `PING` frame is received but not decoded when ardopcf is not in `DISC` state or `RX0` mode. (duplicate?)
+`REJECTEDBW CALLSIGN`
 
-#### STATUS QUEUE BREAK new Protocol State IRStoISS
+Used to signal the host that a connect request to or from Remote Call sign was rejected due to bandwidth incompatibility
 
-The message `STATUS QUEUE BREAK new Protocol State IRStoISS` is sent to the host when the protocol state changes from IRS (Idle Receiver State) to ISS (Idle Sender State). This typically happens when a connection has been established and the software is transitioning from receiving to sending data. 
+#### REJECTEDBUSY
 
-#### STATUS BREAK received from Protocol State IDLE, new state IRS
+`REJECTEDBUSY CALLSIGN` 
 
-`STATUS BREAK received from Protocol State IDLE, new state IRS` can be received when:
-- ardopcf is in an ARQ session but not actively sending or receiving data
-- A `BREAK` frame is receieved
+Used to signal the host that a connect request to/from Remote Call sign was rejected due to channel busy detection.
 
-The `BREAK` frame is used to tell the other station to get ready to receive data.
+#### STATUS
 
-#### STATUS BREAK received from Protocol State ISS, new state IRS
+`STATUS QUEUE/BREAK/END/ARQ/CONNECT text`
 
-`STATUS BREAK received from Protocol State ISS, new state IRS` can be received when:
-- ardopcf is in an ARQ session and is the Information Sending Station
-- A `BREAK` frame is receieved
+There are several status messages, here are some of them:
 
-The `BREAK` frame is used to tell the other station to get ready to receive data.
+`STATUS QUEUE BREAK new Protocol State IRStoISS`
 
-The inline comments say:
->With new rules IRS can use BREAK to interrupt data from ISS. It will only
->be sent on IDLE or changed data frame type, so we know the last sent data
->wasn't processed by IRS
+`STATUS BREAK received from Protocol State IDLE, new state IRS`
 
-#### PTT TRUE
+`STATUS BREAK received from Protocol State IDLE, new state IRS` 
 
-`PTT TRUE` is sent to the host when ardopcf is generating frame data.
+`STATUS BREAK received from Protocol State ISS, new state IRS`
 
-#### PTT FALSE
+`STATUS [RXO [SessionIDByte]] [FrameType] frame received OK.`
 
-`PTT FALSE` is sent to the host when ardopcf is finished sending frame data.
+`STATUS [RXO [SessionIDByte]] [FrameType] frame decode FAIL.`
 
-#### STATUS [RXO {SessionIDByte}] {FrameType} frame received OK.
+`STATUS END ARQ CALL`
 
-This message gives basic information about a decoded frame type.
+`STATUS ARQ Timeout from Protocol State:  [protocol state]`
 
-#### STATUS [RXO {SessionIDByte}] {FrameType} frame decode FAIL.
+`STATUS ARQ CONNECT REQUEST TIMEOUT FROM PROTOCOL STATE: [protocol state]`
 
-This message gives basic information about a frame that failed to decode.
+`STATUS END NOT RECEIVED CLOSING ARQ SESSION WITH [callsign]`
 
-#### ~Various CAT Rig Commands
+`STATUS CONNECT TO [callsign] FAILED!`
+
+`STATUS ARQ CONNECTION REQUEST FROM [callsign] REJECTED, CHANNEL BUSY.`
+
+`STATUS ARQ CONNECTION REJECTED BY [callsign]`
+
+`STATUS ARQ CONNECTION FROM [callsign]: [bandwidth] HZ`
+
+`STATUS ARQ CONNECTION ENDED WITH [callsign]`
+
+#### TARGET
+
+`TARGET K7CALL`
+
+Identifies the target call sign of the incoming connect request. The target call will be either `MYCALL` or one of the `MYAUX` call signs.
+
+##### ~Various CAT Rig Commands
 
 Needs developer review.
 
 When CAT commands are sent to a serial port, they will be echod to the command port.
-
-#### BUSY TRUE
-
-Needs developer review.
-
-
-If in `DISC` state, tells the host application that BUSY is true if BusyDetect3 returns true.?
-
-#### STATUS END ARQ CALL
-
-Needs developer review.
-
-When another station calls this station, but never responds to `CONACK` frames.?
-
-#### PENDING
-
-Needs developer review.
-
-#### "STATUS ARQ Timeout from Protocol State:  %s", ARDOPStates[ProtocolState]
-
-Needs developer review.
-
-#### STATUS ARQ CONNECT REQUEST TIMEOUT FROM PROTOCOL STATE: %s",ARDOPStates[ProtocolState]
-
-Needs developer review.
-
-#### "NEWSTATE %s ", ARDOPStates[ProtocolState])
-
-Needs developer review.
-
-#### STATUS END NOT RECEIVED CLOSING ARQ SESSION WITH %s", strRemoteCallsign);
-
-Needs developer review.
-
-#### "STATUS CONNECT TO %s FAILED!", strRemoteCallsign);
-
-Needs developer review.
-
-#### "REJECTEDBUSY %s", strRemoteCallsign)
-
-Needs developer review.
-
-#### "STATUS ARQ CONNECTION REQUEST FROM %s REJECTED, CHANNEL BUSY.", strRemoteCallsign);
-
-Needs developer review.
-
-#### "TARGET %s", strCallsign)
-
-Needs developer review.
-
-#### REJECTEDBW %s", strRemoteCallsign);
-
-Needs developer review.
-
-#### "STATUS ARQ CONNECTION REJECTED BY %s", strRemoteCallsign);
-
-Needs developer review.
-
-#### "CONNECTED %s %d", strRemoteCallsign, intSessionBW);
-
-Needs developer review.
-
-#### "STATUS ARQ CONNECTION FROM %s: SESSION BW = %d HZ", strRemoteCallsign, intSessionBW);
-
-Needs developer review.
-
-#### "STATUS ARQ CONNECTION ENDED WITH %s", strRemoteCallsign);
-
-Needs developer review.
