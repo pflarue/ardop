@@ -259,7 +259,10 @@ sendit:
 
 		if (strcmp(strMod, "4FSK") == 0)
 		{
-			EncLen = EncodeFSKData(bytFrameType, bytDataToSend, Len, bytEncodedBytes);
+			if ((EncLen = EncodeFSKData(bytFrameType, bytDataToSend, Len, bytEncodedBytes)) <= 0) {
+				WriteDebugLog(LOGERROR, "ERROR: In GetNextFECFrame() 4FSK Invalid EncLen (%d).", EncLen);
+				return FALSE;
+			}
 			RemoveDataFromQueue(Len);		// No ACKS in FEC
 
 			if (bytFrameType >= 0x7A && bytFrameType <= 0x7D)
@@ -269,19 +272,29 @@ sendit:
 		}
 		else if (strcmp(strMod, "16FSK") == 0)
 		{
-			EncLen = EncodeFSKData(bytFrameType, bytDataToSend, Len, bytEncodedBytes);
+			if ((EncLen = EncodeFSKData(bytFrameType, bytDataToSend, Len, bytEncodedBytes)) <= 0) {
+				WriteDebugLog(LOGERROR, "ERROR: In GetNextFECFrame() 16FSK Invalid EncLen (%d).", EncLen);
+				return FALSE;
+			}
 			RemoveDataFromQueue(Len);		// No ACKS in FEC
 			Mod16FSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame 
 		}
 		else if (strcmp(strMod, "8FSK") == 0)
 		{
-			EncLen = EncodeFSKData(bytFrameType, bytDataToSend, Len, bytEncodedBytes);          //      intCurrentFrameSamples = Mod8FSKData(bytFrameType, bytData);
+			if ((EncLen = EncodeFSKData(bytFrameType, bytDataToSend, Len, bytEncodedBytes)) <= 0) {
+				WriteDebugLog(LOGERROR, "ERROR: In GetNextFECFrame() 8FSK Invalid EncLen (%d).", EncLen);
+				return FALSE;
+			}
+			//      intCurrentFrameSamples = Mod8FSKData(bytFrameType, bytData);
 			RemoveDataFromQueue(Len);		// No ACKS in FEC
 			Mod8FSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame 
 		}
 		else		// This handles PSK and QAM
 		{
-			EncLen = EncodePSKData(bytFrameType, bytDataToSend, Len, bytEncodedBytes);
+			if ((EncLen = EncodePSKData(bytFrameType, bytDataToSend, Len, bytEncodedBytes)) <= 0) {
+				WriteDebugLog(LOGERROR, "ERROR: In GetNextFECFrame() PSK and QAM Invalid EncLen (%d).", EncLen);
+				return FALSE;
+			}
 			RemoveDataFromQueue(Len);		// No ACKS in FEC
 			ModPSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame 
 		}
@@ -304,8 +317,11 @@ sendit:
 
 			unsigned char bytEncodedBytes[16];
 
-			EncLen = Encode4FSKIDFrame(Callsign, GridSquare, bytEncodedBytes);
-			Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], 16, 0);		// only returns when all sent
+			if ((EncLen = Encode4FSKIDFrame(Callsign, GridSquare, bytEncodedBytes)) <= 0) {
+				WriteDebugLog(LOGERROR, "ERROR: In GetNextFECFrame() IDFrame Invalid EncLen (%d).", EncLen);
+				return FALSE;
+			}
+			Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], EncLen, 0);		// only returns when all sent
 
 			dttLastFECIDSent = Now;
 			return TRUE;

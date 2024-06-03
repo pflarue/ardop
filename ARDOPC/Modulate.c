@@ -21,6 +21,9 @@ FILE * fp1;
 extern short Dummy;
 extern int DriveLevel;
 extern BOOL WriteTxWav;
+
+int wg_send_txframet(int cnum, const char *frame);
+
 // writing unfiltered tx audio to WAV disabled
 // extern struct WavFile *txwfu;
 
@@ -132,14 +135,27 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 	int intLeaderLenMS;
 	int k, m, n;
 
+	if (Len < 0) {
+		WriteDebugLog(LOGERROR, "ERROR: In Mod4FSKDataAndPlay() Invalid Len (%d).", Len);
+		return;
+	}
+
 	if (!FrameInfo(Type, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType))
 		return;
 
 	if (strcmp(strMod, "4FSK") != 0)
 		return;
 
+	if (intBaud == 600) {
+		WriteDebugLog(LOGERROR,
+			"ERROR: Mod4FSKDataAndPlay() cannot be used for 600 baud 4FSK Frames."
+			"Use Mod4FSK600BdDataAndPlay() instead.");
+		return;
+	}
+
 	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
+	wg_send_txframet(0, strType);
 
 	if (Type == PktFrameHeader)
 	{
@@ -177,13 +193,14 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
     switch(intBaud)
 	{		
 	case 50:
-		
 		intSampPerSym = 240;
 		break;
-                
 	case 100:
-		
 		intSampPerSym = 120;
+		break;
+	default:
+		WriteDebugLog(LOGERROR, "ERROR: Invalid baud rate (%d) in Mod4FSKDataAndPlay().", intBaud);
+		return;
 	}
 		
 	intDataBytesPerCar = (Len - 2) / intNumCar;		// We queue the samples here, so dont copy below
@@ -383,6 +400,11 @@ void Mod8FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 	int intMask = 0;
 	int k, m, n;
 
+	if (Len < 0) {
+		WriteDebugLog(LOGERROR, "ERROR: In Mod8FSKDataAndPlay() Invalid Len (%d).", Len);
+		return;
+	}
+
 	if (!FrameInfo(Type, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType))
 		return;
 
@@ -391,6 +413,7 @@ void Mod8FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 
 	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
+	wg_send_txframet(0, strType);
 
 	initFilter(200,1500);
 
@@ -459,6 +482,11 @@ void Mod16FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int
 	int intMask = 0;
 	int k, m, n;
 
+	if (Len < 0) {
+		WriteDebugLog(LOGERROR, "ERROR: In Mod16FSKDataAndPlay() Invalid Len (%d).", Len);
+		return;
+	}
+
 	if (!FrameInfo(Type, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType))
 		return;
 
@@ -467,6 +495,7 @@ void Mod16FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int
 
 	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
+	wg_send_txframet(0, strType);
 
 	initFilter(500,1500);
 
@@ -528,14 +557,27 @@ void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len,
 	int intMask = 0;
 	int k, m, n;
 
+	if (Len < 0) {
+		WriteDebugLog(LOGERROR, "ERROR: In Mod4FSK600BdDataAndPlay() Invalid Len (%d).", Len);
+		return;
+	}
+
 	if (!FrameInfo(Type, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType))
 		return;
 
 	if (strcmp(strMod, "4FSK") != 0)
 		return;
 
+	if (intBaud != 600) {
+		WriteDebugLog(LOGERROR,
+			"ERROR: Mod4FSK600BdDataAndPlay() is only for 600 baud 4FSK Frames."
+			"Use Mod4FSKDataAndPlay() instead.");
+		return;
+	}
+
 	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
+	wg_send_txframet(0, strType);
 
 	initFilter(2000,1500);
 
@@ -630,7 +672,12 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 	int intCarIndex;
 
 	UCHAR bytLastSym[9]; // = {0}; // Holds the last symbol sent (per carrier). bytLastSym(4) is 1500 Hz carrier (only used on 1 carrier modes) 
- 
+
+	if (Len < 0) {
+		WriteDebugLog(LOGERROR, "ERROR: In ModPSKDataAndPlay() Invalid Len (%d).", Len);
+		return;
+	}
+
 	if (!FrameInfo(Type, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType))
 		return;
 
@@ -655,6 +702,7 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 		intCarStartIndex = 4;
 //		dblCarScalingFactor = 1.0f; // Starting at 1500 Hz  (scaling factors determined emperically to minimize crest factor)  TODO:  needs verification
 		dblCarScalingFactor = 1.2f; // Starting at 1500 Hz  Selected to give < 13% clipped values yielding a PAPR = 1.6 Constellation Quality >98
+		break;
 	case 2:
 		intCarStartIndex = 3;
 //		dblCarScalingFactor = 0.53f;
@@ -688,6 +736,7 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 	
 	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
+	wg_send_txframet(0, strType);
 
 /*	// DOnt use PSK Header at the moment
 	if (Type == PktFrameHeader)
@@ -960,6 +1009,7 @@ PktLoopBack:		// Reenter here to send rest of variable length packet frame
 			intCarStartIndex = 4;
 //			dblCarScalingFactor = 1.0f; // Starting at 1500 Hz  (scaling factors determined emperically to minimize crest factor)  TODO:  needs verification
 			dblCarScalingFactor = 1.2f; // Starting at 1500 Hz  Selected to give < 13% clipped values yielding a PAPR = 1.6 Constellation Quality >98
+			break;
 		case 2:
 			intCarStartIndex = 3;
 //			dblCarScalingFactor = 0.53f;
@@ -1370,8 +1420,11 @@ void sendCWID(char * strID, BOOL blnPlay)
 	char * index;
 	int intMask;
 	int idoffset;
+	char gui_frametype[15];
 
     strlop(strID, '-');		// Remove any SSID    
+	snprintf(gui_frametype, sizeof(gui_frametype), "CW.ID.%s", strID);
+	wg_send_txframet(0, gui_frametype);
 
 	// Generate the dot samples (high tone) and space samples (low tone) 
 
@@ -1392,7 +1445,7 @@ void sendCWID(char * strID, BOOL blnPlay)
 			dblLoPhase -= 2 * M_PI;
 	}
 	
-	initFilter(500,1500);
+	initFilter(500,1500);  // This keys PTT
    
 	//Generate leader for VOX 6 dots long
 

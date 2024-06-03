@@ -8,6 +8,7 @@
 #include "ARDOPC.h"
 #include "RXO.h"
 #include "sdft.h"
+#include "../lib/rockliff/rrs.h"
 
 #pragma warning(disable : 4244)		// Code does lots of float to int
 
@@ -56,13 +57,16 @@ int intLeaderRcvdMs = 1000;		// Leader length??
 extern int intLastRcvdFrameQuality;
 extern int intReceivedLeaderLen;
 extern UCHAR bytLastReceivedDataFrameType;
-extern int NErrors;
 extern BOOL blnBREAKCmd;
 extern UCHAR bytLastACKedDataFrameType;
 extern int intARQDefaultDlyMs;
 extern unsigned int tmrFinalID;
 extern BOOL PKTCONNECTED;
 void DrawDecode(char * Decode);
+
+int wg_send_rxframet(int cnum, unsigned char state, const char *frame);
+int wg_send_quality(int cnum, unsigned char quality,
+	unsigned int totalRSErrors, unsigned int maxRSErrors);
 
 extern BOOL UseSDFT;
 int Corrections = 0;
@@ -255,6 +259,9 @@ int RcvdSamplesLen = 0;				// Samples in RX buffer
 int cumAdvances = 0;
 int symbolCnt = 0;
 
+int intSNdB = 0;
+int intQuality = 0;
+
 
 BOOL Acquire2ToneLeaderSymbolFraming();
 BOOL SearchFor2ToneLeader3(short * intNewSamples, int Length, float * dblOffsetHz, int * intSN);
@@ -411,7 +418,8 @@ BOOL IsDataFrame(UCHAR intFrameType)
 {
 	const char * String = Name(intFrameType);
 
-	if (intFrameType == PktFrameHeader)
+	// Disabling Pkt support
+	if (FALSE) // intFrameType == PktFrameHeader)
 		return TRUE;
 	
 	if (String == NULL || String[0] == 0)
@@ -759,9 +767,7 @@ void MixNCOFilter(short * intNewSamples, int Length, float dblOffsetHz)
 
 int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDataLen, int intRSLen, int bytFrameType, int Carrier)
 {
-	BOOL blnRSOK;
-	BOOL FrameOK;
-
+	int NErrors;
 	//Dim bytNoRS(1 + intDataLen + 2 - 1) As Byte  ' 1 byte byte Count, Data, 2 byte CRC 
 	//Array.Copy(bytRawData, 0, bytNoRS, 0, bytNoRS.Length)
 
@@ -775,7 +781,7 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 
 		memcpy(bytCorrectedData, &bytRawData[1], bytRawData[0]);    
 
-		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] Carrier %d already decoded", Carrier);
+		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] Carrier %d (%d bytes) already decoded", Carrier, intDataLen);
 		return bytRawData[0];			// don't do it again
 	}
 
@@ -784,51 +790,49 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 		// return the actual data
 		
 		memcpy(bytCorrectedData, &bytRawData[1], bytRawData[0]);    
-		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] OK without RS");
+		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] OK (%d bytes) without RS", intDataLen);
 		CarrierOk[Carrier] = TRUE;
 		return bytRawData[0];
 	}
 	
 	// Try correcting with RS Parity
+	NErrors = rs_correct(bytRawData, intDataLen + 3 + intRSLen, intRSLen, true, false);
 
-	FrameOK = RSDecode(bytRawData, intDataLen + 3 + intRSLen, intRSLen, &blnRSOK);
-
-	if (blnRSOK)
+	if (NErrors == 0)
 	{}
 //		WriteDebugLog(LOGDEBUG, "RS Says OK without correction");
 	else
-	if (FrameOK)
+	if (NErrors > 0)
 	{}
+	// Unfortunately, Reed Solomon correction will sometimes return a 
+	// non-negative result indicating that the data is OK when it is not.  
+	// This is most likely to occur if the number of errors exceeds 
+	// intRSLen.  However, espectially for small intRSLen, it may also 
+	// occur even if the number of errors is less than or equal to
+	// intRSLen.  The test for invalid corrections in the padding bytes 
+	// performed by rs_correct() can reduce the likelyhood of this, 
+	// occuring, but it cannot be eliminiated.
+	// For frames like this with a CRC, it provides a more reliable test
+	// to verify whether a frame is correctly decoded. 
 //		WriteDebugLog(LOGDEBUG, "RS Says OK after %d correction(s)", NErrors);
-	else
+	else // NErrors < 0
 	{
-		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] RS Says Can't Correct");
+		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] RS Says Can't Correct (%d bytes) (>%d max corrections)", intDataLen, intRSLen/2);
 		goto returnBad;
 	}
 
-    if (FrameOK &&  CheckCRC16FrameType(bytRawData, intDataLen + 1, bytFrameType)) // RS correction successful 
+    if (NErrors >= 0 && CheckCRC16FrameType(bytRawData, intDataLen + 1, bytFrameType)) // RS correction successful 
 	{
 		int intFailedByteCnt = 0;
-		
-		// need to fix this if we want to use it
-		//  test code just to determine how many corrections were applied  ...later remove
-        //for (j = 0 ; j < intDataLen + 3; j++)
-		//{
-		//	if (bytRawData[j] <> bytCorrectedData[j])
-		//		intFailedByteCnt++;
-		//}
-
-        WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] OK with RS %d corrections", NErrors);
+        WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] OK (%d bytes) with RS %d (of max %d) corrections", intDataLen, NErrors, intRSLen/2);
 		totalRSErrors += NErrors;
- 
-		// End of test code
 
 		memcpy(bytCorrectedData, &bytRawData[1], bytRawData[0]);  
 		CarrierOk[Carrier] = TRUE;
 		return bytRawData[0];
 	}
 	else
-        WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] RS says ok but CRC still bad");
+        WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] RS says ok (%d bytes) but CRC still bad", intDataLen);
 	
 	// return uncorrected data without byte count or RS Parity
 
@@ -1026,10 +1030,10 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			State = SearchingForLeader;
 			printtick("frame sync timeout");
 		}
+		memset(intToneMagsIndex, 0, sizeof(intToneMagsIndex));
 	}
 	
 	//	Acquire Frame Type
-	memset(intToneMagsIndex, 0, sizeof(intToneMagsIndex));
 	if (State == AcquireFrameType)
 	{
 //		printtick("getting frame type");
@@ -1095,6 +1099,8 @@ void ProcessNewSamples(short * Samples, int nSamples)
 				// See if IRStoISS shortcut can be invoked
 
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
+
 				
 				if (ProtocolState == IRStoISS && intFrameType >= 0xe0)
 				{
@@ -1133,6 +1139,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			}
 
 			DrawRXFrame(0, Name(intFrameType));
+			wg_send_rxframet(0, 0, Name(intFrameType));
 
 			if (intBaud == 25)
 				intSampPerSym = 480;
@@ -1166,7 +1173,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			PSKInitDone = 0;
 			
 			frameLen = 0;
-			totalRSErrors = 0;
+			totalRSErrors = 0;  // reset totalRSErrors just before AquireFrame
 
 			DummyCarrier = 0;	// pseudo carrier used for long 600 baud frames
 			Decode600Buffer = bytFrameData1;
@@ -1189,7 +1196,8 @@ void ProcessNewSamples(short * Samples, int nSamples)
 
 //			if (IsDataFrame(intFrameType) && LastDataFrameType != intFrameType)
 
-			if (intFrameType == PktFrameHeader || intFrameType == PktFrameData)
+			// Disabling Pkt support
+			if (False) //intFrameType == PktFrameHeader || intFrameType == PktFrameData)
 			{
 				memset(CarrierOk, 0, sizeof(CarrierOk));
 				memset(intSumCounts, 0, sizeof(intSumCounts));
@@ -1288,11 +1296,14 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			blnEnbARQRpt = TRUE;  // setup for repeats until changeover
 			WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.ProcessNewSamples] %d bytes to send in ProtocolState: %s: Send BREAK,  New state=IRStoISS (Rule 3.3)",
 					bytDataToSendLength,  ARDOPStates[ProtocolState]);
- 			EncLen = Encode4FSKControl(BREAK, bytSessionID, bytEncodedBytes);
-			Mod4FSKDataAndPlay(BREAK, &bytEncodedBytes[0], EncLen, intARQDefaultDlyMs);		// only returns when all sent
-
 			WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.ProcessNewSamples] Skip Data Decoding when blnBREAKCmd and ProtcolState=IRS");
 			blnBREAKCmd = FALSE;
+			if ((EncLen = Encode4FSKControl(BREAK, bytSessionID, bytEncodedBytes)) <= 0) {
+				WriteDebugLog(LOGERROR, "ERROR: In ProcessNewSamples() Invalid EncLen (%d).", EncLen);
+				goto skipDecode;
+			}
+			Mod4FSKDataAndPlay(BREAK, &bytEncodedBytes[0], EncLen, intARQDefaultDlyMs);		// only returns when all sent
+
 			goto skipDecode;
 		}
 						
@@ -1304,7 +1315,10 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.ProcessNewSamples] Skip Data Decoding when ProtcolState=IRStoISS, Answer with BREAK");
 			intFrameRepeatInterval = ComputeInterFrameInterval(1000 + rand() % 2000);
 			blnEnbARQRpt = TRUE;  // setup for repeats until changeover
- 			EncLen = Encode4FSKControl(BREAK, bytSessionID, bytEncodedBytes);
+			if ((EncLen = Encode4FSKControl(BREAK, bytSessionID, bytEncodedBytes)) <= 0) {
+				WriteDebugLog(LOGERROR, "ERROR: In ProcessNewSamples() Invalid EncLen (%d).", EncLen);
+				goto skipDecode;
+			}
 			Mod4FSKDataAndPlay(BREAK, &bytEncodedBytes[0], EncLen, intARQDefaultDlyMs);		// only returns when all sent
 			goto skipDecode;
 		}						
@@ -1333,14 +1347,16 @@ void ProcessNewSamples(short * Samples, int nSamples)
 		blnFrameDecodedOK = DecodeFrame(intFrameType, bytData);
 
 ProcessFrame:	
-
-		if (!blnFrameDecodedOK)
+		if (!blnFrameDecodedOK) {
 			DrawRXFrame(2, Name(intFrameType));
+			wg_send_rxframet(0, 2, Name(intFrameType));
+		}
 
-		if (intFrameType == PktFrameData)
+		// Disabling Pkt support
+		if (FALSE) // intFrameType == PktFrameData)
 		{
 			SetLED(PKTLED, TRUE);		// Flash LED
-			PKTLEDTimer = Now + 400;	// For 400 Ms	
+			PKTLEDTimer = Now + 400;	// For 400 Ms
 			return;
 		}
 
@@ -1386,8 +1402,11 @@ ProcessFrame:
 					tmrFinalID = Now + 3000;			
 					blnEnbARQRpt = FALSE;
 
-					EncLen = Encode4FSKControl(END, bytLastARQSessionID, bytEncodedBytes);
-					Mod4FSKDataAndPlay(END, &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
+					if ((EncLen = Encode4FSKControl(END, bytLastARQSessionID, bytEncodedBytes)) <= 0) {
+						WriteDebugLog(LOGERROR, "ERROR: In ProcessNewSamples() Invalid EncLen (%d).", EncLen);
+						goto skipDecode;
+					} else
+						Mod4FSKDataAndPlay(END, &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
 
 					// Drop through
 				}
@@ -1403,13 +1422,14 @@ ProcessFrame:
 
 				// If still in DISC monitor it
 				
-				if (ProtocolState == DISC && Monitor)		  // allows ARQ mode to operate like FEC when not connected
+				if (ProtocolState == DISC && Monitor) {		  // allows ARQ mode to operate like FEC when not connected
 					if (intFrameType == 0x30)				
 						AddTagToDataAndSendToHost(bytData, "IDF", frameLen);			
 					else if (intFrameType >= 0x31 && intFrameType <= 0x38)
 						ProcessUnconnectedConReqFrame(intFrameType, bytData);			
 					else if (IsDataFrame(intFrameType)) // check to see if a data frame
 						ProcessRcvdFECDataFrame(intFrameType, bytData, blnFrameDecodedOK);			
+				}
 			}
 			else
 			{
@@ -1423,14 +1443,14 @@ ProcessFrame:
 			//	Bad decode
 
             if (AccumulateStats)
-				if (IsDataFrame(intFrameType))
+				if (IsDataFrame(intFrameType)) {
 					if (strstr (strMod, "PSK"))
 						intFailedPSKFrameDataDecodes++;
 					else if (strstr (strMod, "QAM"))
 						intFailedQAMFrameDataDecodes++;
 					else
 						intFailedFSKFrameDataDecodes++;
-
+				}
 
             // Debug.WriteLine("[DecodePSKData2] bytPass = " & Format(bytPass, "X"))
 	
@@ -2490,11 +2510,12 @@ int Acquire4FSKFrameType()
 	if (NewType >= 0 &&  IsShortControlFrame(NewType))		// update the constellation if a short frame (no data to follow)
 		Update4FSKConstellation(&intToneMags[0][0], &intLastRcvdFrameQuality);
 
-	if (AccumulateStats)
+	if (AccumulateStats) {
 		if (NewType >= 0)
 			intGoodFSKFrameTypes++;
 		else
 			intFailedFSKFrameTypes++;
+	}
 	
 	intMFSReadPtr += (240 * 10) + Corrections;	// advance to read pointer to the next symbol (if there is one)
 	Corrections = 0;
@@ -2621,7 +2642,8 @@ BOOL Demod1Car4FSK()
 
 			// If variable length packet frame header we only have header - leave rx running
 		
-			if (intFrameType == PktFrameHeader)
+			// Disabling Pkt support
+			if (FALSE) // intFrameType == PktFrameHeader)
 			{
 				State = SearchingForLeader;
 			
@@ -2764,7 +2786,9 @@ void DemodEachCar4FSK_SDFT(int Start, int * intCenterFrqs, BOOL blnGetFrameType)
             It also incremented intToneMagsIndex[cnum] to now point to the
             next free slot after the four values that must now be compared.
             */
-            intToneMags_sum = 0;
+            // Start at 1 instead of 0 so that if audio is total silence,
+            // later division by this value does not cause an error
+            intToneMags_sum = 1;
             for (frqNum = 0; frqNum < FRQCNT; frqNum++)
             {
                 intToneMags_sum += intToneMags[cnum][intToneMagsIndex[cnum] - (frqNum + 1)];
@@ -2857,7 +2881,9 @@ void Demod1Car4FSKChar(int Start, UCHAR * Decoded, int Carrier)
 	snprintf(DebugMess, sizeof(DebugMess), "4FSK_bytSym :");
 	for (j = 0; j < 4; j++)		// for each 4FSK symbol (2 bits) in a byte
 	{
-		dblMagSum = 0;
+        // Start at 1 instead of 0 so that if audio is total silence,
+        // later division by this value does not cause an error
+		dblMagSum = 1;
 		GoertzelRealImag(intFilteredMixedSamples, Start, intSampPerSym, dblSearchFreq / intBaud, &dblReal, &dblImag);
 		dblMag[0] = powf(dblReal,2) + powf(dblImag, 2);
 		dblMagSum += dblMag[0];
@@ -3350,28 +3376,31 @@ BOOL Decode4FSKConReq()
 	UCHAR strCaller[32];
 	UCHAR strTarget [32];
 	UCHAR bytCall[6];
-	BOOL blnRSOK;
 	BOOL FrameOK;
 
 	// Modified May 24, 2015 to use RS encoding vs CRC (similar to ID Frame)
  
-	FrameOK = RSDecode(bytFrameData1, 16, 4, &blnRSOK);
+	// Try correcting with RS Parity
+	int NErrors = rs_correct(bytFrameData1, 16, 4, true, false);
 
-	if (FrameOK && blnRSOK == FALSE)
-	{
-		// RS Claims to have corrected it, but check
-
+	FrameOK = TRUE;
+	if (NErrors > 0) {
+		// Unfortunately, Reed Solomon correction will sometimes return a 
+		// non-negative result indicating that the data is OK when it is not.  
+		// This is most likely to occur if the number of errors exceeds 
+		// intRSLen.  However, espectially for small intRSLen, it may also 
+		// occur even if the number of errors is less than or equal to
+		// intRSLen.  The test for invalid corrections in the padding bytes 
+		// performed by rs_correct() can reduce the likelyhood of this, 
+		// occuring, but it cannot be eliminiated.
+		// Without a CRC, it is not possible to be completely confident
+		// that the frame is correctly decoded. 
+		//
+		// Check for valid callsigns?
 		WriteDebugLog(LOGDEBUG, "CONREQ Frame Corrected by RS");
-
-		FrameOK = RSDecode(bytFrameData1, 16, 4, &blnRSOK);
-
-		// Should now be OK without connections, if not RS didn't fix it
-
-		if (blnRSOK == FALSE)
-		{
-			WriteDebugLog(LOGDEBUG, "CONREQ Still bad after RS");
-			FrameOK = FALSE;
-		}
+	} else if (NErrors < 0) {
+		WriteDebugLog(LOGDEBUG, "CONREQ Still bad after RS");
+		FrameOK = FALSE;
 	}
 	memcpy(bytCall, bytFrameData1, 6);
 	DeCompressCallsign(bytCall, strCaller);
@@ -3422,7 +3451,7 @@ int Compute4FSKSN()
 	float dblAVGSNdB = 0;
 	int intDominateTones[64];
 	int intNonDominateToneSum;
-	float intAvgNonDominateTone;
+	float dblAvgNonDominateTone;
 	int i, j;
 	int SNcount = 0;
 
@@ -3441,16 +3470,15 @@ int Compute4FSKSN()
 			intNonDominateToneSum += intToneMags[0][4 * i + j];
 		}
 		
-		intAvgNonDominateTone = (intNonDominateToneSum - intDominateTones[i])/ 3; // subtract out the Dominate Tone from the sum
+		dblAvgNonDominateTone = (intNonDominateToneSum - intDominateTones[i])/ 3; // subtract out the Dominate Tone from the sum
 		
-		// Note subtract intAvgNonDominateTone below to compute S:N instead of (S+N):N
+		// Note subtract dblAvgNonDominateTone below to compute S:N instead of (S+N):N
 		// note 10 * log used since tone values are already voltage squared (avoids SQRT) 
 		// the S:N calculation is limited to a Max of + 50 dB to avoid distorting the average in very low noise environments 
             
-		dblAVGSNdB += min(50.0f, 10.0f * log10f((intDominateTones[i] - intAvgNonDominateTone) / intAvgNonDominateTone)); //  average in the S:N;
+		dblAVGSNdB += min(50.0f, 10.0f * log10f((intDominateTones[i] - dblAvgNonDominateTone) / dblAvgNonDominateTone)); //  average in the S:N;
 	}
 	intSNdB = (dblAVGSNdB / intNumSymbols) - 17.8f;	//  17.8 converts from nominal 50 Hz "bin" BW to standard 3 KHz BW (10* Log10(3000/50))
-	
 	return intSNdB;
 }
 
@@ -3461,27 +3489,29 @@ BOOL Decode4FSKPing()
 	UCHAR strCaller[10];
 	UCHAR strTarget [10];
 	UCHAR bytCall[6];
-	BOOL blnRSOK;
 	BOOL FrameOK;
-	int intSNdB;
 
-	FrameOK = RSDecode(bytFrameData1, 16, 4, &blnRSOK);
-
-	if (FrameOK && blnRSOK == FALSE)
+	int NErrors = rs_correct(bytFrameData1, 16, 4, true, false);
+	FrameOK = TRUE;
+	
+	if (NErrors > 0)
 	{
-		// RS Claims to have corrected it, but check
-
+		// Unfortunately, Reed Solomon correction will sometimes return a 
+		// non-negative result indicating that the data is OK when it is not.  
+		// This is most likely to occur if the number of errors exceeds 
+		// intRSLen.  However, espectially for small intRSLen, it may also 
+		// occur even if the number of errors is less than or equal to
+		// intRSLen.  The test for invalid corrections in the padding bytes 
+		// performed by rs_correct() can reduce the likelyhood of this, 
+		// occuring, but it cannot be eliminiated.
+		// Without a CRC, it is not possible to be completely confident
+		// that the frame is correctly decoded. 
+		//
+		// Check for valid callsigns?
 		WriteDebugLog(LOGDEBUG, "PING Frame Corrected by RS");
-
-		FrameOK = RSDecode(bytFrameData1, 16, 4, &blnRSOK);
-
-		// Should now be OK without connections, if not RS didn't fix it
-
-		if (blnRSOK == FALSE)
-		{
-			WriteDebugLog(LOGDEBUG, "PING Still bad after RS");
-			FrameOK = FALSE;
-		}
+	} else if (NErrors < 0) {
+		WriteDebugLog(LOGDEBUG, "PING Still bad after RS");
+		FrameOK = FALSE;
 	}
 
 	memcpy(bytCall, bytFrameData1, 6);
@@ -3502,7 +3532,7 @@ BOOL Decode4FSKPing()
 	}
 
 	DrawRXFrame(1, bytData);
-
+	wg_send_rxframet(0, 1, (char *)bytData);
 
 	intSNdB = Compute4FSKSN();
 
@@ -3595,6 +3625,11 @@ BOOL Decode4FSKPingACK(UCHAR bytFrameType, int * intSNdB, int * intQuality)
 		blnFramePending = False;	//  Cancels last repeat
 		return TRUE;
 	}
+	else {
+		*intSNdB = -1;
+		*intQuality = -1;
+		WriteDebugLog(LOGDEBUG, "[DemodDecode4FSKPingACK]  Unable to decode S:N and Quality.");
+	}
 	return FALSE;
 }
 
@@ -3603,7 +3638,6 @@ BOOL Decode4FSKID(UCHAR bytFrameType, char * strCallID, char * strGridSquare)
 {
 	UCHAR bytCall[10];
 	UCHAR temp[20];
-	BOOL blnRSOK;
 	BOOL FrameOK;
 	unsigned char * p = bytFrameData1;
 
@@ -3611,24 +3645,27 @@ BOOL Decode4FSKID(UCHAR bytFrameType, char * strCallID, char * strGridSquare)
 	WriteDebugLog(LOGDEBUG, "%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x  %02x %02x %02x %02x ",
 		p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15]);
 
+	int NErrors = rs_correct(bytFrameData1, 16, 4, true, false);
+	FrameOK = TRUE;
 
-	FrameOK = RSDecode(bytFrameData1, 16, 4, &blnRSOK);
-
-	if (FrameOK && blnRSOK == FALSE)
+	if (NErrors > 0)
 	{
-		// RS Claims to have corrected it, but check
-
+		// Unfortunately, Reed Solomon correction will sometimes return a 
+		// non-negative result indicating that the data is OK when it is not.  
+		// This is most likely to occur if the number of errors exceeds 
+		// intRSLen.  However, espectially for small intRSLen, it may also 
+		// occur even if the number of errors is less than or equal to
+		// intRSLen.  The test for invalid corrections in the padding bytes 
+		// performed by rs_correct() can reduce the likelyhood of this, 
+		// occuring, but it cannot be eliminiated.
+		// Without a CRC, it is not possible to be completely confident
+		// that the frame is correctly decoded. 
+		//
+		// Check for valid callsigns?
 		WriteDebugLog(LOGDEBUG, "ID Frame Corrected by RS");
-
-		FrameOK = RSDecode(bytFrameData1, 16, 4, &blnRSOK);
-
-		// Should now be OK without connections, if not RS didn't fix it
-
-		if (blnRSOK == FALSE)
-		{
-			WriteDebugLog(LOGDEBUG, "ID Still bad after RS");
-			FrameOK = FALSE;
-		}
+	} else if (NErrors < 0) {
+		WriteDebugLog(LOGDEBUG, "ID Still bad after RS");
+		FrameOK = FALSE;
 	}
 
 	memcpy(bytCall, bytFrameData1, 6);
@@ -3643,11 +3680,12 @@ BOOL Decode4FSKID(UCHAR bytFrameType, char * strCallID, char * strGridSquare)
 	}
 	sprintf(strGridSquare, "[%s]", temp);
 
-	if (AccumulateStats)
+	if (AccumulateStats) {
 		if (FrameOK)
 			intGoodFSKFrameDataDecodes++;
 		else
 			intFailedFSKFrameDataDecodes++;
+	}
 
 	if (FrameOK)
 		memcpy(lastGoodID, strCallID, 10);
@@ -3802,6 +3840,8 @@ void DemodulateFrame(int intFrameType)
 			Demod1Car4FSK600();
 			break;
 
+// Disabling Pkt support
+/*
 		case PktFrameHeader:	// Experimantal Variable Length Frame 
 
 			Demod1Car4FSK();
@@ -3816,7 +3856,7 @@ void DemodulateFrame(int intFrameType)
 			else
 				DemodPSK();
 			break;
-
+*/
 
   /*              ' Experimental Sounding frame
             Case 0xD0
@@ -3846,7 +3886,6 @@ BOOL DecodeACKNAK(int intFrameType, int *  intQuality)
 }
 
 
-int intSNdB = 0, intQuality = 0;
 
 
 BOOL DecodeFrame(int xxx, UCHAR * bytData)
@@ -3872,10 +3911,13 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 	if ((intFrameType >= 0 && intFrameType <= 0x1F) || intFrameType >= 0xE0) // DataACK/NAK
 	{
 		blnDecodeOK = DecodeACKNAK(intFrameType, &intRcvdQuality);
-		if (blnDecodeOK)
+		if (blnDecodeOK) {
 			DrawRXFrame(1, Name(intFrameType));
-		else
+			wg_send_rxframet(0, 1, Name(intFrameType));
+		} else {
 			DrawRXFrame(2, Name(intFrameType));
+			wg_send_rxframet(0, 2, Name(intFrameType));
+		}
 
 		goto returnframe;
 	}
@@ -3883,11 +3925,13 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 	{
 		blnDecodeOK = TRUE;
 		DrawRXFrame(1, Name(intFrameType));
+		wg_send_rxframet(0, 1, Name(intFrameType));
 
 		goto returnframe;
 	}
 
-	totalRSErrors = 0;
+	// DON'T do this here.  RS correction for PSK and QAM frames already done.
+	// totalRSErrors = 0;
 			
 	if (CarrierOk[0] != 0 && CarrierOk[0] != 1)
 		CarrierOk[0] = 0;
@@ -3909,6 +3953,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			{
 				bytData[0] = intTiming / 10;
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
 			}
 
 		break;
@@ -3923,18 +3968,21 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 				SendCommandToHost(Reply);
 
 				DrawRXFrame(1, Reply);
+				wg_send_rxframet(0, 1, Reply);
 			}
  			break;
     
 
 		case 0x30:		 // ID Frame, 
-						
+
 			blnDecodeOK = Decode4FSKID(0x30, strIDCallSign, strGridSQ);
 			
 			frameLen = sprintf(bytData, "ID:%s %s:" , strIDCallSign, strGridSQ);
 
-			if (blnDecodeOK)
+			if (blnDecodeOK) {
 				DrawRXFrame(1, bytData);
+				wg_send_rxframet(0, 1, (char *)bytData);
+			}
 
 			break;
 
@@ -3948,8 +3996,10 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 		case 0x38:
 
 			blnDecodeOK = Decode4FSKConReq();
-			if (blnDecodeOK)
+			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
+			}
 
 			break;
 
@@ -3970,8 +4020,10 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 
 			blnDecodeOK = CarrierOk[0];
 	
-			if (blnDecodeOK)
+			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
+			}
 
 			break;
 
@@ -3989,8 +4041,10 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			if (memcmp(CarrierOk, Good, intNumCar) == 0)
 				blnDecodeOK = TRUE;
 
-			if (blnDecodeOK)
+			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
+			}
 
 			break;
 
@@ -4006,8 +4060,10 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			frameLen = CorrectRawDataWithRS(bytFrameData1, bytData, intDataLen, intRSLen, intFrameType, 0);
 			blnDecodeOK = CarrierOk[0];
 
-			if (blnDecodeOK)
+			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
+			}
 			break;
 
 
@@ -4018,11 +4074,13 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 		case 0x52:
 		case 0x53:
 
-		if (CarrierOk[0] && CarrierOk[1])
-			blnDecodeOK = TRUE;
+			if (CarrierOk[0] && CarrierOk[1])
+				blnDecodeOK = TRUE;
 
-			if (blnDecodeOK)
+			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
+			}
 
 			break;
 
@@ -4036,8 +4094,10 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			if (memcmp(CarrierOk, Good, intNumCar) == 0)
 				blnDecodeOK = TRUE;
 
-			if (blnDecodeOK)
+			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
+			}
 
 			break;
 	
@@ -4051,8 +4111,10 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			if (memcmp(CarrierOk, Good, intNumCar) == 0)
 				blnDecodeOK = TRUE;
 
-			if (blnDecodeOK)
+			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
+			}
 			break;
 
 		case 0x78:
@@ -4069,8 +4131,11 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			if (CarrierOk[0] && CarrierOk[1] && CarrierOk[2] && CarrierOk[3]) 
 				blnDecodeOK = TRUE;
 
-			if (blnDecodeOK)
+			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
+			}
+			break;
 
 		case 0x7A:
 		case 0x7B:
@@ -4090,8 +4155,10 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			if (CarrierOk[0] && CarrierOk[1] && CarrierOk[2]) 
 				blnDecodeOK = TRUE;
 
-			if (blnDecodeOK)
+			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
+			}
 
 			break;
 
@@ -4104,11 +4171,15 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 
 			blnDecodeOK = CarrierOk[0];
 
-			if (blnDecodeOK)
+			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
+			}
 
 			break;
 
+// Disabling Pkt support
+/*
 		case PktFrameHeader:
 		{
 			// Variable Length Packet Frame Header
@@ -4124,6 +4195,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			if (CarrierOk[0])
 			{
 					DrawRXFrame(1, Name(intFrameType));
+					wg_send_rxframet(0, 1, Name(intFrameType));
 
 					pktRXMode = bytFrameData1[1] >> 2;
 					pktNumCar = pktCarriers[pktRXMode];
@@ -4148,6 +4220,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 				}
 
 				DrawRXFrame(0, Name(PktFrameData));
+				wg_send_rxframet(0, 0, Name(intFrameType));
 				
 				strcpy(strMod, &pktMod[pktRXMode][0]);
 
@@ -4183,6 +4256,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 
 				return 0;
 		}
+		break;
 
 					
 		case PktFrameData:
@@ -4206,6 +4280,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			{
 				blnDecodeOK = TRUE;
 				DrawRXFrame(1, Name(intFrameType));
+				wg_send_rxframet(0, 1, Name(intFrameType));
 
 				// Packet Data  - if KISS interface ias active
 				// Pass to Host as KISS frame, else pass to
@@ -4224,7 +4299,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			}
 			break;
 		}
-
+*/
 
 
 //                ' Experimental Sounding frame
@@ -4236,7 +4311,8 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 
 	if (blnDecodeOK)
 	{
-		WriteDebugLog(LOGINFO, "[DecodeFrame] Frame: %s Decode PASS,   Constellation Quality= %d", Name(intFrameType),  intLastRcvdFrameQuality);
+		WriteDebugLog(LOGINFO, "[DecodeFrame] Frame: %s Decode PASS,  Quality= %d,  RS fixed %d (of %d max).", Name(intFrameType),  intLastRcvdFrameQuality, totalRSErrors, (intRSLen / 2) * intNumCar);
+		wg_send_quality(0, intLastRcvdFrameQuality, totalRSErrors, (intRSLen / 2) * intNumCar);
 #ifdef PLOTCONSTELLATION
 		if (intFrameType >= 0x30 && intFrameType <= 0x38)
 			DrawDecode(lastGoodID);		// ID or CONREQ
@@ -4248,7 +4324,10 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 
 	else
 	{
-		WriteDebugLog(LOGINFO, "[DecodeFrame] Frame: %s Decode FAIL,   Constellation Quality= %d", Name(intFrameType),  intLastRcvdFrameQuality);
+		WriteDebugLog(LOGINFO, "[DecodeFrame] Frame: %s Decode FAIL,  Quality= %d", Name(intFrameType),  intLastRcvdFrameQuality);
+		// For a failure to decode, send max + 1 as the number of 
+		// RS errors.
+		wg_send_quality(0, intLastRcvdFrameQuality, (intRSLen / 2) * intNumCar + 1, (intRSLen / 2) * intNumCar);
 #ifdef PLOTCONSTELLATION
 		DrawDecode("FAIL");
 		updateDisplay();
@@ -4294,7 +4373,6 @@ void drawFastHLine(int x0, int y0, int length, int color);
 void Update4FSKConstellation(int * intToneMags, int * intQuality)
 {
 	// Subroutine to update bmpConstellation plot for 4FSK modes...
-        
 	int intToneSum = 0;
 	int intMagMax = 0;
 	float dblPi4  = 0.25 * M_PI;
@@ -5355,7 +5433,8 @@ void DemodPSK()
 
 		// If variable length packet frame header we only have header - leave rx running
 		
-		if (intFrameType == PktFrameHeader)
+		// Disabling Pkt support
+		if (FALSE) // intFrameType == PktFrameHeader)
 		{
 			State = SearchingForLeader;
 			
