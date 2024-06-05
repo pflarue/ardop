@@ -61,13 +61,7 @@ int wg_send_quality(int cnum, unsigned char quality,
 
 extern BOOL UseSDFT;
 int Corrections = 0;
-int intStdCenterFrqs[CARCNT][FRQCNT] = {
-	{1500, 0, 0, 0},          // 1 Carrier 4FSK
-	{1750, 1250, 0, 0},       // 2 Carrier 4FSK
-	{0, 0, 0, 0},             // 3 Carrier 4FSK not used
-	{2250, 1750, 1250, 750}   // 4 Carrier 4FSK
-};
-void DemodEachCar4FSK_SDFT(int Start, int * intCenterFrqs, BOOL blnGetFrameType);
+void Demod1Car4FSK_SDFT(int Start, BOOL blnGetFrameType);
 
 short intPriorMixedSamples[120];  // a buffer of 120 samples to hold the prior samples used in the filter
 int	intPriorMixedSamplesLength = 120;  // size of Prior sample buffer
@@ -108,24 +102,18 @@ int intPSKMode;
 #define MAX_RAW_LENGTH	256     // I think! Max length of an RS block
 #define MAX_DATA_LENGTH	8 * 128 // I think! 16QAM.2000.100
 
-// intToneMags should be an array with one row per carrier.
-// and 16 * max bytes data (2 bits per symbol, 4 samples per symbol in 4FSK.
+// obsolete versions of this code accommodated multi-carrier FSK modes, for
+// which intToneMags was intToneMags[4][16 * MAX_RAW_LENGTH]
+// obsolete versions of this code also treated the three blocks of data in
+// long 600 baud 4FSK frames as if they were 3 dummy carriers.
+// This was changed to use only a single set of intToneMags[], but to still
+// put decoded results into bytFrameData1, bytFrameData2, and bytFrameData3
 
-// but as 600 Baud frames are very long (750 bytes), but only one carrier
-// may be better to store as scalar and calculate offsets into it for each carrier
-// treat 600 as 3 * 200, but scalar still may be better
-
-// Needs 64K if ints + another 64 for MEM ARQ. (maybe able to store as shorts)
-// 48K would do if we use a scalar (600 baud, 750 bytes)
-// Max is 4 carrier, 83 bytes or 1 carrier 762 (or treat as 3 * 253)
-
-// Could just about do this on Teensy 3.6 or Nucleo F7
-
+// length 16 * max bytes data (2 bits per symbol, 4 samples per symbol in 4FSK.
 // looks like we have 4 samples for each 2 bits, which means 16 samples per byte.
 
-int intToneMags[4][16 * MAX_RAW_LENGTH] = {0};	// Need one per carrier
-
-int intToneMagsIndex[4];
+int intToneMags[16 * MAX_RAW_LENGTH] = {0};	// Need one per carrier
+int intToneMagsIndex = 0;
 
 // Same here
 
@@ -150,7 +138,7 @@ short intMags[8][652] = {0};
 
 // Enough RAM for memory ARQ so keep all samples for FSK and a copy of tones or phase/amplitude
 
-int  intToneMagsAvg[4][332];	//???? FSK Tone averages
+int  intToneMagsAvg[332];	//???? FSK Tone averages
 
 short intCarPhaseAvg[8][652];	// array to accumulate phases for averaging (Memory ARQ)
 short intCarMagAvg[8][652];		// array to accumulate mags for averaging (Memory ARQ) 
@@ -196,7 +184,7 @@ int charIndex = 0;			// Index into received chars
 
 int SymbolsLeft;			// number still to decode
 
-int DummyCarrier = 0;	// pseudo carrier used for long 600 baud frames
+int Decode600BlockNum = 0;	// Next block number for decoding long 600 baud frames
 UCHAR * Decode600Buffer = bytFrameData1;
 
 BOOL PSKInitDone = FALSE;
@@ -258,7 +246,7 @@ BOOL AcquireFrameSyncRSB();
 int Acquire4FSKFrameType();
 
 void DemodulateFrame(int intFrameType);
-void Demod1Car4FSKChar(int Start, UCHAR * Decoded, int Carrier);
+void Demod1Car4FSKChar(int Start, UCHAR * Decoded);
 VOID Track1Car4FSK(short * intSamples, int * intPtr, int intSampPerSymbol, float intSearchFreq, int intBaud, UCHAR * bytSymHistory);
 VOID Decode1CarPSK(UCHAR * Decoded, int Carrier);
 int EnvelopeCorrelator();
@@ -811,7 +799,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			State = SearchingForLeader;
 			printtick("frame sync timeout");
 		}
-		memset(intToneMagsIndex, 0, sizeof(intToneMagsIndex));
+		intToneMagsIndex = 0;
 	}
 	
 	//	Acquire Frame Type
@@ -947,8 +935,12 @@ void ProcessNewSamples(short * Samples, int nSamples)
 				DataRate = Rate[intFrameType];
 
 			intToneMagsLength = 16 * SymbolsLeft;	// 4 tones, 2 bits per set
+			if (intDataLen == 600) {
+				// 4FSK.2000.600 decoded as three blocks
+				intToneMagsLength /= 3;
+			}
 			
-			memset(intToneMagsIndex, 0, sizeof(intToneMagsIndex));
+			intToneMagsIndex = 0;
 			
 			charIndex = 0;	
 			PSKInitDone = 0;
@@ -956,7 +948,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			frameLen = 0;
 			totalRSErrors = 0;  // reset totalRSErrors just before AquireFrame
 
-			DummyCarrier = 0;	// pseudo carrier used for long 600 baud frames
+			Decode600BlockNum = 0;	// Next block number for decoding long 600 baud frames
 			Decode600Buffer = bytFrameData1;
 
 			if (!IsShortControlFrame(intFrameType))
@@ -1039,7 +1031,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 				Name(intFrameType), observed_baudrate);
 		}
 		if (strcmp (strMod, "4FSK") == 0)
-			Update4FSKConstellation(&intToneMags[0][0], &intLastRcvdFrameQuality);
+			Update4FSKConstellation(&intToneMags[0], &intLastRcvdFrameQuality);
 
 		// PSK and QAM quality done in Decode routines
 
@@ -1120,13 +1112,14 @@ ProcessFrame:
 		if (blnFrameDecodedOK)
 		{
 			if (AccumulateStats)
-				if (IsDataFrame(intFrameType))
+				if (IsDataFrame(intFrameType)) {
 					if (strstr (strMod, "PSK"))
 						intGoodPSKFrameDataDecodes++;
 					else if (strstr (strMod, "QAM"))
 						intGoodQAMFrameDataDecodes++;
 					else	
 						intGoodFSKFrameDataDecodes++;
+				}
 
 
 			if (IsDataFrame(intFrameType))
@@ -1647,7 +1640,7 @@ BOOL SearchFor2ToneLeader3(short * intNewSamples, int Length, float * dblOffsetH
 			// The following demonstrated good detection down to -10 dB S:N with squelch = 3 and minimal false triggering. 
 			// Added rev 0.8.2.2 11/6/2016 RM
 
-			if (abs(dblPriorFineOffset - *dblOffsetHz) < 2.9f)
+			if (fabs(dblPriorFineOffset - *dblOffsetHz) < 2.9f)
 			{
 				WriteDebugLog(LOGDEBUG, "Prior-Offset= %f", (dblPriorFineOffset - *dblOffsetHz));
                    		
@@ -1891,7 +1884,7 @@ BOOL DemodFrameType4FSK(int intPtr, short * intSamples, int * intToneMags)
 	if (UseSDFT)
 	{
 		intSampPerSym = 240;  // 50 baud 4FSK frame type
-		DemodEachCar4FSK_SDFT(intPtr, intStdCenterFrqs[0], TRUE);
+		Demod1Car4FSK_SDFT(intPtr, TRUE);
 		return TRUE;
 	}
 
@@ -2204,9 +2197,9 @@ int Acquire4FSKFrameType()
 	if ((intFilteredMixedSamplesLength - intMFSReadPtr) < (240 * 10))
 		return -2;		//  Check for 12 available 4FSK Symbols (but only 10 are used)  
 
-	if (!DemodFrameType4FSK(intMFSReadPtr, intFilteredMixedSamples, &intToneMags[0][0]))
+	if (!DemodFrameType4FSK(intMFSReadPtr, intFilteredMixedSamples, &intToneMags[0]))
 	{
-		Update4FSKConstellation(&intToneMags[0][0], &intLastRcvdFrameQuality);
+		Update4FSKConstellation(&intToneMags[0], &intLastRcvdFrameQuality);
 		intMFSReadPtr += (240 * 10);
 		return -1;
 	}
@@ -2216,13 +2209,13 @@ int Acquire4FSKFrameType()
 	// Now do check received  Tone array for testing minimum distance decoder
 
 	if (ProtocolMode == RXO)  // bytSessionID is uncertain, but alternatives will be tried if unsuccessful.
-		NewType = RxoMinimalDistanceFrameType(&intToneMags[0][0]);
+		NewType = RxoMinimalDistanceFrameType(&intToneMags[0]);
 	else if (blnPending)			// If we have a pending connection (btween the IRS first decode of ConReq until it receives a ConAck from the iSS)
-		NewType = MinimalDistanceFrameType(&intToneMags[0][0], bytPendingSessionID);		 // The pending session ID will become the session ID once connected) 
+		NewType = MinimalDistanceFrameType(&intToneMags[0], bytPendingSessionID);		 // The pending session ID will become the session ID once connected) 
 	else if (blnARQConnected)		// If we are connected then just use the stcConnection.bytSessionID
-		NewType = MinimalDistanceFrameType(&intToneMags[0][0], bytSessionID);
+		NewType = MinimalDistanceFrameType(&intToneMags[0], bytSessionID);
 	else					// not connected and not pending so use &FF (FEC or ARQ unconnected session ID
-		NewType = MinimalDistanceFrameType(&intToneMags[0][0], 0xFF);
+		NewType = MinimalDistanceFrameType(&intToneMags[0], 0xFF);
   
 	if ((NewType > 0x30 && NewType < 0x39) || NewType == PING)
 		QueueCommandToHost("PENDING");			 // early pending notice to stop scanners
@@ -2231,7 +2224,7 @@ int Acquire4FSKFrameType()
 	SendtoGUI('O', Offset, strlen(Offset));
 
 	if (NewType >= 0 &&  IsShortControlFrame(NewType))		// update the constellation if a short frame (no data to follow)
-		Update4FSKConstellation(&intToneMags[0][0], &intLastRcvdFrameQuality);
+		Update4FSKConstellation(&intToneMags[0], &intLastRcvdFrameQuality);
 
 	if (AccumulateStats) {
 		if (NewType >= 0)
@@ -2256,10 +2249,8 @@ int Acquire4FSKFrameType()
 
 BOOL Demod1Car4FSK()
 {
+	// obsolete versions of this code accommodated multiple 4FSK carriers
 	int Start = 0;
-	int intCenterFrqs[4];
-	int cnum;
-	int NotOKCnt;
 	
 	// We can't wait for the full frame as we don't have enough ram, so
 	// we do one character at a time, until we run out or end of frame
@@ -2284,31 +2275,13 @@ BOOL Demod1Car4FSK()
 			return FALSE;
 		}
 
-		// If this is a multicarrier mode, we must call the
-		// decode char routing for each carrier
-
 		if (UseSDFT)
 		{
-			memcpy(intCenterFrqs, intStdCenterFrqs[intNumCar - 1], sizeof(intStdCenterFrqs[intNumCar - 1]));
-			NotOKCnt = 0;
-	        for (cnum = 0; cnum < CARCNT; cnum++)
-	        {
-	            if (CarrierOk[cnum])
-	            {
-	                intCenterFrqs[cnum] = -1;  // Don't redo if already decoded
-                }
-                if (intCenterFrqs[cnum] > 0)
-                {
-					NotOKCnt += 1;
-                }
-            }
-            if (NotOKCnt > 0)
-            {
-				// Only do DemodEachCar4FSK_SDFT() if there is at
-				// least one carrier that has not been successfully
-				// demodulated.
-		        DemodEachCar4FSK_SDFT(Start, intCenterFrqs, FALSE);
-            }
+			// Only do Demod1Car4FSK_SDFT() if carrier has not been successfully demodulated
+			// 
+			if (!CarrierOk[0]) {
+		        Demod1Car4FSK_SDFT(Start, FALSE);
+	        }
             else if (SymbolsLeft == 1)
             {
 				// Only write this to log once per frame.
@@ -2318,9 +2291,8 @@ BOOL Demod1Car4FSK()
 		else
 		{
 			// obsolete versions of this code accommodated inNumCar > 1
-			intCenterFreq = 1500;
 			if (CarrierOk[0] == FALSE)		// Don't redo if already decoded
-				Demod1Car4FSKChar(Start, bytFrameData1, 0);
+				Demod1Car4FSKChar(Start, bytFrameData1);
 		}
 		charIndex++;			// Index into received chars
 		SymbolsLeft--;			// number still to decode
@@ -2342,12 +2314,12 @@ BOOL Demod1Car4FSK()
 
 short intSdftSamples[5 * MAXDFTLEN / 2];
 const short intHalfDftlenZeros[MAXDFTLEN / 2];
-// Function to demodulate each carrier for 4FSK tones
-void DemodEachCar4FSK_SDFT(int Start, int * intCenterFrqs, BOOL blnGetFrameType)
+// Function to demodulate one carrier for all low baud rate 4FSK frame types using SDFT
+void Demod1Car4FSK_SDFT(int Start, BOOL blnGetFrameType)
 {
     /*
-    Demodulate the 4FSK symbols from intFilteredMixedSample around center freqencies
-    defined by intCenterFreq.  Populate intToneMags[][] and, if blnGetFrameType
+    Demodulate the 4FSK symbols from intFilteredMixedSample around center freqency
+    defined by (global) intCenterFreq.  Populate intToneMags[] and, if blnGetFrameType
     is FALSE, also populate bytFrameData.
 
     Start, an index into intFilteredMixedSAmples, points to the first sample of the
@@ -2355,25 +2327,16 @@ void DemodEachCar4FSK_SDFT(int Start, int * intCenterFrqs, BOOL blnGetFrameType)
 
     Updates bytData() with demodulated bytes
     Updates bytMinSymQuality with the minimum (range is 25 to 100) symbol making up each byte.
-
-    intCenterFrqs is a list of center frequencies for up to CARCNT carriers to be evaluated.
-    If less than CARCNT carriers are to be evaluated, their center frequencies shall occur at
-    the start of this list, and be followed by zeros.
-    For a multicarrier frame if CarrierOK[] is TRUE for some of the frequencies, such that
-    for those frequencies, demodulation has already been completed successfully and need not
-    be repeated, then a negative frequency will be given in intCenterFrqs for those carriers.
     */
 
     int nSym;
     int symnum;
-    int cnum;
-    int cfrq;
     int frqNum;
     int timing_advance;
     int intToneMags_sum;
     UCHAR bytSym;
     int intToneMags_max;
-	UCHAR bytCharValues[CARCNT];
+	UCHAR bytCharValue;
 	// size of intSampPerSym/2 samples
 	int intHalfSampPerSymSize = sizeof(intHalfDftlenZeros)*intSampPerSym/MAXDFTLEN;
 
@@ -2383,7 +2346,7 @@ void DemodEachCar4FSK_SDFT(int Start, int * intCenterFrqs, BOOL blnGetFrameType)
     if (!blnSdftInitialized)
     {
         // init_sdft() consumes the first intSampPerSym/2 samples of the first symbol.
-        init_sdft(intCenterFrqs, intFilteredMixedSamples + Start, intSampPerSym);
+        init_sdft(intCenterFreq, intFilteredMixedSamples + Start, intSampPerSym);
         memcpy(intSdftSamples, intHalfDftlenZeros, intHalfSampPerSymSize);
         memcpy(intSdftSamples + intSampPerSym/2, intFilteredMixedSamples + Start, intHalfSampPerSymSize);
         // Don't adjust Start or apply Corrections after init_sdft()
@@ -2403,8 +2366,6 @@ void DemodEachCar4FSK_SDFT(int Start, int * intCenterFrqs, BOOL blnGetFrameType)
     for (symnum = 0; symnum < nSym; symnum++)
     {
 		/*
-        Since this represents a time range in the samples, demodulate
-        output for all carriers for this time range together.
         sdft() requires intSamples to begin with the intSampPerSym samples
         consumed by the prior call of sdft(), or the values passed to
         init_sdft() which were implicity preceeded by intSampPerSym/2 zeros.
@@ -2421,7 +2382,7 @@ void DemodEachCar4FSK_SDFT(int Start, int * intCenterFrqs, BOOL blnGetFrameType)
 			intFilteredMixedSamples + Start + intSampPerSym/2,
 			3 * intHalfSampPerSymSize);
         // timing advance may be positive or negative.
-        timing_advance = sdft(intCenterFrqs, intSdftSamples, intToneMags, intToneMagsIndex, intSampPerSym);
+        timing_advance = sdft(intSdftSamples, intToneMags, &intToneMagsIndex, intSampPerSym);
         cumAdvances += timing_advance;
         symbolCnt++;
         // Adjust Start so that the correct samples are included in
@@ -2442,93 +2403,63 @@ void DemodEachCar4FSK_SDFT(int Start, int * intCenterFrqs, BOOL blnGetFrameType)
             2 * intHalfSampPerSymSize);
 
         // Could an indicator of confidence level of bytSym be used for improved FEC??
-	    for (cnum = 0; cnum < CARCNT; cnum++)
-	    {
-	        cfrq = intCenterFrqs[cnum];
-	        if (cfrq == 0)
-	        {
-	            // No more carriers to evaluate
-	            break;
-	        }
-	        if (cfrq < 0)
-	        {
-	            // CarrierOK[cnum] is True, so skip demodulating this carrier
-	            continue;
-	        }
-	        /*
-            sdft() set intToneMags[cnum][intToneMagsIndex[cnum]] to the
-            magnitude squared of the sdft_s values.
-            It also incremented intToneMagsIndex[cnum] to now point to the
-            next free slot after the four values that must now be compared.
-            */
-            // Start at 1 instead of 0 so that if audio is total silence,
-            // later division by this value does not cause an error
-            intToneMags_sum = 1;
-            for (frqNum = 0; frqNum < FRQCNT; frqNum++)
-            {
-                intToneMags_sum += intToneMags[cnum][intToneMagsIndex[cnum] - (frqNum + 1)];
-            }
-            /*
-            FrameType will be computed from intToneMags[][] values by
-            considering minimum distance to a sparse set of possible
-            values.  So, extraction of symbols by direct compartison
-            of tone magnitudes is not required for that case
-            */
-            bytSym = 99;  // value to write to debug log for FrameType
-            if (!blnGetFrameType)
-            {
-                // Compare the tone magnitudes to extract bytSym values.
-                bytSym = 0;
-                intToneMags_max = 0;
-	            for (frqNum = 0; frqNum < FRQCNT; frqNum++)
-	            {
-                    if (intToneMags[cnum][intToneMagsIndex[cnum] - 4 + frqNum] > intToneMags_max)
-                    {
-                        bytSym = frqNum;
-                        intToneMags_max = intToneMags[cnum][intToneMagsIndex[cnum] - 4 + frqNum];
-                    }
-                }
-                bytCharValues[cnum] = (bytCharValues[cnum] << 2) + bytSym;
-            }
-            // Include these tone values in debug log only if FileLogLevel is LOGDEBUGPLUS
-            WriteDebugLog(LOGDEBUGPLUS, "Demod4FSK[Carrier=%d] %d(%03.0f/%03.0f/%03.0f/%03.0f) [timing_advance=%d : avg %.02f per symbol]",
-                cnum, bytSym,
-                100.0*intToneMags[cnum][intToneMagsIndex[cnum] - 4]/intToneMags_sum,
-                100.0*intToneMags[cnum][intToneMagsIndex[cnum] - 3]/intToneMags_sum,
-                100.0*intToneMags[cnum][intToneMagsIndex[cnum] - 2]/intToneMags_sum,
-                100.0*intToneMags[cnum][intToneMagsIndex[cnum] - 1]/intToneMags_sum,
-                timing_advance,
-                1.0 * cumAdvances / symbolCnt
-            );
+        /*
+        sdft() set intToneMags[intToneMagsIndex] to the
+        magnitude squared of the sdft_s values.
+        It also incremented intToneMagsIndex to now point to the
+        next free slot after the four values that must now be compared.
+        */
+        // Start at 1 instead of 0 so that if audio is total silence,
+        // later division by this value does not cause an error
+        intToneMags_sum = 1;
+        for (frqNum = 0; frqNum < FRQCNT; frqNum++)
+        {
+            intToneMags_sum += intToneMags[intToneMagsIndex - (frqNum + 1)];
         }
+        /*
+        FrameType will be computed from intToneMags[] values by
+        considering minimum distance to a sparse set of possible
+        values.  So, extraction of symbols by direct comparison
+        of tone magnitudes is not required for that case
+        */
+        bytSym = 99;  // value to write to debug log for FrameType
+        if (!blnGetFrameType)
+        {
+            // Compare the tone magnitudes to extract bytSym values.
+            bytSym = 0;
+            intToneMags_max = 0;
+	        for (frqNum = 0; frqNum < FRQCNT; frqNum++)
+	        {
+                if (intToneMags[intToneMagsIndex - 4 + frqNum] > intToneMags_max)
+                {
+                    bytSym = frqNum;
+                    intToneMags_max = intToneMags[intToneMagsIndex - 4 + frqNum];
+                }
+            }
+            bytCharValue = (bytCharValue << 2) + bytSym;
+        }
+        // Include these tone values in debug log only if FileLogLevel is LOGDEBUGPLUS
+        WriteDebugLog(LOGDEBUGPLUS, "Demod4FSK %d(%03.0f/%03.0f/%03.0f/%03.0f) [timing_advance=%d : avg %.02f per symbol]",
+            bytSym,
+            100.0*intToneMags[intToneMagsIndex - 4]/intToneMags_sum,
+            100.0*intToneMags[intToneMagsIndex - 3]/intToneMags_sum,
+            100.0*intToneMags[intToneMagsIndex - 2]/intToneMags_sum,
+            100.0*intToneMags[intToneMagsIndex - 1]/intToneMags_sum,
+            timing_advance,
+            1.0 * cumAdvances / symbolCnt
+        );
         Start += intSampPerSym;  // Advance by one symbol.  timing adjustments already made.
 	}
     if (!blnGetFrameType)
-    {
-	    for (cnum = 0; cnum < CARCNT; cnum++)
-	    {
-	        cfrq = intCenterFrqs[cnum];
-	        if (cfrq == 0)
-	        {
-	            // No more carriers to evaluate
-	            break;
-	        }
-	        if (cfrq < 0)
-	        {
-	            // CarrierOK[cnum] is True, so skip demodulating this carrier
-	            continue;
-	        }
-            bytFrameData[cnum][charIndex] = bytCharValues[cnum];
-        }
-    }
+        bytFrameData1[charIndex] = bytCharValue;
     return;
 }
 
 // Function to demodulate one carrier for all low baud rate 4FSK frame types
  
-void Demod1Car4FSKChar(int Start, UCHAR * Decoded, int Carrier)
+void Demod1Car4FSKChar(int Start, UCHAR * Decoded)
 {
-	// Converts intSamples to an array of bytes demodulating the 4FSK symbols with center freq intCenterFreq
+	// Converts intSamples to an array of bytes demodulating the 4FSK symbols with center freq (global) intCenterFreq
 	// intPtr should be pointing to the approximate start of the first data symbol  
 	// Updates bytData() with demodulated bytes
 	// Updates bytMinSymQuality with the minimum (range is 25 to 100) symbol making up each byte.
@@ -2543,9 +2474,9 @@ void Demod1Car4FSKChar(int Start, UCHAR * Decoded, int Carrier)
 	UCHAR bytData = 0;
 	char DebugMess[1024];
 
-	int * intToneMagsptr = &intToneMags[Carrier][intToneMagsIndex[Carrier]];
+	int * intToneMagsptr = &intToneMags[intToneMagsIndex];
 	   
-	intToneMagsIndex[Carrier] += 16;
+	intToneMagsIndex += 16;
 
 	//	ReDim intToneMags(4 * intNumOfSymbols - 1)
     //    ReDim bytData(intNumOfSymbols \ 4 - 1)
@@ -2619,7 +2550,7 @@ void Demod1Car4FSKChar(int Start, UCHAR * Decoded, int Carrier)
 }
 
 
-void Demod1Car4FSK600Char(int Start, UCHAR * Decoded, int Carrier);
+void Demod1Car4FSK600Char(int Start, UCHAR * Decoded);
 
 BOOL Demod1Car4FSK600()
 {
@@ -2638,8 +2569,8 @@ BOOL Demod1Car4FSK600()
 
 			//	(while checking process - will use cyclic buffer eventually
 
-	if (intFilteredMixedSamplesLength < 0)
-		WriteDebugLog(LOGDEBUG, "Corrupt intFilteredMixedSamplesLength");
+			if (intFilteredMixedSamplesLength < 0)
+				WriteDebugLog(LOGDEBUG, "Corrupt intFilteredMixedSamplesLength");
 
 			if (intFilteredMixedSamplesLength > 0)
 				memmove(intFilteredMixedSamples,
@@ -2648,9 +2579,8 @@ BOOL Demod1Car4FSK600()
 			return FALSE;
 		}
 	
-		intCenterFreq = 1500;
-		if (CarrierOk[DummyCarrier] == FALSE)
-			Demod1Car4FSK600Char(Start, Decode600Buffer, DummyCarrier);
+		if (CarrierOk[Decode600BlockNum] == FALSE)
+			Demod1Car4FSK600Char(Start, Decode600Buffer);
 
 		charIndex++;			// Index into received chars
 
@@ -2666,8 +2596,8 @@ BOOL Demod1Car4FSK600()
 			DiscardOldSamples();
 			ClearAllMixedSamples();
 			State = SearchingForLeader;
-			
-			DummyCarrier = 0;	// pseudo carrier used for long 600 baud frames
+
+			Decode600BlockNum = 0;	// Next block number for decoding long 600 baud frames
 			Decode600Buffer = bytFrameData1;
 
 		}
@@ -2675,19 +2605,24 @@ BOOL Demod1Car4FSK600()
 		{
 			if (charIndex == 253)	// End of RS fragment (3 per message) 
 			{
-				DummyCarrier++;		// pseudo carrier used for long 600 baud frames
+				Decode600BlockNum++;	// Next block number for decoding long 600 baud frames
 				charIndex = 0;
-				if (DummyCarrier == 1)
+				if (Decode600BlockNum == 1) {
+					// Resuse intToneMags, but with a new decode buffer
+					intToneMagsIndex = 0;
 					Decode600Buffer = bytFrameData2;
-				else
+				} else {
+					// Resuse intToneMags, but with a new decode buffer
+					intToneMagsIndex = 0;
 					Decode600Buffer = bytFrameData3;
+				}
 			}
 		}
 	}
 	return TRUE;
 }
 
-void Demod1Car4FSK600Char(int Start, UCHAR * Decoded, int Carrier)
+void Demod1Car4FSK600Char(int Start, UCHAR * Decoded)
 {
   	float dblReal, dblImag;
 	float dblSearchFreq;
@@ -2700,13 +2635,9 @@ void Demod1Car4FSK600Char(int Start, UCHAR * Decoded, int Carrier)
 	int intSampPerSymbol = 12000 / intBaud;
 	int intMaxMag;
 
-	// I think the best way to handle long 600 frames is to
-	// treak each RS block as a separate frame. This will save
-	// RAM in both Tone Mags and Data buffers
-
-	int * intToneMagsptr = &intToneMags[Carrier][intToneMagsIndex[Carrier]];	// only 1 carrier in 600
+	int * intToneMagsptr = &intToneMags[intToneMagsIndex];	// only 1 carrier in 600
 	   
-	intToneMagsIndex[Carrier] += 16;
+	intToneMagsIndex += 16;
 
 	dblSearchFreq = intCenterFreq + (1.5f * intBaud);	// the highest freq (equiv to lowest sent freq because of sideband reversal)
 
@@ -2845,10 +2776,10 @@ int Compute4FSKSN()
 
 		for (j = 0; j < 4; j++)			 // for each tone
 		{
-			if (intToneMags[0][4 * i + j] > intDominateTones[i])
-				intDominateTones[i] = intToneMags[0][4 * i + j];
+			if (intToneMags[4 * i + j] > intDominateTones[i])
+				intDominateTones[i] = intToneMags[4 * i + j];
 			
-			intNonDominateToneSum += intToneMags[0][4 * i + j];
+			intNonDominateToneSum += intToneMags[4 * i + j];
 		}
 		
 		dblAvgNonDominateTone = (intNonDominateToneSum - intDominateTones[i])/ 3; // subtract out the Dominate Tone from the sum
