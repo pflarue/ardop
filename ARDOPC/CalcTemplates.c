@@ -121,9 +121,8 @@ void GenerateFSKTemplates()
 	//Used to speed up computation of FSK frames and reduce use of Sin functions.
 	//50 baud Tone values 
 
-	// the possible carrier frequencies in Hz ' note gaps for groups of 4 at 900, 1400, and 1900 Hz improved isolation between simultaneous carriers
-
-	float dblCarFreq[] = {1425, 1475, 1525, 1575, 600, 700, 800, 900, 1100, 1200, 1300, 1400, 1600, 1700, 1800, 1900, 2100, 2200, 2300, 2400};
+	// obsolete versions of this code accommodated multi-carrier FSK
+	float dblCarFreq[] = {1425, 1475, 1525, 1575};
 
 	float dblAngle;		// Angle in radians
 	float dblCarPhaseInc[20]; 
@@ -202,22 +201,22 @@ void GenerateFSKTemplates()
 	//  100 baud Tone values for a single carrier case 
 	// the 100 baud carrier frequencies in Hz
 
+	// obsolete versions of this code accommodated multi-carrier FSK
 	dblCarFreq[0] = 1350;
 	dblCarFreq[1] = 1450;
 	dblCarFreq[2] = 1550;
 	dblCarFreq[3] = 1650;
 
-	//Values of dblCarFreq for index 4-19 as in Dim above
 	// Compute the phase inc per sample
    
-	for (i = 0; i < 20; i++)
+	for (i = 0; i < 4; i++)
 	{
 		dblCarPhaseInc[i] = 2 * M_PI * dblCarFreq[i] / 12000;
 	}
 
 	// Now compute the templates: (2400 32 bit values total)  
 
-	for (i = 0; i < 20; i++)	 // across 20 tones
+	for (i = 0; i < 4; i++)	 // across 20 tones
 	{
 		dblAngle = 0;
 		//'100 baud template
@@ -238,13 +237,13 @@ void GenerateFSKTemplates()
 
 	fp1 = fopen("s:\\fskcoeffs100.txt", "wb");
 
-	len = sprintf(msg, "short intFSK100bdCarTemplate[20][120] = \r\n");
+	len = sprintf(msg, "short intFSK100bdCarTemplate[4][120] = \r\n");
 	fwrite(msg, 1, len, fp1);
 
 	len = sprintf(msg, "\t{{\r\n");
 	fwrite(msg, 1, len, fp1);
 
-	for (i = 0; i < 20; i++)		// across 9 tones
+	for (i = 0; i < 4; i++)		// across 9 tones
 	{
 			line = 0;
 

@@ -157,14 +157,11 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 	DrawTXFrame(strType);
 	wg_send_txframet(0, strType);
 
+	// obsolete versions of this code accommodated inNumCar > 1
 	if (intBaud == 50)
 		initFilter(200,1500);
-	else if (intNumCar == 1)
+	else
 		initFilter(500,1500);
-	else if (intNumCar == 2)
-		initFilter(1000,1500);
-	else if (intNumCar == 4)
-		initFilter(2000,1500);
 
 //	If Not (strType = "DataACK" Or strType = "DataNAK" Or strType = "IDFrame" Or strType.StartsWith("ConReq") Or strType.StartsWith("ConAck")) Then
  //               strLastWavStream = strType
@@ -195,129 +192,51 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 
 	intDataPtr = 2;
 
-	switch(intNumCar)
+	// obsolete versions of this code accommodated inNumCar > 1
+	dblCarScalingFactor = 1.0; //  (scaling factors determined emperically to minimize crest factor) 
+
+	sprintf(DebugMess, "Mod4FSKDataAndPlay 1Car tones :");
+	for (m = 0; m < intDataBytesPerCar; m++)  // For each byte of input data
 	{
-	case 1:			 // use carriers 0-3
-		
-		dblCarScalingFactor = 1.0; //  (scaling factors determined emperically to minimize crest factor) 
-
-		sprintf(DebugMess, "Mod4FSKDataAndPlay 1Car tones :");
-		for (m = 0; m < intDataBytesPerCar; m++)  // For each byte of input data
+		bytMask = 0xC0;		 // Initialize mask each new data byte
+		sprintf(DebugMess + strlen(DebugMess), " ");
+		for (k = 0; k < 4; k++)		// for 4 symbol values per byte of data
 		{
-			bytMask = 0xC0;		 // Initialize mask each new data byte
-			sprintf(DebugMess + strlen(DebugMess), " ");
-			for (k = 0; k < 4; k++)		// for 4 symbol values per byte of data
-			{
-				bytSymToSend = (bytMask & bytEncodedBytes[intDataPtr]) >> (2 * (3 - k)); // Values 0-3
-				sprintf(DebugMess + strlen(DebugMess), "%d", bytSymToSend);
+			bytSymToSend = (bytMask & bytEncodedBytes[intDataPtr]) >> (2 * (3 - k)); // Values 0-3
+			sprintf(DebugMess + strlen(DebugMess), "%d", bytSymToSend);
 
-				for (n = 0; n < intSampPerSym; n++)	 // Sum for all the samples of a symbols 
+			for (n = 0; n < intSampPerSym; n++)	 // Sum for all the samples of a symbols 
+			{
+				if((k & 1) == 0)
 				{
-					if((k & 1) == 0)
-					{
-						if(intBaud == 50)
-							intSample = intFSK50bdCarTemplate[bytSymToSend][n];
-						else
-							intSample = intFSK100bdCarTemplate[bytSymToSend][n];
-							
-						SampleSink(intSample);
-					}
+					if(intBaud == 50)
+						intSample = intFSK50bdCarTemplate[bytSymToSend][n];
 					else
- 					{
-						if(intBaud == 50)
-							intSample = -intFSK50bdCarTemplate[bytSymToSend][n];
-						else
-							intSample = -intFSK100bdCarTemplate[bytSymToSend][n];
-							
-						SampleSink(intSample);	
-					}
-				}
-
-				bytMask = bytMask >> 2;
-			}
-			intDataPtr += 1;
-		}
-		// Include these tone values in debug log only if FileLogLevel is LOGDEBUGPLUS
-		if (intDataBytesPerCar == 0)
-			sprintf(DebugMess + strlen(DebugMess), "(None)");
-		WriteDebugLog(LOGDEBUGPLUS, "%s", DebugMess);
-
-		Flush();
-
-		break;
-
-	case 2:			// use carriers 8-15 (100 baud only)
-
-		dblCarScalingFactor = 0.51f; //  (scaling factors determined emperically to minimize crest factor)
-
-		for (m = 0; m < intDataBytesPerCar; m++)	  // For each byte of input data 
-		{
-			bytMask = 0xC0;	// Initialize mask each new data byte
-                        			
-			for (k = 0; k < 4; k++)		// for 4 symbol values per byte of data
-			{
-				for (n = 0; n < intSampPerSym; n++)	 // for all the samples of a symbol for 2 carriers
-				{
-					//' First carrier
-                      
-					bytSymToSend = (bytMask & bytEncodedBytes[intDataPtr]) >> (2 * (3 - k)); // Values 0-3
-					intSample = intFSK100bdCarTemplate[8 + bytSymToSend][n];
-					// Second carrier
-                    
-					bytSymToSend = (bytMask & bytEncodedBytes[intDataPtr + intDataBytesPerCar]) >> (2 * (3 - k));	// Values 0-3
-					intSample = dblCarScalingFactor * (intSample + intFSK100bdCarTemplate[12 + bytSymToSend][n]);
-			
-					SampleSink(intSample);
-				}
-				bytMask = bytMask >> 2;
-			}
-			intDataPtr += 1;
-		}
-             
-		Flush();
-
-		break;
-
-	case 4:		 // use carriers 4-19 (100 baud only)
-
- 		dblCarScalingFactor = 0.27f; //  (scaling factors determined emperically to minimize crest factor)
-
-		for (m = 0; m < intDataBytesPerCar; m++)	  // For each byte of input data 
-		{
-			bytMask = 0xC0;	// Initialize mask each new data byte
-                        			
-			for (k = 0; k < 4; k++)		// for 4 symbol values per byte of data
-			{
-				for (n = 0; n < intSampPerSym; n++)	 // for all the samples of a symbol for 2 carriers
-				{
-					//' First carrier
-                      
-					bytSymToSend = (bytMask & bytEncodedBytes[intDataPtr]) >> (2 * (3 - k)); // Values 0-3
-					intSample = intFSK100bdCarTemplate[4 + bytSymToSend][n];
-					// Second carrier
-                    
-					bytSymToSend = (bytMask & bytEncodedBytes[intDataPtr + intDataBytesPerCar]) >> (2 * (3 - k));	// Values 0-3
-					intSample = intSample + intFSK100bdCarTemplate[8 + bytSymToSend][n];
-			
-					//' Third carrier
-					
-					bytSymToSend = (bytMask & bytEncodedBytes[intDataPtr + 2 * intDataBytesPerCar]) >> (2 * (3 - k));	// Values 0-3
-					intSample = intSample + intFSK100bdCarTemplate[12 + bytSymToSend][n];
-
-					// ' Fourth carrier
-   
-					bytSymToSend = (bytMask & bytEncodedBytes[intDataPtr + 3 * intDataBytesPerCar]) >> (2 * (3 - k));	// Values 0-3
-					intSample = dblCarScalingFactor * (intSample + intFSK100bdCarTemplate[16 + bytSymToSend][n]);
+						intSample = intFSK100bdCarTemplate[bytSymToSend][n];
 
 					SampleSink(intSample);
 				}
-				bytMask = bytMask >> 2;
+				else
+					{
+					if(intBaud == 50)
+						intSample = -intFSK50bdCarTemplate[bytSymToSend][n];
+					else
+						intSample = -intFSK100bdCarTemplate[bytSymToSend][n];
+
+					SampleSink(intSample);	
+				}
 			}
-			intDataPtr += 1;
-		}       
-		Flush();
-		break;
+
+			bytMask = bytMask >> 2;
+		}
+		intDataPtr += 1;
 	}
+	// Include these tone values in debug log only if FileLogLevel is LOGDEBUGPLUS
+	if (intDataBytesPerCar == 0)
+		sprintf(DebugMess + strlen(DebugMess), "(None)");
+	WriteDebugLog(LOGDEBUGPLUS, "%s", DebugMess);
+
+	Flush();
 }
 
 

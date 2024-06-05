@@ -2317,41 +2317,10 @@ BOOL Demod1Car4FSK()
 		}
 		else
 		{
-			switch (intNumCar)
-			{
-			case 1:
-
-				intCenterFreq = 1500;
-				if (CarrierOk[0] == FALSE)		// Don't redo if already decoded
-					Demod1Car4FSKChar(Start, bytFrameData1, 0);
-				break;
-
-			case 2:
-
-				intCenterFreq = 1750;
-				if (CarrierOk[0] == FALSE)
-					Demod1Car4FSKChar(Start, bytFrameData1, 0);
-				intCenterFreq = 1250;
-				if (CarrierOk[1] == FALSE)
-					Demod1Car4FSKChar(Start, bytFrameData2, 1);
-				break;
-
-			case 4:
-
-				intCenterFreq = 2250;
-				if (CarrierOk[0] == FALSE)
-					Demod1Car4FSKChar(Start, bytFrameData1, 0);
-				intCenterFreq = 1750;
-				if (CarrierOk[1] == FALSE)
-					Demod1Car4FSKChar(Start, bytFrameData2, 1);
-				intCenterFreq = 1250;
-				if (CarrierOk[2] == FALSE)
-					Demod1Car4FSKChar(Start, bytFrameData3, 2);
-				intCenterFreq = 750;
-				if (CarrierOk[3] == FALSE)
-					Demod1Car4FSKChar(Start, bytFrameData4, 3);
-				break;
-			}
+			// obsolete versions of this code accommodated inNumCar > 1
+			intCenterFreq = 1500;
+			if (CarrierOk[0] == FALSE)		// Don't redo if already decoded
+				Demod1Car4FSKChar(Start, bytFrameData1, 0);
 		}
 		charIndex++;			// Index into received chars
 		SymbolsLeft--;			// number still to decode
@@ -3252,11 +3221,6 @@ void DemodulateFrame(int intFrameType)
 			Demod1Car4FSK600();
 			break;
 
-  /*              ' Experimental Sounding frame
-            Case 0xD0
-                DemodSounder(intMFSReadPtr, intFilteredMixedSamples)
-                blnDecodeOK = TRUE
-  */
 		default:
 
 			WriteDebugLog(LOGDEBUG, "Unsupported frame type %x", intFrameType);
@@ -3503,26 +3467,6 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 		case 0x73:
 
 			if (memcmp(CarrierOk, Good, intNumCar) == 0)
-				blnDecodeOK = TRUE;
-
-			if (blnDecodeOK) {
-				DrawRXFrame(1, Name(intFrameType));
-				wg_send_rxframet(0, 1, Name(intFrameType));
-			}
-			break;
-
-		case 0x78:
-		case 0x79:
-
-			// 4 Carrier FSK Modes
-
-			frameLen = CorrectRawDataWithRS(bytFrameData1, bytData, intDataLen, intRSLen, intFrameType, 0);
-			frameLen +=  CorrectRawDataWithRS(bytFrameData2, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 1);
-			frameLen +=  CorrectRawDataWithRS(bytFrameData3, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 2);
-			frameLen +=  CorrectRawDataWithRS(bytFrameData4, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 3);
-
-
-			if (CarrierOk[0] && CarrierOk[1] && CarrierOk[2] && CarrierOk[3]) 
 				blnDecodeOK = TRUE;
 
 			if (blnDecodeOK) {
