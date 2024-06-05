@@ -144,9 +144,6 @@ BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL
             ElseIf strMod = "16FSK" Then
                 bytFrameData = objMain.objMod.EncodeFSKData(bytFrameType, bytFrameData, strCurrentFrameFilename)
                 intCurrentFrameSamples = objMain.objMod.Mod16FSKData(bytFrameType, bytFrameData)
-            ElseIf strMod = "8FSK" Then
-                bytFrameData = objMain.objMod.EncodeFSKData(bytFrameType, bytFrameData, strCurrentFrameFilename)
-                intCurrentFrameSamples = objMain.objMod.Mod8FSKData(bytFrameType, bytFrameData)
             Else
                 bytFrameData = objMain.objMod.EncodePSK(bytFrameType, bytFrameData, strCurrentFrameFilename)
                 intCurrentFrameSamples = objMain.objMod.ModPSK(bytFrameType, bytFrameData)
@@ -278,16 +275,6 @@ sendit:
 			}
 			RemoveDataFromQueue(Len);		// No ACKS in FEC
 			Mod16FSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame 
-		}
-		else if (strcmp(strMod, "8FSK") == 0)
-		{
-			if ((EncLen = EncodeFSKData(bytFrameType, bytDataToSend, Len, bytEncodedBytes)) <= 0) {
-				WriteDebugLog(LOGERROR, "ERROR: In GetNextFECFrame() 8FSK Invalid EncLen (%d).", EncLen);
-				return FALSE;
-			}
-			//      intCurrentFrameSamples = Mod8FSKData(bytFrameType, bytData);
-			RemoveDataFromQueue(Len);		// No ACKS in FEC
-			Mod8FSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame 
 		}
 		else		// This handles PSK and QAM
 		{

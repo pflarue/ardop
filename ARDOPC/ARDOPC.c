@@ -136,8 +136,6 @@ UCHAR PTTOffCmdLen = 0;
   
 int int4FSKQuality;
 int int4FSKQualityCnts;
-int int8FSKQuality;
-int int8FSKQualityCnts;
 int int16FSKQuality;
 int int16FSKQualityCnts;
 int intFSKSymbolsDecoded;
@@ -383,8 +381,8 @@ const char strFrameType[256][18] = {
 	"4FSK.500.100.O",
 	"4FSK.500.100S.E",
 	"4FSK.500.100S.O",
-	"",//"8FSK.200.25.E",
-	"",//"8FSK.200.25.O",
+	"",
+	"",
 
 	//' 2 Car PSK Data Modes 100 baud
 	"4PSK.500.100.E", // 50

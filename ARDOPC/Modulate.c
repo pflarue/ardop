@@ -320,86 +320,6 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 	}
 }
 
-// Function to Modulate encoded data to 8FSK and send to sound interface
-
-void Mod8FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen)
-{
-	// Function to Modulate data encoded for 8FSK, create
-	// the 16 bit samples and send to sound interface
-
-	int intBaud, intDataLen, intRSLen, intDataPtr, intSampPerSym, intDataBytesPerCar;
-	BOOL blnOdd;
-	int intNumCar;
-
-	short intSample;
-	unsigned int intThreeBytes = 0;
-
-    char strType[18] = "";
-    char strMod[16] = "";
-
-	UCHAR bytSymToSend, bytMinQualThresh;
-	int intMask = 0;
-	int k, m, n;
-
-	if (Len < 0) {
-		WriteDebugLog(LOGERROR, "ERROR: In Mod8FSKDataAndPlay() Invalid Len (%d).", Len);
-		return;
-	}
-
-	if (!FrameInfo(Type, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType))
-		return;
-
-	if (strcmp(strMod, "8FSK") != 0)
-		return;
-
-	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
-	DrawTXFrame(strType);
-	wg_send_txframet(0, strType);
-
-	initFilter(200,1500);
-
-//	If Not (strType = "DataACK" Or strType = "DataNAK" Or strType = "IDFrame" Or strType.StartsWith("ConReq") Or strType.StartsWith("ConAck")) Then
- //               strLastWavStream = strType
-  //          End If
-
-
-	intSampPerSym = 240;
-	
-	intDataBytesPerCar = (Len - 2) / intNumCar;		// We queue the samples here, so dont copy below
-    
-	SendLeaderAndSYNC(bytEncodedBytes, intLeaderLen);
-
-	intSampPerSym = 480;			// 25 Baud
-
-	intDataPtr = 2;
-
- 	for (m = 0; m < intDataBytesPerCar; m += 3)  // For each byte of input data
-	{
-		intThreeBytes = bytEncodedBytes[intDataPtr++];
-		intThreeBytes = (intThreeBytes << 8) + bytEncodedBytes[intDataPtr++];
-		intThreeBytes = (intThreeBytes << 8) + bytEncodedBytes[intDataPtr++];
-		intMask = 0xE00000;
-                 
-		for (k = 0; k < 8; k++)
-		{
-			bytSymToSend = (intMask & intThreeBytes) >> (3 * (7 - k));
-
-			// note value of "+ 4" below allows using 16FSK template for 8FSK using only the "inner" 8 tones around 1500
-
-			for (n = 0; n < intSampPerSym; n++)	 // Sum for all the samples of a symbols 
-			{
-				if((k & 1) == 0)
-					intSample = intFSK25bdCarTemplate[bytSymToSend + 4][n]; // Symbol vlaues 4- 11 (surrounding 1500 Hz)  
-				else
-					intSample = -intFSK25bdCarTemplate[bytSymToSend + 4][n]; // Symbol vlaues 4- 11 (surrounding 1500 Hz)  
-
-				SampleSink(intSample);
-			}
-			intMask = intMask >> 3;
-		}
-	}
-	Flush();
-}
 
 // Function to Modulate encoded data to 16FSK and send to sound interface
 
@@ -956,11 +876,6 @@ void RemodulateLastFrame()
 	if (strcmp(strMod, "16FSK") == 0)
 	{
 		Mod16FSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame 
-		return;
-	}
-	if (strcmp(strMod, "8FSK") == 0)
-	{
-		Mod8FSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame 
 		return;
 	}
 	ModPSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame 
