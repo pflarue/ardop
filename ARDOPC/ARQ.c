@@ -892,14 +892,6 @@ void SendData()
 				else
 					Mod4FSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame 
 			}
-			else if (strcmp(strMod, "16FSK") == 0)
-			{
-				if ((EncLen = EncodeFSKData(bytCurrentFrameType, bytDataToSend, Len, bytEncodedBytes)) <= 0) {
-					WriteDebugLog(LOGERROR, "ERROR: In SendData() for 16FSK Invalid EncLen (%d).", EncLen);
-					return;
-				}
-				Mod16FSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame 
-			}
 			else		// This handles PSK and QAM
 			{
 				if ((EncLen = EncodePSKData(bytCurrentFrameType, bytDataToSend, Len, bytEncodedBytes)) <= 0) {
@@ -2456,8 +2448,6 @@ void ClearQualityStats()
 {
 	int4FSKQuality = 0;
     int4FSKQualityCnts = 0;
-    int16FSKQuality = 0;
-    int16FSKQualityCnts = 0;
 	intPSKQuality[0] = 0;
 	intPSKQuality[1] = 0;
 	intPSKQualityCnts[0] = 0;
@@ -2517,9 +2507,6 @@ void LogStats()
 
 	if (int4FSKQualityCnts > 0)
 		Statsprintf("     Avg 4FSK Quality=%d on %d frame(s)",  int4FSKQuality / int4FSKQualityCnts, int4FSKQualityCnts);
-
-	if (int16FSKQualityCnts > 0)
-		Statsprintf("     Avg 16FSK Quality=%d on %d frame(s)",  int16FSKQuality / int16FSKQualityCnts, int16FSKQualityCnts);
 
 	if (intPSKQualityCnts[0] > 0)
 		Statsprintf("     Avg 4PSK Quality=%d on %d frame(s)",  intPSKQuality[0] / intPSKQualityCnts[0], intPSKQualityCnts[0]);

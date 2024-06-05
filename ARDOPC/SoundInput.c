@@ -265,7 +265,6 @@ int EnvelopeCorrelator();
 BOOL DecodeFrame(int intFrameType, UCHAR * bytData);
 
 void Update4FSKConstellation(int * intToneMags, int * intQuality);
-void Update16FSKConstellation(int * intToneMags, int * intQuality);
 void ProcessPingFrame(char * bytData);
 int Compute4FSKSN();
 
@@ -1041,8 +1040,6 @@ void ProcessNewSamples(short * Samples, int nSamples)
 		}
 		if (strcmp (strMod, "4FSK") == 0)
 			Update4FSKConstellation(&intToneMags[0][0], &intLastRcvdFrameQuality);
-		else if (strcmp (strMod, "16FSK") == 0)
-			Update16FSKConstellation(&intToneMags[0][0], &intLastRcvdFrameQuality);
 
 		// PSK and QAM quality done in Decode routines
 
@@ -2782,154 +2779,7 @@ void Demod1Car4FSK600Char(int Start, UCHAR * Decoded, int Carrier)
 }
 
 
-void Demod1Car16FSKChar(int Start, UCHAR * Decoded, int Carrier);
-
-BOOL Demod1Car16FSK()
-{
-	int Start = 0;
-	
-	// We can't wait for the full frame as we don't have enough data, so
-	// we do one character at a time, until we run out or end of frame
-
-	// Only continue if we have more than intSampPerSym * 2 chars
-
-	while (State == AcquireFrame)
-	{
-		if (intFilteredMixedSamplesLength < ((intSampPerSym * 2) + 20)) // allow for correcrions
-		{
-			// Move any unprocessessed data down buffer
-
-			//	(while checking process - will use cyclic buffer eventually
-
-			if (intFilteredMixedSamplesLength < 0)
-				WriteDebugLog(LOGDEBUG, "Corrupt intFilteredMixedSamplesLength");
-
-			if (intFilteredMixedSamplesLength > 0)
-				memmove(intFilteredMixedSamples,
-					&intFilteredMixedSamples[Start], intFilteredMixedSamplesLength * 2); 
-
-			return FALSE;
-		}
-
-		// If this is a multicarrier mode, we must call the
-		// decode char routing for each carrier
-	
-		switch (intNumCar)
-		{
-		case 1:
-
-			intCenterFreq = 1500;
-			if (CarrierOk[0] == FALSE)
-				Demod1Car16FSKChar(Start, bytFrameData1, 0);
-			break;
-
-		case 2:
-
-			intCenterFreq = 1750;
-			if (CarrierOk[0] == FALSE)
-				Demod1Car16FSKChar(Start, bytFrameData1, 0);
-			intCenterFreq = 1250;
-			if (CarrierOk[1] == FALSE)
-				Demod1Car16FSKChar(Start, bytFrameData2, 1);
-			break;
-		}
-
-		SymbolsLeft--;			// number still to decode
-		Start += intSampPerSym * 2;	// 2 FSK nibbles 
-		intFilteredMixedSamplesLength -= intSampPerSym * 2;
-
-		if (intFilteredMixedSamplesLength < 0)
-			WriteDebugLog(LOGERROR, "Corrupt intFilteredMixedSamplesLength");
-
-		if (SymbolsLeft <= 0)	
-		{	
-			//- prepare for next
-
-			DecodeCompleteTime = Now;
-			DiscardOldSamples();
-			ClearAllMixedSamples();
-			State = SearchingForLeader;
-		}
-	}
-	return TRUE;
-}
-
-// Function to demodulate one carrier for all 16FSK frame types
- 
-void Demod1Car16FSKChar(int Start, UCHAR * Decoded, int Carrier)
-{
-	// Converts intSamples to an array of bytes demodulating the 4FSK symbols with center freq intCenterFreq
-	// intPtr should be pointing to the approximate start of the first data symbol  
-	// Updates bytData() with demodulated bytes
-	// Updates bytMinSymQuality with the minimum (range is 25 to 100) symbol making up each byte.
-
-	float dblReal, dblImag;
-	float dblSearchFreq;
-	float dblMagSum = 0;
-	UCHAR bytSym = 0;
-	static UCHAR bytSymHistory[3];
-	int j, k;
-	UCHAR bytData = 0;
-	int intMaxMag;
-
-	int * intToneMagsptr = &intToneMags[Carrier][intToneMagsIndex[Carrier]];
-	   
-	intToneMagsIndex[Carrier] += 32;
-	
-	dblSearchFreq = intCenterFreq + (7.5f * intBaud);	// the highest freq (equiv to lowest sent freq because of sideband reversal)
-
-	// Do one symbol
- 
-	for (j = 0; j < 2; j++)  // for each 16FSK symbol (4 bits) in a byte
-	{
-		dblMagSum = 0;
-		intMaxMag = 0;
-
-		dblSearchFreq = intCenterFreq + 7.5f * intBaud; //' the highest freq (equiv to lowest sent freq because of sideband reversal)
-			
-		for (k = 0; k < 16; k++)  // for each of 8 possible tones per symbol
-		{
-			GoertzelRealImag(intFilteredMixedSamples, Start, intSampPerSym, (dblSearchFreq - k * intBaud) / intBaud, &dblReal, &dblImag);
- 
-			*intToneMagsptr = powf(dblReal, 2) + powf(dblImag, 2);
-			dblMagSum += *intToneMagsptr;
-
-			if (*intToneMagsptr > intMaxMag)
-			{
-				intMaxMag = *intToneMagsptr;
-				bytSym = k;
-			}
-			intToneMagsptr++;
-		}
-
-		bytData = (bytData << 4) + bytSym;
-
-		bytSymHistory[0] = bytSymHistory[1];
-		bytSymHistory[1] = bytSymHistory[2];
-		bytSymHistory[2] = bytSym;
-
-//		if ((bytSymHistory[0] != bytSymHistory[1]) && (bytSymHistory[1] != bytSymHistory[2]))
-		{
-			// only track when adjacent symbols are different (statistically about 56% of the time) 
-			// this should allow tracking over 2000 ppm sampling rate error	
-//			if (Start > intSampPerSym + 2)
-//				Track1Car4FSK(intFilteredMixedSamples, &Start, intSampPerSym, dblSearchFreq, intBaud, bytSymHistory);
-		}
-		Start += intSampPerSym; // advance the pointer one symbol
-	}
-
-//	WriteDebugLog(LOGDEBUG, "Tone Mags Index %d", charIndex * 32 + 16 * j + k);
-
-	if (AccumulateStats)
-		intFSKSymbolCnt += 2;
-    
-	Decoded[charIndex++] = bytData;;	
-	return;
-}
-
 //	Function to Decode 1 carrier 4FSK 50 baud Connect Request 
-
-
 
 extern int intBW;
 
@@ -3878,86 +3728,6 @@ void Update4FSKConstellation(int * intToneMags, int * intQuality)
 #endif
 
 	return;
-}
-
-
-
-// Subroutine to update the 16FSK constallation
-
-void Update16FSKConstellation(int * intToneMags, int * intQuality)
-{
-	//	Subroutine to update bmpConstellation plot for 16FSK modes...
-
-
-	int	intToneSum = 0;
-	float intMagMax = 0;
-	float dblDistanceSum = 0;
-	float dblPlotRotation = 0;
-//            Dim stcStatus As Status
-	int	intRad;
-//            Dim clrPixel As System.Drawing.Color
-	int	intJatMaxMag;
-	int i, j;
-
-#ifdef PLOTCONSTELLATION
-
-	float dblAng;
-	int x, y,clrPixel;
-	int yCenter = (ConstellationHeight - 2)/ 2;
-	int xCenter = (ConstellationWidth - 2) / 2;
-
-	clearDisplay();
-#endif
-
-
-	for (i = 0; i< intToneMagsLength; i += 16)  // for the number of symbols represented by intToneMags
-	{
-		intToneSum = 0;
-		intMagMax = 0;
-
-		for (j = 0; j < 16; j++)
-		{
-			if (intToneMags[i + j] > intMagMax)
-			{
-				intMagMax = intToneMags[i + j];
-				intJatMaxMag = j;
-			}
-			intToneSum += intToneMags[i + j];
-		}
-		intRad = max(5, 42 - 40 * (intToneSum - intMagMax) / intToneSum);
-		dblDistanceSum += (43 - intRad);
-
-#ifdef PLOTCONSTELLATION		
-		if (intRad < 15)
-			clrPixel = Tomato;
-		else if (intRad < 30)
-			clrPixel = Gold;
-		else
-			clrPixel = Lime;
-
-		// plot the symbols rotated to avoid the axis
-
-		intRad = (intRad * PLOTRADIUS) /42; // rescale for OLED
-		dblAng = M_PI / 16.0f + (intJatMaxMag * M_PI / 8);
-  
-		x = xCenter + intRad * cosf(dblAng);
-		y = yCenter + intRad * sinf(dblAng);
-		mySetPixel(x, y, clrPixel);    
-#endif
-
-	}
-		
-	*intQuality = max(0, (100 - 2.2 * (dblDistanceSum / (intToneMagsLength / 16))));	 // factor 2.2 emperically chosen for calibration (Qual range 25 to 100)
-//	*intQuality = max(0, (100 - 1.0 * (dblDistanceSum / (intToneMagsLength / 16))));	 // factor 2.2 emperically chosen for calibration (Qual range 25 to 100)
-
-	if(AccumulateStats)
-	{
-		int16FSKQualityCnts++;
-		int16FSKQuality += *intQuality;
-	}
-#ifdef PLOTCONSTELLATION
-	DrawAxes(*intQuality, strMod);
-#endif
 }
 
 

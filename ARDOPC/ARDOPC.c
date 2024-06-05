@@ -136,8 +136,6 @@ UCHAR PTTOffCmdLen = 0;
   
 int int4FSKQuality;
 int int4FSKQualityCnts;
-int int16FSKQuality;
-int int16FSKQualityCnts;
 int intFSKSymbolsDecoded;
 int intPSKQuality[2];
 int intPSKQualityCnts[2];
@@ -395,13 +393,6 @@ const char strFrameType[256][18] = {
 	"16QAM.500.100.E",	//54
 	"16QAM.500.100.O",
 	"", "",				// 56, 57 were 500 167 modes	
-
-	// 1 Car 16FSK mode 25 baud
-
-//	"16FSK.500.25.E", // 58
-//	"16FSK.500.25.O",
-//	"16FSK.500.25S.E",
-//	"16FSK.500.25S.O",
 
 	"","","","",		// 58 -5B
 	"","","","",		// 5C-5F

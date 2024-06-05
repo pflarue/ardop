@@ -182,24 +182,6 @@ void GenerateFSKTemplates()
 	}
 
 
-	// 16 FSK templates (500 Hz BW, 25 baud)
-
-	for (i = 0; i < 16; i++)	 // across the 16 tones for 25 baud frequencies
-	{
-		dblAngle = 0;
-		//25 baud template
-		for (k = 0; k < 480; k++)			 // for 480 samples (one 25 baud symbol)
-		{
-			int xx = intAmp * 1.1 * sin(dblAngle); // with no envelope control (factor 1.1 chosen emperically to keep FSK peak amplitude slightly below 2 tone peak)
-			if (intFSK25bdCarTemplate[i][k] != xx)
-				printf("Duff\n");
-				
-			dblAngle += (2 * M_PI / 12000) * (1312.5 + i * 25);
-			if (dblAngle >= 2 * M_PI)
-				dblAngle -= 2 * M_PI;
-		}
-	}
-
 	// 4FSK templates for 600 baud (2 Khz bandwidth) 
 	for (i = 0; i < 4; i++)		 // across the 4 tones for 600 baud frequencies
 	{
@@ -287,55 +269,6 @@ void GenerateFSKTemplates()
 					line = k + 1;
 
 					if (k == 119)
-					{
-						len += sprintf(&msg[len-2], "},\r\n\r\n\t{");
-						len -=2;
-					}
-					fwrite(msg, 1, len, fp1);
-				}
-	
-		}
-	}
-
-	len = sprintf(msg, "\t}};\r\n");
-	fwrite(msg, 1, len, fp1);
-
-	fclose(fp1);
-
-
-	fp1 = fopen("s:\\fskcoeffs25.txt", "wb");
-
-	len = sprintf(msg, "short intFSK25bdCarTemplate[16][480] = {\r\n");
-	fwrite(msg, 1, len, fp1);
-
-	len = sprintf(msg, "\t{\r\n");
-	fwrite(msg, 1, len, fp1);
-
-	for (i = 0; i < 16; i++)		// across 16 tones
-	{
-			line = 0;
-
-			for (k = 0; k <= 479; k++) // for 480 samples (one 25 baud symbol)
-			{
-				if ((k - line) == 9)
-				{
-					// print 10 to line
-
-					len = sprintf(msg, "\t%d, %d, %d, %d, %d, %d, %d, %d, %d, %d,\n",
-					intFSK25bdCarTemplate[i][line],
-					intFSK25bdCarTemplate[i][line + 1],
-					intFSK25bdCarTemplate[i][line + 2],
-					intFSK25bdCarTemplate[i][line + 3],
-					intFSK25bdCarTemplate[i][line + 4],
-					intFSK25bdCarTemplate[i][line + 5],
-					intFSK25bdCarTemplate[i][line + 6],
-					intFSK25bdCarTemplate[i][line + 7],
-					intFSK25bdCarTemplate[i][line + 8],
-					intFSK25bdCarTemplate[i][line + 9]);
-
-					line = k + 1;
-
-					if (k == 479)
 					{
 						len += sprintf(&msg[len-2], "},\r\n\r\n\t{");
 						len -=2;
