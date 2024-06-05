@@ -1,112 +1,22 @@
 // ARDOP TNC Host Interface
 
-
 #define HANDLE int
-
-#define _XOPEN_SOURCE 600
-#define _GNU_SOURCE
-
-#include <features.h>
 
 #include <stdlib.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <termios.h>
-#include <fcntl.h>
-#include <syslog.h>
-#include <pthread.h>
 #include <errno.h>
 #include <stdio.h>
 #include <unistd.h>
 
-//#include "ARDOPC.h"
 
-HANDLE hDevice;
-
+void Debugprintf(const char * format, ...);
 int WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite);
 
 extern HANDLE hCATDevice;		// port for Rig Control
 extern char HostPort[80];
-
-//#include <pty.h>
-
-HANDLE LinuxOpenPTY(char * Name)
-{            
-	// Open a Virtual COM Port
-
-	HANDLE hDevice, slave;
-	char slavedevice[80];
-	int ret;
-	u_long param=1;
-	struct termios term;
-
-#ifdef MACBPQ
-
-	// Create a pty pair
-	
-	openpty(&hDevice, &slave, &slavedevice[0], NULL, NULL);
-	close(slave);
-
-#else
-	 
-	hDevice = posix_openpt(O_RDWR|O_NOCTTY);
-
-	if (hDevice == -1 || grantpt (hDevice) == -1 || unlockpt (hDevice) == -1 ||
-		 ptsname_r(hDevice, slavedevice, 80) != 0)
-	{
-		perror("Create PTY pair failed");
-		return -1;
-	} 
-
-#endif
-
-	printf("slave device: %s\n", slavedevice);
- 
-	if (tcgetattr(hDevice, &term) == -1)
-	{
-		perror("tty_speed: tcgetattr");
-		return 0;
-	}
-
-	cfmakeraw(&term);
-
-	if (tcsetattr(hDevice, TCSANOW, &term) == -1)
-	{
-		perror("tcsetattr");
-		return -1;
-	}
-
-	ioctl(hDevice, FIONBIO, &param);
-
-	chmod(slavedevice, S_IRUSR|S_IRGRP|S_IWUSR|S_IWGRP|S_IROTH|S_IWOTH);
-
-	unlink (Name);
-		
-	ret = symlink (slavedevice, Name);
-		
-	if (ret == 0)
-		printf ("symlink to %s created\n", Name);
-	else
-		printf ("symlink to %s failed\n", Name);	
-	
-	return hDevice;
-}
-
-
-int SerialSendData(unsigned char * Message,int MsgLen)
-{
-	// Linux uses normal IO for all ports
-
-	WriteCOMBlock(hDevice, Message, MsgLen);
-	return 0;
-}
-
-int xSerialGetData(unsigned char * Message, unsigned int BufLen, unsigned long * MsgLen)
-{
-	return 0;
-}
-
 
 int ReadCOMBlock(HANDLE fd, char * Block, int MaxLength)
 {
@@ -275,23 +185,4 @@ void COMClearRTS(HANDLE fd)
 	status &= ~TIOCM_RTS;
 	if (ioctl(fd, TIOCMSET, &status) == -1)
 		perror("ARDOP PTT TIOCMSET");
-}
-
-
-void PutString(unsigned char * Msg)
-{
-	SerialSendData(Msg, strlen(Msg));
-}
-
-int PutChar(unsigned char c)
-{
-	SerialSendData(&c, 1);
-	return 0;
-}
-
-void CatWrite(char * Buffer, int Len)
-{
-	WriteDebugLog(5, "CAT Write Len %d %s", Len, Buffer);
-	if (hCATDevice)
-		WriteCOMBlock(hCATDevice, Buffer, Len);
 }
