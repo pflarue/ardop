@@ -14,7 +14,7 @@ LDFLAGS = -Xlinker -Map=output.map
 CC = gcc
 
 ifeq ($(OS),Windows_NT)
-OBJS += WinSerial.o Waveout.o hid.o
+OBJS += Waveout.o hid.o
 LDLIBS += -lwsock32 -lwinmm -lsetupapi -lws2_32
 RM = del /Q /F
 else
