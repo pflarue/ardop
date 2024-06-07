@@ -65,53 +65,6 @@ void Generate50BaudTwoToneLeaderTemplate()
 	fclose(fp1);
 }
 
-void GenerateTwoToneLeaderTemplate()
-{
-	// to create leader alternate these template samples reversing sign on each adjacent symbol
-    
-	int i;
-	float x, y, z;
-	int line = 0;
-
-	FILE * fp1;
-
-	char msg[80];
-	int len;
-
-	fp1 = fopen("s:\\leadercoeffs.txt", "wb");
-
-	for (i = 0; i < 120; i++)
-	{
-		y = (sin(((1500.0 - 50) / 1500) * (i / 8.0 * 2 * M_PI)));
-		z = (sin(((1500.0 + 50) / 1500) * (i / 8.0 * 2 * M_PI)));
-
-		x = intAmp * 0.6 * (y - z);
-		intTwoToneLeaderTemplate[i] = (short)x + 0.5;
-
-		if ((i - line) == 9)
-		{
-			// print the last 10 values
-
-			len = sprintf(msg, "\t%d, %d, %d, %d, %d, %d, %d, %d, %d, %d\n",
-				intTwoToneLeaderTemplate[line],
-				intTwoToneLeaderTemplate[line + 1],
-				intTwoToneLeaderTemplate[line + 2],
-				intTwoToneLeaderTemplate[line + 3],
-				intTwoToneLeaderTemplate[line + 4],
-				intTwoToneLeaderTemplate[line + 5],
-				intTwoToneLeaderTemplate[line + 6],
-				intTwoToneLeaderTemplate[line + 7],
-				intTwoToneLeaderTemplate[line + 8],
-				intTwoToneLeaderTemplate[line + 9]);
-
-			line = i + 1;
-
-			fwrite(msg, 1, len, fp1);
-		}
-	}		
-	fclose(fp1);
-}
-
 // Subroutine to create the FSK symbol templates
 
 void GenerateFSKTemplates()
