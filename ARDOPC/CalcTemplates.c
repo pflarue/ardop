@@ -340,6 +340,7 @@ void GenerateFSKTemplates()
 //	Subroutine to create the PSK symbol templates for 8 tones and 8 phases at 200 baud
 float round(float x);
 
+// obsolete versions of this code partially accommodated intBaud of 200 and 167 as well as 100.
 VOID GeneratePSKTemplates()
 {
 	// Generate templates of 120 samples (each template = 10 ms) for each of the 9 possible carriers used in PSK modulation. 
@@ -382,10 +383,7 @@ VOID GeneratePSKTemplates()
 		for (j = 0; j <= 3; j++)	// ( using only half the values and sign compliment for the opposit phases) 
 		{
 			dblAngle = 2 * M_PI * j / 8;
-
-			// 100 baud template
-
-			for (k = 0; k <= 119; k++) // for 120 samples (one 100 baud symbol, 200 baud modes will just use half of the data)
+			for (k = 0; k <= 119; k++) // for 120 samples (one 100 baud symbol)
 			{
 	//			float xx = intAmp * sin(M_PI * k / 119) * sin(dblAngle);
 	//			float xx2 = round(xx);
@@ -402,21 +400,6 @@ VOID GeneratePSKTemplates()
  		
 				dblAngle += dblCarPhaseInc[i];
 				
-				if (dblAngle >= 2 * M_PI)
-					dblAngle -= 2 * M_PI;
-			}
-			
-			// 167 baud template
-
-			dblAngle = 2 * M_PI * j / 8;
-
-			for (k = 0 ; k <= 71; k++)
-			{
-				float xx = intAmp * sin(dblAngle);
-				int xxi= (int)round(xx);
-				
-//				intPSK200bdCarTemplate[i][j][k] = (short)round(intAmp * sin(dblAngle)); // with no envelope control
-				dblAngle += dblCarPhaseInc[i];
 				if (dblAngle >= 2 * M_PI)
 					dblAngle -= 2 * M_PI;
 			}
@@ -474,57 +457,6 @@ VOID GeneratePSKTemplates()
 
 	len = sprintf(msg, "\t}}};\r\n");
 	fwrite(msg, 1, len, fp1);
-/*
-
-	len = sprintf(msg, "\tshort intPSK200bdCarTemplate[9][4][120] = \r\n");
-	fwrite(msg, 1, len, fp1);
-
-	len = sprintf(msg, "\t{{{\r\n");
-	fwrite(msg, 1, len, fp1);
-
-	for (i = 0; i <= 8; i++)		// across 9 tones
-	{
-		for (j = 0; j <= 3; j++)	// ( using only half the values and sign compliment for the opposit phases) 
-		{
-			line = 0;
-
-			for (k = 0; k <= 71; k++) // for 120 samples (one 100 baud symbol, 200 baud modes will just use half of the data)
-			{
-				if ((k - line) == 8)
-				{
-					// ony 72, so print 9 to line
-
-					len = sprintf(msg, "\t%d, %d, %d, %d, %d, %d, %d, %d, %d,\n",
-					intPSK200bdCarTemplate[i][j][line],
-					intPSK200bdCarTemplate[i][j][line + 1],
-					intPSK200bdCarTemplate[i][j][line + 2],
-					intPSK200bdCarTemplate[i][j][line + 3],
-					intPSK200bdCarTemplate[i][j][line + 4],
-					intPSK200bdCarTemplate[i][j][line + 5],
-					intPSK200bdCarTemplate[i][j][line + 6],
-					intPSK200bdCarTemplate[i][j][line + 7],
-					intPSK200bdCarTemplate[i][j][line + 8]);
-
-					line = k + 1;
-
-					if (k == 71)
-					{
-						len += sprintf(&msg[len-2], "},\r\n\t{");
-						len -=2;
-					}
-					fwrite(msg, 1, len, fp1);
-				}
-			}
-//			len = sprintf(msg, "\t}{\r\n");
-//			fwrite(msg, 1, len, fp1);
-		}
-		len = sprintf(msg, "\t}}{{\r\n");
-		fwrite(msg, 1, len, fp1);
-	}
-
-	len = sprintf(msg, "\t}}};\r\n");
-	fwrite(msg, 1, len, fp1);
-*/
 	fclose(fp1);
 	
 }

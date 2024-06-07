@@ -480,10 +480,8 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
                 
 			bytLastSym[intCarIndex] = bytSymToSend;
 
-			if (intBaud == 100)
-				intSample += intPSK100bdCarTemplate[intCarIndex][0][n];  // double the symbol value during template lookup for 4PSK. (skips over odd PSK 8 symbols)
-			else
-				intSample += intPSK200bdCarTemplate[intCarIndex][0][n]; // subtract 2 from the symbol value before doubling and subtract value of table 
+			// obsolete versions of this code accommodated intBaud == 200 as well as 100.
+			intSample += intPSK100bdCarTemplate[intCarIndex][0][n];  // double the symbol value during template lookup for 4PSK. (skips over odd PSK 8 symbols)
 
 			intCarIndex += 1;
 			if (intCarIndex == 4)
@@ -513,20 +511,11 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 						bytSym = (bytMask & bytEncodedBytes[intDataPtr + i * intDataBytesPerCar]) >> (2 * (3 - k));
 						bytSymToSend = ((bytLastSym[intCarIndex] + bytSym) & 3);  // Values 0-3
 			
-						if (intBaud == 100)
-						{
-							if (bytSymToSend < 2)
-								intSample += intPSK100bdCarTemplate[intCarIndex][bytSymToSend * 2][n];  // double the symbol value during template lookup for 4PSK. (skips over odd PSK 8 symbols)
-							else
-								intSample -= intPSK100bdCarTemplate[intCarIndex][2 * (bytSymToSend - 2)][n]; // subtract 2 from the symbol value before doubling and subtract value of table 
-						}
+						// obsolete versions of this code accommodated intBaud == 200 as well as 100.
+						if (bytSymToSend < 2)
+							intSample += intPSK100bdCarTemplate[intCarIndex][bytSymToSend * 2][n];  // double the symbol value during template lookup for 4PSK. (skips over odd PSK 8 symbols)
 						else
-						{
-							if (bytSymToSend < 2)
-								intSample += intPSK200bdCarTemplate[intCarIndex][bytSymToSend * 2][n];  // double the symbol value during template lookup for 4PSK. (skips over odd PSK 8 symbols)
-							else
-								intSample -= intPSK200bdCarTemplate[intCarIndex][2 * (bytSymToSend - 2)][n]; // subtract 2 from the symbol value before doubling and subtract value of table 
-						}
+							intSample -= intPSK100bdCarTemplate[intCarIndex][2 * (bytSymToSend - 2)][n]; // subtract 2 from the symbol value before doubling and subtract value of table 
 						if (n == intSampPerSym - 1)		// Last sample?
 							bytLastSym[intCarIndex] = bytSymToSend;
 
@@ -572,21 +561,11 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 						bytSym = GetSym8PSK(intDataPtr, k, i, bytEncodedBytes, intDataBytesPerCar);
 						bytSymToSend = ((bytLastSym[intCarIndex] + bytSym) & 7);	// mod 8
 				
-						if (intBaud == 100)
-						{
-							if (bytSymToSend < 4) // This uses the symmetry of the symbols to reduce the table size by a factor of 2
-								intSample += intPSK100bdCarTemplate[intCarIndex][bytSymToSend][n]; // positive phase values template lookup for 8PSK.
-							else
-								intSample -= intPSK100bdCarTemplate[intCarIndex][bytSymToSend - 4][n]; // negative phase values,  subtract value of table 
-						}
+						// obsolete versions of this code accommodated intBaud == 200 as well as 100.
+						if (bytSymToSend < 4) // This uses the symmetry of the symbols to reduce the table size by a factor of 2
+							intSample += intPSK100bdCarTemplate[intCarIndex][bytSymToSend][n]; // positive phase values template lookup for 8PSK.
 						else
-						{
-							if (bytSymToSend < 4) // This uses the symmetry of the symbols to reduce the table size by a factor of 2
-								intSample += intPSK200bdCarTemplate[intCarIndex][bytSymToSend][n]; // positive phase values template lookup for 8PSK.
-							else
-								intSample -= intPSK200bdCarTemplate[intCarIndex][bytSymToSend - 4][n]; // negative phase values,  subtract value of table 
-						}
-
+							intSample -= intPSK100bdCarTemplate[intCarIndex][bytSymToSend - 4][n]; // negative phase values,  subtract value of table 
 						if (n == intSampPerSym - 1)		// Last sample?
 							bytLastSym[intCarIndex] = bytSymToSend;
 
@@ -628,8 +607,6 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 						bytSym = (bytMask & bytEncodedBytes[intDataPtr + i * intDataBytesPerCar]) >> (4 * (1 - k));
 						bytSymToSend = (bytLastSym[intCarIndex] + (bytSym & 7)) & 7;  // Values 0-7
 								
-					//if (intBaud == 100) only use 100
-					//{
 						if (bytSym < 8)
 						{
 							if (bytSymToSend < 4) // This uses the symmetry of the symbols to reduce the table size by a factor of 2
@@ -644,7 +621,6 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 							else
 								intSample -= 0.5f * intPSK100bdCarTemplate[intCarIndex][bytSymToSend - 4][n]; // negative phase values,  subtract value of table 
 						}
-					//}	
 						if (n == intSampPerSym - 1)		// Last sample?
 							bytLastSym[intCarIndex] = bytSymToSend;
 					

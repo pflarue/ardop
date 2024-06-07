@@ -910,14 +910,11 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			DrawRXFrame(0, Name(intFrameType));
 			wg_send_rxframet(0, 0, Name(intFrameType));
 
-			if (intBaud == 25)
-				intSampPerSym = 480;
+			// obsolete versions of this code also accommodated intBaud of 25 and 167.
 			if (intBaud == 50)
 				intSampPerSym = 240;
 			else if (intBaud == 100)
 				intSampPerSym = 120;
-			else if (intBaud == 167)
-				intSampPerSym = 72;
 			else if (intBaud == 600)
 				intSampPerSym = 20;
 
@@ -4185,10 +4182,8 @@ VOID InitDemodPSK()
 	else
 		dblPhaseInc = 2 * M_PI * 1000 / 4;
 
-	if (intBaud == 167)
-		intSampPerSym = 72;
-	else
-		intSampPerSym = 120;
+	// obsolete versions of this code accommodated intBaud = 167 as well as 100.
+	intSampPerSym = 120;
 
 	if (intNumCar == 1)
 		intCarFreq = 1500;
@@ -4197,21 +4192,12 @@ VOID InitDemodPSK()
   
 	for (i= 0; i < intNumCar; i++)
 	{
-		if (intBaud == 100)
-		{
-			//Experimental use of Hanning Windowing
-				
-            intNforGoertzel[i] = 120;
-            dblFreqBin[i] = intCarFreq / 100;
-            intCP[i] = 0;
-		}
-		else if (intBaud == 167)
-		{
-			intCP[i] = 6;  // Need to optimize wwith multi path channels (little difference between 6 and 12 @ wgn10, 4 Car 1000 Hz)
-  
-            intNforGoertzel[i] = 60;
-            dblFreqBin[i] = intCarFreq / 200;
-		}
+	// obsolete versions of this code accommodated intBaud = 167 as well as 100.
+		//Experimental use of Hanning Windowing
+			
+        intNforGoertzel[i] = 120;
+        dblFreqBin[i] = intCarFreq / 100;
+        intCP[i] = 0;
  
 /*		if (intBaud == 100 && intCarFreq == 1500) 
 		{
@@ -4222,12 +4208,6 @@ VOID InitDemodPSK()
 		else if (intBaud == 100)
 		{
 			intCP[i] = 28; // This value selected for best decoding percentage (56%) and best Averag 4PSK Quality (77) on mpg +5 dB
-			intNforGoertzel[i] = 60;
-			dblFreqBin[i] = intCarFreq / 200;
-		}
-		else if (intBaud == 167)
-		{
-			intCP[i] = 6;  // Need to optimize (little difference between 6 and 12 @ wgn5, 2 Car 500 Hz)
 			intNforGoertzel[i] = 60;
 			dblFreqBin[i] = intCarFreq / 200;
 		}
