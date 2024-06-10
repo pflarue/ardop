@@ -1,27 +1,25 @@
-
-
 #ifndef ARDOPCHEADERDEFINED
 #define ARDOPCHEADERDEFINED
 
 extern const char ProductName[];
 extern const char ProductVersion[];
 
-//#define USE_SOUNDMODEM
+// #define USE_SOUNDMODEM
 
-//	Sound interface buffer size
+// Sound interface buffer size
 
-#define SendSize 1200		// 100 mS for now
-// #define ReceiveSize 512	// Must be 1024 for FFT (or we will need torepack frames)
+#define SendSize 1200  // 100 mS for now
+// #define ReceiveSize 512  // Must be 1024 for FFT (or we will need torepack frames)
 #define NumberofinBuffers 4
 
 // Host to TNC Buffer Size
 #define DATABUFFERSIZE 100000
 
-#ifndef _WIN32_WINNT		// Allow use of features specific to Windows XP or later.                   
-#define _WIN32_WINNT 0x0501	// Change this to the appropriate value to target other versions of Windows.
-#endif						
+#ifndef _WIN32_WINNT  // Allow use of features specific to Windows XP or later.
+#define _WIN32_WINNT 0x0501  // Change this to the appropriate value to target other versions of Windows.
+#endif
 
-#define WIN32_LEAN_AND_MEAN		// Exclude rarely-used stuff from Windows headers
+#define WIN32_LEAN_AND_MEAN  // Exclude rarely-used stuff from Windows headers
 #define _CRT_SECURE_NO_DEPRECATE
 
 #ifndef WIN32
@@ -43,12 +41,12 @@ extern unsigned int pttOnTime;
 
 #define Now getTicks()
 
-// DebugLog Severity Levels 
+// DebugLog Severity Levels
 
-#define LOGEMERGENCY 0 
+#define LOGEMERGENCY 0
 #define LOGALERT 1
-#define LOGCRIT 2 
-#define LOGERROR 3 
+#define LOGCRIT 2
+#define LOGERROR 3
 #define LOGWARNING 4
 #define LOGNOTICE 5
 #define LOGINFO 6
@@ -67,7 +65,7 @@ extern unsigned int pttOnTime;
 #undef M_PI
 #endif
 
-#define M_PI       3.1415926f
+#define M_PI 3.1415926f
 
 #ifndef WIN32
 #define LINUX
@@ -77,7 +75,7 @@ extern unsigned int pttOnTime;
 #define ARMLINUX
 #endif
 
-#define UseGUI			// Enable GUI Front End Support
+#define UseGUI  // Enable GUI Front End Support
 
 #ifdef UseGUI
 
@@ -99,7 +97,7 @@ extern unsigned int pttOnTime;
 #define WHITE 0
 #define Tomato 1
 #define Gold 2
-#define Lime 3	
+#define Lime 3
 #define Yellow 4
 #define Orange 5
 #define Khaki 6
@@ -107,7 +105,7 @@ extern unsigned int pttOnTime;
 #define DeepSkyBlue 8
 #define RoyalBlue 9
 #define Navy 10
-#define Black 11 
+#define Black 11
 #define Goldenrod 12
 #define Fuchsia 13
 
@@ -131,7 +129,7 @@ BOOL KeyPTT(BOOL State);
 
 UCHAR FrameCode(char * strFrameName);
 BOOL FrameInfo(UCHAR bytFrameType, int * blnOdd, int * intNumCar, char * strMod,
-   int * intBaud, int * intDataLen, int * intRSLen, UCHAR * bytQualThres, char * strType);
+int * intBaud, int * intDataLen, int * intRSLen, UCHAR * bytQualThres, char * strType);
 
 void ClearDataToSend();
 int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigned char * bytEncodedBytes);
@@ -151,7 +149,7 @@ void AddDataToDataToSend(UCHAR * bytNewData, int Len);
 BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL blnSendID);
 void SendID(BOOL blnEnableCWID);
 BOOL CheckGSSyntax(char * GS);
-//void SetARDOPProtocolState(int value);
+// void SetARDOPProtocolState(int value);
 unsigned int GenCRC16(unsigned char * Data, unsigned short length);
 void SendCommandToHost(char * Cmd);
 void TCPSendCommandToHost(char * Cmd);
@@ -203,7 +201,7 @@ VOID CloseCOMPort(HANDLE fd);
 VOID COMClearRTS(HANDLE fd);
 VOID COMClearDTR(HANDLE fd);
 
-//#ifdef WIN32
+// #ifdef WIN32
 void ProcessNewSamples(short * Samples, int nSamples);
 VOID Debugprintf(const char * format, ...);
 VOID WriteDebugLog(int LogLevel, const char * format, ...);
@@ -212,7 +210,7 @@ BOOL GetNextFECFrame();
 void GenerateFSKTemplates();
 void printtick(char * msg);
 void InitValidFrameTypes();
-//#endif
+// #endif
 
 extern void Generate50BaudTwoToneLeaderTemplate();
 extern BOOL blnDISCRepeating;
@@ -242,7 +240,7 @@ VOID LostHost();
 int ReadCOMBlock(HANDLE fd, char * Block, int MaxLength);
 VOID ProcessDEDModeFrame(UCHAR * rxbuffer, unsigned int Length);
 
-int SendtoGUI(char Type, unsigned char * Msg, int Len);	
+int SendtoGUI(char Type, unsigned char * Msg, int Len);
 void DrawTXFrame(const char * Frame);
 void DrawRXFrame(int State, const char * Frame);
 void mySetPixel(unsigned char x, unsigned char y, unsigned int Colour);
@@ -259,7 +257,7 @@ extern int stcLastPingintRcvdSN;
 extern int stcLastPingintQuality;
 extern time_t stcLastPingdttTimeReceived;
 
-enum _ReceiveState		// used for initial receive testing...later put in correct protocol states
+enum _ReceiveState  // used for initial receive testing...later put in correct protocol states
 {
 	SearchingForLeader,
 	AcquireSymbolSync,
@@ -295,9 +293,9 @@ enum _ARDOPState
 	DISC,
 	ISS,
 	IRS,
-	IDLE,     // ISS in quiet state ...no transmissions)
-	IRStoISS, // IRS during transition to ISS waiting for ISS's ACK from IRS's BREAK
- 	FECSend,
+	IDLE,  // ISS in quiet state ...no transmissions)
+	IRStoISS,  // IRS during transition to ISS waiting for ISS's ACK from IRS's BREAK
+	FECSend,
 	FECRcv
 };
 
@@ -364,11 +362,11 @@ extern struct SEM Semaphore;
 extern const short intTwoToneLeaderTemplate[120];  // holds just 1 symbol (0 ms) of the leader
 extern const short int50BaudTwoToneLeaderTemplate[240];  // holds just 1 symbol (20 ms) of the leader
 
-extern const short intPSK100bdCarTemplate[9][4][120];	// The actual templates over 9 carriers for 4 phase values and 120 samples
-    //   (only positive Phase values are in the table, sign reversal is used to get the negative phase values) This reduces the table size from 7680 to 3840 integers
-extern const short intFSK50bdCarTemplate[4][240];		// Template for 4FSK carriers spaced at 50 Hz, 50 baud
-extern const short intFSK100bdCarTemplate[20][120];		// Template for 4FSK carriers spaced at 100 Hz, 100 baud
-extern const short intFSK600bdCarTemplate[4][20];		// Template for 4FSK carriers spaced at 600 Hz, 600 baud  (used for FM only)
+extern const short intPSK100bdCarTemplate[9][4][120];  // The actual templates over 9 carriers for 4 phase values and 120 samples
+// (only positive Phase values are in the table, sign reversal is used to get the negative phase values) This reduces the table size from 7680 to 3840 integers
+extern const short intFSK50bdCarTemplate[4][240];  // Template for 4FSK carriers spaced at 50 Hz, 50 baud
+extern const short intFSK100bdCarTemplate[20][120];  // Template for 4FSK carriers spaced at 100 Hz, 100 baud
+extern const short intFSK600bdCarTemplate[4][20];  // Template for 4FSK carriers spaced at 600 Hz, 600 baud  (used for FM only)
 
 // Config Params
 extern char GridSquare[9];
@@ -409,18 +407,18 @@ extern BOOL useGPIO;
 extern int pttGPIOPin;
 extern BOOL pttGPIOInvert;
 
-extern HANDLE hCATDevice;		// port for Rig Control
+extern HANDLE hCATDevice;  // port for Rig Control
 extern char CATPort[80];
 extern int CATBAUD;
 extern int EnableHostCATRX;
 
-extern HANDLE hPTTDevice;			// port for PTT
-extern char PTTPort[80];			// Port for Hardware PTT - may be same as control port.
+extern HANDLE hPTTDevice;  // port for PTT
+extern char PTTPort[80];  // Port for Hardware PTT - may be same as control port.
 extern int PTTBAUD;
 
-#define PTTRTS		1
-#define PTTDTR		2
-#define PTTCI_V		4
+#define PTTRTS 1
+#define PTTDTR 2
+#define PTTCI_V 4
 
 extern UCHAR PTTOnCmd[];
 extern UCHAR PTTOnCmdLen;
@@ -428,7 +426,7 @@ extern UCHAR PTTOnCmdLen;
 extern UCHAR PTTOffCmd[];
 extern UCHAR PTTOffCmdLen;
 
-extern int PTTMode;				// PTT Control Flags.
+extern int PTTMode;  // PTT Control Flags.
 
 
 
@@ -439,7 +437,7 @@ extern char * PlaybackDevices;
 extern int dttCodecStarted;
 extern int dttStartRTMeasure;
 
-extern int intCalcLeader;        // the computed leader to use based on the reported Leader Length
+extern int intCalcLeader;  // the computed leader to use based on the reported Leader Length
 
 extern const char strFrameType[256][18];
 extern const char shortFrameType[256][12];
@@ -544,7 +542,7 @@ extern int int4FSKQualityCnts;
 extern int intFSKSymbolsDecoded;
 extern int intPSKQuality[2];
 extern int intPSKQualityCnts[2];
-extern int intPSKSymbolsDecoded; 
+extern int intPSKSymbolsDecoded;
 
 extern int intQAMQuality;
 extern int intQAMQualityCnts;
@@ -562,7 +560,7 @@ extern int LastBusyOn;
 extern int LastBusyOff;
 extern int dttLastLeaderDetect;
 
-extern int initMode;		 // 0 - 4PSK 1 - 8PSK 2 = 16QAM
+extern int initMode;  // 0 - 4PSK 1 - 8PSK 2 = 16QAM
 
 // Has to follow enum defs
 
