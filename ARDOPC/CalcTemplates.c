@@ -9,7 +9,7 @@
 // used to generate modulation samples.
 
 // Rick's code gererates them dynamically as program start, but
-// that measns they have to be in RAM. By pregenerating and 
+// that measns they have to be in RAM. By pregenerating and
 // compliling them they can be placed in program space
 // This is necessary with the small RAM space of embedded CPUs
 
@@ -19,7 +19,7 @@
 
 FILE * fout;
 
-#pragma warning(disable : 4244)		// Code does lots of int float to int
+#pragma warning(disable : 4244)  // Code does lots of int float to int
 
 // These are the values found in the existing ardopSampleArrays.c
 // Newly calculated values will be compared to these so that a summary
@@ -38,7 +38,7 @@ short intNewFSK600bdCarTemplate[4][20];
 short intNewFSK100bdCarTemplate[4][120];
 short intNewPSK100bdCarTemplate[9][4][120];
 
-static int intAmp = 26000;	   // Selected to have some margin in calculations with 16 bit values (< 32767) this must apply to all filters as well. 
+static int intAmp = 26000;  // Selected to have some margin in calculations with 16 bit values (< 32767) this must apply to all filters as well.
 
 void Generate50BaudTwoToneLeaderTemplate()
 {
@@ -104,14 +104,14 @@ void GenerateFSKTemplates()
 {
 	// Generate templates of 240 samples (each symbol template = 20 ms) for each of the 4 possible carriers used in 200 Hz BW 4FSK modulation.
 	// Generate templates of 120 samples (each symbol template = 10 ms) for each of the 4 possible carriers used in 500 Hz BW 4FSK modulation.
-	//Used to speed up computation of FSK frames and reduce use of Sin functions.
-	//50 baud Tone values 
+	// Used to speed up computation of FSK frames and reduce use of Sin functions.
+	// 50 baud Tone values
 
 	// obsolete versions of this code accommodated multi-carrier FSK
 	float dblCarFreq[] = {1425, 1475, 1525, 1575};
 
-	float dblAngle;		// Angle in radians
-	float dblCarPhaseInc[20]; 
+	float dblAngle;  // Angle in radians
+	float dblCarPhaseInc[20];
 	int i, k;
 
 	char msg[256];
@@ -127,21 +127,21 @@ void GenerateFSKTemplates()
 	);
 	fwrite(msg, 1, len, fout);
 
-    for (i = 0; i < 4; i++) 
+	for (i = 0; i < 4; i++)
 	{
 		dblCarPhaseInc[i] = 2 * M_PI * dblCarFreq[i] / 12000;
 	}
-	
+
 	// Now compute the templates: (960 16 bit values total)
-	
-	for (i = 0; i < 4; i++)			// across the 4 tones for 50 baud frequencies
+
+	for (i = 0; i < 4; i++)  // across the 4 tones for 50 baud frequencies
 	{
 		dblAngle = 0;
 		// 50 baud template
 
 		line = 0;
 
-		for (k = 0; k < 240; k++)	// for 240 samples (one 50 baud symbol)
+		for (k = 0; k < 240; k++)  // for 240 samples (one 50 baud symbol)
 		{
 			// with no envelope control (factor 1.1 chosen emperically to keep
 			// FSK peak amplitude slightly below 2 tone peak)
@@ -150,7 +150,7 @@ void GenerateFSKTemplates()
 
 			if (dblAngle >= 2 * M_PI)
 				dblAngle -= 2 * M_PI;
-		
+
 			if ((k - line) == 9)
 			{
 				// print the last 10 values
@@ -185,7 +185,7 @@ void GenerateFSKTemplates()
 		}
 	}
 
-	//  100 baud Tone values for a single carrier case 
+	// 100 baud Tone values for a single carrier case
 	// the 100 baud carrier frequencies in Hz
 
 	// obsolete versions of this code accommodated multi-carrier FSK
@@ -195,7 +195,7 @@ void GenerateFSKTemplates()
 	dblCarFreq[3] = 1650;
 
 	// Compute the phase inc per sample
-   
+
 	for (i = 0; i < 4; i++)
 	{
 		dblCarPhaseInc[i] = 2 * M_PI * dblCarFreq[i] / 12000;
@@ -206,8 +206,8 @@ void GenerateFSKTemplates()
 	for (i = 0; i < 4; i++)	 // across 4 tones
 	{
 		dblAngle = 0;
-		//'100 baud template
-		for (k = 0; k < 120; k++)		// for 120 samples (one 100 baud symbol)
+		// 100 baud template
+		for (k = 0; k < 120; k++)  // for 120 samples (one 100 baud symbol)
 		{
 			short work = intAmp * 1.1 * sin(dblAngle);
 			// with no envelope control (factor 1.1 chosen emperically to keep
@@ -228,42 +228,42 @@ void GenerateFSKTemplates()
 	);
 	fwrite(msg, 1, len, fout);
 
-	for (i = 0; i < 4; i++)		// across 4 tones
+	for (i = 0; i < 4; i++)  // across 4 tones
 	{
-			line = 0;
+		line = 0;
 
-			for (k = 0; k <= 119; k++) // for 120 samples (one 100 baud symbol)
+		for (k = 0; k <= 119; k++)  // for 120 samples (one 100 baud symbol)
+		{
+			if ((k - line) == 9)
 			{
-				if ((k - line) == 9)
-				{
-					// print 10 to line
-					if (line == 0)
-						sprintf(prefix, "\t{");
-					else
-						sprintf(prefix, "\t");
-					if (i == 3 && k + 1 == 120)
-						sprintf(suffix, "}\n};\n\n\n");
-					else if (k + 1 == 120)
-						sprintf(suffix, "},\n\n");
-					else
-						sprintf(suffix, ",\n");
-					len = sprintf(msg, "%s%d, %d, %d, %d, %d, %d, %d, %d, %d, %d%s",
-					prefix,
-					intNewFSK100bdCarTemplate[i][line],
-					intNewFSK100bdCarTemplate[i][line + 1],
-					intNewFSK100bdCarTemplate[i][line + 2],
-					intNewFSK100bdCarTemplate[i][line + 3],
-					intNewFSK100bdCarTemplate[i][line + 4],
-					intNewFSK100bdCarTemplate[i][line + 5],
-					intNewFSK100bdCarTemplate[i][line + 6],
-					intNewFSK100bdCarTemplate[i][line + 7],
-					intNewFSK100bdCarTemplate[i][line + 8],
-					intNewFSK100bdCarTemplate[i][line + 9],
-					suffix);
+				// print 10 to line
+				if (line == 0)
+					sprintf(prefix, "\t{");
+				else
+					sprintf(prefix, "\t");
+				if (i == 3 && k + 1 == 120)
+					sprintf(suffix, "}\n};\n\n\n");
+				else if (k + 1 == 120)
+					sprintf(suffix, "},\n\n");
+				else
+					sprintf(suffix, ",\n");
+				len = sprintf(msg, "%s%d, %d, %d, %d, %d, %d, %d, %d, %d, %d%s",
+				prefix,
+				intNewFSK100bdCarTemplate[i][line],
+				intNewFSK100bdCarTemplate[i][line + 1],
+				intNewFSK100bdCarTemplate[i][line + 2],
+				intNewFSK100bdCarTemplate[i][line + 3],
+				intNewFSK100bdCarTemplate[i][line + 4],
+				intNewFSK100bdCarTemplate[i][line + 5],
+				intNewFSK100bdCarTemplate[i][line + 6],
+				intNewFSK100bdCarTemplate[i][line + 7],
+				intNewFSK100bdCarTemplate[i][line + 8],
+				intNewFSK100bdCarTemplate[i][line + 9],
+				suffix);
 
-					line = k + 1;
-					fwrite(msg, 1, len, fout);
-				}
+				line = k + 1;
+				fwrite(msg, 1, len, fout);
+			}
 		}
 	}
 
@@ -285,10 +285,10 @@ void GenerateFSKTemplates()
 
 	// Now compute the templates:
 
-	for (i = 0; i < 4; i++)	 // across 20 tones
+	for (i = 0; i < 4; i++)  // across 20 tones
 	{
 		dblAngle = 0;
-		for (k = 0; k < 20; k++)		// for 20 samples (one 600 baud symbol)
+		for (k = 0; k < 20; k++)  // for 20 samples (one 600 baud symbol)
 		{
 			short work = intAmp * 1.1 * sin(dblAngle);
 			// with no envelope control (factor 1.1 chosen emperically to keep
@@ -306,54 +306,54 @@ void GenerateFSKTemplates()
 		"const short intFSK600bdCarTemplate[4][20] = {\n");
 	fwrite(msg, 1, len, fout);
 
-	for (i = 0; i < 4; i++)		// across 4 tones
+	for (i = 0; i < 4; i++)  // across 4 tones
 	{
-			line = 0;
-			for (k = 0; k < 20; k++) // for 20 samples (one 600 baud symbol)
+		line = 0;
+		for (k = 0; k < 20; k++)  // for 20 samples (one 600 baud symbol)
+		{
+			if ((k - line) == 9)
 			{
-				if ((k - line) == 9)
-				{
-					// print 10 to line
-					if (line == 0)
-						sprintf(prefix, "\t{");
-					else
-						sprintf(prefix, "\t");
-					if (i == 3 && k + 1 == 20)
-						sprintf(suffix, "}\n};\n\n");
-					else if (k + 1 == 20)
-						sprintf(suffix, "},\n\n");
-					else
-						sprintf(suffix, ",\n");
-					len = sprintf(msg, "%s%d, %d, %d, %d, %d, %d, %d, %d, %d, %d%s",
-					prefix,
-					intNewFSK600bdCarTemplate[i][line],
-					intNewFSK600bdCarTemplate[i][line + 1],
-					intNewFSK600bdCarTemplate[i][line + 2],
-					intNewFSK600bdCarTemplate[i][line + 3],
-					intNewFSK600bdCarTemplate[i][line + 4],
-					intNewFSK600bdCarTemplate[i][line + 5],
-					intNewFSK600bdCarTemplate[i][line + 6],
-					intNewFSK600bdCarTemplate[i][line + 7],
-					intNewFSK600bdCarTemplate[i][line + 8],
-					intNewFSK600bdCarTemplate[i][line + 9],
-					suffix);
+				// print 10 to line
+				if (line == 0)
+					sprintf(prefix, "\t{");
+				else
+					sprintf(prefix, "\t");
+				if (i == 3 && k + 1 == 20)
+					sprintf(suffix, "}\n};\n\n");
+				else if (k + 1 == 20)
+					sprintf(suffix, "},\n\n");
+				else
+					sprintf(suffix, ",\n");
+				len = sprintf(msg, "%s%d, %d, %d, %d, %d, %d, %d, %d, %d, %d%s",
+				prefix,
+				intNewFSK600bdCarTemplate[i][line],
+				intNewFSK600bdCarTemplate[i][line + 1],
+				intNewFSK600bdCarTemplate[i][line + 2],
+				intNewFSK600bdCarTemplate[i][line + 3],
+				intNewFSK600bdCarTemplate[i][line + 4],
+				intNewFSK600bdCarTemplate[i][line + 5],
+				intNewFSK600bdCarTemplate[i][line + 6],
+				intNewFSK600bdCarTemplate[i][line + 7],
+				intNewFSK600bdCarTemplate[i][line + 8],
+				intNewFSK600bdCarTemplate[i][line + 9],
+				suffix);
 
-					line = k + 1;
-					fwrite(msg, 1, len, fout);
-				}
+				line = k + 1;
+				fwrite(msg, 1, len, fout);
+			}
 		}
 	}
 }
 
-//	 Subroutine to initialize valid frame types 
+// Subroutine to initialize valid frame types
 
 // obsolete versions of this code partially accommodated intBaud of 200 and 167 as well as 100.
 void GeneratePSKTemplates()
 {
-	// Generate templates of 120 samples (each template = 10 ms) for each of the 9 possible carriers used in PSK modulation. 
+	// Generate templates of 120 samples (each template = 10 ms) for each of the 9 possible carriers used in PSK modulation.
 	// Used to speed up computation of PSK frames and reduce use of Sin functions.
 	// Amplitude values will have to be scaled based on the number of Active Carriers (1, 2, 4 or 8) initial values should be OK for 1 carrier
-	// Tone values 
+	// Tone values
 	// the carrier frequencies in Hz
 
 	int i, j ,k;
@@ -366,17 +366,16 @@ void GeneratePSKTemplates()
 
 	//  for 1 carrier modes use index 4 (1500)
 	//  for 2 carrier modes use indexes 3, 5 (1400 and 1600 Hz)
-	//  for 4 carrier modes use indexes 2, 3, 5, 6 (1200, 1400, 1600, 1800Hz) 
-	//  for 8 carrier modes use indexes 0,1,2,3,5,6,7,8 (800, 1000, 1200, 1400, 1600, 1800, 2000, 2200 Hz) 
+	//  for 4 carrier modes use indexes 2, 3, 5, 6 (1200, 1400, 1600, 1800Hz)
+	//  for 8 carrier modes use indexes 0,1,2,3,5,6,7,8 (800, 1000, 1200, 1400, 1600, 1800, 2000, 2200 Hz)
 
-	float dblCarPhaseInc[9] ;	// the phase inc per sample
+	float dblCarPhaseInc[9];  // the phase inc per sample
 
-	float dblAngle;			 // Angle in radians
+	float dblAngle;  // Angle in radians
 
-        //Dim dblPeakAmp As Double = intAmp * 0.5 ' may need to adjust 
-	
+	// Dim dblPeakAmp As Double = intAmp * 0.5  // may need to adjust
 
-		// Compute the phase inc per sample
+	// Compute the phase inc per sample
 
 	for (i = 0; i <= 8; i++)
 	{
@@ -385,12 +384,12 @@ void GeneratePSKTemplates()
 
 	// Now compute the templates: (4320 16 bit values total)
 
-	for (i = 0; i <= 8; i++)		// across 9 tones
+	for (i = 0; i <= 8; i++)  // across 9 tones
 	{
-		for (j = 0; j <= 3; j++)	// ( using only half the values and sign compliment for the opposite phases)
+		for (j = 0; j <= 3; j++)  // (using only half the values and sign compliment for the opposite phases)
 		{
 			dblAngle = 2 * M_PI * j / 8;
-			for (k = 0; k <= 119; k++) // for 120 samples (one 100 baud symbol)
+			for (k = 0; k <= 119; k++)  // for 120 samples (one 100 baud symbol)
 			{
 				// This source file (CalcTemplates.c) was not functional as
 				// inherited from g8bpq/ardop, though most of the calculations
@@ -416,7 +415,7 @@ void GeneratePSKTemplates()
 		}
 	}
 
-// Now print them
+	// Now print them
 
 	len = sprintf(msg,
 		"// Templates over 9 carriers for 4 phase values and 120 samples\n"
@@ -426,13 +425,13 @@ void GeneratePSKTemplates()
 		"const short intPSK100bdCarTemplate[9][4][120] = {\n");
 	fwrite(msg, 1, len, fout);
 
-	for (i = 0; i <= 8; i++)		// across 9 tones
+	for (i = 0; i <= 8; i++)  // across 9 tones
 	{
-		for (j = 0; j <= 3; j++)	// ( using only half the values and sign compliment for the opposite phases) 
+		for (j = 0; j <= 3; j++)  // (using only half the values and sign compliment for the opposite phases)
 		{
 			line = 0;
 
-			for (k = 0; k <= 119; k++) // for 120 samples (one 100 baud symbol)
+			for (k = 0; k <= 119; k++)  // for 120 samples (one 100 baud symbol)
 			{
 				if ((k - line) == 9)
 				{
