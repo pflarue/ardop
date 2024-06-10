@@ -926,11 +926,6 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			if (intDataLen == 600)
 				SymbolsLeft += 6;		// 600 baud has 3 * RS Blocks
 
-			// Save data rate for PTC reporting
-
-			if (Rate[intFrameType] > 0)
-				DataRate = Rate[intFrameType];
-
 			intToneMagsLength = 16 * SymbolsLeft;	// 4 tones, 2 bits per set
 			if (intDataLen == 600) {
 				// 4FSK.2000.600 decoded as three blocks

@@ -492,8 +492,6 @@ extern const UCHAR * bytValidFrameTypes;
 extern const char strAllDataModes[][15];
 extern int strAllDataModesLen;
 
-extern const short Rate[256];		// Data Rate (in bits/sec) by Frame Type
-
 
 extern BOOL newStatus;
 
