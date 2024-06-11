@@ -7,16 +7,16 @@
 
 /////////////////////////////////////////////////////////////////////////////
 //
-//  The protocol used to communicate with Webgui clients via a WebSocket
-//  connection should be considered unstable and undocumented.  It is subject
-//  to significant change without notice in future releases of ardopcf.
+// The protocol used to communicate with Webgui clients via a WebSocket
+// connection should be considered unstable and undocumented.  It is subject
+// to significant change without notice in future releases of ardopcf.
 //
 /////////////////////////////////////////////////////////////////////////////
 
 #define MAX_WG_CLIENTS 4  // maximum number of simultaneous clients
 #define WG_RSIZE 512  // maximum length of messages received from Webgui clients
-#define WG_SSIZE 2048 // maximum length of messages sent to Webgui clients
-#define MAX_AVGLEN 10 // maximum supported length of FFT averaging
+#define WG_SSIZE 2048  // maximum length of messages sent to Webgui clients
+#define MAX_AVGLEN 10  // maximum supported length of FFT averaging
 
 extern int wg_port;  // Port number of WebGui.  If 0, no WebGui
 extern char webgui_html[];
@@ -646,11 +646,11 @@ int wg_send_fftdata(float *mags, int magsLen) {
 	// data has already been rescaled.
 	lowerLimitdBfs = lowerLimitdBfs + 0.02 * ((mindBfs + (10 - AvgLen)) - lowerLimitdBfs);
 	// Similarly adjust upperLimitdBfs to about maxdBfs.
-	//upperLimitdBfs = upperLimitdBfs + 0.02 * (maxdBfs - upperLimitdBfs);
-	//if (upperLimitdBfs - lowerLimitdBfs < 40.0)
-	//	upperLimitdBfs = lowerLimitdBfs + 40.0;
+	// upperLimitdBfs = upperLimitdBfs + 0.02 * (maxdBfs - upperLimitdBfs);
+	// if (upperLimitdBfs - lowerLimitdBfs < 40.0)
+	//   upperLimitdBfs = lowerLimitdBfs + 40.0;
 	// WriteDebugLog(LOGDEBUG, "Power dBfs: min=%.1f  max=%.1f  (scale to %.0f to %.0f)",
-	//	mindBfs, maxdBfs, lowerLimitdBfs, upperLimitdBfs);
+	//   mindBfs, maxdBfs, lowerLimitdBfs, upperLimitdBfs);
 
 	return wg_send_msg(0, (char *)msgData, 105);
 }
@@ -736,7 +736,7 @@ void WebguiPoll() {
 			break;
 		}
 		switch(rdata->buf[rdata->offset]) {
-		  case '0':
+		case '0':
 			// Client connected/reconnected (no additional data)
 			// This is sent by a client upon connecting or reconnecting to
 			// the server.  Send current status values.
@@ -753,8 +753,8 @@ void WebguiPoll() {
 			wg_send_protocolmode(cnum);
 			wg_send_state(cnum);
 			// TODO: Also display ARQState?
-			//   To work well, create SetARQState() like SetARDOPProtocolState() in
-			//   ARQ.c so that it is only set changed in one place.
+			// To work well, create SetARQState() like SetARDOPProtocolState() in
+			// ARQ.c so that it is only set changed in one place.
 			wg_send_drivelevel(cnum);
 			wg_send_avglen(cnum);
 			wg_send_bandwidth(cnum);
@@ -769,14 +769,14 @@ void WebguiPoll() {
 				// future releases
 				wg_send_msg(cnum, "D|", 2);
 			break;
-		  case '2':
+		case '2':
 			if (ProtocolState == DISC)
 				NeedTwoToneTest = true;
 			else
 				wg_send_alert(cnum, "Cannot send Two Tone Test from ProtocolState = %s.",
 					ARDOPStates[ProtocolState]);
 			break;
-		  case 'H':
+		case 'H':
 			// Host command
 			if (!WG_DevMode) {
 				WriteDebugLog(LOGWARNING,
@@ -790,7 +790,7 @@ void WebguiPoll() {
 			WriteDebugLog(LOGDEBUG, "Host command (from Webgui): '%s'", tmpdata);
 			ProcessCommandFromHost(tmpdata);
 			break;
-		  case 'I':
+		case 'I':
 			if (ProtocolState != DISC)
 				wg_send_alert(cnum, "Cannot send ID from ProtocolState = %s.",
 					ARDOPStates[ProtocolState]);
@@ -799,7 +799,7 @@ void WebguiPoll() {
 			else
 				NeedID = true;
 			break;
-		  case 0x8D:
+		case 0x8D:
 			// Client command to change DriveLevel
 			if (msglen != 3) {
 				WriteDebugLog(LOGWARNING,
@@ -818,9 +818,9 @@ void WebguiPoll() {
 			DriveLevel = (unsigned char)(rdata->buf[rdata->offset + 2]);
 			WriteDebugLog(LOGWARNING, "DriveLevel changed to %d by Webgui client cnum=%d",
 				DriveLevel, cnum);
-			wg_send_drivelevel(-cnum); // notify all other Webgui clients
+			wg_send_drivelevel(-cnum);  // notify all other Webgui clients
 			break;
-		  case 0x9A:
+		case 0x9A:
 			// Client command to change AvgLen
 			if (msglen != 3) {
 				WriteDebugLog(LOGWARNING,
@@ -838,9 +838,9 @@ void WebguiPoll() {
 				break;
 			}
 			AvgLen = (unsigned char)(rdata->buf[rdata->offset + 2]);
-			wg_send_avglen(-cnum); // notify all other Webgui clients
+			wg_send_avglen(-cnum);  // notify all other Webgui clients
 			break;
-		  default:
+		default:
 			WriteDebugLog(LOGWARNING,
 				"WARNING: Received an unexpected message of type=%d and length=%d"
 				" from Webgui client number %d.",
