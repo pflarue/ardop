@@ -11,71 +11,71 @@
 #include <stdio.h>
 #include <string.h>
 
-#define FALSE 0 // defined in ARDOPC.h
-#define TRUE 1 // defined in ARDOPC.h
-#define VOID void // defined in ARDOPC.h
-typedef unsigned char UCHAR; // defined in ARDOPC.h
-typedef int BOOL; // defined in ARDOPC.h
-#define LOGERROR 3 // defined in ARDOPC.h
-#define LOGWARNING 4 // defined in ARDOPC.h
-#define LOGDEBUG 7 // defined in ARDOPC.h
+#define FALSE 0  // defined in ARDOPC.h
+#define TRUE 1  // defined in ARDOPC.h
+#define VOID void  // defined in ARDOPC.h
+typedef unsigned char UCHAR;  // defined in ARDOPC.h
+typedef int BOOL;  // defined in ARDOPC.h
+#define LOGERROR 3  // defined in ARDOPC.h
+#define LOGWARNING 4  // defined in ARDOPC.h
+#define LOGDEBUG 7  // defined in ARDOPC.h
 
 
-#define BREAK 0x23 // defined in ARDOPC.h
-#define IDLEFRAME 0x24 // defined in ARDOPC.h
-#define DISCFRAME 0x29 // defined in ARDOPC.h
-#define END 0x2C // defined in ARDOPC.h
-#define ConRejBusy 0x2D // defined in ARDOPC.h
-#define ConRejBW 0x2E // defined in ARDOPC.h
+#define BREAK 0x23  // defined in ARDOPC.h
+#define IDLEFRAME 0x24  // defined in ARDOPC.h
+#define DISCFRAME 0x29  // defined in ARDOPC.h
+#define END 0x2C  // defined in ARDOPC.h
+#define ConRejBusy 0x2D  // defined in ARDOPC.h
+#define ConRejBW 0x2E  // defined in ARDOPC.h
 
-#define ConAck200 0x39 // defined in ARDOPC.h
-#define ConAck500 0x3A // defined in ARDOPC.h
-#define ConAck1000 0x3B // defined in ARDOPC.h
-#define ConAck2000 0x3C // defined in ARDOPC.h
-#define PINGACK 0x3D // defined in ARDOPC.h
-#define PING 0x3E // defined in ARDOPC.h
+#define ConAck200 0x39  // defined in ARDOPC.h
+#define ConAck500 0x3A  // defined in ARDOPC.h
+#define ConAck1000 0x3B  // defined in ARDOPC.h
+#define ConAck2000 0x3C  // defined in ARDOPC.h
+#define PINGACK 0x3D  // defined in ARDOPC.h
+#define PING 0x3E  // defined in ARDOPC.h
 
 extern const char strFrameType[256][18];  // defined in ARDOPC.c
-extern int LeaderLength;   // defined in ARDOPC.c
-extern int intLastRcvdFrameQuality; // defined in ARDOPC.c
+extern int LeaderLength;  // defined in ARDOPC.c
+extern int intLastRcvdFrameQuality;  // defined in ARDOPC.c
 
-extern unsigned char bytEncodedBytes[1800]; // defined in ARDOPC.c, extern in ARDOPC.h
-extern int EncLen; // defined in ARDOPC.C, extern in ARDOPC.h
-extern char Callsign[10]; // defined in ARDOPC.c. extern in ARDOPC.h
+extern unsigned char bytEncodedBytes[1800];  // defined in ARDOPC.c, extern in ARDOPC.h
+extern int EncLen;  // defined in ARDOPC.C, extern in ARDOPC.h
+extern char Callsign[10];  // defined in ARDOPC.c. extern in ARDOPC.h
 extern char GridSquare[9];  // defined in ARDOPC.c. extern in ARDOPC.h
-extern int ARQBandwidth; // defined as enum _ARQBandwidth ARQBandwidth in ARDOPC.c. extern in ARDOPC.h
-extern int  CallBandwidth; // defined as enum _ARQBandwidth CallBandwidth in ARDOPC.c. extern in ARDOPC.h
-extern int stcLastPingintRcvdSN; // defined in ARDOPC.c updated in SoundInput.c
-extern int stcLastPingintQuality; // defined in ARDOPC.c updated in SoundInput.c
+extern int ARQBandwidth;  // defined as enum _ARQBandwidth ARQBandwidth in ARDOPC.c. extern in ARDOPC.h
+extern int  CallBandwidth;  // defined as enum _ARQBandwidth CallBandwidth in ARDOPC.c. extern in ARDOPC.h
+extern int stcLastPingintRcvdSN;  // defined in ARDOPC.c updated in SoundInput.c
+extern int stcLastPingintQuality;  // defined in ARDOPC.c updated in SoundInput.c
 
-#define UNDEFINED 8 // Implicit in enum _ARQBandwidth in ARDOPC.h
+#define UNDEFINED 8  // Implicit in enum _ARQBandwidth in ARDOPC.h
 
-extern UCHAR bytSessionID; // defined in ARQ.c
+extern UCHAR bytSessionID;  // defined in ARQ.c
 extern BOOL blnEnbARQRpt;  // defined in ARQ.c
 extern const char ARQBandwidths[9][12];  // defined in ARQ.c. ref in ARDOPC.h
 
-extern int intLeaderRcvdMs; // defined and updated in SoundInput.c. ref in ARQ.c
+extern int intLeaderRcvdMs;  // defined and updated in SoundInput.c. ref in ARQ.c
 
 VOID WriteDebugLog(int LogLevel, const char * format, ...);  // defined in ALSASound.c and Wavout.c. ref in ardopcommon.h and ARDOPC.h
 
-int EncodeDATANAK(int intQuality , UCHAR bytSessionID, UCHAR * bytreturn); // defined in ARDOPC.c. ref in ARDOPC.h
-int Encode4FSKControl(UCHAR bytFrameType, UCHAR bytSessionID, UCHAR * bytreturn); // defined in ARDOPC.c. ref in ARDOPC.h
-int Encode4FSKIDFrame(char * Callsign, char * Square, unsigned char * bytreturn); // defined in ARDOPC.c. ref in ARDOPC.h
+int EncodeDATANAK(int intQuality , UCHAR bytSessionID, UCHAR * bytreturn);  // defined in ARDOPC.c. ref in ARDOPC.h
+int Encode4FSKControl(UCHAR bytFrameType, UCHAR bytSessionID, UCHAR * bytreturn);  // defined in ARDOPC.c. ref in ARDOPC.h
+int Encode4FSKIDFrame(char * Callsign, char * Square, unsigned char * bytreturn);  // defined in ARDOPC.c. ref in ARDOPC.h
 // TODO: Fix bug changing this from BOOL to int
 // Changed type of ARQBandwidth here from enum to int
-BOOL EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, int ARQBandwidth, UCHAR * bytReturn); // defined in ARDOPC.c. ref in ARDOPC.h
-int EncodeConACKwTiming(UCHAR bytFrameType, int intRcvdLeaderLenMs, UCHAR bytSessionID, UCHAR * bytreturn); // defined in ARDOPC.c
-int EncodePingAck(int bytFrameType, int intSN, int intQuality, UCHAR * bytreturn); // defined in ARDOPC.c
+BOOL EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, int ARQBandwidth, UCHAR * bytReturn);  // defined in ARDOPC.c. ref in ARDOPC.h
+int EncodeConACKwTiming(UCHAR bytFrameType, int intRcvdLeaderLenMs, UCHAR bytSessionID, UCHAR * bytreturn);  // defined in ARDOPC.c
+int EncodePingAck(int bytFrameType, int intSN, int intQuality, UCHAR * bytreturn);  // defined in ARDOPC.c
 int EncodePing(char * strMyCallsign, char * strTargetCallsign, UCHAR * bytReturn);
 int EncodeDATAACK(int intQuality, UCHAR bytSessionID, UCHAR * bytreturn);  // defined in ARDOPC.c. ref in ARDOPC.h
-int EncodePSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigned char * bytEncodedBytes); // defined in ARDOPC.c. ref in ARDOPC.h
+int EncodePSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigned char * bytEncodedBytes);  // defined in ARDOPC.c. ref in ARDOPC.h
 int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigned char * bytEncodedBytes);
 
 BOOL FrameInfo(UCHAR bytFrameType, int * blnOdd, int * intNumCar, char * strMod, int * intBaud, int * intDataLen, int * intRSLen, UCHAR * bytQualThres, char * strType);  // defined in ARDOPC.c.  ref in ARDOPC.h
 
-void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen); // defined in Modulate.c. ref in ARDOPC.h
-void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen); // defined in Modulate.c. ref in ARDOPC.h
-void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen); // defined in Modulate.c. ref in ARDOPC.h
+void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);  // defined in Modulate.c. ref in ARDOPC.h
+void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);  // defined in Modulate.c. ref in ARDOPC.h
+void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);  // defined in Modulate.c. ref in ARDOPC.h
 
 
 int parse_params(char *paramstr, char *parsed[10]) {
@@ -142,13 +142,14 @@ int txframe(char * frameParams) {
 
 	// For data frames, if the data parameter starts with "_", then random data
 	// will be used.  "_" followed by a number allows the number of random bytes
-	//to be specified, else random data sufficient to fill the frame will be used.
+	// to be specified, else random data sufficient to fill the frame will be used.
 
 	// global LeaderLength will always be used.  However, this can be queried and
 	// changed with the Host command "LEADER";
 
 	// TODO: range check inputs
 	if (strcmp(params[1], "DataNAK") == 0) {
+		// TXFRAME DataNAK [quality] [sessionid]
 		// 0x00 - 0x1F DataNAK
 		int quality;
 		// Uses globals: intLastRcvdFrameQuality, bytSessionID
@@ -170,6 +171,7 @@ int txframe(char * frameParams) {
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if (strcmp(params[1], "BREAK") == 0) {
+		// TXFRAME BREAK [sessionid]
 		// 0x20 - 0x22 unused
 		// 0x23 DataNAK
 		// sessionid from 0 to 255.  Use of strtol() allows hex if prefixed with 0x of 0X
@@ -184,6 +186,7 @@ int txframe(char * frameParams) {
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if(strcmp(params[1], "IDLE") == 0) {
+		// TXFRAME IDLE [sessionid]
 		// 0x24 IDLE
 		// Uses globals: bytSessionID
 		// sessionid from 0 to 255.  Use of strtol() allows hex if prefixed with 0x of 0X
@@ -198,6 +201,7 @@ int txframe(char * frameParams) {
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if(strcmp(params[1], "DISC") == 0) {
+		// TXFRAME DISC [sessionid]
 		// 0x25 - 0x28 unused
 		// 0x29 DISC
 		// Uses globals: bytSessionID
@@ -213,6 +217,7 @@ int txframe(char * frameParams) {
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if(strcmp(params[1], "END") == 0) {
+		// TXFRAME END [sessionid]
 		// 0x2A - 0x2B unused
 		// 0x2C END
 		// Uses globals: bytSessionID
@@ -228,6 +233,7 @@ int txframe(char * frameParams) {
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if(strcmp(params[1], "ConRejBusy") == 0) {
+		// TXFRAME ConRejBusy [sessioid]
 		// 0x2D ConRejBusy
 		// Uses globals: bytSessionID.  (Normally uses bytPendingSessionID)
 		// sessionid from 0 to 255.  Use of strtol() allows hex if prefixed with 0x of 0X
@@ -242,6 +248,7 @@ int txframe(char * frameParams) {
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if(strcmp(params[1], "ConRejBW") == 0) {
+		// TXFRAME ConRejBW [sessionid]
 		// 0x2E ConRejBW
 		// Uses globals: bytSessionID.  (Normally uses bytPendingSessionID)
 		// sessionid from 0 to 255.  Use of strtol() allows hex if prefixed with 0x of 0X
@@ -256,6 +263,7 @@ int txframe(char * frameParams) {
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if(strcmp(params[1], "IDFrame") == 0) {
+		// TXFRAME IDFrame [callsign] [gridsquare]
 		// 0x2F unused
 		// 0x30 IDFrame
 		// Uses globals: Callsign, GridSquare
@@ -294,6 +302,8 @@ int txframe(char * frameParams) {
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if(strncmp(params[1], "ConReq", 6) == 0) {
+		// TXFRAME ConReq targetcallsign [mycallsign] [bandwidth]
+		// TXFRAME ConReqXXXX targetcallsign [mycallsign]
 		// 0x31 to 0x38
 		// All have unique names indicating bandwidth.  If only 'ConReq' is given,
 		// accept a parameter in the form used for ARQBW, else default to value set
@@ -301,7 +311,7 @@ int txframe(char * frameParams) {
 		// Uses globals: Callsign. CallBandwidth, ARQBandwidth
 		char targetcallsign[10];
 		char callsign[10];
-		int bandwidth_num = -1; // This is an enum value, not an actual bandwith value
+		int bandwidth_num = -1;  // This is an enum value, not an actual bandwith value
 		if (paramcount > 2 && strcmp(params[2], "_") != 0)
 			// TODO: check whether targetcallsign is valid?
 			strncpy(targetcallsign, params[2], 9);
@@ -334,7 +344,7 @@ int txframe(char * frameParams) {
 			}
 			if (bandwidth_num == -1) {
 				WriteDebugLog(LOGWARNING,
-					"TXFRAME ConReq: invalid bandwidth indicator. '%s'.'", params[1]);
+					"TXFRAME ConReq: invalid bandwidth indicator. '%s'.", params[1]);
 				return (1);
 			}
 		}
@@ -347,7 +357,7 @@ int txframe(char * frameParams) {
 			}
 			if (i == 8) {
 				WriteDebugLog(LOGWARNING,
-					"TXFRAME ConReq: invalid bandwidth='%s'.'", params[4]);
+					"TXFRAME ConReq: invalid bandwidth='%s'.", params[4]);
 				return (1);
 			} else
 				bandwidth_num = i;
@@ -374,6 +384,8 @@ int txframe(char * frameParams) {
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if(strncmp(params[1], "ConAck", 6) == 0) {
+		// TXFRAME ConAck [leaderlen] [sessionid] [bandwidth]
+		// TXFRAME ConAckXXX [leaderlen] [sessionid]
 		// 0x39 to 0x3C
 		// All have unique names indicating bandwidth.  If only 'ConAck' is given, accept a
 		// number as a parameter since, unlike ConReq, ConAck does not distinguish between
@@ -384,7 +396,7 @@ int txframe(char * frameParams) {
 		// prefixed with 0x of 0X (though this is unlikely to be useful here).
 		int frametype;
 		int rcvdleaderlen;
-		int bandwidth; // Bandwidth in Hz [200, 500, 1000, 2000]
+		int bandwidth;  // Bandwidth in Hz [200, 500, 1000, 2000]
 		// Received leader length in MS.  Default to intLeaderRcvdMs if not provided.
 		// Use of strtol() allows hex if prefixed with 0x of 0X.
 		if (paramcount > 2 && strcmp(params[2], "_") != 0)
@@ -424,6 +436,7 @@ int txframe(char * frameParams) {
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if(strcmp(params[1], "PingAck") == 0) {
+		// TXFRAME PingAck [snr] [quality]
 		// 0x3D
 		// Uses globals: stcLastPingintRcvdSN, stcLastPingintQuality
 		// SN ratio of received Ping in range of 0-21. If >= 21, result truncated.
@@ -453,6 +466,7 @@ int txframe(char * frameParams) {
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if(strcmp(params[1], "Ping") == 0) {
+		// TXFRAME Ping targetcallsign [mycallsign]
 		// 0x3$
 		// Uses globals: Callsign
 		char targetcallsign[10];
@@ -488,6 +502,7 @@ int txframe(char * frameParams) {
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if (strcmp(params[1], "DataACK") == 0) {
+		// TXFRAME DataACK [quality] [sessionid]
 		// 0xE0 - 0xFF DataACK
 		int quality;
 		// Uses globals: intLastRcvdFrameQuality, bytSessionID
@@ -508,6 +523,10 @@ int txframe(char * frameParams) {
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else {
+		// TXFRAME MOD.BW.BAUD.E/O "text data" [sessionid]
+		// TXFRAME MOD.BW.BAUD.E/O hexdigits [sessionid]
+		// TXFRAME MOD.BW.BAUD.E/O [_] [sessionid]
+		// TXFRAME MOD.BW.BAUD.E/O _bytecount [sessionid]
 		// Anything else should be a data frame.
 		int frametype;
 		unsigned char sessionid_bak;
