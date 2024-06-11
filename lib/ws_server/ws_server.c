@@ -119,14 +119,34 @@ int ws_num_http_targets = 0;  // The length of ws_http_targets list.
 unsigned int ws_max_clients = 10;
 int *state;   // WS_ACTIVE, WS_CLOSING, WS_HTTP, or WS_UNUSED
 WSAPOLLFD *pfds;  // members are fd, events, and revents.
-// global persistent [between calls to ws_poll()] bytes_remaining, cnum, and
+// global persistent [between calls to ws_poll()] remaining_rcvlen, cnum, and
 // mask are used to store information about a partially read frame.  If
-// bytes_remaining is greater than zero at the start of ws_poll(), then
+// remaining_rcvlen is greater than zero at the start of ws_poll(), then
 // that number of bytes still need to be read and unmasked from cnum.
 // Otherwise, check for any socket with data to be read.
-int bytes_remaining;
+int remaining_rcvlen = 0;
 int cnum;
 char mask[4];
+// global persistent [between calls to send_to_socket() and ws_poll()]
+// remaining_sendlen, send_cnum, remaining_senddata, retry_limit,
+// send_retries, and retry_is_http are used to store information about a
+// partially successful send_to_socket().  If remaining_sendlen is greater
+// than zero at the start of send_to_socket() or ws_poll(), then that number
+// of bytes in remaining_senddata still need to be sent, and then
+// remaining_senddata shall be free()d and set to NULL.  Any call to
+// send_to_socket() will fail until the remaining data has been sent or
+// retry_limit is exceeded (at which time that connection will be closed).
+// Because this WebSocket server implementation is designed for sending
+// small to moderate amounts of data to a small number of clients, this is
+// not expected to occur frequently.
+int remaining_sendlen = 0;
+int send_cnum = -1;
+char *remaining_senddata = NULL;
+int retry_limit = 10;
+int send_retries = 0;  // number of unsuccessfull retry attempts.
+// Set retry_is_http to true if remaining_sdata is from an http uri request
+// such that the socket should be closed after sending.
+bool retry_is_http = false;
 
 char ws_port_str[7] = "8088";  // Default.  Can be changed with ws_set_port()
 // ws_uri default can be changed with ws_set_uri().  For the typical expected
@@ -337,6 +357,10 @@ struct ws_http_target* ws_set_httptarget(char *uri, char *contenttype) {
     }
     if (ws_http_targets == NULL) {
         ws_http_targets = malloc(sizeof(struct ws_http_target));
+        if (ws_http_targets == NULL) {
+            ws_error("WS Error:  Memory allocation error for ws_http_targets.");
+            return (NULL);
+        }
         ws_num_http_targets = 1;
     }
     else
@@ -410,17 +434,112 @@ void ws_close_socket(int c_cnum)
     state[c_cnum] = WS_UNUSED;
 }
 
+// Stop attempting to retry sending data to socket.
+// This is used after success retrying or retry_limit failures.
+// This is harmless if not doing retry
+void stop_retry_send() {
+    if (remaining_sendlen == 0)
+        return;
+    if (send_cnum != -1 && retry_is_http)
+        ws_close_socket(send_cnum);
+    if (remaining_senddata != NULL)
+        free(remaining_senddata);
+    send_cnum = -1;
+    remaining_senddata = NULL;
+    remaining_sendlen = 0;
+    send_retries = 0;
+    retry_is_http = false;
+}
+
+// Return remaining_sendlen (which will be 0 if all remaining data
+// has been sent) unless retry_limit has been reached and
+// remaining_sendlen is still not zero.  In that case, close the
+// connection, retset remaining_sendlen and remaining_senddata, and
+// return -1.
+int retry_send_to_socket() {
+    if (remaining_sendlen == 0)
+        return (remaining_sendlen);
+    send_retries++;
+    int sent;
+    if ((sent = send(
+        pfds[send_cnum].fd,
+        remaining_senddata,
+        remaining_sendlen,
+        0
+    )) != remaining_sendlen) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            if (sent > 0) {
+                remaining_sendlen -= sent;
+                char *old_data = remaining_senddata;
+                remaining_senddata = (char *) malloc(remaining_sendlen);
+                if (remaining_senddata == NULL) {
+                    ws_error("WS Error:  Memory allocation error for retry send.");
+                    remaining_senddata = old_data;
+                    stop_retry_send();
+                    return (-1);
+                }
+                memcpy(remaining_senddata, old_data + sent, remaining_sendlen);
+                free(old_data);
+            }
+            ws_debug(
+                "WS: retry_send_to_socket() unable to send all of data."
+                " %d bytes remain unsent after %d retries.",
+                remaining_sendlen, send_retries
+                );
+            return (remaining_sendlen);
+        } else {
+            ws_error("WS: send failed in retry_send_to_socket().");
+            send_retries = retry_limit;
+        }
+        if (send_retries >= retry_limit) {
+            ws_error("WS: Closing connection to client %d.", send_cnum);
+            ws_close_socket(send_cnum);
+            stop_retry_send();
+            return (-1);
+        }
+        return (remaining_sendlen);
+    }
+    // Success
+    stop_retry_send();
+    return (remaining_sendlen);
+}
 
 // Send some data to the client socket number s_cnum.
 // Return -1 on error or else the number of bytes sent.
+// If return value of number of bytes sent is less than
+// data_len, then global variable remaining_sendlen
+// and send_cnum are set.
 int send_to_socket(int s_cnum, const char *data, int data_len)
 {
+    if (retry_send_to_socket() != 0)
+        return (-1);
     int sent;
     if((sent = send(pfds[s_cnum].fd, data, data_len, 0)) != data_len) {
-        // If sent is less than data_len, but not zero, then data was
-        // partially sent.  TODO: buffer unsent data and try again
-        // rather than closing connection
-        ws_error("WS: send failed. Closing connection to client %d.", s_cnum);
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            remaining_sendlen = data_len - sent;
+            send_cnum = s_cnum;
+            remaining_senddata = (char *) malloc(remaining_sendlen);
+            if (remaining_senddata == NULL) {
+                ws_error("WS Error:  Memory allocation error to retry send.");
+                stop_retry_send();
+                return (-1);
+            }
+            memcpy(remaining_senddata, data + sent, remaining_sendlen);
+            ws_debug(
+                "WS: send_to_socket() unable to send all of data."
+                " %d of %d bytes remain unsent to cnum=%d, and will"
+                " be retried by the next attempt to send or ws_poll().",
+                remaining_sendlen, data_len, send_cnum
+                );
+            return (sent);
+        }
+        ws_error(
+            "WS: send failed (%d of %d bytes sent)."
+            " errno=%d (%s)."
+            " Closing connection to client %d.",
+            sent, data_len,
+            errno, strerror(errno),
+            s_cnum);
         ws_close_socket(s_cnum);
         return (-1);
     }
@@ -492,6 +611,10 @@ int ws_handshake(const char key[24], char *buf, int buf_size)
 // If s_cnum == 0, multicast to all clients
 // If s_cnum < 0, multicast to all but -s_cnum
 // return the number of clients that frame was successfully sent to.
+// If it was possibe to send a portion of *data to any client, that
+// client will be included in the count of clients that data was
+// sent to, and any attempt to send to any of the remaining clients
+// will have failed (and used up part some of retry_limit)
 int multicast_fr(int s_cnum, char frh[SHEADSIZE], int frhlen,
     const char *data, int data_len)
 {
@@ -514,7 +637,7 @@ int multicast_fr(int s_cnum, char frh[SHEADSIZE], int frhlen,
                 // sent_to_socket() closed connection.
                 ws_error("WS: Error sending frame header to client %d.",
                     this_cnum);
-                return (-1);
+                return (target_count);
             }
             // While all frames have a header, some do not have a payload
             if (data_len && send_to_socket(this_cnum,
@@ -523,7 +646,7 @@ int multicast_fr(int s_cnum, char frh[SHEADSIZE], int frhlen,
                 // send_to_socket() closed connection.
                 ws_error("WS: Error sending frame payload to client %d.",
                     this_cnum);
-                return (-1);
+                return (target_count);
             }
             target_count++;
         }
@@ -536,7 +659,7 @@ int multicast_fr(int s_cnum, char frh[SHEADSIZE], int frhlen,
 // If s_cnum > 0, send to only that client
 // If s_cnum == 0, multicast to all clients
 // If s_cnum < 0, multicast to all but -s_cnum
-// return the number of clients that frame was successfully sent to.
+// return the number of clients that frame was successfully sent to,
 // data is a buffer of length data_len.
 int ws_send(int s_cnum, const char *data, int data_len) {
     if (!ws_listening) {
@@ -635,7 +758,7 @@ int ws_get_client_count(uint32_t *bitmap) {
 }
 
 
-// Return 0 on success, -2 on failure
+// Return 0 on success, 1 if data was partially sent and will be retried, -2 on failure
 int serve_http(struct ws_http_target *target, int s_cnum) {
     char headerbuf[WS_CONTENTTYPELEN + 40];
     sprintf(headerbuf, "HTTP/1.1 200 OK\r\nContent-type: %s\r\n\r\n\r\n",
@@ -644,8 +767,16 @@ int serve_http(struct ws_http_target *target, int s_cnum) {
         ws_debug("WS: Serving data_len=%d with contenttype='%s'"
             " for http uri='%s'.",
             target->data_len, target->contenttype, target->uri);
-        send_to_socket(s_cnum, headerbuf, strlen(headerbuf));
-        send_to_socket(s_cnum, target->data, target->data_len);
+        if (send_to_socket(s_cnum, headerbuf, strlen(headerbuf)) != (int) strlen(headerbuf)) {
+            // For this short send, consider this a failure.  Don't retry
+            stop_retry_send();
+            return (-2);
+        }
+        int sent = send_to_socket(s_cnum, target->data, target->data_len);
+        if (sent < 0)
+            return (-2);
+        if (sent < (int) target->data_len)
+            return (1);  // remaining_sendlen is set
         return (0);
     }
 
@@ -683,25 +814,35 @@ int serve_http(struct ws_http_target *target, int s_cnum) {
     }
     bptr--;
     fclose(fp);
-    // No need to check for failure of send_to_socket()?
-    send_to_socket(s_cnum, headerbuf, strlen(headerbuf));
-    send_to_socket(s_cnum, data, bptr-data);
+    if (send_to_socket(s_cnum, headerbuf, strlen(headerbuf)) != (int) strlen(headerbuf)) {
+        // For this short send, consider this a failure.  Don't retry
+        stop_retry_send();
+        return (-2);
+    }
+    int sent = send_to_socket(s_cnum, data, bptr  -data);
+    if (sent < 0)
     free(data);
+        return (-2);
+    if (sent < bptr - data)
+        return (1);  // remaining_sendlen is set
     return (0);
 }
 
 
 int sendHttpErr(const char *errstr, const char *uri, int s_cnum) {
     // errstr is expected to have the form "HTTP/1.1 %s\r\n\r\n"
-    // Don't bother checking for failure of send_to_socket().
-    send_to_socket(s_cnum, errstr, strlen(errstr));
+    // Don't bother checking for failure of send_to_socket(), except
+    // to cancel any retries
+    if (send_to_socket(s_cnum, errstr, strlen(errstr)) != (int) strlen(errstr))
+        stop_retry_send();
     ws_error("WS: Sending '%.*s' error for URI='%s'.", strlen(errstr) - 4, errstr, uri);
     ws_close_socket(s_cnum);
     return (-1);
 }
 
 
-// Return 0 for a valid/expected request
+// Return 0 for a valid/expected request including data partially
+//  sent that will be retried.
 // Return -1 for a bad or unexpected request.
 // Return -2 for an unexpected failure while processing a request.
 int process_http_req(){
@@ -760,7 +901,15 @@ int process_http_req(){
         if (strcmp(ws_http_targets[i].uri, uri) == 0) {
             // Serve the file from path associated with uri
             int ret = serve_http(&ws_http_targets[i], cnum);
-            ws_debug("WS: closing client after serving http (%d)", cnum);
+            if (ret == 1) {
+                // data was partially sent, and will be retried.
+                // So, don't close socket now, as normally done after
+                // serving http.  Instead mark as http so socket will
+                // be closed after retry.
+                retry_is_http = true;
+                return (0);
+            }
+            ws_debug("WS: closing client (normally) after serving http (%d)", cnum);
             ws_close_socket(cnum);
             return (ret);
         }
@@ -779,7 +928,8 @@ int process_http_req(){
         return sendHttpErr("HTTP/1.1 400 Bad Request\r\n\r\n", uri, cnum);
     if ((sendfrSize = ws_handshake(tmpptr + 21, hs_resp, sizeof(hs_resp))) == -1)
         return sendHttpErr("HTTP/1.1 400 Bad Request\r\n\r\n", uri, cnum);
-    if (send_to_socket(cnum, hs_resp, sendfrSize) == -1) {
+    if (send_to_socket(cnum, hs_resp, sendfrSize) != sendfrSize) {
+        stop_retry_send(); // Don't retry if only partially sent
         ws_close_socket(cnum);
         ws_error("WS: Error sending handshake response.");
         return (-1);
@@ -824,15 +974,15 @@ int read_websocket_frame(char *data, int data_size, int *opcode) {
         ws_close_socket(cnum);
         return (-1);
     }
-    bytes_remaining = wshead[1] & 0x7F;
-    if (bytes_remaining == 0x7E) {
+    remaining_rcvlen = wshead[1] & 0x7F;
+    if (remaining_rcvlen == 0x7E) {
         // Frame uses 2-byte extended payload length. Read remainder of header
         if((bytes_read += recv(pfds[cnum].fd, (char*)(wshead + 6), 2, 0)) != 8) {
             ws_error("WS: extra head recv failed");
             ws_close_socket(cnum);
             return (-1);
         }
-        bytes_remaining = (wshead[2] << 8) + wshead[3];
+        remaining_rcvlen = (wshead[2] << 8) + wshead[3];
         memcpy(mask, wshead + 4, 4);
     } else
         memcpy(mask, wshead + 2, 4);
@@ -853,12 +1003,12 @@ int read_websocket_frame(char *data, int data_size, int *opcode) {
     }
 
     // If there is a payload, read and unmask it
-    if (bytes_remaining > 0) {
+    if (remaining_rcvlen > 0) {
         // bytes_read is redefined to mean the number of bytes of the payload read.
         if((bytes_read = recv(
                 pfds[cnum].fd,
                 (char*)data,
-                data_size > bytes_remaining ? bytes_remaining : data_size,
+                data_size > remaining_rcvlen ? remaining_rcvlen : data_size,
                 0
             )) == 0)
         {
@@ -866,7 +1016,7 @@ int read_websocket_frame(char *data, int data_size, int *opcode) {
             ws_error("WS: payload recv failed");
             return (-1);
         }
-        bytes_remaining -= bytes_read;
+        remaining_rcvlen -= bytes_read;
         // unmask payload
         for (int i=0; i<bytes_read; i++)
             data[i] ^= mask[i % 4];
@@ -909,11 +1059,13 @@ int process_ws_cframe(char *data, int data_len, int opcode) {
             ws_error("WS: Error creating PONG header.");
             return (-1);
         }
-        if (send_to_socket(cnum, frh, frhlen) == -1) {
+        if (send_to_socket(cnum, frh, frhlen) != frhlen) {
+            stop_retry_send(); // Don't retry if only partially sent
             ws_error("WS: Error sending PONG frame header.");
             return (-1);
         }
-        if (data_len && send_to_socket(cnum, data, data_len) == -1) {
+        if (data_len && send_to_socket(cnum, data, data_len) != frhlen) {
+            stop_retry_send(); // Don't retry if only partially sent
             ws_error("WS: Error sending PONG frame payload.");
             return (-1);
         }
@@ -932,7 +1084,9 @@ int process_ws_cframe(char *data, int data_len, int opcode) {
 // is the payload data from the received frame.  If the data read is a
 // WebSocket control frame (Close, Ping, or Pong) that has no data, or it
 // is a valid and expected http request, then return 0.  This occurs for
-// an http upgrade request, an http GET for a recognized uri.
+// an http upgrade request, an http GET for a recognized uri (including a
+// result that was only partially sent, ready to be retried with the next
+// send_to_socket() or ws_poll).
 // data_size is the maximum number of bytes that can be stored in *data.  If the
 // payload of a binary frame is larger than data_size, then the return value
 // will be greater than data_size, but *data will contain only the first data_size
@@ -941,10 +1095,6 @@ int process_ws_cframe(char *data, int data_len, int opcode) {
 // The caller of client_handler() must decide how to proceed when an
 // oversized frame is received.  Closing the WebSocket connection with
 // status code 1009 (message too big to process) is one option.
-//
-// TODO: Handle processing of frames with payloads larger than data_size?
-//       Perhaps this could be done by buffering the data and returning
-//       more on the next call as if it were sent in fragments?
 int client_handler(char *data, int data_size)
 {
     int data_len;
@@ -1162,7 +1312,7 @@ int ws_init() {
 // ws_poll() will never return data from more than one WebSocket
 // frame/fragment.  However, a single frame/fragment may contain some or all
 // of more than one message sent by a single client.
-// bytes_remaining, last_cnum, and mask are used to store information about
+// remaining_rcvlen, last_cnum, and mask are used to store information about
 // a partially read frame.
 
 // This is one cycle of the main loop in pollserver.c
@@ -1171,19 +1321,19 @@ int ws_poll(int *r_cnum, char *data, int data_size) {
         ws_error("WS ERROR: ws_init() must be called before ws_poll().");
         return (-1);
     }
-    if (bytes_remaining != 0)
-    {
+    retry_send_to_socket();  // This does nothing unless needed.
+    if (remaining_rcvlen != 0) {
         int bytes_read;
         if (state[cnum] != WS_ACTIVE) {
             // This socket is no longer open
-            bytes_remaining = 0;
+            remaining_rcvlen = 0;
             return (0);
         }
         *r_cnum = cnum;
         if((bytes_read = recv(
                 pfds[cnum].fd,
                 (char*)data,
-                data_size > bytes_remaining ? bytes_remaining : data_size,
+                data_size > remaining_rcvlen ? remaining_rcvlen : data_size,
                 0
             )) == 0)
         {
@@ -1191,7 +1341,7 @@ int ws_poll(int *r_cnum, char *data, int data_size) {
             ws_error("WS: payload recv failed");
             return (-1);
         }
-        bytes_remaining -= bytes_read;
+        remaining_rcvlen -= bytes_read;
         // unmask payload
         for (int i=0; i<bytes_read; i++)
             data[i] ^= mask[i % 4];
