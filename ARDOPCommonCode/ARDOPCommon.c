@@ -28,10 +28,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <getopt.h>
 
 #include "ardopcommon.h"
 #include "wav.h"
-#include "getopt.h"
 
 void ProcessCommandFromHost(char * strCMD);
 
