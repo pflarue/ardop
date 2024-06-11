@@ -14,8 +14,6 @@ int ComputeInterFrameInterval(int intRequestedIntervalMS);
 HANDLE OpenCOMPort(VOID * pPort, int speed, BOOL SetDTR, BOOL SetRTS, BOOL Quiet, int Stopbits);
 BOOL WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite);
 void SetupGPIOPTT();
-int GetEEPROM(int Reg);
-void SaveEEPROM(int reg, int val);
 void setProtocolMode(char* strMode);
 
 void Break();
@@ -41,10 +39,6 @@ int wg_send_hostdatat(int cnum, char *prefix, unsigned char *data, int datalen);
 int SerialMode = 0;
 
 extern BOOL NeedTwoToneTest;
-
-extern unsigned int lastRTCTick;// Make sure this is set to ticks mod 1000 so RTC incrememtns at mS 0
-extern unsigned int RTC;		// set to seconds since 01.01.2000 by DATE and TIME Commands (Dragon log time epoch)
-
 
 #ifndef WIN32
 
@@ -365,10 +359,7 @@ void ProcessCommandFromHost(char * strCMD)
 		}
 		else
 		{
-			// Can't change on Teensy
-#ifndef Teensy
 			strcpy(CaptureDevice, ptrParams);
-#endif
 			sprintf(cmdReply, "%s now %s", strCMD, CaptureDevice);
 			SendReplyToHost(cmdReply);
 		}
@@ -520,45 +511,8 @@ void ProcessCommandFromHost(char * strCMD)
 		goto cmddone;
 	}
 
-  
-	if (strcmp(strCMD, "DATETIME") == 0)
-	{
-#ifndef TEENSY
- 		sprintf(strFault, "DATETIME not supported on this platform");
-#else
-		// Set RTC to Date (DD MM YY HH MM SS format)
+	// DATETIME command previously provided for TEENSY support removed
 
-		struct tm tm;
-		int n; 
-
-		if (ptrParams == NULL || strlen(ptrParams) != 17)
-		{
-			sprintf(strFault, "Syntax Err: %s", cmdCopy);	
-			goto cmddone;
-		}
-
-		n = sscanf(ptrParams, "%d %d %d %d %d %d",
-			&tm.tm_mday, &tm.tm_mon, &tm.tm_year,
-			&tm.tm_hour, &tm.tm_min, &tm.tm_sec);
-
-		if (n != 6)
-		{
-			sprintf(strFault, "Syntax Err: %s", cmdCopy);	
-			goto cmddone;
-		}
-
-		tm.tm_year += 100;
-		tm.tm_mon--;
-
-		RTC = mktime(&tm);
-		sprintf(cmdReply, "RTC set");
-		RTC -= 946684800;	// Adjust to start from 1/1/2000
-
-		SendReplyToHost(cmdReply);
-#endif
-		goto cmddone;
-	}
-  
 	if (strcmp(strCMD, "DEBUGLOG") == 0)
 	{
 		DoTrueFalseCmd(strCMD, ptrParams, &DebugLog);
@@ -606,70 +560,7 @@ void ProcessCommandFromHost(char * strCMD)
 		goto cmddone;
 	}
 
-#ifdef TEENSY
-
-	if (strcmp(strCMD, "EEPROM") == 0)
-	{
-		if (ptrParams)
-		{
-			char * ptr, * context;
-			int Reg = 0, Val = 0;
-
-			ptr = strtok_s(ptrParams, ", ", &context);
-
-			if (ptr)
-			{
-				Reg = atoi(ptr);
-				ptr = strtok_s(NULL, ", ", &context);
-				if (ptr)
-				{
-					Val = atoi(ptr);
-				}
-			}
-
-			if (Reg == 0 || Reg == 12 || Reg > 14 || ptr == 0)
-			{
-				// Bad command
-		
-				sprintf(strFault, "Syntax Err: %s", cmdCopy);
-				goto cmddone;
-			}
-
-			SaveEEPROM(Reg, Val);
-		}
-
-		// Display EEPROM Settings
-
-		sprintf(cmdReply, "01 TXDelay - Zero means use ADC %3d\n", GetEEPROM(1));
-		SendReplyToHost(cmdReply);
-		sprintf(cmdReply, "02 Persistance                  %3d\n", GetEEPROM(2));
-		SendReplyToHost(cmdReply);
-		sprintf(cmdReply, "03 Slottime (in 10 mS)          %3d\n", GetEEPROM(3));
-		SendReplyToHost(cmdReply);
-		sprintf(cmdReply, "04 TXTail                       %3d\n", GetEEPROM(4));
-		SendReplyToHost(cmdReply);
-		sprintf(cmdReply, "05 Full Duplex - Not used       %3d\n", GetEEPROM(5));
-		SendReplyToHost(cmdReply);
-		sprintf(cmdReply, "06 Our Channel (Hex)             %02x\n", GetEEPROM(6));
-		SendReplyToHost(cmdReply);
-		sprintf(cmdReply, "07 I2C Address (0 = async) Hex   %02x\n", GetEEPROM(7));
-		SendReplyToHost(cmdReply);
-		sprintf(cmdReply, "08 Mode Speed                  %4d\n", GetEEPROM(8) * 100);
-		SendReplyToHost(cmdReply);
-		sprintf(cmdReply, "09 RX Level (Config)            %3d\n", GetEEPROM(9));
-		SendReplyToHost(cmdReply);
-		sprintf(cmdReply, "10 TX Level                     %3d\n", GetEEPROM(10));
-		SendReplyToHost(cmdReply);
-		sprintf(cmdReply, "11 RX Level (Actual)            %3d\n", GetEEPROM(11));
-		SendReplyToHost(cmdReply);
-		sprintf(cmdReply, "13 Centre Freq                 %4d\n", GetEEPROM(13) * 10);
-		SendReplyToHost(cmdReply);
-		sprintf(cmdReply, "14 TNC Mode                       %c\n", GetEEPROM(14));
-		SendReplyToHost(cmdReply);
-		goto cmddone;			
-	}
-
-#endif
+	// EEPROM command previously provided for TEENSY support removed
 	
 	if (strcmp(strCMD, "ENABLEPINGACK") == 0)
 	{
@@ -1011,10 +902,7 @@ void ProcessCommandFromHost(char * strCMD)
 		}
 		else
 		{
-			// Can't change sound devices on Teensy
-#ifndef Teensy
 			strcpy(PlaybackDevice, ptrParams);
-#endif
 			sprintf(cmdReply, "%s now %s", strCMD, PlaybackDevice);
 			SendReplyToHost(cmdReply);
 		}
@@ -1110,9 +998,6 @@ void ProcessCommandFromHost(char * strCMD)
 
 	if (strcmp(strCMD, "RADIOHEX") == 0)
 	{
-#ifdef TEENSY
- 		sprintf(strFault, "RADIOHEX not supported on this platform");
-#else
 		// Parameter is block to send to radio, in hex
 		
 		char c;
@@ -1140,7 +1025,6 @@ void ProcessCommandFromHost(char * strCMD)
 			WriteCOMBlock(hCATDevice, ptrParams, ptr2 - ptrParams);
 			EnableHostCATRX = TRUE;
 		}
-#endif	
 		goto cmddone;
 	}
 
@@ -1309,40 +1193,7 @@ void ProcessCommandFromHost(char * strCMD)
 		goto cmddone;
 	}
 
-
-	if (strcmp(strCMD, "RXLEVEL") == 0)
-	{
-#ifndef HASPOTS
-		sprintf(cmdReply, "RXLEVEL command not available on this platform");
-		SendReplyToHost(cmdReply);
-		goto cmddone;
-#else
-		int i;
-
-		if (ptrParams == 0)
-		{
-			sprintf(cmdReply, "%s %d", strCMD, RXLevel);
-			SendReplyToHost(cmdReply);
-			goto cmddone;
-		}
-		else
-		{
-			i = atoi(ptrParams);
-
-			if (i >= 0 && i <= 3000)
-			{
-				int Pot;
-				RXLevel = i;
-				AdjustRXLevel(RXLevel);
-				sprintf(cmdReply, "%s now %d", strCMD, RXLevel);
-				SendReplyToHost(cmdReply);
-			}
-			else
-				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);	
-		}
-		goto cmddone;
-#endif
-	}
+	// RXLEVEL command previously provided for TEENSY support removed
 
 	if (strcmp(strCMD, "SENDID") == 0)
 	{
@@ -1477,38 +1328,7 @@ void ProcessCommandFromHost(char * strCMD)
 		goto cmddone;
 	}
 
-	if (strcmp(strCMD, "TXLEVEL") == 0)
-	{
-#ifndef HASPOTS
-		sprintf(cmdReply, "TXLEVEL command not available on this platform");
-		SendReplyToHost(cmdReply);
-		goto cmddone;
-#else
-		int i;
-
-		if (ptrParams == 0)
-		{
-			sprintf(cmdReply, "%s %d", strCMD, TXLevel);
-			SendReplyToHost(cmdReply);
-			goto cmddone;
-		}
-		else
-		{
-			i = atoi(ptrParams);
-
-			if (i >= 0 && i <= 3000)	
-			{
-				int Pot;
-				TXLevel = i;
-				sprintf(cmdReply, "%s now %d", strCMD, i);
-				AdjustTXLevel(TXLevel);
-				SendReplyToHost(cmdReply);			}
-			else
-				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);	
-		}
-		goto cmddone;
-#endif
-	}
+	// TXLEVEL command previously provided for TEENSY support removed
 
 	if (strcmp(strCMD, "USE600MODES") == 0)
 	{
@@ -1619,23 +1439,3 @@ void AddTagToDataAndSendToHost(UCHAR * bytData, char * strTag, int Len)
 			wg_send_hostdatab(0, strTag, bytData, Len);
 	}
 }
-
-#ifdef TEENSY
-
-// Dummies for Linker
-
-void TCPSendCommandToHost(char * strText)
-{}
-void TCPQueueCommandToHost(char * strText)
-{}
-void TCPSendReplyToHost(char * strText)
-{}
-void TCPAddTagToDataAndSendToHost(UCHAR * bytData, char * strTag, int Len)
-{}
-
-#endif
-
-
- 
-
-

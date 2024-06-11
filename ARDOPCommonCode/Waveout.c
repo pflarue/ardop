@@ -3,8 +3,6 @@
 
 //	Windows uses WaveOut
 
-//	Nucleo uses DMA
-
 //	Linux will use ALSA
 
 //	This is the Windows Version
@@ -48,8 +46,6 @@ int LogToHostBufferLen;
 #endif
 
 // Windows works with signed samples +- 32767
-// STM32 DAC uses unsigned 0 - 4095
-
 // Currently use 1200 samples for TX but 480 for RX to reduce latency
 
 short buffer[2][SendSize];		// Two Transfer/DMA buffers of 0.1 Sec
@@ -113,8 +109,6 @@ WAVEHDR inheader[5] =
 
 WAVEOUTCAPS pwoc;
 WAVEINCAPS pwic;
-
-unsigned int RTC = 0;
 
 int InitSound(BOOL Quiet);
 void HostPoll();
@@ -1161,15 +1155,6 @@ void PlatformSleep(int mS)
     }
 }
 
-void displayState(const char * State)
-{
-	char Msg[80];
-
-	strcpy(Msg, State); 
-	SendtoGUI('S', Msg, strlen(Msg) + 1);		// Protocol State
-	// Dummy for i2c display
-}
-
 void DrawTXMode(const char * Mode)
 {
 	char Msg[80];
@@ -1204,13 +1189,6 @@ void SetLED(int LED, int State)
 
 	Leds[LED] = State;
 	SendtoGUI('D', Leds, 8);
-}
-
-void displayCall(int dirn, char * call)
-{
-	char Msg[32];
-	sprintf(Msg, "%c%s", dirn, call);
-	SendtoGUI('I', Msg, strlen(Msg));
 }
 
 HANDLE OpenCOMPort(VOID * pPort, int speed, BOOL SetDTR, BOOL SetRTS, BOOL Quiet, int Stopbits)
@@ -1464,12 +1442,9 @@ void updateDisplay()
 {
 //	 SendtoGUI('C', Pixels, pixelPointer - Pixels);	
 }
-void DrawAxes(int Qual, const char * Frametype, char * Mode)
+void DrawAxes(int Qual, char * Mode)
 {
 	UCHAR Msg[80];
-
-	// Teensy used Frame Type, GUI Mode
-	
 	SendtoGUI('C', Pixels, pixelPointer - Pixels);	
 	wg_send_pixels(0, Pixels, pixelPointer - Pixels);
 	pixelPointer = Pixels;

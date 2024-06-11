@@ -8,9 +8,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
-#ifndef TEENSY
 #include <sys/socket.h>
-#endif
 #define SOCKET int
 #define closesocket close
 #define HANDLE int
@@ -21,8 +19,6 @@
 #include <errno.h>
 
 #include "../hid/hidapi.h"
-
-#ifndef TEENSY
 
 #ifdef WIN32
 #include "../../ARDOPCommonCode/ardopcommon.h"
@@ -537,11 +533,6 @@ void CM108_set_ptt(int PTTState)
 	return;
 }
 
-
-#endif
-
-#ifndef TEENSY
-
 void DecodeCM108(char * ptr)
 {
 	// Called if Device Name or PTT = Param is CM108
@@ -620,5 +611,3 @@ void DecodeCM108(char * ptr)
 	CM108Device = strdup(ptr);
 #endif
 }
-
-#endif

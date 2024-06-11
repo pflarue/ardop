@@ -19,7 +19,7 @@ OBJS += WinSerial.o Waveout.o hid.o
 LDLIBS += -lwsock32 -lwinmm -lsetupapi -lws2_32
 RM = del /Q /F
 else
-OBJS += LinSerial.o i2cDisplay.o ALSASound.o
+OBJS += LinSerial.o ALSASound.o
 LDLIBS += -lrt -lasound
 RM = rm -f --
 endif

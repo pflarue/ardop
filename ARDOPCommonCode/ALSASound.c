@@ -8,18 +8,15 @@
 
 //	This is ALSASound.c for Linux
 //	Windows Version is Waveout.c
-//	Nucleo Version is NucleoSound.c
 
 #include <alsa/asoundlib.h>
 #include <signal.h>
 #include <termios.h>
 #include <sys/ioctl.h>
 #include <stdbool.h>
-#ifndef TEENSY
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#endif
 
 #define HANDLE int
 
@@ -47,7 +44,6 @@ VOID SerialHostPoll();
 VOID TCPHostPoll();
 int CloseSoundCard();
 int PackSamplesAndSend(short * input, int nSamples);
-void displayLevel(int max);
 BOOL WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite);
 VOID processargs(int argc, char * argv[]);
 void Send5SecTwoTone();
@@ -57,8 +53,6 @@ int wg_send_pixels(int cnum, unsigned char *data, size_t datalen);
 void WebguiPoll();
 
 VOID WriteDebugLog(int Level, const char * format, ...);
-
-int initdisplay();
 
 extern BOOL blnDISCRepeating;
 
@@ -99,8 +93,6 @@ void Sleep(int mS)
 
 
 // Windows and ALSA work with signed samples +- 32767
-// STM32 and Teensy DAC uses unsigned 0 - 4095
-
 short buffer[2][1200];			// Two Transfer/DMA buffers of 0.1 Sec
 short inbuffer[2][1200];		// Two Transfer/DMA buffers of 0.1 Sec
 
@@ -705,8 +697,6 @@ int main(int argc, char * argv[])
 		RadioControl = TRUE;
 	}	
 
-
-	initdisplay();
 
 	if (SerialMode)
 		Debugprintf("ARDOPC Using a pseudotty symlinked to %s", HostPort);
@@ -1840,7 +1830,6 @@ void PollReceivedSamples()
 			ptr++;
 		}
 
-		displayLevel(max);
 		CurrentLevel = ((max - min) * 75) /32768;	// Scale to 150 max
 		wg_send_currentlevel(0, CurrentLevel);
 
@@ -2488,12 +2477,9 @@ void updateDisplay()
 {
 //	 SendtoGUI('C', Pixels, pixelPointer - Pixels);	
 }
-void DrawAxes(int Qual, const char * Frametype, char * Mode)
+void DrawAxes(int Qual, char * Mode)
 {
 	UCHAR Msg[80];
-
-	// Teensy used Frame Type, GUI Mode
-	
 	SendtoGUI('C', Pixels, pixelPointer - Pixels);	
 	wg_send_pixels(0, Pixels, pixelPointer - Pixels);
 	pixelPointer = Pixels;

@@ -61,21 +61,16 @@ extern const char strLogLevels[9][13];
 
 #define M_PI       3.1415926f
 
-#ifndef TEENSY
 #ifndef WIN32
 #define LINUX
 #endif
-#endif
 
 #ifdef __ARM_ARCH
-#ifndef TEENSY
 #define ARMLINUX
-#endif
 #endif
 
 #define UseGUI			// Enable GUI Front End Support
 
-#ifndef TEENSY
 #ifdef UseGUI
 
 // Constellation and Waterfall for GUI interface
@@ -107,7 +102,6 @@ extern const char strLogLevels[9][13];
 #define Fuchsia 13
 
 #endif
-#endif
 
 typedef int BOOL;
 typedef unsigned char UCHAR;
@@ -125,22 +119,10 @@ typedef void *HANDLE;
 #define False 0
 #define True 1
 
-// TEENSY Interface board equates
-
-#ifdef TEENSY
-#ifdef PIBOARD
-#define ISSLED LED0
-#else
-#define ISSLED LED1
-#endif
-#define IRSLED LED1
-#define TRAFFICLED LED2
-#else
 #define ISSLED 1
 #define IRSLED 2
 #define TRAFFICLED 3
 #define PKTLED 4
-#endif
 
 BOOL KeyPTT(BOOL State);
 
@@ -270,11 +252,7 @@ VOID ProcessDEDModeFrame(UCHAR * rxbuffer, unsigned int Length);
 int SendtoGUI(char Type, unsigned char * Msg, int Len);	
 void DrawTXFrame(const char * Frame);
 void DrawRXFrame(int State, const char * Frame);
-#ifdef TEENSY
-void mySetPixel(int16_t x, int16_t y, int16_t Colour);
-#else
 void mySetPixel(unsigned char x, unsigned char y, unsigned int Colour);
-#endif
 void clearDisplay();
 
 extern int WaterfallActive;
@@ -368,9 +346,6 @@ extern int LeaderLength;
 extern int TrailerLength;
 extern unsigned int ARQTimeout;
 extern int TuningRange;
-extern int TXLevel;
-extern int RXLevel;
-extern int autoRXLevel;
 extern BOOL DebugLog;
 extern int ARQConReqRepeats;
 extern BOOL CommandTrace;

@@ -106,8 +106,6 @@ int ReplyLen;
 extern float dblOffsetHz;
 extern int intSessionBW;
 
-extern int SerialWatchDog;
-
 void SCSSendCommandToHost(char * Cmd)
 {
 	if (HostMode & !PTCMode)	// ARDOP Native
@@ -543,11 +541,6 @@ VOID ProcessSCSHostFrame(UCHAR *  Buffer, int Length)
 		
 		// General Poll
 
-		// if Teensy, kick link watchdog
-
-#ifdef TEENSY
-		SerialWatchDog = 0;
-#endif
 		// See if any channels have anything available
 
 		// Although spec say Dragon only sends log data in response
@@ -607,12 +600,10 @@ VOID ProcessSCSHostFrame(UCHAR *  Buffer, int Length)
 
 		if (CatRXLen == 0)
 		{
-#ifndef TEENSY
 			if (hCATDevice)
 			{
 				CatRXLen = ReadCOMBlock(hCATDevice, CatRXbuffer, 256);
 			}
-#endif
 		}
 
 		if (CatRXLen)		// Cat data available?
@@ -1114,48 +1105,8 @@ VOID ProcessSCSTextCommand(char * Command, int Len)
 		PutString("\r\nLICENSE: 010000141714CB53 ABCDEFGHIJKL");
 	}
 
-	else if (_memicmp(Command, "PSKA", 4) == 0 ||
-		(PACMode && _memicmp(Command, "TXL A", 5) == 0))
-	{
-		char cmdReply[80];
-		int i;
-
-		i = atoi(&Command[5]);
-
-		if (i >= 0 && i <= 3000)	
-		{
-			TXLevel = i;
-			sprintf(cmdReply, "\r\nPSKA: %d", i);
-#ifdef HASPOTS
-			AdjustTXLevel(TXLevel);
-#endif
-		}
-		else
-			sprintf(cmdReply, "Syntax Err: %s", Command);	
-	
-		PutString(cmdReply);
-	}
-
-	else if (_memicmp(Command, "FSKA", 4) == 0)
-	{
-		char cmdReply[80];
-		int i;
-
-		i = atoi(&Command[5]);
-
-		if (i >= 0 && i <= 3000)	
-		{
-			RXLevel = i;
-			sprintf(cmdReply, "\r\nFSKA: %d", i);
-#ifdef HASPOTS
-			AdjustRXLevel(RXLevel);
-#endif
-		}
-		else
-			sprintf(cmdReply, "Syntax Err: %s", Command);	
-	
-		PutString(cmdReply);
-	}
+	// PSKA previously provided for TEENSY removed
+	// FSKA previously provided for TEENSY removed
 
 	else if (_memicmp(Command, "PTCC", 4) == 0)
 	{

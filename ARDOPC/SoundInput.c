@@ -12,9 +12,7 @@
 
 #pragma warning(disable : 4244)		// Code does lots of float to int
 
-#ifndef TEENSY
 #define MEMORYARQ
-#endif
 
 #undef PLOTWATERFALL
 
@@ -31,18 +29,14 @@
 #endif
 
 
-#ifdef TEENSY
-#define PKTLED LED3		// flash when packet received
 extern unsigned int PKTLEDTimer;
-#endif
 
 void SendFrametoHost(unsigned char *data, unsigned dlen);
 
-void CheckandAdjustRXLevel(int maxlevel, int minlevel, BOOL Force);
 void clearDisplay();
 void updateDisplay();
 
-void DrawAxes(int Qual, const char * FrameType, char * Mode);
+void DrawAxes(int Qual, char * Mode);
 
 extern int lastmax, lastmin;		// Sample Levels
 
@@ -1333,11 +1327,6 @@ ProcessFrame:
 
 		if (blnFrameDecodedOK)
 		{
-			// Set input level if supported
-			
-#ifdef HASPOTS
-			CheckandAdjustRXLevel(lastmax, lastmin, TRUE);
-#endif
 			if (AccumulateStats)
 				if (IsDataFrame(intFrameType))
 					if (strstr (strMod, "PSK"))
@@ -4271,7 +4260,7 @@ void Update4FSKConstellation(int * intToneMags, int * intQuality)
 	}
 
 #ifdef PLOTCONSTELLATION
-	DrawAxes(*intQuality, shortName(intFrameType), strMod);
+	DrawAxes(*intQuality, strMod);
 #endif
 
 	return;
@@ -4353,7 +4342,7 @@ void Update16FSKConstellation(int * intToneMags, int * intQuality)
 		int16FSKQuality += *intQuality;
 	}
 #ifdef PLOTCONSTELLATION
-	DrawAxes(*intQuality, shortName(intFrameType), strMod);
+	DrawAxes(*intQuality, strMod);
 #endif
 }
 
@@ -4427,7 +4416,7 @@ void Update8FSKConstellation(int * intToneMags, int * intQuality)
 		int8FSKQuality += *intQuality;
 	}
 #ifdef PLOTCONSTELLATION
-	DrawAxes(*intQuality, shortName(intFrameType), strMod);
+	DrawAxes(*intQuality, strMod);
 #endif
 	return;
 }
@@ -4565,7 +4554,7 @@ int UpdatePhaseConstellation(short * intPhases, short * intMag, char * strMod, B
 		}
 	}	
 #ifdef PLOTCONSTELLATION
-	DrawAxes(intQuality, shortName(intFrameType), strMod);
+	DrawAxes(intQuality, strMod);
 #endif
 	return intQuality;
 
