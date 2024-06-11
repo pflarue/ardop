@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-struct WavFile 
+struct WavFile
 {
 	FILE *f;
 	int NumSamples;
