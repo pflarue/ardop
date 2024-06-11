@@ -55,7 +55,7 @@
 	receieved data block of length nn nominally consisting of the nn-rslen
 	bytes of source data followed by rslen parity bytes.  Of course this
 	received data may contain errors.
-	
+
 	When source data of length d is to be encoded and d is less than nn-rslen,
 	then the padded data block to be passed to encode_rs() shall be a block of
 	nn-rslen-d zeros, followed by the source data of length d.  The source data
@@ -121,7 +121,7 @@ void generate_gf()
 	alpha=2 is the primitive element of GF(2**mm)
 */
 {
-	/* 	specify irreducible polynomial coeffts
+	/*	specify irreducible polynomial coeffts
 		There are a few suitable choices for this irreducible polynomial.
 		This one happens to be the one specified by RFC5510 for m=8.
 
@@ -169,7 +169,7 @@ int gen_polys(int *lengths, int count)
 {
 	int *ggl;
 	int rslen;
-	
+
 	if (count > MAXRSLEN_COUNT) {
 		printf(
 			"ERROR in gen_polys().  count is limited to %d but %d provided."
@@ -185,14 +185,14 @@ int gen_polys(int *lengths, int count)
 				" %d provided. This limit can be increased by changing a value"
 				" defined in rs.c.\n",
 				MAXRSLEN, lengths[l]);
-			return (1);		
+			return (1);
 		}
 		rslen_set[l] = lengths[l];
 	}
-	
+
 	for (int l = 0; l < rslen_count; l++) {
 		rslen = rslen_set[l];
-		ggl = get_gg(rslen);				
+		ggl = get_gg(rslen);
 		ggl[0] = 2;  // primitive element alpha = 2 for GF(2**mm)
 		ggl[1] = 1;  // g(x) = (X+alpha) initially
 		for (int i = 2; i <= rslen; i++) {
@@ -231,7 +231,7 @@ void encode_rs(int *data, int *bb, int rslen)
 
 	for (int i = 0; i < rslen; i++)
 		bb[i] = 0;
-	for (int i = kk - 1; i >= 0; i--) {  	
+	for (int i = kk - 1; i >= 0; i--) {
 		feedback = index_of[data[i] ^ bb[rslen - 1]];
 		if (feedback != -1) {
 			for (int j = rslen - 1; j > 0; j--) {
@@ -248,7 +248,7 @@ void encode_rs(int *data, int *bb, int rslen)
 		}
 	}
 }
-	
+
 
 int decode_rs(int *rcvd, int rslen, bool quiet, bool test_only)
 /*	assume we have received bits grouped into mm-bit symbols in rcvd[i],
@@ -285,7 +285,7 @@ int decode_rs(int *rcvd, int rslen, bool quiet, bool test_only)
 	form normally provided upon return.
 
 	This function doesn't do error checking for valid rslen or to verify that
-	gg[][] has been populated.  Use rs_correct() to include these checks.	
+	gg[][] has been populated.  Use rs_correct() to include these checks.
 	*/
 {
 	int retval = 0;
@@ -315,7 +315,7 @@ int decode_rs(int *rcvd, int rslen, bool quiet, bool test_only)
 			retval = 1;
 			if (test_only) {
 				if (!quiet)
-					printf("Errors Detected.\n");		
+					printf("Errors Detected.\n");
 				return(retval);
 			}
 		}
@@ -323,11 +323,11 @@ int decode_rs(int *rcvd, int rslen, bool quiet, bool test_only)
 	}
 	if (test_only) {
 		if (!quiet)
-			printf("No Errors Detected.\n");		
+			printf("No Errors Detected.\n");
 		return(retval);
 	}
 	if (syn_error) {  // if errors, try and correct
-		/* 	compute the error location polynomial via the Berlekamp iterative algorithm,
+		/*	compute the error location polynomial via the Berlekamp iterative algorithm,
 			following the terminology of Lin and Costello :   d[u] is the 'mu'th
 			discrepancy, where u='mu'+1 and 'mu' (the Greek letter!) is the step number
 			ranging from -1 to 2*tt (see L&C),  l[u] is the
@@ -335,7 +335,7 @@ int decode_rs(int *rcvd, int rslen, bool quiet, bool test_only)
 			step number and the degree of the elp.
 		*/
 		if (!quiet)
-			printf("Errors Detected.\n");		
+			printf("Errors Detected.\n");
 		// initialise table entries
 		d[0] = 0;  // index form
 		d[1] = s[1];  // index form
@@ -440,9 +440,9 @@ int decode_rs(int *rcvd, int rslen, bool quiet, bool test_only)
 					else if ((s[i] != -1) && (elp[u][i] == -1))
 						z[i] = alpha_to[s[i]];
 					else if ((s[i] == -1) && (elp[u][i] != -1))
-				  		z[i] = alpha_to[elp[u][i]];
+						z[i] = alpha_to[elp[u][i]];
 					else
-				  		z[i] = 0;
+						z[i] = 0;
 					for (j = 1; j < i; j++) {
 						if ((s[j] != -1) && (elp[u][i - j] != -1))
 							z[i] ^= alpha_to[(elp[u][i - j] + s[j]) % nn];
@@ -489,7 +489,7 @@ int decode_rs(int *rcvd, int rslen, bool quiet, bool test_only)
 						rcvd[i] = 0;  // just output received codeword as is
 				}
 			}
-		} else {  //  elp has degree >tt hence cannot solve
+		} else {  // elp has degree >tt hence cannot solve
 			retval = -1;
 			if (!quiet)
 				printf("Errors Not Corrected.\n");
@@ -544,9 +544,9 @@ int rs_append(unsigned char *data, int datalen, int rslen) {
 
 	if (datalen + rslen > nn)
 		return (-1);  // invalid inputs
-	
+
 	for (int i = 0; i < datalen; i++)
-		padded[i + nn - rslen - datalen] = data[i];	
+		padded[i + nn - rslen - datalen] = data[i];
 
 	encode_rs(padded, bb, rslen);
 
@@ -582,16 +582,16 @@ int rs_correct(unsigned char *data, int combinedlen, int rslen, bool quiet, bool
 			" passed to init_rs().\n", rslen);
 		return (-2);
 	}
-	
+
 	if (combinedlen > nn) {
 		printf(
 			"Error in rs_correct().  Invalid inputs."
 			" (combinedlen=%d)>(nn-%d)\n", combinedlen, nn);
 		return (-2);
 	}
-	
+
 	for (int i = 0; i < combinedlen; i++)
-		padded[i + nn - combinedlen] = data[i];	
+		padded[i + nn - combinedlen] = data[i];
 
 	for (int i = 0; i < nn; i++)
 		padded[i] = index_of[padded[i]];  // put padded[i] into index form
@@ -634,7 +634,7 @@ int rs_correct(unsigned char *data, int combinedlen, int rslen, bool quiet, bool
 		for (int i = 0; i < nn - combinedlen; i++) {
 			if (padded[i] != 0)	{
 				printf("Non-zero padding found.\n");
-				return (-1);	
+				return (-1);
 			}
 		}
 	}
