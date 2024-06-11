@@ -67,20 +67,20 @@ char GridSquare[9] = "";
 char Callsign[10] = "";
 BOOL wantCWID = FALSE;
 BOOL CWOnOff = FALSE;
-BOOL NeedID = FALSE;		// SENDID Command Flag
-BOOL NeedCWID = FALSE;		// SENDCWID Command Flag
-BOOL NeedConReq = FALSE;	// ARQCALL Command Flag
-BOOL NeedPing = FALSE;		// PING Command Flag
+BOOL NeedID = FALSE;  // SENDID Command Flag
+BOOL NeedCWID = FALSE;  // SENDCWID Command Flag
+BOOL NeedConReq = FALSE;  // ARQCALL Command Flag
+BOOL NeedPing = FALSE;  // PING Command Flag
 BOOL NeedTwoToneTest = FALSE;
 enum _ARQBandwidth CallBandwidth = UNDEFINED;
 int PingCount;
 
 BOOL blnPINGrepeating = False;
-BOOL blnFramePending = False;	//  Cancels last repeat
+BOOL blnFramePending = False;  // Cancels last repeat
 int intPINGRepeats = 0;
 
-int WaterfallActive = 1;		// Waterfall display on
-int SpectrumActive = 0;			// Spectrum display off
+int WaterfallActive = 1;  // Waterfall display on
+int SpectrumActive = 0;  // Spectrum display off
 
 char ConnectToCall[16] = "";
 
@@ -115,13 +115,13 @@ BOOL useGPIO = FALSE;
 int pttGPIOPin = -1;
 BOOL pttGPIOInvert = FALSE;
 
-HANDLE hCATDevice = 0;	
-char CATPort[80] = "";			// Port for CAT.
+HANDLE hCATDevice = 0;
+char CATPort[80] = "";  // Port for CAT.
 int CATBAUD = 19200;
-int EnableHostCATRX = FALSE;	// Set when host sends RADIOHEX command
+int EnableHostCATRX = FALSE;  // Set when host sends RADIOHEX command
 
 HANDLE hPTTDevice = 0;
-char PTTPort[80] = "";			// Port for Hardware PTT - may be same as control port.
+char PTTPort[80] = "";  // Port for Hardware PTT - may be same as control port.
 int PTTBAUD = 19200;
 
 UCHAR PTTOnCmd[64];
@@ -132,14 +132,14 @@ UCHAR PTTOffCmdLen = 0;
 
 // Stats
 
-//    Public Structure QualityStats
-  
+// Public Structure QualityStats
+
 int int4FSKQuality;
 int int4FSKQualityCnts;
 int intFSKSymbolsDecoded;
 int intPSKQuality[2];
 int intPSKQualityCnts[2];
-int intPSKSymbolsDecoded; 
+int intPSKSymbolsDecoded;
 
 int intQAMQuality;
 int intQAMQualityCnts;
@@ -171,7 +171,9 @@ int dttCodecStarted;
 enum _ReceiveState State;
 enum _ARDOPState ProtocolState;
 
-const char ARDOPStates[8][9] = {"OFFLINE", "DISC", "ISS", "IRS", "IDLE", "IRStoISS", "FECSEND", "FECRCV"};
+const char ARDOPStates[8][9] = {
+	"OFFLINE", "DISC", "ISS", "IRS", "IDLE", "IRStoISS", "FECSEND", "FECRCV"
+};
 
 struct SEM Semaphore = {0, 0, 0, 0};
 
@@ -215,35 +217,36 @@ unsigned int dttNextPlay = 0;
 extern BOOL InitRXO;
 extern bool DeprecationWarningsIssued;
 
-const UCHAR bytValidFrameTypesALL[]=
-{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
-35, 36, 41, 44, 45,
- 46, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, PINGACK, PING,
+const UCHAR bytValidFrameTypesALL[] = {
+	0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+	16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+	35, 36, 41, 44, 45,
+	46, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, PINGACK, PING,
 
-	0x40,0x41,0x42,0x43,0x44,0x45,0x46,0x47,0x48,0x49,	// 40 - 4F
-	0x4A,0x4B,0x4C,0x4D,
-	0x50,0x51,0x52,0x53,0x54,0x55,						// 50 - 5F 
-	0x60,0x61,0x62,0x63,0x64,0x65,						// 60 - 6F
-	0x70,0x71,0x72,0x73,0x74,0x75,0x7A,0x7B,0x7C,0x7D,	// 70 - 7F
+	0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46,0x47,0x48,0x49,  // 40 - 4F
+	0x4A, 0x4B, 0x4C, 0x4D,
+	0x50, 0x51, 0x52, 0x53, 0x54, 0x55,  // 50 - 5F
+	0x60, 0x61, 0x62, 0x63, 0x64, 0x65,  // 60 - 6F
+	0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x7A, 0x7B, 0x7C, 0x7D,  // 70 - 7F
 
- 208, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234,
- 124, 125, 208, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234,
- 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248,
- 249, 250, 251, 252, 253, 254, 255};
+	208, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234,
+	124, 125, 208, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234,
+	235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248,
+	249, 250, 251, 252, 253, 254, 255
+};
 
-const UCHAR bytValidFrameTypesISS[]=		// ACKs, NAKs, END, DISC, BREAK
-{
- //NAK
- 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
- 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
- // BREAK, DISC, or END
- BREAK, DISCFRAME, END, ConRejBusy, ConRejBW, 
-// Con req and Con ACK
- 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60,
- //ACK
- 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239,
- 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255};
+const UCHAR bytValidFrameTypesISS[] = {  // ACKs, NAKs, END, DISC, BREAK
+	// NAK
+	0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+	16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+	// BREAK, DISC, or END
+	BREAK, DISCFRAME, END, ConRejBusy, ConRejBW,
+	// Con req and Con ACK
+	49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60,
+	// ACK
+	224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239,
+	240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255
+};
 
 
 const UCHAR * bytValidFrameTypes;
@@ -257,7 +260,7 @@ BOOL blnTimeoutTriggered = FALSE;
 //	We can't keep the audio samples for retry, but we can keep the
 //	encoded data
 
-unsigned char bytEncodedBytes[1800] ="";		// I think the biggest is 600 bd 768 + overhead
+unsigned char bytEncodedBytes[1800] = "";  // I think the biggest is 600 bd 768 + overhead
 int EncLen;
 
 
@@ -265,69 +268,48 @@ extern UCHAR bytSessionID;
 
 int intLastRcvdFrameQuality;
 
-int intAmp = 26000;	   // Selected to have some margin in calculations with 16 bit values (< 32767) this must apply to all filters as well. 
+int intAmp = 26000;	   // Selected to have some margin in calculations with 16 bit values (< 32767) this must apply to all filters as well.
 
-const char strAllDataModes[18][15] =
-		{"4FSK.200.50S", "4PSK.200.100S",
-		"4PSK.200.100", "8PSK.200.100", "16QAM.200.100",
-		"4FSK.500.100S", "4FSK.500.100",
-		"4PSK.500.100", "8PSK.500.100", "16QAM.500.100",
-		"4PSK.1000.100", "8PSK.1000.100", "16QAM.1000.100", 
-		"4PSK.2000.100", "8PSK.2000.100", "16QAM.2000.100", 
-		"4FSK.2000.600", "4FSK.2000.600S"};
+const char strAllDataModes[18][15] = {
+	"4FSK.200.50S", "4PSK.200.100S",
+	"4PSK.200.100", "8PSK.200.100", "16QAM.200.100",
+	"4FSK.500.100S", "4FSK.500.100",
+	"4PSK.500.100", "8PSK.500.100", "16QAM.500.100",
+	"4PSK.1000.100", "8PSK.1000.100", "16QAM.1000.100",
+	"4PSK.2000.100", "8PSK.2000.100", "16QAM.2000.100",
+	"4FSK.2000.600", "4FSK.2000.600S"
+};
 
 int strAllDataModesLen = 18;
 
-// Frame Speed By Type (from Rick's spreadsheet)
-
-const short Rate[256] = 
-{
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// 00 - 0F
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// 10 - 1F
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// 20 - 2F
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// 30 - 3F
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// 40 - 4F
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// 50 - 5F
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// 60 - 6F
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// 70 - 7F
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// 80 - 8F
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// 90 - 9F
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// a0 - AF
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// b0 - BF
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// c0 - CF
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// d0 - DF
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// e0 - EF
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};	// f0 - FF
-
-const short FrameSize[256] =
-{
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// 00 - 0F
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// 10 - 1F
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// 20 - 2F
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// 30 - 3F
-	64,64,16,16,108,108,128,128,16,16,64,64,32,32,0,0,	// 40 - 4F
-	128,128,216,216,256,256,0,0,0,0,0,0,0,0,0,0,	// 50 - 5F
-	256,256,432,432,512,512,0,0,0,0,0,0,0,0,0,0,	// 60 - 6F
-	512,512,864,864,1024,1024,0,0,0,0,600,600,200,200,0,0,	// 70 - 7F
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// 80 - 8F
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// 90 - 9F
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// a0 - AF
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// b0 - BF
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// c0 - CF
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// d0 - DF
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,	// e0 - EF
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};	// f0 - FF
+const short FrameSize[256] = {
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // 00 - 0F
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // 10 - 1F
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // 20 - 2F
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // 30 - 3F
+	64, 64, 16, 16, 108, 108, 128, 128, 16, 16, 64, 64, 32, 32, 0, 0,  // 40 - 4F
+	128, 128, 216, 216, 256, 256, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // 50 - 5F
+	256, 256, 432, 432, 512, 512, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // 60 - 6F
+	512, 512, 864, 864, 1024, 1024, 0, 0, 0, 0, 600, 600, 200, 200, 0, 0,  // 70 - 7F
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // 80 - 8F
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // 90 - 9F
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // a0 - AF
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // b0 - BF
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // c0 - CF
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // d0 - DF
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // e0 - EF
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0  // f0 - FF
+};
 
 
-	
 const char strFrameType[256][18] = {
-	"DataNAK", //  Range 0x00 to 0x1F includes 5 bits for quality 1 Car, 200Hz,4FSK
-	"","","","","","","","","","","","","","","","",
-	"","","","","","","","","","","","","","","","",
-	"","",
+	"DataNAK",  // Range 0x00 to 0x1F includes 5 bits for quality 1 Car, 200Hz,4FSK
+	"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+	"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+	"", "",
 
-        //Short Control Frames 1 Car, 200Hz,4FSK  ' Reassigned May 22, 2015 for maximum "distance"
- 
+	// Short Control Frames 1 Car, 200Hz,4FSK.  Reassigned May 22, 2015 for maximum "distance"
+
 	"BREAK", "IDLE", "",
 	"", "", "",
 	"DISC", "", "",
@@ -336,7 +318,7 @@ const char strFrameType[256][18] = {
 	"ConRejBW",
 	"",
 
-	//Special frames 1 Car, 200Hz,4FSK 0x30 +
+	// Special frames 1 Car, 200Hz,4FSK 0x30 +
 
 	"IDFrame",
 	"ConReq200M",
@@ -354,26 +336,25 @@ const char strFrameType[256][18] = {
 	"PingAck",
 	"Ping",
 	"",
-	// 200 Hz Bandwidth Data 
-	// 1 Car PSK Data Modes 200 HzBW  100 baud 
-	
-	"4PSK.200.100.E",	// 0x40
+
+	// 200 Hz Bandwidth Data
+	// 1 Car PSK Data Modes 200 HzBW  100 baud
+
+	"4PSK.200.100.E",  // 0x40
 	"4PSK.200.100.O",
 	"4PSK.200.100S.E",
 	"4PSK.200.100S.O",
 	"8PSK.200.100.E",
 	"8PSK.200.100.O",
 
-		// 1 Car 16QAM Data mode 200 Hz BW, 100 baud
+	// 1 Car 16QAM Data mode 200 Hz BW, 100 baud
 
-	"16QAM.200.100.E",	// 46
-    "16QAM.200.100.O",	// 47
+	"16QAM.200.100.E",  // 46
+	"16QAM.200.100.O",  // 47
 
-	// 1 Car 4FSK Data mode 200 HzBW, 50 baud 
+	// 1 Car 4FSK Data mode 200 HzBW, 50 baud
 
-	//"4FSK.200.50.E",
-	//"4FSK.200.50.O",
-	"4FSK.200.50S.E", // 48
+	"4FSK.200.50S.E",  // 48
 	"4FSK.200.50S.O",
 	"4FSK.500.100.E",
 	"4FSK.500.100.O",
@@ -382,73 +363,70 @@ const char strFrameType[256][18] = {
 	"",
 	"",
 
-	//' 2 Car PSK Data Modes 100 baud
-	"4PSK.500.100.E", // 50
+	// 2 Car PSK Data Modes 100 baud
+
+	"4PSK.500.100.E",  // 50
 	"4PSK.500.100.O",
 	"8PSK.500.100.E",
 	"8PSK.500.100.O",
 
-	// 2 Car Data modes 16 QAM baud  
+	// 2 Car Data modes 16 QAM baud
 
-	"16QAM.500.100.E",	//54
+	"16QAM.500.100.E",  // 54
 	"16QAM.500.100.O",
-	"", "",				// 56, 57 were 500 167 modes	
+	"", "",  // 56, 57 were 500 167 modes
 
-	"","","","",		// 58 -5B
-	"","","","",		// 5C-5F
+	"", "", "", "",  // 58 -5B
+	"", "", "", "",  // 5C-5F
 
-	//1 Khz Bandwidth Data Modes 
-	//  4 Car 100 baud PSK
-	"4PSK.1000.100.E", //60
+	// 1 Khz Bandwidth Data Modes
+	// 4 Car 100 baud PSK
+	"4PSK.1000.100.E",  // 60
 	"4PSK.1000.100.O",
 	"8PSK.1000.100.E",
 	"8PSK.1000.100.O",
-	// 4 car 167 baud PSK
 	"16QAM.1000.100.E",
 	"16QAM.1000.100.O",
 	"",
 	"",
-	// 2 Car 4FSK 100 baud
-	"", //68
-	"","","","","","","",
+	"",  // 68
+	"", "", "", "", "", "", "",
 
-	// 2Khz Bandwidth Data Modes 
-	//  8 Car 100 baud PSK
-	"4PSK.2000.100.E", //70 
+	// 2Khz Bandwidth Data Modes
+	// 8 Car 100 baud PSK
+	"4PSK.2000.100.E",  // 70
 	"4PSK.2000.100.O",
 	"8PSK.2000.100.E",
 	"8PSK.2000.100.O",
-	//  8 Car 167 baud PSK
 	"16QAM.2000.100.E",
-	"16QAM.2000.100.O",	// 75
-	"","","","",		// 79=79
+	"16QAM.2000.100.O",  // 75
+	"", "", "", "",  // 76-79
 	// 1 Car 4FSK 600 baud (FM only)
-	"4FSK.2000.600.E", // Experimental //7A
-	"4FSK.2000.600.O", // Experimental
-	"4FSK.2000.600S.E", // Experimental
-	"4FSK.2000.600S.O", // Experimental //7D
-	"","",	// 7e-7f
-	"","","","","","","","","","","","","","","","",
-	"","","","","","","","","","","","","","","","",
-	"","","","","","","","","","","","","","","","",
-	"","","","","","","","","","","","","","","","",
-	"","","","","","","","","","","","","","","","", //C0
+	"4FSK.2000.600.E",  // Experimental  // 7A
+	"4FSK.2000.600.O",  // Experimental
+	"4FSK.2000.600S.E",  // Experimental
+	"4FSK.2000.600S.O",  // Experimental  // 7D
+	"", "",  // 7e-7f
+	"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",  // 80 - 8F
+	"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",  // 90 - 9F
+	// Frame Types 0xA0 to 0xDF reserved for experimentation
+	"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",  // A0 - AF
+	"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",  // B0 - BF
+	"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",  // C0 - CF
+	"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",  // D0 - DF
 
-	//Frame Types 0xA0 to 0xDF reserved for experimentation 
-	"" //D0
-	"","","","","","","","","","","","","","","","",
-    //Data ACK  1 Car, 200Hz,4FSK
-	"DataACK"		// Range 0xE0 to 0xFF includes 5 bits for quality 
+	// Data ACK  1 Car, 200Hz,4FSK
+	"DataACK"  // Range 0xE0 to 0xFF includes 5 bits for quality
 };
 
 const char shortFrameType[256][12] = {
-	"DataNAK", //  Range 0x00 to 0x1F includes 5 bits for quality 1 Car, 200Hz,4F
-	"","","","","","","","","","","","","","","","",
-	"","","","","","","","","","","","","","","","",
-	"","",
+	"DataNAK",  // Range 0x00 to 0x1F includes 5 bits for quality 1 Car, 200Hz,4F
+	"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+	"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
+	"", "",
 
-        //Short Control Frames 1 Car, 200Hz,4F  ' Reassigned May 22, 2015 for maximum "distance"
- 
+	// Short Control Frames 1 Car, 200Hz,4F. Reassigned May 22, 2015 for maximum "distance"
+
 	"BREAK", "IDLE", "",
 	"", "", "",
 	"DISC", "", "",
@@ -457,7 +435,7 @@ const char shortFrameType[256][12] = {
 	"ConRejBW",
 	"",
 
-	//Special frames 1 Car, 200Hz,4F 0x30 +
+	// Special frames 1 Car, 200Hz,4F 0x30 +
 
 	"IDFrame",
 	"ConReq200M",
@@ -473,24 +451,24 @@ const char shortFrameType[256][12] = {
 	"ConAck1K",
 	"ConAck2K",
 	// Types 0x3D to 0x3F reserved
-	"PingAck","Ping","",
-	// 200 Hz Bandwidth Data 
-	// 1 Car P Data Modes 200 HzBW  100 baud 
-	
-	"4P.200.100",	// 0x40
+	"PingAck", "Ping", "",
+
+	// 200 Hz Bandwidth Data
+	// 1 Car P Data Modes 200 HzBW  100 baud
+
+	"4P.200.100",  // 0x40
 	"4P.200.100",
 	"4P.200.100S",
 	"4P.200.100S",
 	"8P.200.100",
 	"8P.200.100",
 
-		// 1 Car 16QAM Data mode 200 Hz BW, 100 baud
+	// 1 Car 16QAM Data mode 200 Hz BW, 100 baud
 
-	"16Q.200.100",	// 46
-    "16Q.200.100",	// 47
+	"16Q.200.100",  // 46
+	"16Q.200.100",  // 47
 
-
-	"4F.200.50S", // 48
+	"4F.200.50S",  // 48
 	"4F.200.50S",
 	"4F.500.100",
 	"4F.500.100",
@@ -499,49 +477,46 @@ const char shortFrameType[256][12] = {
 	"",
 	"",
 
-	//' 2 Car P Data Modes 100 baud
-	"4P.500.100", // 50
+	// 2 Car P Data Modes 100 baud
+	"4P.500.100",  // 50
 	"4P.500.100",
 	"8P.500.100",
 	"8P.500.100",
 
-	// 2 Car Data modes 16 Q baud  
+	// 2 Car Data modes 16 Q baud
 
-	"16Q.500.100",	//54
+	"16Q.500.100",  // 54
 	"16Q.500.100",
-	"", "",				// 56, 57 were 500 167 modes	
+	"", "",  // 56, 57 were 500 167 modes
 
-	"", // 58
+	"",  // 58
 	"",
 	"",
 	"",
-	
-	"",	// 5C
-    "",	// 5D
-	"","",				// 5E/F
+	"",  // 5C
+	"",  // 5D
+	"", "",  // 5E/F
 
-	//1 Khz Bandwidth Data Modes 
-	//  4 Car 100 baud P
-	"4P.1K.100", //60
+	// 1 Khz Bandwidth Data Modes
+	// 4 Car 100 baud P
+	"4P.1K.100",  // 60
 	"4P.1K.100",
 	"8P.1K.100",
 	"8P.1K.100",
-	// 4 car 167 baud P
 	"16Q.1K.100",
 	"16Q.1K.100",
-	"8",
-	"8",
+	"",
+	"",
 	// 2 Car 4F 100 baud
-	"", //68
-	"","","","","","","",
+	"",  // 68
+	"", "", "", "", "", "", "",
 
-	// 2Khz Bandwidth Data Modes 
-	//  8 Car 100 baud P
-	"4P.2K.100", //70 
+	// 2Khz Bandwidth Data Modes
+	// 8 Car 100 baud P
+	"4P.2K.100",  // 70
 	"4P.2K.100",
 	"8P.2K.100",
 	"8P.2K.100",
-	//  8 Car 167 baud P
 	"16Q.2K.100",
 	"16Q.2K.100",
 	"",
@@ -550,35 +525,31 @@ const char shortFrameType[256][12] = {
 	"",
 	"",
 	// 1 Car 4F 600 baud (FM only)
-	"4F.2K.600", // Experimental 
-	"4F.2K.600", // Experimental
-	"4F.2K.600S", // Experimental
-	"4F.2K.600S", // Experimental //7d
-	"","",	// 7e-7f
-	"","","","","","","","","","","","","","","","",
-	"","","","","","","","","","","","","","","","",
-	"","","","","","","","","","","","","","","","",
-	"","","","","","","","","","","","","","","","",
-	"","","","","","","","","","","","","","","","", //C0
-
-	//Frame Types 0xA0 to 0xDF reserved for experimentation 
-	"" //D0
-	"","","","","","","","","","","","","","","","",
-    //Data ACK  1 Car, 200Hz,4F
-	"DataACK"		// Range 0xE0 to 0xFF includes 5 bits for quality 
+	"4F.2K.600",  // Experimental
+	"4F.2K.600",  // Experimental
+	"4F.2K.600S",  // Experimental
+	"4F.2K.600S",  // Experimental  // 7d
+	"", "",  // 7e-7f
+	"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",  // 80-8F
+	"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",  // 90-9F
+	// Frame Types 0xA0 to 0xDF reserved for experimentation
+	"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",  // A0-AF
+	"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",  // B0-BF
+	"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",  // C0-CF
+	"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",  // D0-DF
+	// Data ACK  1 Car, 200Hz,4F
+	"DataACK"  // Range 0xE0 to 0xFF includes 5 bits for quality
 };
 
 
 char * strlop(char * buf, char delim)
 {
 	// Terminate buf at delim, and return rest of string
-
 	char * ptr = strchr(buf, delim);
 
-	if (ptr == NULL) return NULL;
-
+	if (ptr == NULL)
+		return NULL;
 	*(ptr)++=0;
-
 	return ptr;
 }
 
@@ -613,7 +584,7 @@ BOOL CheckValidCallsignSyntax(char * strCallsign)
 		if (!isalnum(*(Dash + 1)))
 			return FALSE;
 	}
-		
+
 	if (callLen > 7 || callLen < 3)
 			return FALSE;
 
@@ -636,7 +607,7 @@ BOOL CheckGSSyntax(char * GS)
 
 	if (!isalpha(GS[0]) || !isalpha(GS[1]))
 		return FALSE;
-	
+
 	if (!isdigit(GS[2]) || !isdigit(GS[3]))
 		return FALSE;
 
@@ -672,11 +643,11 @@ BOOL GetNextFrame()
 //		if (ARQState == None)
 //			return FALSE;
 //		else
-            return GetNextARQFrame();
+			return GetNextARQFrame();
 
 	return FALSE;
 }
-     
+
 #ifdef WIN32
 
 extern LARGE_INTEGER Frequency;
@@ -787,7 +758,7 @@ void ardopmain()
 
 // Subroutine to generate 1 symbol of leader
 
-//	 returns pointer to Frame Type Name
+// returns pointer to Frame Type Name
 
 const char * Name(UCHAR bytID)
 {
@@ -799,7 +770,7 @@ const char * Name(UCHAR bytID)
 		return strFrameType[bytID];
 }
 
-//	 returns pointer to Frame Type Name
+// returns pointer to Frame Type Name
 
 const char * shortName(UCHAR bytID)
 {
@@ -810,16 +781,17 @@ const char * shortName(UCHAR bytID)
 	else
 		return shortFrameType[bytID];
 }
+
 // Function to look up frame info from bytFrameType
 
 BOOL FrameInfo(UCHAR bytFrameType, int * blnOdd, int * intNumCar, char * strMod,
-			   int * intBaud, int * intDataLen, int * intRSLen, UCHAR * bytQualThres, char * strType)
+	int * intBaud, int * intDataLen, int * intRSLen, UCHAR * bytQualThres, char * strType)
 {
-	//Used to "lookup" all parameters by frame Type. 
+	// Used to "lookup" all parameters by frame Type.
 	// returns TRUE if all fields updated otherwise FALSE (improper bytFrameType)
 
-	// 1 Carrier 4FSK control frames 
-   
+	// 1 Carrier 4FSK control frames
+
 	if ((bytFrameType >= 0 &&  bytFrameType <= 0x1F) || bytFrameType >= 0xE0)
 	{
 		*blnOdd = (1 & bytFrameType) != 0;
@@ -833,343 +805,336 @@ BOOL FrameInfo(UCHAR bytFrameType, int * blnOdd, int * intNumCar, char * strMod,
 	else
 	{
 
-	switch(bytFrameType)
-	{
-	case 0x23:
-	case 0x24:
-	case 0x29:
+		switch(bytFrameType)
+		{
+		case 0x23:
+		case 0x24:
+		case 0x29:
 
-		*blnOdd = (1 & bytFrameType) != 0;
-		*intNumCar = 1;
-		*intDataLen = 0;
-		*intRSLen = 0;
-		strcpy(strMod, "4FSK");
-		*intBaud = 50;
-		*bytQualThres = 60;
-		break;
-	
-	case 0x2C:
-	case 0x2D:
-	case 0x2E:
-		
-		*blnOdd = (1 & bytFrameType) != 0;
-		*intNumCar = 1;
-		*intDataLen = 0;
-		*intRSLen = 0;
-		strcpy(strMod, "4FSK");
-		*intBaud = 50;
-		*bytQualThres = 60;
-		break;
+			*blnOdd = (1 & bytFrameType) != 0;
+			*intNumCar = 1;
+			*intDataLen = 0;
+			*intRSLen = 0;
+			strcpy(strMod, "4FSK");
+			*intBaud = 50;
+			*bytQualThres = 60;
+			break;
 
-	case 0x30:
-	case 0x31:
-	case 0x32:
-	case 0x33:
-	case 0x34:
-	case 0x35:
-	case 0x36:
-	case 0x37:
-	case 0x38:
-	case 0x3E:		// Ping
+		case 0x2C:
+		case 0x2D:
+		case 0x2E:
 
-		*blnOdd = (1 & bytFrameType) != 0;
-		*intNumCar = 1;
-		*intDataLen = 12;
-		*intRSLen = 4;			// changed 0.8.0
-		strcpy(strMod, "4FSK");
-		*intBaud = 50;
-		*bytQualThres = 50;
-		break;
+			*blnOdd = (1 & bytFrameType) != 0;
+			*intNumCar = 1;
+			*intDataLen = 0;
+			*intRSLen = 0;
+			strcpy(strMod, "4FSK");
+			*intBaud = 50;
+			*bytQualThres = 60;
+			break;
 
-	case 0x39:
-	case 0x3A:
-	case 0x3B:
-	case 0x3C:
-	case 0x3D:
+		case 0x30:
+		case 0x31:
+		case 0x32:
+		case 0x33:
+		case 0x34:
+		case 0x35:
+		case 0x36:
+		case 0x37:
+		case 0x38:
+		case 0x3E:  // Ping
 
-		*blnOdd = (1 & bytFrameType) != 0;
-		*intNumCar = 1;
-		*intDataLen = 3;
-		*intRSLen = 0;
-		strcpy(strMod, "4FSK");
-		*intBaud = 50;
-		*bytQualThres = 50;
-		break;
+			*blnOdd = (1 & bytFrameType) != 0;
+			*intNumCar = 1;
+			*intDataLen = 12;
+			*intRSLen = 4;  // changed 0.8.0
+			strcpy(strMod, "4FSK");
+			*intBaud = 50;
+			*bytQualThres = 50;
+			break;
 
-	case 0xe0:
+		case 0x39:
+		case 0x3A:
+		case 0x3B:
+		case 0x3C:
+		case 0x3D:
 
-		*blnOdd = (1 & bytFrameType) != 0;
-		*intNumCar = 1;
-		*intDataLen = 0;
-		*intRSLen = 0;
-		strcpy(strMod, "4FSK");
-		*intBaud = 50;
-		*bytQualThres = 60;
-		break;
+			*blnOdd = (1 & bytFrameType) != 0;
+			*intNumCar = 1;
+			*intDataLen = 3;
+			*intRSLen = 0;
+			strcpy(strMod, "4FSK");
+			*intBaud = 50;
+			*bytQualThres = 50;
+			break;
 
-	// 1 Carrier Data modes
-    //  100 baud PSK (200 baud not compatible with 200 Hz bandwidth)  (Note 1 carrier modes Qual Threshold reduced to 30 (was 50) for testing April 20, 2015
+		case 0xe0:
 
-	case 0x40:
-	case 0x41:
+			*blnOdd = (1 & bytFrameType) != 0;
+			*intNumCar = 1;
+			*intDataLen = 0;
+			*intRSLen = 0;
+			strcpy(strMod, "4FSK");
+			*intBaud = 50;
+			*bytQualThres = 60;
+			break;
 
-		*blnOdd = (1 & bytFrameType) != 0;
-		*intNumCar = 1;
-		*intDataLen = 64;
-		*intRSLen = 32;
-		strcpy(strMod, "4PSK");
-		*intBaud = 100;
-		*bytQualThres = 30;	
-		break;
-	
-	case 0x42:
-	case 0x43:
+		// 1 Carrier Data modes
+		// 100 baud PSK (Note 1 carrier modes Qual Threshold reduced to 30 (was 50) for testing April 20, 2015
 
-		*blnOdd = (1 & bytFrameType) != 0;
-		*intNumCar = 1;
-		*intDataLen = 16;
-		*intRSLen = 8;
-		strcpy(strMod, "4PSK");
-		*intBaud = 100;
-		*bytQualThres = 30;
-		break;
-	
-	case 0x44:
-	case 0x45:
+		case 0x40:
+		case 0x41:
 
-		*blnOdd = (1 & bytFrameType) != 0;
-		*intNumCar = 1;
-		*intDataLen = 108;
-		*intRSLen = 36;
-		strcpy(strMod, "8PSK");
-		*intBaud = 100;
-		*bytQualThres = 30;
-		break;
+			*blnOdd = (1 & bytFrameType) != 0;
+			*intNumCar = 1;
+			*intDataLen = 64;
+			*intRSLen = 32;
+			strcpy(strMod, "4PSK");
+			*intBaud = 100;
+			*bytQualThres = 30;
+			break;
 
-	case 0x46:
- 	case 0x47:
+		case 0x42:
+		case 0x43:
 
-		// 100 baud 16QAM 
-  
-		*blnOdd = (1 & bytFrameType) != 0;
-		*intNumCar = 1;
-		*intDataLen = 128;
-		*intRSLen = 64;
-		strcpy(strMod, "16QAM");
-		*intBaud = 100;
-		*bytQualThres = 30;
- 		break;
+			*blnOdd = (1 & bytFrameType) != 0;
+			*intNumCar = 1;
+			*intDataLen = 16;
+			*intRSLen = 8;
+			strcpy(strMod, "4PSK");
+			*intBaud = 100;
+			*bytQualThres = 30;
+			break;
 
+		case 0x44:
+		case 0x45:
 
+			*blnOdd = (1 & bytFrameType) != 0;
+			*intNumCar = 1;
+			*intDataLen = 108;
+			*intRSLen = 36;
+			strcpy(strMod, "8PSK");
+			*intBaud = 100;
+			*bytQualThres = 30;
+			break;
 
-	case 0x48:
-	case 0x49:
+		case 0x46:
+		case 0x47:
 
-		*blnOdd = (1 & bytFrameType) != 0;
-		*intNumCar = 1;
-		*intDataLen = 16;
-		*intRSLen = 4;
-		strcpy(strMod, "4FSK");
-		*intBaud = 50;
-		*bytQualThres = 30;
-		break;
-	
-	case 0x4A:
-	case 0x4B:
+			// 100 baud 16QAM
 
-		*blnOdd = (1 & bytFrameType) != 0;
-		*intNumCar = 1;
-		*intDataLen = 64;
-		*intRSLen = 16;
-		strcpy(strMod, "4FSK");
-		*intBaud = 100;
-		*bytQualThres = 30;
-		break;
-	
-	case 0x4C:
-	case 0x4D:
+			*blnOdd = (1 & bytFrameType) != 0;
+			*intNumCar = 1;
+			*intDataLen = 128;
+			*intRSLen = 64;
+			strcpy(strMod, "16QAM");
+			*intBaud = 100;
+			*bytQualThres = 30;
+			break;
 
-		*blnOdd = (1 & bytFrameType) != 0;
-		*intNumCar = 1;
-		*intDataLen = 32;
-		*intRSLen = 8;
-		strcpy(strMod, "4FSK");
-		*intBaud = 100;
-		*bytQualThres = 30;
-		break;
-			
- 
-	// 2 Carrier Data Modes
-	// 100 baud 
+		case 0x48:
+		case 0x49:
 
-	case 0x50:
-	case 0x51:
+			*blnOdd = (1 & bytFrameType) != 0;
+			*intNumCar = 1;
+			*intDataLen = 16;
+			*intRSLen = 4;
+			strcpy(strMod, "4FSK");
+			*intBaud = 50;
+			*bytQualThres = 30;
+			break;
 
-		*blnOdd = (1 & bytFrameType) != 0;
-		*intNumCar = 2;
-		*intDataLen = 64;
-		*intRSLen = 32;
-		strcpy(strMod, "4PSK");
-		*intBaud = 100;
-		*bytQualThres = 50;
- 		break;
+		case 0x4A:
+		case 0x4B:
 
-	case 0x52:
-	case 0x53:
+			*blnOdd = (1 & bytFrameType) != 0;
+			*intNumCar = 1;
+			*intDataLen = 64;
+			*intRSLen = 16;
+			strcpy(strMod, "4FSK");
+			*intBaud = 100;
+			*bytQualThres = 30;
+			break;
 
-		*blnOdd = bytFrameType & 1;
-		*intNumCar = 2;
-		*intDataLen = 108;
-		*intRSLen = 36;
-		strcpy(strMod, "8PSK");
-		*intBaud = 100;
-		*bytQualThres = 50;
-		break;
-						
-	// 16 QAM 2 Carrier 
-    
-	case 0x54:
-	case 0x55:
+		case 0x4C:
+		case 0x4D:
 
-		// 100 baud 16QAM
-  
-		*blnOdd = bytFrameType & 1;
-		*intNumCar = 2;
-		*intDataLen = 128;
-		*intRSLen = 64;
-		strcpy(strMod, "16QAM");
-		*intBaud = 100;
-		*bytQualThres = 50;
-		break;
-		
-	//' 4 Carrier Data Modes
-	//	100 baud
-     	
-	case 0x60:
-	case 0x61:
+			*blnOdd = (1 & bytFrameType) != 0;
+			*intNumCar = 1;
+			*intDataLen = 32;
+			*intRSLen = 8;
+			strcpy(strMod, "4FSK");
+			*intBaud = 100;
+			*bytQualThres = 30;
+			break;
 
-		*blnOdd = bytFrameType & 1;
-		*intNumCar = 4;
-		*intDataLen = 64;
-		*intRSLen = 32;
-		strcpy(strMod, "4PSK");
-		*intBaud = 100;
-		*bytQualThres = 50;
-		break;
-	
-	case 0x62:
-	case 0x63:
+		// 2 Carrier Data Modes
+		// 100 baud
 
-		*blnOdd = bytFrameType & 1;
-		*intNumCar = 4;
-		*intDataLen = 108;
-		*intRSLen = 36;
-		strcpy(strMod, "8PSK");
-		*intBaud = 100;
-		*bytQualThres = 50;
-		break;
+		case 0x50:
+		case 0x51:
 
-	//	16QAM Baud
+			*blnOdd = (1 & bytFrameType) != 0;
+			*intNumCar = 2;
+			*intDataLen = 64;
+			*intRSLen = 32;
+			strcpy(strMod, "4PSK");
+			*intBaud = 100;
+			*bytQualThres = 50;
+			break;
 
-	case 0x64:
-	case 0x65:
+		case 0x52:
+		case 0x53:
 
-		*blnOdd = bytFrameType & 1;
-		*intNumCar = 4;
-		*intDataLen = 128;
-		*intRSLen = 64;
-		strcpy(strMod, "16QAM");
-		*intBaud = 100;
-		*bytQualThres = 50;
-		break;
+			*blnOdd = bytFrameType & 1;
+			*intNumCar = 2;
+			*intDataLen = 108;
+			*intRSLen = 36;
+			strcpy(strMod, "8PSK");
+			*intBaud = 100;
+			*bytQualThres = 50;
+			break;
 
+		// 16 QAM 2 Carrier
 
-	// 8 Carrier Data modes
-	//	100 baud
+		case 0x54:
+		case 0x55:
 
-	case 0x70:
-	case 0x71:
+			// 100 baud 16QAM
 
-		*blnOdd = bytFrameType & 1;
-		*intNumCar = 8;
-		*intDataLen = 64;
-		*intRSLen = 32;
-		strcpy(strMod, "4PSK");
-		*intBaud = 100;
-		*bytQualThres = 50;
-		break;
+			*blnOdd = bytFrameType & 1;
+			*intNumCar = 2;
+			*intDataLen = 128;
+			*intRSLen = 64;
+			strcpy(strMod, "16QAM");
+			*intBaud = 100;
+			*bytQualThres = 50;
+			break;
 
-	case 0x72:
-	case 0x73:
+		// 4 Carrier Data Modes
+		// 100 baud
 
-		*blnOdd = bytFrameType & 1;
-		*intNumCar = 8;
-		*intDataLen = 108;
-		*intRSLen = 36;
-		strcpy(strMod, "8PSK");
-		*intBaud = 100;
-		*bytQualThres = 50;
-		break;
+		case 0x60:
+		case 0x61:
 
-	// 16QAM 
+			*blnOdd = bytFrameType & 1;
+			*intNumCar = 4;
+			*intDataLen = 64;
+			*intRSLen = 32;
+			strcpy(strMod, "4PSK");
+			*intBaud = 100;
+			*bytQualThres = 50;
+			break;
 
-	case 0x74:
-	case 0x75:
+		case 0x62:
+		case 0x63:
 
-		*blnOdd = bytFrameType & 1;
-		*intNumCar = 8;
-		*intDataLen = 128;
-		*intRSLen = 64;
-		strcpy(strMod, "16QAM");
-		*intBaud = 100;
-		*bytQualThres = 50;
-		break;
-		
+			*blnOdd = bytFrameType & 1;
+			*intNumCar = 4;
+			*intDataLen = 108;
+			*intRSLen = 36;
+			strcpy(strMod, "8PSK");
+			*intBaud = 100;
+			*bytQualThres = 50;
+			break;
 
-	// 600 baud 4FSK 2000 Hz bandwidth 
+		//	16QAM Baud
 
-	case 0x7a:
-	case 0x7b:
+		case 0x64:
+		case 0x65:
 
-		*blnOdd = (1 & bytFrameType) != 0;
-		*intNumCar = 1;
-		*intDataLen = 600;
-		*intRSLen = 150;
-		strcpy(strMod, "4FSK");
-		*intBaud = 600;
-		*bytQualThres = 30;
-		break;
- 
-	case 0x7C:
-	case 0x7D:
+			*blnOdd = bytFrameType & 1;
+			*intNumCar = 4;
+			*intDataLen = 128;
+			*intRSLen = 64;
+			strcpy(strMod, "16QAM");
+			*intBaud = 100;
+			*bytQualThres = 50;
+			break;
 
-		*blnOdd = (1 & bytFrameType) != 0;
-		*intNumCar = 1;
-		*intDataLen = 200;
-		*intRSLen = 50;
-		strcpy(strMod, "4FSK");
-		*intBaud = 600;
-		*bytQualThres = 30;
-		break;
+		// 8 Carrier Data modes
+		// 100 baud
 
-	default:
-		WriteDebugLog(LOGCRIT, "No data for frame type = 0x" ,bytFrameType);
-        return FALSE;
+		case 0x70:
+		case 0x71:
+
+			*blnOdd = bytFrameType & 1;
+			*intNumCar = 8;
+			*intDataLen = 64;
+			*intRSLen = 32;
+			strcpy(strMod, "4PSK");
+			*intBaud = 100;
+			*bytQualThres = 50;
+			break;
+
+		case 0x72:
+		case 0x73:
+
+			*blnOdd = bytFrameType & 1;
+			*intNumCar = 8;
+			*intDataLen = 108;
+			*intRSLen = 36;
+			strcpy(strMod, "8PSK");
+			*intBaud = 100;
+			*bytQualThres = 50;
+			break;
+
+		// 16QAM
+
+		case 0x74:
+		case 0x75:
+
+			*blnOdd = bytFrameType & 1;
+			*intNumCar = 8;
+			*intDataLen = 128;
+			*intRSLen = 64;
+			strcpy(strMod, "16QAM");
+			*intBaud = 100;
+			*bytQualThres = 50;
+			break;
+
+		// 600 baud 4FSK 2000 Hz bandwidth
+
+		case 0x7a:
+		case 0x7b:
+
+			*blnOdd = (1 & bytFrameType) != 0;
+			*intNumCar = 1;
+			*intDataLen = 600;
+			*intRSLen = 150;
+			strcpy(strMod, "4FSK");
+			*intBaud = 600;
+			*bytQualThres = 30;
+			break;
+
+		case 0x7C:
+		case 0x7D:
+
+			*blnOdd = (1 & bytFrameType) != 0;
+			*intNumCar = 1;
+			*intDataLen = 200;
+			*intRSLen = 50;
+			strcpy(strMod, "4FSK");
+			*intBaud = 600;
+			*bytQualThres = 30;
+			break;
+
+		default:
+			WriteDebugLog(LOGCRIT, "No data for frame type = 0x" ,bytFrameType);
+			return FALSE;
+		}
 	}
-	}
-	
+
 	if (bytFrameType >= 0 && bytFrameType <= 0x1F)
 		strcpy(strType,strFrameType[0]);
 	else
-		if (bytFrameType >= 0xE0) 
+		if (bytFrameType >= 0xE0)
 			strcpy(strType,strFrameType[0xE0]);
-        else
+		else
 			strcpy(strType,strFrameType[bytFrameType]);
 
 	return TRUE;
 }
-
-int NPAR = -1;	// Number of Parity Bytes - used in RS Code
 
 int MaxErrors = 0;
 
@@ -1178,8 +1143,8 @@ int MaxErrors = 0;
 extern int index_of[];
 extern int recd[];
 int Corrected[256];
-extern int tt;		//  number of errors that can be corrected 
-extern int kk;		// Info Symbols
+extern int tt;  // number of errors that can be corrected
+extern int kk;  // Info Symbols
 
 BOOL blnErrorsCorrected;
 
@@ -1188,17 +1153,20 @@ BOOL blnErrorsCorrected;
 
 int EncodePSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigned char * bytEncodedBytes)
 {
-	// Objective is to use this to use this to send all PSK data frames 
-	// 'Output is a byte array which includes:
-	//  1) A 2 byte Header which include the Frame ID.  This will be sent using 4FSK at 50 baud. It will include the Frame ID and ID Xored by the Session bytID.
-	//  2) n sections one for each carrier that will inlcude all data (with FEC appended) for the entire frame. Each block will be identical in length.
-	//  Ininitial implementation:
+	// Objective is to use this to use this to send all PSK data frames
+	// Output is a byte array which includes:
+	//  1) A 2 byte Header which include the Frame ID.
+	//    This will be sent using 4FSK at 50 baud.
+	//    It will include the Frame ID and ID Xored by the Session bytID.
+	//  2) n sections one for each carrier that will inlcude all data (with FEC appended) for the entire frame.
+	//    Each block will be identical in length.
+	//  Initial implementation:
 	//    intNum Car may be 1, 2, 4 or 8
 	//    intBaud may be 100, 167
-	//    intPSKMode may be 4 (4PSK) or 8 (8PSK) 
+	//    intPSKMode may be 4 (4PSK) or 8 (8PSK)
 	//    bytDataToSend must be equal to or less than max data supported by the frame or a exception will be logged and an empty array returned
 
-	//  First determine if bytDataToSend is compatible with the requested modulation mode.
+	// First determine if bytDataToSend is compatible with the requested modulation mode.
 
 	int intNumCar, intBaud, intDataLen, intRSLen, bytDataToSendLengthPtr, intEncodedDataPtr;
 
@@ -1209,34 +1177,34 @@ int EncodePSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 	BOOL blnFrameTypeOK;
 	UCHAR bytQualThresh;
 	int i;
-	UCHAR * bytToRS = &bytEncodedBytes[2]; 
+	UCHAR * bytToRS = &bytEncodedBytes[2];
 
 	blnFrameTypeOK = FrameInfo(bytFrameType, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytQualThresh, strType);
 
 	if (intDataLen == 0 || Length == 0 || !blnFrameTypeOK)
 	{
-		//Logs.Exception("[EncodeFSKFrameType] Failure to update parameters for frame type H" & Format(bytFrameType, "X") & "  DataToSend Len=" & bytDataToSend.Length.ToString)
+		// Logs.Exception("[EncodeFSKFrameType] Failure to update parameters for frame type H" & Format(bytFrameType, "X") & "  DataToSend Len=" & bytDataToSend.Length.ToString)
 		return 0;
 	}
-		
-	//	Generate the 2 bytes for the frame type data:
-	
+
+	// Generate the 2 bytes for the frame type data:
+
 	bytEncodedBytes[0] = bytFrameType;
 	bytEncodedBytes[1] = bytFrameType ^ bytSessionID;
 
 	bytDataToSendLengthPtr = 0;
 	intEncodedDataPtr = 2;
 
-	// Now compute the RS frame for each carrier in sequence and move it to bytEncodedBytes 
-		
-	for (i = 0; i < intNumCar; i++)		//  across all carriers
+	// Now compute the RS frame for each carrier in sequence and move it to bytEncodedBytes
+
+	for (i = 0; i < intNumCar; i++)  // across all carriers
 	{
 		memset(bytToRS, 0x69, intDataLen + 3 + intRSLen);
 		intCarDataCnt = Length - bytDataToSendLengthPtr;
-			
-		if (intCarDataCnt > intDataLen) // why not > ??
+
+		if (intCarDataCnt > intDataLen)  // why not > ??
 		{
-			// Won't all fit 
+			// Won't all fit
 
 			bytToRS[0] = intDataLen;
 			intStartIndex = intEncodedDataPtr;
@@ -1247,48 +1215,51 @@ int EncodePSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 		{
 			// Last bit
 
-			bytToRS[0] = intCarDataCnt;  // Could be 0 if insuffient data for # of carriers 
+			bytToRS[0] = intCarDataCnt;  // Could be 0 if insuffient data for # of carriers
 
 			if (intCarDataCnt > 0)
 			{
 				memcpy(&bytToRS[1], &bytDataToSend[bytDataToSendLengthPtr], intCarDataCnt);
 				bytDataToSendLengthPtr += intCarDataCnt;
-			}	
+			}
 		}
-		
-		GenCRC16FrameType(bytToRS, intDataLen + 1, bytFrameType); // calculate the CRC on the byte count + data bytes
+
+		GenCRC16FrameType(bytToRS, intDataLen + 1, bytFrameType);  // calculate the CRC on the byte count + data bytes
 
 		// Append Reed Solomon codes to end of frame data
 		if (rs_append(bytToRS, intDataLen + 3, intRSLen) != 0) {
 			WriteDebugLog(LOGERROR, "ERROR in EncodePSKData(): rs_append() failed.");
 			return (-1);
 		}
-     
- 		//  Need: (2 bytes for Frame Type) +( Data + RS + 1 byte byteCount + 2 Byte CRC per carrier)
 
- 		intEncodedDataPtr += intDataLen + 3 + intRSLen;
+		// Need: (2 bytes for Frame Type) +( Data + RS + 1 byte byteCount + 2 Byte CRC per carrier)
 
-		bytToRS += intDataLen + 3 + intRSLen;		
+		intEncodedDataPtr += intDataLen + 3 + intRSLen;
+
+		bytToRS += intDataLen + 3 + intRSLen;
 	}
 	return intEncodedDataPtr;
 }
 
 
 // Function to encode data for all FSK frame types
-  
+
 int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigned char * bytEncodedBytes)
 {
-	// Objective is to use this to use this to send all 4FSK data frames 
-	// 'Output is a byte array which includes:
-	//  1) A 2 byte Header which include the Frame ID.  This will be sent using 4FSK at 50 baud. It will include the Frame ID and ID Xored by the Session bytID.
-	//  2) n sections one for each carrier that will inlcude all data (with FEC appended) for the entire frame. Each block will be identical in length.
-	//  Ininitial implementation:
+	// Objective is to use this to use this to send all 4FSK data frames
+	// Output is a byte array which includes:
+	//  1) A 2 byte Header which include the Frame ID.
+	//    This will be sent using 4FSK at 50 baud.
+	//    It will include the Frame ID and ID Xored by the Session bytID.
+	//  2) n sections one for each carrier that will inlcude all data (with FEC appended) for the entire frame.
+	//    Each block will be identical in length.
+	//  Initial implementation:
 	//    intNum Car may be 1, 2, 4 or 8
 	//    intBaud may be 50, 100
-	//    strMod is 4FSK) 
+	//    strMod is 4FSK)
 	//    bytDataToSend must be equal to or less than max data supported by the frame or a exception will be logged and an empty array returned
 
-	//  First determine if bytDataToSend is compatible with the requested modulation mode.
+	// First determine if bytDataToSend is compatible with the requested modulation mode.
 
 	int intNumCar, intBaud, intDataLen, intRSLen, bytDataToSendLengthPtr, intEncodedDataPtr;
 
@@ -1299,38 +1270,38 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 	BOOL blnFrameTypeOK;
 	UCHAR bytQualThresh;
 	int i;
-	UCHAR * bytToRS = &bytEncodedBytes[2]; 
+	UCHAR * bytToRS = &bytEncodedBytes[2];
 
 	blnFrameTypeOK = FrameInfo(bytFrameType, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytQualThresh, strType);
 
 	if (intDataLen == 0 || Length == 0 || !blnFrameTypeOK)
 	{
-		//Logs.Exception("[EncodeFSKFrameType] Failure to update parameters for frame type H" & Format(bytFrameType, "X") & "  DataToSend Len=" & bytDataToSend.Length.ToString)
+		// Logs.Exception("[EncodeFSKFrameType] Failure to update parameters for frame type H" & Format(bytFrameType, "X") & "  DataToSend Len=" & bytDataToSend.Length.ToString)
 		return 0;
 	}
-	
-	//	Generate the 2 bytes for the frame type data:
-	
+
+	// Generate the 2 bytes for the frame type data:
+
 	bytEncodedBytes[0] = bytFrameType;
 	bytEncodedBytes[1] = bytFrameType ^ bytSessionID;
 
-     //   Dim bytToRS(intDataLen + 3 - 1) As Byte ' Data + Count + 2 byte CRC
+	// Dim bytToRS(intDataLen + 3 - 1) As Byte Data + Count + 2 byte CRC
 
 	bytDataToSendLengthPtr = 0;
 	intEncodedDataPtr = 2;
 
 	if (intBaud < 600 || intDataLen < 600)
 	{
-		// Now compute the RS frame for each carrier in sequence and move it to bytEncodedBytes 
-		
-		for (i = 0; i < intNumCar; i++)		//  across all carriers
+		// Now compute the RS frame for each carrier in sequence and move it to bytEncodedBytes
+
+		for (i = 0; i < intNumCar; i++)  // across all carriers
 		{
 			memset(bytToRS, 0x66, intDataLen + 3 + intRSLen);
 			intCarDataCnt = Length - bytDataToSendLengthPtr;
-			
-			if (intCarDataCnt >= intDataLen) // why not > ??
+
+			if (intCarDataCnt >= intDataLen)  // why not > ??
 			{
-				// Won't all fit 
+				// Won't all fit
 
 				bytToRS[0] = intDataLen;
 				intStartIndex = intEncodedDataPtr;
@@ -1341,16 +1312,16 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 			{
 				// Last bit
 
-				bytToRS[0] = intCarDataCnt;  // Could be 0 if insuffient data for # of carriers 
+				bytToRS[0] = intCarDataCnt;  // Could be 0 if insuffient data for # of carriers
 
 				if (intCarDataCnt > 0)
 				{
 					memcpy(&bytToRS[1], &bytDataToSend[bytDataToSendLengthPtr], intCarDataCnt);
-                    bytDataToSendLengthPtr += intCarDataCnt;
-				}	
+					bytDataToSendLengthPtr += intCarDataCnt;
+				}
 			}
-		
-			GenCRC16FrameType(bytToRS, intDataLen + 1, bytFrameType); // calculate the CRC on the byte count + data bytes
+
+			GenCRC16FrameType(bytToRS, intDataLen + 1, bytFrameType);  // calculate the CRC on the byte count + data bytes
 
 			// Append Reed Solomon codes to end of frame data
 			if (rs_append(bytToRS, intDataLen + 3, intRSLen) != 0) {
@@ -1358,9 +1329,9 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 				return (-1);
 			}
 
- 			//  Need: (2 bytes for Frame Type) +( Data + RS + 1 byte byteCount + 2 Byte CRC per carrier)
+			// Need: (2 bytes for Frame Type) +( Data + RS + 1 byte byteCount + 2 Byte CRC per carrier)
 
- 			intEncodedDataPtr += intDataLen + 3 + intRSLen;
+			intEncodedDataPtr += intDataLen + 3 + intRSLen;
 
 			bytToRS += intDataLen + 3 + intRSLen;
 		}
@@ -1373,10 +1344,10 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 	{
 		memset(bytToRS, 0x66, intDataLen / 3  + 3 + intRSLen / 3);
 		intCarDataCnt = Length - bytDataToSendLengthPtr;
-			
-		if (intCarDataCnt >= intDataLen /3 ) // why not > ??
+
+		if (intCarDataCnt >= intDataLen /3 )  // why not > ??
 		{
-			// Won't all fit 
+			// Won't all fit
 
 			bytToRS[0] = intDataLen / 3;
 			intStartIndex = intEncodedDataPtr;
@@ -1387,15 +1358,15 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 		{
 			// Last bit
 
-			bytToRS[0] = intCarDataCnt;  // Could be 0 if insuffient data for # of carriers 
+			bytToRS[0] = intCarDataCnt;  // Could be 0 if insuffient data for # of carriers
 
 			if (intCarDataCnt > 0)
 			{
 				memcpy(&bytToRS[1], &bytDataToSend[bytDataToSendLengthPtr], intCarDataCnt);
-                bytDataToSendLengthPtr += intCarDataCnt;
-			}	
+				bytDataToSendLengthPtr += intCarDataCnt;
+			}
 		}
-		GenCRC16FrameType(bytToRS, intDataLen / 3 + 1, bytFrameType); // calculate the CRC on the byte count + data bytes
+		GenCRC16FrameType(bytToRS, intDataLen / 3 + 1, bytFrameType);  // calculate the CRC on the byte count + data bytes
 
 		// Append Reed Solomon codes to end of frame data
 		if (rs_append(bytToRS, intDataLen / 3 + 3, intRSLen / 3) != 0) {
@@ -1405,15 +1376,15 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 
 		intEncodedDataPtr += intDataLen / 3  + 3 + intRSLen / 3;
 		bytToRS += intDataLen / 3  + 3 + intRSLen / 3;
-	}		
+	}
 	return intEncodedDataPtr;
 }
-	
-//  Function to encode ConnectRequest frame 
+
+// Function to encode ConnectRequest frame
 
 BOOL EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, enum _ARQBandwidth ARQBandwidth, UCHAR * bytReturn)
 {
-	//  Encodes a 4FSK 200 Hz BW Connect Request frame ( ~ 1950 ms with default leader/trailer)
+	// Encodes a 4FSK 200 Hz BW Connect Request frame ( ~ 1950 ms with default leader/trailer)
 
 	UCHAR * bytToRS= &bytReturn[2];
 
@@ -1421,17 +1392,17 @@ BOOL EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, enum _A
 	{
 		if (!CheckValidCallsignSyntax(strMyCallsign))
 		{
-			//Logs.Exception("[EncodeModulate.EncodeARQConnectRequest] Illegal Call sign syntax. MyCallsign = " & strMyCallsign & ", TargetCallsign = " & strTargetCallsign)
+			// Logs.Exception("[EncodeModulate.EncodeARQConnectRequest] Illegal Call sign syntax. MyCallsign = " & strMyCallsign & ", TargetCallsign = " & strTargetCallsign)
 
 			return 0;
 		}
 		if (!CheckValidCallsignSyntax(strTargetCallsign) || !CheckValidCallsignSyntax(strMyCallsign))
-		{            
-			//Logs.Exception("[EncodeModulate.EncodeARQConnectRequest] Illegal Call sign syntax. MyCallsign = " & strMyCallsign & ", TargetCallsign = " & strTargetCallsign)
-			
+		{
+			// Logs.Exception("[EncodeModulate.EncodeARQConnectRequest] Illegal Call sign syntax. MyCallsign = " & strMyCallsign & ", TargetCallsign = " & strTargetCallsign)
+
 			return 0;
 		}
-	}		
+	}
 	if (ARQBandwidth == B200MAX)
 		bytReturn[0] = 0x31;
 	else if (ARQBandwidth == B500MAX)
@@ -1451,7 +1422,7 @@ BOOL EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, enum _A
 		bytReturn[0] = 0x38;
 	else
 	{
-		//Logs.Exception("[EncodeModulate.EncodeFSK500_1S] Bandwidth error.  Bandwidth = " & strBandwidth)
+		// Logs.Exception("[EncodeModulate.EncodeFSK500_1S] Bandwidth error.  Bandwidth = " & strBandwidth)
 		return 0;
 	}
 
@@ -1460,7 +1431,7 @@ BOOL EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, enum _A
 	// Modified May 24, 2015 to use RS instead of 2 byte CRC. (same as ID frame)
 
 	CompressCallsign(strMyCallsign, &bytToRS[0]);
-	CompressCallsign(strTargetCallsign, &bytToRS[6]);  //this uses compression to accept 4, 6, or 8 character Grid squares.
+	CompressCallsign(strTargetCallsign, &bytToRS[6]);  // this uses compression to accept 4, 6, or 8 character Grid squares.
 
 	// Append Reed Solomon codes to end of frame data
 	if (rs_append(bytToRS, 12, 4) != 0) {
@@ -1473,20 +1444,20 @@ BOOL EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, enum _A
 
 int EncodePing(char * strMyCallsign, char * strTargetCallsign, UCHAR * bytReturn)
 {
-	// Encodes a 4FSK 200 Hz BW Ping frame ( ~ 1950 ms with default leader/trailer) 
+	// Encodes a 4FSK 200 Hz BW Ping frame ( ~ 1950 ms with default leader/trailer)
 
 	UCHAR * bytToRS= &bytReturn[2];
 
 //        If Not (CheckValidCallsignSyntax(strTargetCallsign) Or CheckValidCallsignSyntax(strMyCallsign)) Then
-  //          Logs.Exception("[EncodeModulate.EncodePing] Illegal Call sign syntax. MyCallsign = " & strMyCallsign & ", TargetCallsign = " & strTargetCallsign)
-   ////         Return Nothing
-   //     End If
+//          Logs.Exception("[EncodeModulate.EncodePing] Illegal Call sign syntax. MyCallsign = " & strMyCallsign & ", TargetCallsign = " & strTargetCallsign)
+////         Return Nothing
+//     End If
 
 	bytReturn[0] = PING;
-	bytReturn[1] = bytReturn[0] ^ 0xFF; // Ping always uses session ID of &HFF
+	bytReturn[1] = bytReturn[0] ^ 0xFF;  // Ping always uses session ID of &HFF
 
 	CompressCallsign(strMyCallsign, &bytToRS[0]);
-	CompressCallsign(strTargetCallsign, &bytToRS[6]);  //this uses compression to accept 4, 6, or 8 character Grid squares.
+	CompressCallsign(strTargetCallsign, &bytToRS[6]);  // this uses compression to accept 4, 6, or 8 character Grid squares.
 
 	// Append Reed Solomon codes to end of frame data
 	if (rs_append(bytToRS, 12, 4) != 0) {
@@ -1499,30 +1470,29 @@ int EncodePing(char * strMyCallsign, char * strTargetCallsign, UCHAR * bytReturn
 
 
 
- 
 int Encode4FSKIDFrame(char * Callsign, char * Square, unsigned char * bytreturn)
 {
-	// Function to encodes ID frame 
-	// returns length of encoded message 
+	// Function to encodes ID frame
+	// returns length of encoded message
 
 	UCHAR * bytToRS= &bytreturn[2];
 
-	 if (!CheckValidCallsignSyntax(Callsign))
-	 {
-		//       Logs.Exception("[EncodeModulate.EncodeIDFrame] Illegal Callsign syntax or Gridsquare length. MyCallsign = " & strMyCallsign & ", Gridsquare = " & strGridSquare)
-		
-		 return 0;
-	 }
+	if (!CheckValidCallsignSyntax(Callsign))
+	{
+		// Logs.Exception("[EncodeModulate.EncodeIDFrame] Illegal Callsign syntax or Gridsquare length. MyCallsign = " & strMyCallsign & ", Gridsquare = " & strGridSquare)
+
+		return 0;
+	}
 
 	bytreturn[0] = 0x30;
 	bytreturn[1] = 0x30 ^ 0xFF;
 
 	// Modified May 9, 2015 to use RS instead of 2 byte CRC.
-       
+
 	CompressCallsign(Callsign, &bytToRS[0]);
 
-    if (Square[0])
-		CompressGridSquare(Square, &bytToRS[6]);  //this uses compression to accept 4, 6, or 8 character Grid squares.
+	if (Square[0])
+		CompressGridSquare(Square, &bytToRS[6]);  // this uses compression to accept 4, 6, or 8 character Grid squares.
 
 	// Append Reed Solomon codes to end of frame data
 	if (rs_append(bytToRS, 12, 4) != 0) {
@@ -1533,40 +1503,40 @@ int Encode4FSKIDFrame(char * Callsign, char * Square, unsigned char * bytreturn)
 	return 18;  // 2 bytes for FrameType + 12 bytes data + 4 bytes RS
 }
 
-//  Funtion to encodes a short 4FSK 50 baud Control frame  (2 bytes total) BREAK, END, DISC, IDLE, ConRejBusy, ConRegBW  
+// Funtion to encodes a short 4FSK 50 baud Control frame  (2 bytes total) BREAK, END, DISC, IDLE, ConRejBusy, ConRegBW
 
 int Encode4FSKControl(UCHAR bytFrameType, UCHAR bytSessionID, UCHAR * bytreturn)
 {
-	// Encodes a short control frame (normal length ~320 ms with default 160 ms leader+trailer) 
-    
-	//If IsShortControlFrame(intFrameCode) Then
-    //        Logs.Exception("[EncodeModulate.EncodeFSKControl] Illegal control frame code: H" & Format(intFrameCode, "X"))
-    //        return Nothing
-    //    End If
+	// Encodes a short control frame (normal length ~320 ms with default 160 ms leader+trailer)
+
+	// If IsShortControlFrame(intFrameCode) Then
+	//        Logs.Exception("[EncodeModulate.EncodeFSKControl] Illegal control frame code: H" & Format(intFrameCode, "X"))
+	//        return Nothing
+	//    End If
 
 	bytreturn[0] = bytFrameType;
 	bytreturn[1] = bytFrameType ^ bytSessionID;
 
-	return 2;		// Length
+	return 2;  // Length
 }
 
-//  Function to encode a CONACK frame with Timing data  (6 bytes total)  
+// Function to encode a CONACK frame with Timing data  (6 bytes total)
 
 int EncodeConACKwTiming(UCHAR bytFrameType, int intRcvdLeaderLenMs, UCHAR bytSessionID, UCHAR * bytreturn)
 {
-	// Encodes a Connect ACK with one byte Timing info. (Timing info repeated 2 times for redundancy) 
+	// Encodes a Connect ACK with one byte Timing info. (Timing info repeated 2 times for redundancy)
 
-	//If intFrameCode < 0x39 Or intFrameCode > 0x3C Then
-    //        Logs.Exception("[EncodeConACKwTiming] Illegal Frame code: " & Format(intFrameCode, "X"))
-    //        return Nothing
-    //    End If
+	// If intFrameCode < 0x39 Or intFrameCode > 0x3C Then
+	//        Logs.Exception("[EncodeConACKwTiming] Illegal Frame code: " & Format(intFrameCode, "X"))
+	//        return Nothing
+	//    End If
 
 	UCHAR bytTiming = min(255, intRcvdLeaderLenMs / 10);  // convert to 10s of ms.
 
 	if (intRcvdLeaderLenMs > 2550 || intRcvdLeaderLenMs < 0)
 	{
 		// Logs.Exception("[EncodeConACKwTiming] Timing value out of range: " & intRcvdLeaderLenMs.ToString & " continue with forced value = 0")
-        bytTiming = 0;
+		bytTiming = 0;
 	}
 
 	bytreturn[0] = bytFrameType;
@@ -1578,29 +1548,30 @@ int EncodeConACKwTiming(UCHAR bytFrameType, int intRcvdLeaderLenMs, UCHAR bytSes
 
 	return 5;
 }
-//  Function to encode a PingAck frame with Quality Data  (5 bytes total)  
+
+// Function to encode a PingAck frame with Quality Data  (5 bytes total)
 
 int EncodePingAck(int bytFrameType, int intSN, int intQuality, UCHAR * bytreturn)
 {
-	// Encodes a Ping ACK with one byte of S:N and Quality info ( info repeated 2 times for redundancy) 
+	// Encodes a Ping ACK with one byte of S:N and Quality info ( info repeated 2 times for redundancy)
 
 	bytreturn[0] = bytFrameType;
 	bytreturn[1] = bytFrameType ^ 0xff;
 
 	if (intSN >= 21)
-		bytreturn[2] = 0xf8;	// set to MAX level indicating >= 21dB
+		bytreturn[2] = 0xf8;  // set to MAX level indicating >= 21dB
 	else
-		bytreturn[2] = ((intSN + 10) & 0x1F) << 3;		// Upper 5 bits are S:N 0-31 corresponding to -10 to 21 dB   (5 bits S:N, 3 bits Quality 
+		bytreturn[2] = ((intSN + 10) & 0x1F) << 3;  // Upper 5 bits are S:N 0-31 corresponding to -10 to 21 dB   (5 bits S:N, 3 bits Quality
 
-	bytreturn[2] += max(0, (intQuality - 30) / 10) & 7; // Quality is lower 3 bits value 0 to 7 representing 30-100
+	bytreturn[2] += max(0, (intQuality - 30) / 10) & 7;  // Quality is lower 3 bits value 0 to 7 representing 30-100
 	bytreturn[3] = bytreturn[2];
 	bytreturn[4] = bytreturn[2];
-	
+
 	return 5;
 }
 
 
-//	' Function to encode an ACK control frame  (2 bytes total) ...with 5 bit Quality code 
+// Function to encode an ACK control frame  (2 bytes total) ...with 5 bit Quality code
 
 int EncodeDATAACK(int intQuality, UCHAR bytSessionID, UCHAR * bytreturn)
 {
@@ -1611,15 +1582,15 @@ int EncodeDATAACK(int intQuality, UCHAR bytSessionID, UCHAR * bytreturn)
 	if (intQuality > 100)
 		intQuality = 100;
 
-	intScaledQuality = max(0, (intQuality / 2) - 19); // scale quality value to fit 5 bit field of 0 represents Q <= of 38 (pretty poor)
-	
-	bytreturn[0] = 0xE0 + intScaledQuality;		//ACKs 0xE0 - 0xFF
+	intScaledQuality = max(0, (intQuality / 2) - 19);  // scale quality value to fit 5 bit field of 0 represents Q <= of 38 (pretty poor)
+
+	bytreturn[0] = 0xE0 + intScaledQuality;  // ACKs 0xE0 - 0xFF
 	bytreturn[1] = bytreturn[0] ^ bytSessionID;
 
 	return 2;
 }
 
-//  Function to encode a NAK frame  (2 bytes total) ...with 5 bit Quality code 
+// Function to encode a NAK frame  (2 bytes total) ...with 5 bit Quality code
 
 int EncodeDATANAK(int intQuality , UCHAR bytSessionID, UCHAR * bytreturn)
 {
@@ -1627,9 +1598,9 @@ int EncodeDATANAK(int intQuality , UCHAR bytSessionID, UCHAR * bytreturn)
 
 	int intScaledQuality;
 
-	intScaledQuality = max(0, (intQuality / 2) - 19); // scale quality value to fit 5 bit field of 0 represents Q <= of 38 (pretty poor)
-	
-	bytreturn[0] = intScaledQuality;		// NAKS 00 - 0x1F
+	intScaledQuality = max(0, (intQuality / 2) - 19);  // scale quality value to fit 5 bit field of 0 represents Q <= of 38 (pretty poor)
+
+	bytreturn[0] = intScaledQuality;  // NAKS 00 - 0x1F
 	bytreturn[1] = bytreturn[0] ^ bytSessionID;
 
 	return 2;
@@ -1646,7 +1617,7 @@ void SendID(BOOL blnEnableCWID)
 	if (SoundIsPlaying)
 		return;
 
-    if (GridSquare[0] == 0)
+	if (GridSquare[0] == 0)
 	{
 		if ((EncLen = Encode4FSKIDFrame(Callsign, "No GS", bytEncodedBytes)) <= 0) {
 			WriteDebugLog(LOGERROR, "ERROR: In SendID() Invalid EncLen (%d).", EncLen);
@@ -1675,20 +1646,19 @@ void SendID(BOOL blnEnableCWID)
 		p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17]);
 
 
-	Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], EncLen, 0);		// only returns when all sent
+	Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
 
-    if (blnEnableCWID)
+	if (blnEnableCWID)
 		sendCWID(Callsign, FALSE);
-
 }
 
 // Function to generate a 5 second burst of two tone (1450 and 1550 Hz) used for setting up drive level
- 
+
 void Send5SecTwoTone()
 {
 	initFilter(200, 1500);
 	GetTwoToneLeaderWithSync(250);
-//	SampleSink(0);	// 5 secs
+//	SampleSink(0);  // 5 secs
 	SoundFlush();
 }
 
@@ -1697,7 +1667,7 @@ void  ASCIIto6Bit(char * Padded, UCHAR * Compressed)
 {
 	// Input must be 8 bytes which will convert to 6 bytes of packed 6 bit characters and
 	// inputs must be the ASCII character set values from 32 to 95....
-    
+
 	unsigned long long intSum = 0;
 
 	int i;
@@ -1727,7 +1697,7 @@ void Bit6ToASCII(UCHAR * Padded, UCHAR * UnCompressed)
 {
 	// uncompress 6 to 8
 
-	// Input must be 6 bytes which represent packed 6 bit characters that well 
+	// Input must be 6 bytes which represent packed 6 bit characters that well
 	// result will be 8 ASCII character set values from 32 to 95...
 
 	unsigned long long intSum = 0;
@@ -1758,8 +1728,8 @@ void Bit6ToASCII(UCHAR * Padded, UCHAR * UnCompressed)
 }
 
 
-// Function to compress callsign (up to 7 characters + optional "-"SSID   (-0 to -15 or -A to -Z) 
-    
+// Function to compress callsign (up to 7 characters + optional "-"SSID   (-0 to -15 or -A to -Z)
+
 void CompressCallsign(char * inCallsign, UCHAR * Compressed)
 {
 	char Callsign[10] = "";
@@ -1769,12 +1739,12 @@ void CompressCallsign(char * inCallsign, UCHAR * Compressed)
 
 	memcpy(Callsign, inCallsign, 10);
 	Dash = strchr(Callsign, '-');
-	
-	if (Dash == 0)		// if No SSID
+
+	if (Dash == 0)  // if No SSID
 	{
 		strcpy(Padded, Callsign);
 		strcat(Padded, "    ");
-		Padded[7] = '0';			//  "0" indicates no SSID
+		Padded[7] = '0';  // "0" indicates no SSID
 	}
 	else
 	{
@@ -1784,13 +1754,13 @@ void CompressCallsign(char * inCallsign, UCHAR * Compressed)
 		strcpy(Padded, Callsign);
 		strcat(Padded, "    ");
 
-		if (SSID >= 10)		// ' handles special case of -10 to -15 : ; < = > ? '
+		if (SSID >= 10)  // handles special case of -10 to -15 : ; < = > ?
 			Padded[7] = ':' + SSID - 10;
 		else
 			Padded[7] = *(Dash);
 	}
 
-	ASCIIto6Bit(Padded, Compressed); //compress to 8 6 bit characters   6 bytes total
+	ASCIIto6Bit(Padded, Compressed);  // compress to 8 6 bit characters   6 bytes total
 }
 
 // Function to compress Gridsquare (up to 8 characters)
@@ -1798,36 +1768,36 @@ void CompressCallsign(char * inCallsign, UCHAR * Compressed)
 void CompressGridSquare(char * Square, UCHAR * Compressed)
 {
 	char Padded[17];
-        
+
 	if (strlen(Square) > 8)
 		return;
 
 	strcpy(Padded, Square);
 	strcat(Padded, "        ");
 
-	ASCIIto6Bit(Padded, Compressed); //compress to 8 6 bit characters   6 bytes total
+	ASCIIto6Bit(Padded, Compressed);  // compress to 8 6 bit characters   6 bytes total
 }
 
 // Function to decompress 6 byte call sign to 7 characters plus optional -SSID of -0 to -15 or -A to -Z
-  
+
 void DeCompressCallsign(char * bytCallsign, char * returned)
 {
 	char bytTest[10] = "";
 	char SSID[8] = "";
-    
+
 	Bit6ToASCII(bytCallsign, bytTest);
 
 	memcpy(returned, bytTest, 7);
 	returned[7] = 0;
-	strlop(returned, ' ');		// remove trailing space
+	strlop(returned, ' ');  // remove trailing space
 
-	if (bytTest[7] == '0') // Value of "0" so No SSID
+	if (bytTest[7] == '0')  // Value of "0" so No SSID
 		returned[6] = 0;
-	else if (bytTest[7] >= 58 && bytTest[7] <= 63) //' handles special case for -10 to -15
+	else if (bytTest[7] >= 58 && bytTest[7] <= 63)  // handles special case for -10 to -15
 		sprintf(SSID, "-%d", bytTest[7] - 48);
 	else
 		sprintf(SSID, "-%c", bytTest[7]);
-	
+
 	strcat(returned, SSID);
 }
 
@@ -1858,7 +1828,7 @@ UCHAR ComputeTypeParity(UCHAR bytFrameType)
 		bytParitySum = bytParitySum ^ bytSym;
 		bytMask = bytMask >> 2;
 	}
-    
+
 	return bytParitySum & 0x3;
 }
 
@@ -1868,7 +1838,7 @@ UCHAR FrameCode(char * strFrameName)
 {
 	int i;
 
-    for (i = 0; i < 256; i++)
+	for (i = 0; i < 256; i++)
 	{
 		if (strcmp(strFrameType[i], strFrameName) == 0)
 		{
@@ -1881,79 +1851,78 @@ UCHAR FrameCode(char * strFrameName)
 unsigned int GenCRC16(unsigned char * Data, unsigned short length)
 {
 	// For  CRC-16-CCITT =    x^16 + x^12 +x^5 + 1  intPoly = 1021 Init FFFF
-    // intSeed is the seed value for the shift register and must be in the range 0-0xFFFF
+	// intSeed is the seed value for the shift register and must be in the range 0-0xFFFF
 
-	int intRegister = 0xffff; //intSeed
-	int i,j;
+	int intRegister = 0xffff;  // intSeed
+	int i, j;
 	int Bit;
-	int intPoly = 0x8810;	//  This implements the CRC polynomial  x^16 + x^12 +x^5 + 1
+	int intPoly = 0x8810;  // This implements the CRC polynomial  x^16 + x^12 +x^5 + 1
 
-	for (j = 0; j < length; j++)	
+	for (j = 0; j < length; j++)
 	{
-		int Mask = 0x80;			// Top bit first
+		int Mask = 0x80;  // Top bit first
 
-		for (i = 0; i < 8; i++)	// for each bit processing MS bit first
+		for (i = 0; i < 8; i++)  // for each bit processing MS bit first
 		{
 			Bit = Data[j] & Mask;
 			Mask >>= 1;
 
-            if (intRegister & 0x8000)		//  Then ' the MSB of the register is set
+			if (intRegister & 0x8000)  // Then the MSB of the register is set
 			{
-                // Shift left, place data bit as LSB, then divide
-                // Register := shiftRegister left shift 1
-                // Register := shiftRegister xor polynomial
-                 
-              if (Bit)
-                 intRegister = 0xFFFF & (1 + (intRegister << 1));
-			  else
-                  intRegister = 0xFFFF & (intRegister << 1);
-	
+				// Shift left, place data bit as LSB, then divide
+				// Register := shiftRegister left shift 1
+				// Register := shiftRegister xor polynomial
+
+				if (Bit)
+					intRegister = 0xFFFF & (1 + (intRegister << 1));
+				else
+					intRegister = 0xFFFF & (intRegister << 1);
 				intRegister = intRegister ^ intPoly;
 			}
-			else  
+			else
 			{
 				// the MSB is not set
-                // Register is not divisible by polynomial yet.
-                // Just shift left and bring current data bit onto LSB of shiftRegister
-              if (Bit)
-                 intRegister = 0xFFFF & (1 + (intRegister << 1));
-			  else
-                  intRegister = 0xFFFF & (intRegister << 1);
+				// Register is not divisible by polynomial yet.
+				// Just shift left and bring current data bit onto LSB of shiftRegister
+				if (Bit)
+					intRegister = 0xFFFF & (1 + (intRegister << 1));
+				else
+					intRegister = 0xFFFF & (intRegister << 1);
 			}
 		}
 	}
- 
+
 	return intRegister;
 }
 
-//	Subroutine to compute a 16 bit CRC value and append it to the Data... With LS byte XORed by bytFrameType
-    
+// Function to compute a 16 bit CRC value and append it to the Data... With LS byte XORed by bytFrameType
+
 void GenCRC16FrameType(char * Data, int Length, UCHAR bytFrameType)
 {
 	unsigned int CRC = GenCRC16(Data, Length);
 
 	// Put the two CRC bytes after the stop index
 
-	Data[Length++] = (CRC >> 8);		 // MS 8 bits of Register
+	Data[Length++] = (CRC >> 8);  // MS 8 bits of Register
 	Data[Length] = (CRC & 0xFF) ^ bytFrameType;  // LS 8 bits of Register
 }
 
 // Function to compute a 16 bit CRC value and check it against the last 2 bytes of Data (the CRC) XORing LS byte with bytFrameType..
- 
+
 unsigned short int compute_crc(unsigned char *buf,int len);
 
 BOOL  CheckCRC16FrameType(unsigned char * Data, int Length, UCHAR bytFrameType)
 {
 	// returns TRUE if CRC matches, else FALSE
-    // For  CRC-16-CCITT =    x^16 + x^12 +x^5 + 1  intPoly = 1021 Init FFFF
-    // intSeed is the seed value for the shift register and must be in the range 0-0xFFFF
+	// For  CRC-16-CCITT =    x^16 + x^12 +x^5 + 1  intPoly = 1021 Init FFFF
+	// intSeed is the seed value for the shift register and must be in the range 0-0xFFFF
 
 	unsigned int CRC = GenCRC16(Data, Length);
 	unsigned short CRC2 =  compute_crc(Data, Length);
 	CRC2 ^= 0xffff;
-  
-	// Compare the register with the last two bytes of Data (the CRC) 
-    
+
+	// Compare the register with the last two bytes of Data (the CRC)
+
 	if ((CRC >> 8) == Data[Length])
 		if (((CRC & 0xFF) ^ bytFrameType) == Data[Length + 1])
 			return TRUE;
@@ -1961,7 +1930,7 @@ BOOL  CheckCRC16FrameType(unsigned char * Data, int Length, UCHAR bytFrameType)
 	return FALSE;
 }
 
-// Subroutine to get intDataLen bytes from outbound queue (bytDataToSend)
+// Function to get intDataLen bytes from outbound queue (bytDataToSend)
 
 void ClearDataToSend()
 {
@@ -1991,7 +1960,7 @@ void RemoveDataFromQueue(int Len)
 	GetSemaphore();
 
 	if (Len > bytDataToSendLength)
-		Len = bytDataToSendLength;			// Shouldn't happen, unless the Q is cleared
+		Len = bytDataToSendLength;  // Shouldn't happen, unless the Q is cleared
 
 	bytDataToSendLength -= Len;
 
@@ -2002,7 +1971,7 @@ void RemoveDataFromQueue(int Len)
 
 	if (bytDataToSendLength == 0)
 		SetLED(TRAFFICLED, FALSE);
-	
+
 	sprintf(HostCmd, "BUFFER %d", bytDataToSendLength);
 	QueueCommandToHost(HostCmd);
 }
@@ -2011,7 +1980,7 @@ void RemoveDataFromQueue(int Len)
 
 void CheckTimers()
 {
-	//	Check for Timeout after a send that needs to be repeated
+	// Check for Timeout after a send that needs to be repeated
 
 	if ((blnEnbARQRpt || blnDISCRepeating) && Now > dttNextPlay)
 	{
@@ -2019,10 +1988,10 @@ void CheckTimers()
 
 		if (GetNextFrame())
 		{
-			// I think this only returns TRUE if we have to repeat the last 
+			// I think this only returns TRUE if we have to repeat the last
 
 			//	Repeat mechanism for normal repeated FEC or ARQ frames
-      
+
 			WriteDebugLog(LOGINFO, "[Repeating Last Frame]");
 			RemodulateLastFrame();
 		}
@@ -2033,69 +2002,70 @@ void CheckTimers()
 	}
 
 
-	//  Event triggered by tmrSendTimeout elapse. Ends an ARQ session and sends a DISC frame 
-    
+	// Event triggered by tmrSendTimeout elapse. Ends an ARQ session and sends a DISC frame
+
 	if (tmrSendTimeout && Now > tmrSendTimeout)
 	{
 		char HostCmd[80];
 
 		// (Handles protocol rule 1.7)
-       
+
 		tmrSendTimeout = 0;
 
-			//Dim dttStartWait As Date = Now
-			//While objMain.blnLastPTT And Now.Subtract(dttStartWait).TotalSeconds < 10
-			// Thread.Sleep(50)
-			// End While
+		// Dim dttStartWait As Date = Now
+		// While objMain.blnLastPTT And Now.Subtract(dttStartWait).TotalSeconds < 10
+		//  Thread.Sleep(50)
+		// End While
 
 		WriteDebugLog(LOGDEBUG, "ARDOPprotocol.tmrSendTimeout]  ARQ Timeout from ProtocolState: %s Going to DISC state", ARDOPStates[ProtocolState]);
-        
-			// Confirmed proper operation of this timeout and rule 4.0 May 18, 2015
-			// Send an ID frame (Handles protocol rule 4.0)
-		
+
+		// Confirmed proper operation of this timeout and rule 4.0 May 18, 2015
+		// Send an ID frame (Handles protocol rule 4.0)
+
 		if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes)) <= 0) {
 			WriteDebugLog(LOGERROR, "ERROR: In CheckTimers() sending IDFrame before DIC Invalid EncLen (%d).", EncLen);
 			return;
 		}
-		Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], EncLen, 0);		// only returns when all sent
+		Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
 		dttLastFECIDSent = Now;
-			
-		if (AccumulateStats) LogStats();
+
+		if (AccumulateStats)
+			LogStats();
 
 		QueueCommandToHost("DISCONNECTED");
-			
+
 		sprintf(HostCmd, "STATUS ARQ Timeout from Protocol State:  %s", ARDOPStates[ProtocolState]);
 		QueueCommandToHost(HostCmd);
 		blnEnbARQRpt = FALSE;
-		//Thread.Sleep(2000)
+		// Thread.Sleep(2000)
 		ClearDataToSend();
 
 		if ((EncLen = Encode4FSKControl(0x29, bytSessionID, bytEncodedBytes)) <= 0) {
 			WriteDebugLog(LOGERROR, "ERROR: In CheckTimers() sending DISC Invalid EncLen (%d).", EncLen);
 			return;
 		}
-		Mod4FSKDataAndPlay(0x29, &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
+		Mod4FSKDataAndPlay(0x29, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 
 		intFrameRepeatInterval = 2000;
 		SetARDOPProtocolState(DISC);
-			
-		InitializeConnection(); // reset all Connection data
-				
-			// Clear the mnuBusy status on the main form
-			//Dim stcStatus As Status = Nothing
-		    //stcStatus.ControlName = "mnuBusy"
-			//stcStatus.Text = "FALSE"
-		    //queTNCStatus.Enqueue(stcStatus)
-        
-		blnTimeoutTriggered = FALSE ;// prevents a retrigger
+
+		InitializeConnection();  // reset all Connection data
+
+		// Clear the mnuBusy status on the main form
+		// Dim stcStatus As Status = Nothing
+		// stcStatus.ControlName = "mnuBusy"
+		// stcStatus.Text = "FALSE"
+		// queTNCStatus.Enqueue(stcStatus)
+
+		blnTimeoutTriggered = FALSE;  // prevents a retrigger
 	}
 
 	// Elapsed Subroutine for Pending timeout
-   
+
 	if (tmrIRSPendingTimeout && Now > tmrIRSPendingTimeout)
 	{
 		char HostCmd[80];
-		
+
 		tmrIRSPendingTimeout = 0;
 
 		WriteDebugLog(LOGDEBUG, "ARDOPprotocol.tmrIRSPendingTimeout]  ARQ Timeout from ProtocolState: %s Going to DISC state",  ARDOPStates[ProtocolState]);
@@ -2110,11 +2080,11 @@ void CheckTimers()
 		blnPending = FALSE;
 		InitializeConnection();	 // reset all Connection data
 
-			//' Clear the mnuBusy status on the main form
-		     //Dim stcStatus As Status = Nothing
-			//stcStatus.ControlName = "mnuBusy"
-			//stcStatus.Text = "FALSE"
-			//	queTNCStatus.Enqueue(stcStatus)
+		// Clear the mnuBusy status on the main form
+		// Dim stcStatus As Status = Nothing
+		// stcStatus.ControlName = "mnuBusy"
+		// stcStatus.Text = "FALSE"
+		// queTNCStatus.Enqueue(stcStatus)
 	}
 
 	// Subroutine for tmrFinalIDElapsed
@@ -2122,16 +2092,16 @@ void CheckTimers()
 	if (tmrFinalID && Now > tmrFinalID)
 	{
 		tmrFinalID = 0;
-		
+
 		WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.tmrFinalID_Elapsed]  Send Final ID (%s, [%s])", strFinalIDCallsign, GridSquare);
-   
+
 		if (CheckValidCallsignSyntax(strFinalIDCallsign))
 		{
 			if ((EncLen = Encode4FSKIDFrame(strFinalIDCallsign, GridSquare, bytEncodedBytes)) <= 0) {
 				WriteDebugLog(LOGERROR, "ERROR: In CheckTimers() sending IDFrame  Invalid EncLen (%d).", EncLen);
 				return;
 			}
-			Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], EncLen, 0);		// only returns when all sent
+			Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
 			dttLastFECIDSent = Now;
 		}
 	}
@@ -2175,17 +2145,17 @@ void CheckTimers()
 //		char HostCmd[32];
 //		sprintf(HostCmd, "BUFFER %d", bytDataToSendLength);
 //		QueueCommandToHost(HostCmd);
-	
-		tmrPollOBQueue = Now + 10000;		// 10 Secs
+
+		tmrPollOBQueue = Now + 10000;  // 10 Secs
 	}
 }
 
-// Main polling Function returns True or FALSE if closing 
+// Main polling Function returns True or FALSE if closing
 
 BOOL MainPoll() {
 	// Checks to see if frame ready for playing
 
-	if (!SoundIsPlaying && !blnEnbARQRpt && !blnDISCRepeating)		// Idle (check playing in case we call from txSleep())
+	if (!SoundIsPlaying && !blnEnbARQRpt && !blnDISCRepeating)  // Idle (check playing in case we call from txSleep())
 	{
 		if (GetNextFrame())
 		{
@@ -2193,8 +2163,8 @@ BOOL MainPoll() {
 			// till it is all sent, I don't think I have to do anything here
 		}
 	}
-	
-	if	(blnClosing)	// Check for closing
+
+	if	(blnClosing)  // Check for closing
 		return FALSE;
 
 	return TRUE;
@@ -2204,19 +2174,19 @@ int dttLastBusy;
 int dttLastClear;
 int dttStartRTMeasure;
 
-//  Functino to extract bandwidth from ARQBandwidth
+// Function to extract bandwidth from ARQBandwidth
 
 int ExtractARQBandwidth()
 {
 	return atoi(ARQBandwidths[ARQBandwidth]);
 }
 
-//	Subroutine to update the Busy detector when not displaying Spectrum or Waterfall (graphics disabled)
- 		
+// Subroutine to update the Busy detector when not displaying Spectrum or Waterfall (graphics disabled)
+
 int LastBusyCheck = 0;
 extern UCHAR CurrentLevel;
 
-#ifdef PLOTSPECTRUM		
+#ifdef PLOTSPECTRUM
 float dblMagSpectrum[206];
 float dblMaxScale = 0.0f;
 extern UCHAR Pixels[4096];
@@ -2227,7 +2197,7 @@ float bhWindow[513];
 float wS1 = 0;
 void generateBH() {
 	for (int i = 0; i < 513; i++) {
-		bhWindow[i] = 0.35875 - 0.48829 * cos(2 * M_PI * i / 1024) 
+		bhWindow[i] = 0.35875 - 0.48829 * cos(2 * M_PI * i / 1024)
 			+ 0.14128 * cos(4 * M_PI * i / 1024) - 0.01168 * cos(6 * M_PI * i / 1024);
 		wS1 += 2 * bhWindow[i];
 	}
@@ -2245,24 +2215,24 @@ void UpdateBusyDetector(short * bytNewSamples)
 	float dblMagMax = 0.0000000001f;
 	float dblMagMin = 10000000000.0f;
 #endif
-	UCHAR Waterfall[256];			// Colour index values to send to GUI
-	int clrTLC = Lime;				// Default Bandwidth lines on waterfall
-	
+	UCHAR Waterfall[256];  // Colour index values to send to GUI
+	int clrTLC = Lime;  // Default Bandwidth lines on waterfall
+
 	static BOOL blnLastBusyStatus;
-	
+
 	float dblMagAvg = 0;
 	int intTuneLineLow, intTuneLineHi, intDelta;
 	int i;
 
 //	if (State != SearchingForLeader)
-//		return;						// only when looking for leader
+//		return;  // only when looking for leader
 
-	if (ProtocolState != DISC)		// ' Only process busy when in DISC state
+	if (ProtocolState != DISC)  // Only process busy when in DISC state
 	{
 		// Dont do busy, but may need waterfall or spectrum
 
 		if ((WaterfallActive | SpectrumActive) == 0 && WebGuiNumConnected == 0)
-			return;					// No waterfall or spectrum 
+			return;  // No waterfall or spectrum
 	}
 
 	if (Now - LastBusyCheck < 100)
@@ -2271,7 +2241,7 @@ void UpdateBusyDetector(short * bytNewSamples)
 	LastBusyCheck = Now;
 
 	// Apply a Blackman-Harris window before doing FFT
-	// This will decrease spectral leakage.  It also decreases the magnitude 
+	// This will decrease spectral leakage.  It also decreases the magnitude
 	// of the FFT results by wS1/1024
 	if (wS1 == 0)
 		generateBH();
@@ -2286,15 +2256,15 @@ void UpdateBusyDetector(short * bytNewSamples)
 
 	for (i = 0; i < 206; i++)
 	{
-		//	starting at ~300 Hz to ~2700 Hz Which puts the center of the signal in the center of the window (~1500Hz)
+		// starting at ~300 Hz to ~2700 Hz Which puts the center of the signal in the center of the window (~1500Hz)
 		// bytNewSamples are sampled at 12000 samples per second, and a 1024 sample FFT was
 		// used.  So dblReF[j] and dblImF[j] correspond to a frequency of j * 12000 / 1024
 		// for 0 <= j < 512
-            
-		dblMag[i] = powf(dblReF[i + 25], 2) + powf(dblImF[i + 25], 2);	 // first pass 
+
+		dblMag[i] = powf(dblReF[i + 25], 2) + powf(dblImF[i + 25], 2);	 // first pass
 		dblMagAvg += dblMag[i];
-#ifdef PLOTSPECTRUM		
-		dblMagSpectrum[i] = 0.2 * dblMag[i] + 0.8 * dblMagSpectrum[i];	
+#ifdef PLOTSPECTRUM
+		dblMagSpectrum[i] = 0.2 * dblMag[i] + 0.8 * dblMagSpectrum[i];
 		dblMagMax = max(dblMagMax, dblMagSpectrum[i]);
 		dblMagMin = min(dblMagMin, dblMagSpectrum[i]);
 #endif
@@ -2304,15 +2274,15 @@ void UpdateBusyDetector(short * bytNewSamples)
 
 	intTuneLineLow = max((103 - intDelta), 3);
 	intTuneLineHi = min((103 + intDelta), 203);
-    
-	if (ProtocolState == DISC)		// ' Only process busy when in DISC state
+
+	if (ProtocolState == DISC)  // Only process busy when in DISC state
 	{
 		blnBusyStatus = BusyDetect3(dblMag, intTuneLineLow, intTuneLineHi);
-		
+
 		if (blnBusyStatus && !blnLastBusyStatus)
 		{
 			QueueCommandToHost("BUSY TRUE");
-         	newStatus = TRUE;				// report to PTC
+			newStatus = TRUE;  // report to PTC
 
 			if (!WaterfallActive && !SpectrumActive)
 			{
@@ -2320,17 +2290,17 @@ void UpdateBusyDetector(short * bytNewSamples)
 
 				Msg[0] = blnBusyStatus;
 				SendtoGUI('B', Msg, 1);
-			}	    
+			}
 			wg_send_busy(0, true);
 		}
-		//    stcStatus.Text = "True"
-            //    queTNCStatus.Enqueue(stcStatus)
-            //    'Debug.WriteLine("BUSY TRUE @ " & Format(DateTime.UtcNow, "HH:mm:ss"))
-			
+		// stcStatus.Text = "True"
+		// queTNCStatus.Enqueue(stcStatus)
+		// Debug.WriteLine("BUSY TRUE @ " & Format(DateTime.UtcNow, "HH:mm:ss"))
+
 		else if (blnLastBusyStatus && !blnBusyStatus)
 		{
 			QueueCommandToHost("BUSY FALSE");
-			newStatus = TRUE;				// report to PTC
+			newStatus = TRUE;  // report to PTC
 
 			if (!WaterfallActive && !SpectrumActive)
 			{
@@ -2340,16 +2310,16 @@ void UpdateBusyDetector(short * bytNewSamples)
 				SendtoGUI('B', Msg, 1);
 			}
 			wg_send_busy(0, false);
-		} 
-		//    stcStatus.Text = "False"
-        //    queTNCStatus.Enqueue(stcStatus)
-        //    'Debug.WriteLine("BUSY FALSE @ " & Format(DateTime.UtcNow, "HH:mm:ss"))
+		}
+		// stcStatus.Text = "False"
+		// queTNCStatus.Enqueue(stcStatus)
+		// Debug.WriteLine("BUSY FALSE @ " & Format(DateTime.UtcNow, "HH:mm:ss"))
 
 		blnLastBusyStatus = blnBusyStatus;
 
 	}
-	
-	if (BusyDet == 0) 
+
+	if (BusyDet == 0)
 		clrTLC = Goldenrod;
 	else if (blnBusyStatus)
 		clrTLC = Fuchsia;
@@ -2358,23 +2328,21 @@ void UpdateBusyDetector(short * bytNewSamples)
 	// but if we want to plot spectrum we should call
 	// it always
 
-
-
 	if (WaterfallActive)
 	{
 #ifdef PLOTWATERFALL
 		dblMagAvg = log10f(dblMagAvg / 5000.0f);
-	
+
 		for (i = 0; i < 206; i++)
 		{
 			// The following provides some AGC over the waterfall to compensate for avg input level.
-        
+
 			float y1 = (0.25f + 2.5f / dblMagAvg) * log10f(0.01 + dblMag[i]);
 			int objColor;
 
 			// Set the pixel color based on the intensity (log) of the spectral line
 			if (y1 > 6.5)
-				objColor = Orange; // Strongest spectral line 
+				objColor = Orange;  // Strongest spectral line
 			else if (y1 > 6)
 				objColor = Khaki;
 			else if (y1 > 5.5)
@@ -2387,13 +2355,13 @@ void UpdateBusyDetector(short * bytNewSamples)
 				objColor = Navy;
 			else
 				objColor = Black;
-		
+
 			if (i == 102)
 				Waterfall[i] =  Tomato;  // 1500 Hz line (center)
 			else if (i == intTuneLineLow || i == intTuneLineLow - 1 || i == intTuneLineHi || i == intTuneLineHi + 1)
 				Waterfall[i] = clrTLC;
 			else
-				Waterfall[i] = objColor; // ' Else plot the pixel as received
+				Waterfall[i] = objColor;  // Else plot the pixel as received
 		}
 
 		// Send Signal level and Busy indicator to save extra packets
@@ -2408,23 +2376,23 @@ void UpdateBusyDetector(short * bytNewSamples)
 	{
 #ifdef PLOTSPECTRUM
 		// This performs an auto scaling mechansim with fast attack and slow release
-        if (dblMagMin / dblMagMax < 0.0001) // more than 10000:1 difference Max:Min
-            dblMaxScale = max(dblMagMax, dblMaxScale * 0.9f);
+		if (dblMagMin / dblMagMax < 0.0001)  // more than 10000:1 difference Max:Min
+			dblMaxScale = max(dblMagMax, dblMaxScale * 0.9f);
 		else
-            dblMaxScale = max(10000 * dblMagMin, dblMagMax);
-   
+			dblMaxScale = max(10000 * dblMagMin, dblMagMax);
+
 		clearDisplay();
-	
+
 		for (i = 0; i < 206; i++)
 		{
 		// The following provides some AGC over the spectrum to compensate for avg input level.
-        
-			float y1 = -0.25f * (SpectrumHeight - 1) *  log10f((max(dblMagSpectrum[i], dblMaxScale / 10000)) / dblMaxScale); // ' range should be 0 to bmpSpectrumHeight -1
+
+			float y1 = -0.25f * (SpectrumHeight - 1) *  log10f((max(dblMagSpectrum[i], dblMaxScale / 10000)) / dblMaxScale);  // range should be 0 to bmpSpectrumHeight -1
 			int objColor  = Yellow;
 
 			Waterfall[i] = y1;
 		}
-         
+
 		// Send Signal level and Busy indicator to save extra packets
 
 		Waterfall[206] = CurrentLevel;
@@ -2439,22 +2407,22 @@ void UpdateBusyDetector(short * bytNewSamples)
 }
 
 void SendPING(char * strMycall, char * strTargetCall, int intRpt)
-{   	
+{
 	if ((EncLen = EncodePing(strMycall, strTargetCall, bytEncodedBytes)) <= 0) {
 		WriteDebugLog(LOGERROR, "ERROR: In SendPING() Invalid EncLen (%d).", EncLen);
 		return;
 	}
-	
+
 	// generate the modulation with 2 x the default FEC leader length...Should insure reception at the target
 	// Note this is sent with session ID 0xFF
 
 	//	Set all flags before playing, as the End TX is called before we return here
-	
-	intFrameRepeatInterval = 2000;  // ms ' Finn reported 7/4/2015 that 1600 was too short ...need further evaluation but temporarily moved to 2000 ms
+
+	intFrameRepeatInterval = 2000;  // ms Finn reported 7/4/2015 that 1600 was too short ...need further evaluation but temporarily moved to 2000 ms
 	blnEnbARQRpt = TRUE;
 
-	Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
-        
+	Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
+
 	blnAbort = False;
 	dttTimeoutTrip = Now;
 	intRepeatCount = 1;
@@ -2466,17 +2434,17 @@ void SendPING(char * strMycall, char * strTargetCall, int intRpt)
 
 	return;
 }
- 
-// This sub processes a correctly decoded Ping frame, decodes it an passed to host for display if it doesn't duplicate the prior passed frame. 
+
+// This sub processes a correctly decoded Ping frame, decodes it an passed to host for display if it doesn't duplicate the prior passed frame.
 
 void ProcessPingFrame(char * bytData)
 {
 	WriteDebugLog(LOGDEBUG, "ProcessPingFrame Protocol State = %s", ARDOPStates[ProtocolState]);
-	
+
 	if (ProtocolState == DISC)
 	{
 		char * strPingInfo = strlop(bytData, ' ');
-		
+
 		if (blnListen && IsPingToMe(strPingInfo) && EnablePingAck)
 		{
 			// Ack Ping
@@ -2485,12 +2453,12 @@ void ProcessPingFrame(char * bytData)
 				WriteDebugLog(LOGERROR, "ERROR: In ProcessPingFrame() Invalid EncLen (%d).", EncLen);
 				return;
 			}
-			Mod4FSKDataAndPlay(PINGACK, &bytEncodedBytes[0], EncLen, LeaderLength);		// only returns when all sent
-               
+			Mod4FSKDataAndPlay(PINGACK, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
+
 			WriteDebugLog(LOGDEBUG, "[ProcessPingFrame] PING from %s S:N=%d Qual=%d", bytData, stcLastPingintRcvdSN, stcLastPingintQuality);
-			SendCommandToHost("PINGREPLY");	
+			SendCommandToHost("PINGREPLY");
 			return;
 		}
-	}	
-	SendCommandToHost("CANCELPENDING");	
+	}
+	SendCommandToHost("CANCELPENDING");
 }

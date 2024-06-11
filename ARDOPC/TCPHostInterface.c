@@ -33,7 +33,7 @@
 #define INVALID_SOCKET  (SOCKET)(~0)
 #define SOCKET_ERROR            (-1)
 #define WSAGetLastError() errno
-#define GetLastError() errno 
+#define GetLastError() errno
 #define closesocket close
 int _memicmp(unsigned char *a, unsigned char *b, int n);
 #endif
@@ -61,18 +61,18 @@ int ReadCOMBlock(HANDLE fd, char * Block, int MaxLength );
 
 extern int port;
 
-extern BOOL NeedID;				// SENDID Command Flag
-extern BOOL NeedCWID;			// SENDCWID Command Flag
+extern BOOL NeedID;  // SENDID Command Flag
+extern BOOL NeedCWID;  // SENDCWID Command Flag
 extern BOOL NeedTwoToneTest;
 
 SOCKET TCPControlSock = 0, TCPDataSock = 0;
 SOCKET ListenSock = 0, DataListenSock = 0;
-SOCKET GUISock = 0;				// UDP socket for GUI interface
+SOCKET GUISock = 0;  // UDP socket for GUI interface
 
 int GUIActive = 0;
 int LastGUITime = 0;
-extern int WaterfallActive;		// Waterfall display turned on
-extern int SpectrumActive;		// Spectrum display turned on
+extern int WaterfallActive;  // Waterfall display turned on
+extern int SpectrumActive;  // Spectrum display turned on
 
 struct sockaddr_in GUIHost;
 
@@ -98,7 +98,7 @@ int NOBUFFCOUNT = 0;
 int BUFFERWAITS = 0;
 int NUMBEROFBUFFERS = 0;
 
-unsigned int Host_Q;			// Frames for Host
+unsigned int Host_Q;  // Frames for Host
 */
 
 // Convert IP Address to Text
@@ -115,17 +115,17 @@ VOID Format_Addr(struct sockaddr_in * sin, char * dst)
 
 UCHAR bytLastCMD_DataSent[256];
 
-//	Function to send a text command to the Host
+// Function to send a text command to the Host
 
 void TCPSendCommandToHost(char * strText)
 {
-	//	This sends a command response to the Host.
-	//	It is simply a string terminated by a CR.
+	// This sends a command response to the Host.
+	// It is simply a string terminated by a CR.
 
 	UCHAR bytToSend[1024];
 	int len;
 	int ret;
-	
+
 	len = sprintf(bytToSend,"%s\r", strText);
 
 	if (CONNECTED)
@@ -133,7 +133,8 @@ void TCPSendCommandToHost(char * strText)
 		ret = send(TCPControlSock, bytToSend, len, 0);
 		ret = WSAGetLastError();
 
-		if (CommandTrace) WriteDebugLog(LOGDEBUG, " Command Trace TO Host %s", strText);
+		if (CommandTrace)
+			WriteDebugLog(LOGDEBUG, " Command Trace TO Host %s", strText);
 		return;
 	}
 	return;
@@ -142,15 +143,15 @@ void TCPSendCommandToHost(char * strText)
 
 void TCPSendCommandToHostQuiet(char * strText)
 {
-	//	This sends a command response to the Host.
-	//	It is simply a string terminated by a CR.
-	//	Used for PTT commands and INPUTPEAKS notifications to Host.
-	//	Not logged to the Debug Log.
+	// This sends a command response to the Host.
+	// It is simply a string terminated by a CR.
+	// Used for PTT commands and INPUTPEAKS notifications to Host.
+	// Not logged to the Debug Log.
 
 	UCHAR bytToSend[256];
 	int len;
 	int ret;
-	
+
 	len = sprintf(bytToSend,"%s\r", strText);
 
 	if (CONNECTED)
@@ -165,17 +166,17 @@ void TCPSendCommandToHostQuiet(char * strText)
 
 void TCPQueueCommandToHost(char * strText)
 {
-	//	This wrapper sends a command response to the Host.
-	//	It is simply a string terminated by a CR.
-	//	Response queuing seems to be a legacy from the original ARDOP TNC, but is not used in ARDOPC.
-	//  Good canidate for removing and replacing with TCPSendCommandToHost.
+	// This wrapper sends a command response to the Host.
+	// It is simply a string terminated by a CR.
+	// Response queuing seems to be a legacy from the original ARDOP TNC, but is not used in ARDOPC.
+	// Good canidate for removing and replacing with TCPSendCommandToHost.
 	SendCommandToHost(strText);
 }
 
 void TCPSendReplyToHost(char * strText)
 {
-	//  This wrapper sends a reply to the Host.
-	//  It is simply a string terminated by a CR.
+	// This wrapper sends a reply to the Host.
+	// It is simply a string terminated by a CR.
 
 	SendCommandToHost(strText);
 }
@@ -194,18 +195,18 @@ void WriteFECLog(UCHAR * Msg, int Len)
 	char Value[128];
 
 	GetSystemTime(&st);
-	
+
 	if (FEClogfile == NULL)
 	{
-	if (LogDir[0])
-		sprintf(Value, "%s/%s_%04d%02d%02d.log",
-				LogDir, "ARDOPFECLog", st.wYear, st.wMonth, st.wDay);
-	else		
-		sprintf(Value, "%s_%04d%02d%02d.log",
-				"ARDOPFECLog", st.wYear, st.wMonth, st.wDay);
-		
-	if ((FEClogfile = fopen(Value, "ab")) == NULL)
-			return;
+		if (LogDir[0])
+			sprintf(Value, "%s/%s_%04d%02d%02d.log",
+					LogDir, "ARDOPFECLog", st.wYear, st.wMonth, st.wDay);
+		else
+			sprintf(Value, "%s_%04d%02d%02d.log",
+					"ARDOPFECLog", st.wYear, st.wMonth, st.wDay);
+
+		if ((FEClogfile = fopen(Value, "ab")) == NULL)
+				return;
 
 	}
 	fwrite (Msg, 1, Len, FEClogfile);
@@ -220,18 +221,18 @@ void WriteFECLog(UCHAR * Msg, int Len)
 
 void TCPAddTagToDataAndSendToHost(UCHAR * bytData, char * strTag, int Len)
 {
-	//  Subroutine to add a short 3 byte tag (ARQ, FEC, ERR, or IDF) to data and send to the host
-	//  The reason for this is to allow the host to determine the type of data and handle it appropriately.
-	//  An example for a FEC response is "<LENGTH><FEC><DATA>"
-	//  Sometimes this will end up replying with FECFEC instead of just FEC, but it is TBD if that is a bug or not.
-	//  I think the reason this happens, is when sending data, you need to prefix with FEC, and when the data
-	//  is received and sent to the host, it just tacks on an extra FEC.
+	// Subroutine to add a short 3 byte tag (ARQ, FEC, ERR, or IDF) to data and send to the host
+	// The reason for this is to allow the host to determine the type of data and handle it appropriately.
+	// An example for a FEC response is "<LENGTH><FEC><DATA>"
+	// Sometimes this will end up replying with FECFEC instead of just FEC, but it is TBD if that is a bug or not.
+	// I think the reason this happens, is when sending data, you need to prefix with FEC, and when the data
+	// is received and sent to the host, it just tacks on an extra FEC.
 
-	//  strTag has the type Tag to prepend to data  "ARQ", "FEC" or "ERR"
-	//  The host is supposed to use this to determine how to handle the data, usually it is stripped off by the host.
+	// strTag has the type Tag to prepend to data  "ARQ", "FEC" or "ERR"
+	// The host is supposed to use this to determine how to handle the data, usually it is stripped off by the host.
 
-	//  Max data size should be 2000 bytes or less for timing purposes
-	//  I think largest apcet is about 1360 bytes
+	// Max data size should be 2000 bytes or less for timing purposes
+	// I think largest apcet is about 1360 bytes
 
 	UCHAR * bytToSend;
 	UCHAR buff[1500];
@@ -241,19 +242,20 @@ void TCPAddTagToDataAndSendToHost(UCHAR * bytData, char * strTag, int Len)
 	if (blnInitializing)
 		return;
 
-	if (CommandTrace) WriteDebugLog(LOGDEBUG, "[AddTagToDataAndSendToHost] bytes=%d Tag %s", Len, strTag);
+	if (CommandTrace)
+		WriteDebugLog(LOGDEBUG, "[AddTagToDataAndSendToHost] bytes=%d Tag %s", Len, strTag);
 
-	//	Have to save copy for possible retry (and possibly until previous 
-	//	command is acked
+	// Have to save copy for possible retry (and possibly until previous
+	// command is acked
 
 	bytToSend = buff;
 
-	Len += 3;					// Add 3 bytes for the tag (FEC, ARQ, ERR)
-	bytToSend[0] = Len >> 8;	//' MS byte of count  (Includes strDataType but does not include the two trailing CRC bytes)
-	bytToSend[1] = Len  & 0xFF;// LS Byte
+	Len += 3;  // Add 3 bytes for the tag (FEC, ARQ, ERR)
+	bytToSend[0] = Len >> 8;  // MS byte of count  (Includes strDataType but does not include the two trailing CRC bytes)
+	bytToSend[1] = Len  & 0xFF;  // LS Byte
 	memcpy(&bytToSend[2], strTag, 3);
 	memcpy(&bytToSend[5], bytData, Len - 3);
-	Len +=2;				//  len
+	Len +=2;  // len
 
 	ret = send(TCPDataSock, bytToSend, Len, 0);
 
@@ -268,18 +270,18 @@ void TCPAddTagToDataAndSendToHost(UCHAR * bytData, char * strTag, int Len)
 
 VOID ARDOPProcessCommand(UCHAR * Buffer, int MsgLen)
 {
-	Buffer[MsgLen - 1] = 0;		// Remove CR
-	
+	Buffer[MsgLen - 1] = 0;  // Remove CR
+
 	if (_memicmp(Buffer, "RDY", 3) == 0)
 	{
-		//	Command ACK. Remove from buffer and send next if a ??????
+		// Command ACK. Remove from buffer and send next if a ??????
 
 		return;
 	}
 	ProcessCommandFromHost(Buffer);
 }
 
-BOOL InReceiveProcess = FALSE;		// Flag to stop reentry
+BOOL InReceiveProcess = FALSE;  // Flag to stop reentry
 
 
 void ProcessReceivedControl()
@@ -293,17 +295,17 @@ void ProcessReceivedControl()
 	if (InReceiveProcess)
 		return;
 
-	//	This is the command port, which only listens on port 8515 or otherwise specified
-	//  as a command line arguemnt. It is used for all commands to the TNC, such as
-	//  setting parameters. 
+	// This is the command port, which only listens on port 8515 or otherwise specified
+	// as a command line arguemnt. It is used for all commands to the TNC, such as
+	// setting parameters.
 
-	//	The command format is expected to be "<COMMAND><CR>"
-	//  It is important for it to be an actual carriage return, as a newline will not be recognized
-				
+	// The command format is expected to be "<COMMAND><CR>"
+	// It is important for it to be an actual carriage return, as a newline will not be recognized
+
 	Len = recv(TCPControlSock, &ARDOPBuffer[InputLen], 8192 - InputLen, 0);
 
-	//  A socket connection will periodically send a TCPKeepAlive packet
-	//  If we stop getting these, then we should close the connection.
+	// A socket connection will periodically send a TCPKeepAlive packet
+	// If we stop getting these, then we should close the connection.
 	if (Len == 0 || Len == SOCKET_ERROR)
 	{
 		closesocket(TCPControlSock);
@@ -312,7 +314,7 @@ void ProcessReceivedControl()
 		CONNECTED = FALSE;
 		LostHost();
 
-		return;					
+		return;
 	}
 
 	InputLen += Len;
@@ -323,9 +325,9 @@ loop:
 	// as we might have read the buffer while the message was being sent, and we need to wait for the whole message.
 	// A timeout may be a good idea here, but it is not implemented.
 	if (InputLen < 4)
-		return;	
+		return;
 
-	//  We are looking for a carriage return in our buffer, as that is the end of a command.
+	// We are looking for a carriage return in our buffer, as that is the end of a command.
 	ptr = memchr(ARDOPBuffer, '\r', InputLen);
 
 	// If there is no carriage return, we need to wait for more data
@@ -344,11 +346,11 @@ loop:
 	if ((ptr2 - ptr) == 1)
 	{
 		// Usual Case - single meg in buffer
-	
+
 		MsgLen = InputLen;
 
 		// We may be reentered as a result of processing,
-		//	so reset InputLen Here
+		// so reset InputLen Here
 
 		InputLen=0;
 		InReceiveProcess = TRUE;
@@ -360,13 +362,13 @@ loop:
 	{
 		// buffer contains more that 1 message
 
-		//	I dont think this should happen, but...
+		// I dont think this should happen, but...
 
-		MsgLen = InputLen - (ptr2-ptr) + 1;	// Include CR
+		MsgLen = InputLen - (ptr2-ptr) + 1;  // Include CR
 
 		memcpy(Buffer, ARDOPBuffer, MsgLen);
 
-		memmove(ARDOPBuffer, ptr + 1,  InputLen-MsgLen);
+		memmove(ARDOPBuffer, ptr + 1, InputLen-MsgLen);
 		InputLen -= MsgLen;
 
 		InReceiveProcess = TRUE;
@@ -381,9 +383,9 @@ loop:
 		}
 		goto loop;
 	}
-		
+
 	// Getting bad data ?? Should we just reset ??
-	
+
 	WriteDebugLog(LOGDEBUG, "ARDOP BadHost Message ?? %s", ARDOPBuffer);
 	InputLen = 0;
 	return;
@@ -404,37 +406,37 @@ void ProcessReceivedData()
 	if (InReceiveProcess)
 		return;
 
-	//	This is the data port, which only listens on port 8516 (8515+1) or otherwise specified (+1)
-	//  as a command line arguemnt. It is used for all data sent to the TNC, such as
-	//  for ARQ or FEC.
+	// This is the data port, which only listens on port 8516 (8515+1) or otherwise specified (+1)
+	// as a command line arguemnt. It is used for all data sent to the TNC, such as
+	// for ARQ or FEC.
 
-	//	The command format is expected to be "<LENGTH><MODE><DATA>"
-	//  The LENGTH is a two-byte big-endian integer, followed by the text FEC or ARQ, followed by the data.
-	//  No carriage return is expected, as the data may contain binary data.
-	//  An example valid message is "0008FECHELLO"
-	//  This will load FECHELLO into the buffer.
-	//	Note that the MODE is included in the length, so the data length is the total length + 3
-	//  This behavior is a little strange, to keep the FEC, but right now it is simply what it does.
-				
+	// The command format is expected to be "<LENGTH><MODE><DATA>"
+	// The LENGTH is a two-byte big-endian integer, followed by the text FEC or ARQ, followed by the data.
+	// No carriage return is expected, as the data may contain binary data.
+	// An example valid message is "0008FECHELLO"
+	// This will load FECHELLO into the buffer.
+	// Note that the MODE is included in the length, so the data length is the total length + 3
+	// This behavior is a little strange, to keep the FEC, but right now it is simply what it does.
+
 	Len = recv(TCPDataSock, &ARDOPDataBuffer[DataInputLen], 8192 - DataInputLen, 0);
 
 	if (Len == 0 || Len == SOCKET_ERROR)
 	{
 		// Does this mean closed?
-		
+
 		closesocket(TCPDataSock);
 		TCPDataSock = 0;
 
 		DATACONNECTED = FALSE;
 		LostHost();
-		return;					
+		return;
 	}
 
 	DataInputLen += Len;
 
 loop:
 	// this will repeat until the entire message is sent, which is controlled by the length of DataInputLen
-	
+
 	// Here we will wait for our input length to be at least 4 bytes before continuing processing,
 	// as we might have read the buffer while the message was being sent, and we need to wait for the whole message.
 	// A timeout may be a good idea here, but it is not implemented.
@@ -444,9 +446,9 @@ loop:
 	// check we have it all
 
 	// This gets the two bytes from the beginning of the buffer, which is the length of the data sent by the host
-	DataLen = (ARDOPDataBuffer[0] << 8) + ARDOPDataBuffer[1]; // HI First (Big Endian)
+	DataLen = (ARDOPDataBuffer[0] << 8) + ARDOPDataBuffer[1];  // HI First (Big Endian)
 	// I think these are Big Endian because it's readable to humans (a length of 9 is 0x00 0x09), but I am not sure.
-	
+
 	// Until we have recieved the amount of bytes specified in the length from the host, wait for more.
 	if (DataInputLen < DataLen + 2)
 		return;
@@ -468,7 +470,7 @@ loop:
 	InReceiveProcess = TRUE;
 	AddDataToDataToSend(Buffer, DataLen);
 	InReceiveProcess = FALSE;
-	
+
 	// See if anything else in buffer
 
 	if (DataInputLen > 0)
@@ -485,7 +487,7 @@ loop:
 SOCKET OpenSocket4(int port)
 {
 	// This is very standard socket opening code for TCP, and is used for both the command and data ports.
-	struct sockaddr_in  local_sin;  /* Local socket - internet style */
+	struct sockaddr_in  local_sin;  // Local socket - internet style
 	struct sockaddr_in * psin;
 	SOCKET sock = 0;
 	u_long param=1;
@@ -498,21 +500,21 @@ SOCKET OpenSocket4(int port)
 	{
 		sock = socket(AF_INET, SOCK_STREAM, 0);
 
-	    if (sock == INVALID_SOCKET)
+		if (sock == INVALID_SOCKET)
 		{
-	        WriteDebugLog(LOGDEBUG, "socket() failed error %d", WSAGetLastError());
+			WriteDebugLog(LOGDEBUG, "socket() failed error %d", WSAGetLastError());
 			return 0;
 		}
 
 		setsockopt (sock, SOL_SOCKET, SO_REUSEADDR, (char *)&param,4);
 
-		psin->sin_port = htons(port);        // Convert to network ordering 
+		psin->sin_port = htons(port);  // Convert to network ordering
 
 		if (bind( sock, (struct sockaddr *) &local_sin, sizeof(local_sin)) == SOCKET_ERROR)
 		{
 			WriteDebugLog(LOGINFO, "bind(sock) failed port %d Error %d", port, WSAGetLastError());
 
-		    closesocket(sock);
+			closesocket(sock);
 			return FALSE;
 		}
 
@@ -531,7 +533,7 @@ SOCKET OpenUDPSocket(int port)
 {
 	// This is very standard socket opening code for UDP.
 	// This is used mostly for a GUI interface, I believe specifically for the waterfall display.
-	struct sockaddr_in  local_sin;  /* Local socket - internet style */
+	struct sockaddr_in  local_sin;  // Local socket - internet style
 	struct sockaddr_in * psin;
 	SOCKET sock = 0;
 	u_long param=1;
@@ -544,22 +546,22 @@ SOCKET OpenUDPSocket(int port)
 	{
 		sock = socket(AF_INET, SOCK_DGRAM, 0);
 
-	    if (sock == INVALID_SOCKET)
+		if (sock == INVALID_SOCKET)
 		{
-	        WriteDebugLog(LOGDEBUG, "socket() failed error %d", WSAGetLastError());
+			WriteDebugLog(LOGDEBUG, "socket() failed error %d", WSAGetLastError());
 			return 0;
 		}
 
 		setsockopt (sock, SOL_SOCKET, SO_REUSEADDR, (char *)&param,4);
 
-		psin->sin_port = htons(port);        // Convert to network ordering 
+		psin->sin_port = htons(port);  // Convert to network ordering
 
 		if (bind( sock, (struct sockaddr *) &local_sin, sizeof(local_sin)) == SOCKET_ERROR)
 		{
 			WriteDebugLog(LOGINFO, "bind(sock) failed port %d Error %d", port, WSAGetLastError());
-		    closesocket(sock);
+			closesocket(sock);
 			return FALSE;
-		}	
+		}
 		ioctl(sock, FIONBIO, &param);
 	}
 	return sock;
@@ -571,7 +573,7 @@ VOID InitQueue();
 BOOL TCPHostInit()
 {
 #ifdef WIN32
-	WSADATA WsaData;			 // receives data from WSAStartup
+	WSADATA WsaData;  // receives data from WSAStartup
 
 	WSAStartup(MAKEWORD(2, 0), &WsaData);
 #endif
@@ -597,7 +599,7 @@ void TCPHostPoll()
 	struct timeval timeout;
 	int ret;
 	int addrlen = sizeof(struct sockaddr_in);
-	struct sockaddr_in sin;  
+	struct sockaddr_in sin;
 	u_long param=1;
 
 	// Check for Rig control data
@@ -620,13 +622,13 @@ void TCPHostPoll()
 			{
 				i = *(ptr++);
 				j = i >>4;
-				j += '0';		// ascii
+				j += '0';  // ascii
 				if (j > '9')
 					j += 7;
 				*(ptr2++) = j;
 
 				j = i & 0xf;
-				j += '0';		// ascii
+				j += '0';  // ascii
 				if (j > '9')
 					j += 7;
 				*(ptr2++) = j;
@@ -637,15 +639,15 @@ void TCPHostPoll()
 	}
 
 	if (ListenSock == 0)
-		goto NoARDOPTCP;			// Could just be runing packet over TCP
+		goto NoARDOPTCP;  // Could just be runing packet over TCP
 
-	FD_ZERO(&readfs);	
+	FD_ZERO(&readfs);
 	FD_ZERO(&errorfs);
 
 	FD_SET(ListenSock,&readfs);
 
-	timeout.tv_sec = 0;				// No wait
-	timeout.tv_usec = 0;	
+	timeout.tv_sec = 0;  // No wait
+	timeout.tv_usec = 0;
 
 	ret = select(ListenSock + 1, &readfs, NULL, NULL, &timeout);
 
@@ -662,14 +664,14 @@ void TCPHostPoll()
 			if (FD_ISSET(ListenSock, &readfs))
 			{
 				TCPControlSock = accept(ListenSock, (struct sockaddr * )&sin, &addrlen);
-	    
+
 				if (TCPControlSock == INVALID_SOCKET)
 				{
 					WriteDebugLog(LOGDEBUG, "accept() failed error %d", WSAGetLastError());
 					return;
 				}
 				WriteDebugLog(LOGINFO, "Host Control Session Connected");
-					
+
 				ioctl(TCPControlSock, FIONBIO, &param);
 				CONNECTED = TRUE;
 //				SendCommandToHost("RDY");
@@ -680,12 +682,12 @@ void TCPHostPoll()
 	if (DataListenSock == 0)
 		return;
 
-	FD_ZERO(&readfs);	
+	FD_ZERO(&readfs);
 	FD_ZERO(&errorfs);
 	FD_SET(DataListenSock,&readfs);
 
-	timeout.tv_sec = 0;				// No wait
-	timeout.tv_usec = 0;	
+	timeout.tv_sec = 0;  // No wait
+	timeout.tv_usec = 0;
 
 	ret = select(DataListenSock + 1, &readfs, NULL, NULL, &timeout);
 
@@ -702,14 +704,14 @@ void TCPHostPoll()
 			if (FD_ISSET(DataListenSock, &readfs))
 			{
 				TCPDataSock = accept(DataListenSock, (struct sockaddr * )&sin, &addrlen);
-	    
+
 				if (TCPDataSock == INVALID_SOCKET)
 				{
 					WriteDebugLog(LOGDEBUG, "accept() failed error %d", WSAGetLastError());
 					return;
 				}
 				WriteDebugLog(LOGINFO, "Host Data Session Connected");
-					
+
 				ioctl(TCPDataSock, FIONBIO, &param);
 				DATACONNECTED = TRUE;
 			}
@@ -720,15 +722,15 @@ NoARDOPTCP:
 
 	if (CONNECTED)
 	{
-		FD_ZERO(&readfs);	
+		FD_ZERO(&readfs);
 		FD_ZERO(&errorfs);
 
 		FD_SET(TCPControlSock,&readfs);
 		FD_SET(TCPControlSock,&errorfs);
 
-		timeout.tv_sec = 0;				// No wait
-		timeout.tv_usec = 0;	
-		
+		timeout.tv_sec = 0;  // No wait
+		timeout.tv_usec = 0;
+
 		ret = select(TCPControlSock + 1, &readfs, NULL, &errorfs, &timeout);
 
 		if (ret == SOCKET_ERROR)
@@ -738,7 +740,7 @@ NoARDOPTCP:
 		}
 		if (ret > 0)
 		{
-			//	See what happened
+			// See what happened
 
 			if (FD_ISSET(TCPControlSock, &readfs))
 			{
@@ -746,12 +748,12 @@ NoARDOPTCP:
 				ProcessReceivedControl();
 				FreeSemaphore();
 			}
-								
+
 			if (FD_ISSET(TCPControlSock, &errorfs))
 			{
-Lost:	
+Lost:
 				WriteDebugLog(LOGDEBUG, "TCP Control Connection lost");
-			
+
 				CONNECTED = FALSE;
 
 				closesocket(TCPControlSock);
@@ -762,15 +764,15 @@ Lost:
 	}
 	if (DATACONNECTED)
 	{
-		FD_ZERO(&readfs);	
+		FD_ZERO(&readfs);
 		FD_ZERO(&errorfs);
 
 		FD_SET(TCPDataSock,&readfs);
 		FD_SET(TCPDataSock,&errorfs);
 
-		timeout.tv_sec = 0;				// No wait
-		timeout.tv_usec = 0;	
-		
+		timeout.tv_sec = 0;  // No wait
+		timeout.tv_usec = 0;
+
 		ret = select(TCPDataSock + 1, &readfs, NULL, &errorfs, &timeout);
 
 		if (ret == SOCKET_ERROR)
@@ -780,7 +782,7 @@ Lost:
 		}
 		if (ret > 0)
 		{
-			//	See what happened
+			// See what happened
 
 			if (FD_ISSET(TCPDataSock, &readfs))
 			{
@@ -788,12 +790,12 @@ Lost:
 				ProcessReceivedData();
 				FreeSemaphore();
 			}
-								
+
 			if (FD_ISSET(TCPDataSock, &errorfs))
 			{
-	DCLost:	
+	DCLost:
 				WriteDebugLog(LOGDEBUG, "TCP Data Connection lost");
-			
+
 				DATACONNECTED = FALSE;
 
 				closesocket(TCPControlSock);
@@ -848,17 +850,17 @@ Lost:
 			else if (strcmp(GUIMsg, "SENDID") == 0)
 			{
 				if (ProtocolState == DISC)
-					NeedID = TRUE;			// Send from background
+					NeedID = TRUE;  // Send from background
 			}
 			else if (strcmp(GUIMsg, "TWOTONETEST") == 0)
 			{
 				if (ProtocolState == DISC)
-					NeedTwoToneTest = TRUE;			// Send from background
+					NeedTwoToneTest = TRUE;  // Send from background
 			}
 			else if (strcmp(GUIMsg, "SENDCWID") == 0)
 			{
 				if (ProtocolState == DISC)
-					NeedCWID = TRUE;			// Send from background
+					NeedCWID = TRUE;  // Send from background
 			}
 		}
 		else
@@ -877,7 +879,7 @@ Lost:
 /*
 
 // Buffer handling routines
-	
+
 #define BUFFLEN 1500
 #define NUMBUFFS 64
 
@@ -891,7 +893,7 @@ VOID InitQueue()
 
 	NEXTFREEDATA = DATAAREA;
 	NUMBEROFBUFFERS = MAXBUFFS = 0;
-	
+
 	for (i = 0; i < NUMBUFFS; i++)
 	{
 		ReleaseBuffer((UINT *)NEXTFREEDATA);
@@ -909,7 +911,7 @@ VOID * _Q_REM(VOID *PQ, char * File, int Line)
 	UINT * first;
 	UINT next;
 
-	//	PQ may not be word aligned, so copy as bytes (for ARM5)
+	// PQ may not be word aligned, so copy as bytes (for ARM5)
 
 	Q = (UINT *) PQ;
 
@@ -918,9 +920,10 @@ VOID * _Q_REM(VOID *PQ, char * File, int Line)
 
 	first = (UINT *)Q[0];
 
-	if (first == 0) return (0);			// Empty
+	if (first == 0)  // Empty
+		return (0);
 
-	next= first[0];						// Address of next buffer
+	next= first[0];  // Address of next buffer
 
 	Q[0] = next;
 
@@ -962,11 +965,11 @@ int _C_Q_ADD(VOID *PQ, VOID *PBUFF, char * File, int Line)
 //		WriteDebugLog(LOGDEBUG, ("C_Q_ADD called without semaphore from %s Line %d", File, Line);
 
 
-	BUFF[0]=0;							// Clear chain in new buffer
+	BUFF[0]=0;  // Clear chain in new buffer
 
-	if (Q[0] == 0)						// Empty
+	if (Q[0] == 0)  // Empty
 	{
-		Q[0]=(UINT)BUFF;				// New one on front
+		Q[0]=(UINT)BUFF;  // New one on front
 		return(0);
 	}
 
@@ -974,9 +977,9 @@ int _C_Q_ADD(VOID *PQ, VOID *PBUFF, char * File, int Line)
 
 	while (next[0]!=0)
 	{
-		next=(UINT *)next[0];			// Chain to end of queue
+		next=(UINT *)next[0];  // Chain to end of queue
 	}
-	next[0]=(UINT)BUFF;					// New one on end
+	next[0]=(UINT)BUFF;  // New one on end
 
 	return(0);
 }
@@ -990,7 +993,7 @@ int C_Q_COUNT(VOID *PQ)
 
 	Q = (UINT *) PQ;
 
-	//	SEE HOW MANY BUFFERS ATTACHED TO Q HEADER
+	// SEE HOW MANY BUFFERS ATTACHED TO Q HEADER
 
 	while (*Q)
 	{
@@ -1032,7 +1035,7 @@ VOID * _GetBuff(char * File, int Line)
 */
 
 
-int SendtoGUI(char Type, unsigned char * Msg, int Len)	
+int SendtoGUI(char Type, unsigned char * Msg, int Len)
 {
 	// Again more ARDOP_GUI interfacing code.
 	// If we do not plan to support an official GUI, this code can be removed.
@@ -1046,6 +1049,6 @@ int SendtoGUI(char Type, unsigned char * Msg, int Len)
 
 	GUIMsg[0] = Type;
 	memcpy(GUIMsg + 1, Msg, Len);
- 
+
 	return sendto(GUISock, GUIMsg, Len + 1, 0, (struct sockaddr *)&GUIHost, sizeof(GUIHost));
 }

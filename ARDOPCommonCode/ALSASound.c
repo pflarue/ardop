@@ -1,13 +1,13 @@
 //
-//	Audio interface Routine
+// Audio interface Routine
 
-//	Passes audio samples to/from the sound intemrface
+// Passes audio samples to/from the sound intemrface
 
-//	As this is platform specific it also has the main() routine, which does
-//	platform specific initialisation before calling ardopmain()
+// As this is platform specific it also has the main() routine, which does
+// platform specific initialisation before calling ardopmain()
 
-//	This is ALSASound.c for Linux
-//	Windows Version is Waveout.c
+// This is ALSASound.c for Linux
+// Windows Version is Waveout.c
 
 #include <alsa/asoundlib.h>
 #include <signal.h>
@@ -24,7 +24,7 @@
 #include "wav.h"
 #include "../lib/rockliff/rrs.h"
 
-#define SHARECAPTURE		// if defined capture device is opened and closed for each transission
+#define SHARECAPTURE  // if defined capture device is opened and closed for each transission
 
 
 void gpioSetMode(unsigned gpio, unsigned mode);
@@ -61,8 +61,8 @@ extern char * CM108Device;
 extern int SampleNo;
 extern unsigned int pttOnTime;
 
-snd_pcm_uframes_t fpp;                  /* Frames per period. */
-int dir; 
+snd_pcm_uframes_t fpp;  // Frames per period.
+int dir;
 
 BOOL UseLeftRX = TRUE;
 BOOL UseRightRX = TRUE;
@@ -80,7 +80,7 @@ extern int WavNow;  // Time since start of WAV file being decoded
 
 char LogDir[256] = "";
 
-extern struct sockaddr HamlibAddr;		// Dest for above
+extern struct sockaddr HamlibAddr;  // Dest for above
 extern int useHamLib;
 
 
@@ -93,11 +93,11 @@ void Sleep(int mS)
 
 
 // Windows and ALSA work with signed samples +- 32767
-short buffer[2][1200];			// Two Transfer/DMA buffers of 0.1 Sec
-short inbuffer[2][1200];		// Two Transfer/DMA buffers of 0.1 Sec
+short buffer[2][1200];  // Two Transfer/DMA buffers of 0.1 Sec
+short inbuffer[2][1200];  // Two Transfer/DMA buffers of 0.1 Sec
 
 BOOL Loopback = FALSE;
-//BOOL Loopback = TRUE;
+// BOOL Loopback = TRUE;
 
 char CaptureDevice[80] = "ARDOP";
 char PlaybackDevice[80] = "ARDOP";
@@ -111,7 +111,7 @@ int Ticks;
 
 int LastNow;
 
-extern int Number;				// Number waiting to be sent
+extern int Number;  // Number waiting to be sent
 
 snd_pcm_sframes_t MaxAvail;
 
@@ -139,21 +139,21 @@ void extendRxwf()
 
 void StartRxWav()
 {
-	// Open a new WAV file if not already recording.  
+	// Open a new WAV file if not already recording.
 	// If already recording, then just extend the time before
 	// recording will end.
 	//
-	// Wav files will use a filename that includes port, UTC date, 
-	// and UTC time, similar to log files but with added time to 
-	// the nearest second.  Like Log files, these Wav files will be 
-	// written to the Log directory if defined, else to the current 
+	// Wav files will use a filename that includes port, UTC date,
+	// and UTC time, similar to log files but with added time to
+	// the nearest second.  Like Log files, these Wav files will be
+	// written to the Log directory if defined, else to the current
 	// directory
 	//
 	// As currently implemented, the wav file written contains only
-	// received audio.  Since nothing is written for the time while 
-	// transmitting, and thus not receiving, this recording is not 
+	// received audio.  Since nothing is written for the time while
+	// transmitting, and thus not receiving, this recording is not
 	// time continuous.  Thus, the filename indicates the time that
-	// the recording was started, but the times of the received 
+	// the recording was started, but the times of the received
 	// transmissions, other than the first one, are not indicated.
 	char rxwf_pathname[1024];
 	int pnlen;
@@ -200,7 +200,7 @@ void StartRxWav()
 	extendRxwf();
 }
 
-// writing unfiltered tx audio to WAV disabled.  Only filtered 
+// writing unfiltered tx audio to WAV disabled.  Only filtered
 // tx audio will be written.  However, the code for unfiltered
 // audio is left in place but commented out so that it can eaily
 // be restored if desired.
@@ -208,17 +208,17 @@ void StartTxWav()
 {
 	// Open two new WAV files for filtered and unfiltered Tx audio.
 	//
-	// Wav files will use a filename that includes port, UTC date, 
-	// and UTC time, similar to log files but with added time to 
-	// the nearest second.  Like Log files, these Wav files will be 
-	// written to the Log directory if defined, else to the current 
+	// Wav files will use a filename that includes port, UTC date,
+	// and UTC time, similar to log files but with added time to
+	// the nearest second.  Like Log files, these Wav files will be
+	// written to the Log directory if defined, else to the current
 	// directory
 	char txwff_pathname[1024];
 	// char txwfu_pathname[1024];
 	int pnflen;
 	// int pnulen;
 
-	if (txwff != NULL) // || txwfu != NULL)
+	if (txwff != NULL)  // || txwfu != NULL)
 	{
 		WriteDebugLog(LOGWARNING, "WARNING: Trying to open Tx WAV file, but already open.");
 		return;
@@ -244,9 +244,9 @@ void StartTxWav()
 			LogDir, port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
 			hh, mm, ss);
 		// pnulen = snprintf(txwfu_pathname, sizeof(txwfu_pathname),
-		//  "%s/ARDOP_txuaudio_%d_%04d%02d%02d_%02d%02d%02d.wav",
-		// 	LogDir, port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
-		// 	hh, mm, ss);
+			// "%s/ARDOP_txuaudio_%d_%04d%02d%02d_%02d%02d%02d.wav",
+			// LogDir, port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
+			// hh, mm, ss);
 	}
 	else
 	{
@@ -255,9 +255,9 @@ void StartTxWav()
 			port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
 			hh, mm, ss);
 		// pnulen = snprintf(txwfu_pathname, sizeof(txwfu_pathname),
-		//  "ARDOP_txuaudio_%d_%04d%02d%02d_%02d:%02d:%02d.wav",
-		// 	port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
-		// 	hh, mm, ss);
+			// "ARDOP_txuaudio_%d_%04d%02d%02d_%02d:%02d:%02d.wav",
+			// port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
+			// hh, mm, ss);
 	}
 	if (pnflen == -1 || pnflen > sizeof(txwff_pathname)) {
 		// Logpath too long likely to also prevent writing to log files.
@@ -268,12 +268,12 @@ void StartTxWav()
 		return;
 	}
 	// if (pnulen == -1 || pnulen > sizeof(txwfu_pathname)) {
-	// Logpath too long likely to also prevent writing to log files.
-	// So, print this error directly to console instead of using
-	// WriteDebugLog.
-	//  printf("Unable to write WAV file, invalid pathname. Logpath may be too long.\n");
-	//	WriteTxWav = FALSE;
-	//	return;
+		// Logpath too long likely to also prevent writing to log files.
+		// So, print this error directly to console instead of using
+		// WriteDebugLog.
+		// printf("Unable to write WAV file, invalid pathname. Logpath may be too long.\n");
+		// WriteTxWav = FALSE;
+		// return;
 	// }
 	txwff = OpenWavW(txwff_pathname);
 	// txwfu = OpenWavW(txwfu_pathname);
@@ -281,7 +281,7 @@ void StartTxWav()
 
 
 VOID CloseDebugLog()
-{	
+{
 	if (logfile[DEBUGLOG])
 		fclose(logfile[DEBUGLOG]);
 	logfile[DEBUGLOG] = NULL;
@@ -317,7 +317,7 @@ VOID WriteDebugLog(int Level, const char * format, ...)
 	va_start(arglist, format);
 	vsnprintf(Mess, sizeof(Mess), format, arglist);
 	strcat(Mess, "\n");
-	
+
 	if (Level <= ConsoleLogLevel)
 		printf("%s", Mess);
 
@@ -370,7 +370,7 @@ VOID Statsprintf(const char * format, ...)
 
 		clock_gettime(CLOCK_REALTIME, &tp);
 
-		ss = tp.tv_sec % 86400;		// Secs int day
+		ss = tp.tv_sec % 86400;  // Secs int day
 		hh = ss / 3600;
 		mm = (ss - (hh * 3600)) / 60;
 		ss = ss % 60;
@@ -425,9 +425,9 @@ void printtick(char * msg)
 struct timespec time_start;
 
 unsigned int getTicks()
-{	
+{
 	struct timespec tp;
-	
+
 	// When decoding a WAV file, return WavNow, a measure of the offset
 	// in ms from the start of the WAV file.
 	if (DecodeWav[0])
@@ -445,26 +445,26 @@ void PlatformSleep(int mS)
 
 	if (strcmp(PlaybackDevice, "NOSOUND") != 0)
 		Sleep(mS);
-		
+
 	if (PKTLEDTimer && Now > PKTLEDTimer)
-    {
-      PKTLEDTimer = 0;
-      SetLED(PKTLED, 0);				// turn off packet rxed led
-    }
+	{
+		PKTLEDTimer = 0;
+		SetLED(PKTLED, 0);  // turn off packet rxed led
+	}
 }
 
 // PTT via GPIO code
 
 #ifdef __ARM_ARCH
 
-#define PI_INPUT  0
+#define PI_INPUT 0
 #define PI_OUTPUT 1
-#define PI_ALT0   4
-#define PI_ALT1   5
-#define PI_ALT2   6
-#define PI_ALT3   7
-#define PI_ALT4   3
-#define PI_ALT5   2
+#define PI_ALT0 4
+#define PI_ALT1 5
+#define PI_ALT2 6
+#define PI_ALT3 7
+#define PI_ALT4 3
+#define PI_ALT5 2
 
 // Set GPIO pin as output and set low
 
@@ -477,7 +477,7 @@ void SetupGPIOPTT()
 {
 	if (pttGPIOPin == -1)
 	{
-		WriteDebugLog(LOGALERT, "GPIO PTT disabled"); 
+		WriteDebugLog(LOGALERT, "GPIO PTT disabled");
 		RadioControl = FALSE;
 		useGPIO = FALSE;
 	}
@@ -490,7 +490,7 @@ void SetupGPIOPTT()
 
 		gpioSetMode(pttGPIOPin, PI_OUTPUT);
 		gpioWrite(pttGPIOPin, pttGPIOInvert ? 1 : 0);
-		WriteDebugLog(LOGALERT, "Using GPIO pin %d for PTT", pttGPIOPin); 
+		WriteDebugLog(LOGALERT, "Using GPIO pin %d for PTT", pttGPIOPin);
 		RadioControl = TRUE;
 		useGPIO = TRUE;
 	}
@@ -522,7 +522,7 @@ int main(int argc, char * argv[])
 	int rslen_set[] = {2, 4, 8, 16, 32, 36, 50, 64};
 	init_rs(rslen_set, 8);
 
-//	Sleep(1000);	// Give LinBPQ time to complete init if exec'ed by linbpq
+//	Sleep(1000);  // Give LinBPQ time to complete init if exec'ed by linbpq
 
 	processargs(argc, argv);
 
@@ -537,12 +537,12 @@ int main(int argc, char * argv[])
 		}
 	}
 
-	setlinebuf(stdout);				// So we can redirect output to file and tail
+	setlinebuf(stdout);  // So we can redirect output to file and tail
 
 	Debugprintf("%s Version %s (https://www.github.com/pflarue/ardop)", ProductName, ProductVersion);
 	Debugprintf("Copyright (c) 2014-2024 Rick Muething, John Wiseman, Peter LaRue");
 	Debugprintf(
-		"See https://github.com/pflarue/ardop/blob/master/LICENSE for licence details including\n" 
+		"See https://github.com/pflarue/ardop/blob/master/LICENSE for licence details including\n"
 		"  information about authors of external libraries used and their licenses."
 	);
 
@@ -554,7 +554,7 @@ int main(int argc, char * argv[])
 
 	if (HostPort[0])
 		port = atoi(HostPort);
-	
+
 	if (CATPort[0])
 	{
 		char * Baud = strlop(CATPort, ':');
@@ -608,7 +608,7 @@ int main(int argc, char * argv[])
 
 #ifdef __ARM_ARCH
 					if (gpioInitialise() == 0)
-					{	
+					{
 						printf("GPIO interface for PTT available\n");
 						gotGPIO = TRUE;
 
@@ -627,7 +627,7 @@ int main(int argc, char * argv[])
 #endif
 
 				}
-				else		//  Not GPIO
+				else  // Not GPIO
 				{
 					if (Baud)
 					{
@@ -642,10 +642,10 @@ int main(int argc, char * argv[])
 						if (destaddr->sin_addr.s_addr != INADDR_NONE)
 						{
 							useHamLib = 1;
-							WriteDebugLog(LOGALERT, "Using Hamlib at %s:%s for PTT", PTTPort, Baud); 
+							WriteDebugLog(LOGALERT, "Using Hamlib at %s:%s for PTT", PTTPort, Baud);
 							RadioControl = TRUE;
 							PTTMode = PTTHAMLIB;
-						}	
+						}
 						else
 							PTTBAUD = atoi(Baud);
 					}
@@ -658,12 +658,12 @@ int main(int argc, char * argv[])
 
 	if (hCATDevice)
 	{
-		WriteDebugLog(LOGALERT, "CAT Control on port %s", CATPort); 
+		WriteDebugLog(LOGALERT, "CAT Control on port %s", CATPort);
 		COMSetRTS(hPTTDevice);
 		COMSetDTR(hPTTDevice);
 		if (PTTOffCmdLen)
 		{
-			WriteDebugLog(LOGALERT, "PTT using CAT Port", CATPort); 
+			WriteDebugLog(LOGALERT, "PTT using CAT Port", CATPort);
 			RadioControl = TRUE;
 		}
 	}
@@ -673,44 +673,44 @@ int main(int argc, char * argv[])
 
 		if (PTTOffCmdLen)
 		{
-			WriteDebugLog(LOGALERT, "Warning PTT Off string defined but no CAT port", CATPort); 
+			WriteDebugLog(LOGALERT, "Warning PTT Off string defined but no CAT port", CATPort);
 		}
 	}
 
 	if (hPTTDevice)
 	{
-		WriteDebugLog(LOGALERT, "Using RTS on port %s for PTT", PTTPort); 
+		WriteDebugLog(LOGALERT, "Using RTS on port %s for PTT", PTTPort);
 		COMClearRTS(hPTTDevice);
 		COMClearDTR(hPTTDevice);
 		RadioControl = TRUE;
-	}	
+	}
 
 
 	Debugprintf("ARDOPC listening on port %d", port);
 
 	// Get Time Reference
-		
+
 	clock_gettime(CLOCK_MONOTONIC, &time_start);
 	LastNow = getTicks();
 
 	// Trap signals
 
 	memset (&act, '\0', sizeof(act));
- 
-	act.sa_handler = &sigint_handler; 
-	if (sigaction(SIGINT, &act, NULL) < 0) 
+
+	act.sa_handler = &sigint_handler;
+	if (sigaction(SIGINT, &act, NULL) < 0)
 		perror ("SIGINT");
 
-	act.sa_handler = &sigterm_handler; 
-	if (sigaction(SIGTERM, &act, NULL) < 0) 
+	act.sa_handler = &sigterm_handler;
+	if (sigaction(SIGTERM, &act, NULL) < 0)
 		perror ("SIGTERM");
 
-	act.sa_handler = SIG_IGN; 
+	act.sa_handler = SIG_IGN;
 
-	if (sigaction(SIGHUP, &act, NULL) < 0) 
+	if (sigaction(SIGHUP, &act, NULL) < 0)
 		perror ("SIGHUP");
 
-	if (sigaction(SIGPIPE, &act, NULL) < 0) 
+	if (sigaction(SIGPIPE, &act, NULL) < 0)
 		perror ("SIGPIPE");
 
 	if (TwoToneAndExit)
@@ -742,13 +742,13 @@ void txSleep(int mS)
 		Sleep(mS);
 
 	if (PKTLEDTimer && Now > PKTLEDTimer)
-    {
-      PKTLEDTimer = 0;
-      SetLED(PKTLED, 0);				// turn off packet rxed led
-    }
+	{
+		PKTLEDTimer = 0;
+		SetLED(PKTLED, 0);  // turn off packet rxed led
+	}
 }
 
-// ALSA Code 
+// ALSA Code
 
 #define true 1
 #define false 0
@@ -760,7 +760,7 @@ int m_playchannels = 1;
 int m_recchannels = 1;
 
 
-char SavedCaptureDevice[256];	// Saved so we can reopen
+char SavedCaptureDevice[256];  // Saved so we can reopen
 char SavedPlaybackDevice[256];
 
 int Savedplaychannels = 1;
@@ -820,13 +820,13 @@ int GetOutputDeviceCollection()
 	WriteDevices = NULL;
 	WriteDeviceCount = 0;
 
-	//	Add virtual device ARDOP so ALSA plugins can be used if needed
+	// Add virtual device ARDOP so ALSA plugins can be used if needed
 
 	WriteDevices = realloc(WriteDevices,(WriteDeviceCount + 1) * sizeof(WriteDevices));
 	WriteDevices[WriteDeviceCount++] = strdup("ARDOP");
 
-	//	Get Device List  from ALSA
-	
+	// Get Device List  from ALSA
+
 	snd_ctl_card_info_alloca(&info);
 	snd_pcm_info_alloca(&pcminfo);
 	snd_pcm_hw_params_alloca(&pars);
@@ -836,7 +836,7 @@ int GetOutputDeviceCollection()
 	unsigned min, max, ratemin, ratemax;
 	int card, err, dev, nsubd;
 	snd_pcm_stream_t stream = SND_PCM_STREAM_PLAYBACK;
-	
+
 	card = -1;
 
 	if (snd_card_next(&card) < 0)
@@ -855,9 +855,9 @@ int GetOutputDeviceCollection()
 		sprintf(hwdev, "hw:%d", card);
 		err = snd_ctl_open(&handle, hwdev, 0);
 		err = snd_ctl_card_info(handle, info);
-    
+
 		Debugprintf("Card %d, ID `%s', name `%s'", card, snd_ctl_card_info_get_id(info),
-                snd_ctl_card_info_get_name(info));
+			snd_ctl_card_info_get_name(info));
 
 
 		dev = -1;
@@ -867,7 +867,7 @@ int GetOutputDeviceCollection()
 			// Card has no devices
 
 			snd_ctl_close(handle);
-			goto nextcard;      
+			goto nextcard;
 		}
 
 		while (dev >= 0)
@@ -875,15 +875,15 @@ int GetOutputDeviceCollection()
 			snd_pcm_info_set_device(pcminfo, dev);
 			snd_pcm_info_set_subdevice(pcminfo, 0);
 			snd_pcm_info_set_stream(pcminfo, stream);
-	
+
 			err = snd_ctl_pcm_info(handle, pcminfo);
 
-			
+
 			if (err == -ENOENT)
 				goto nextdevice;
 
 			nsubd = snd_pcm_info_get_subdevices_count(pcminfo);
-		
+
 			Debugprintf("  Device hw:%d,%d ID `%s', name `%s', %d subdevices (%d available)",
 				card, dev, snd_pcm_info_get_id(pcminfo), snd_pcm_info_get_name(pcminfo),
 				nsubd, snd_pcm_info_get_subdevices_avail(pcminfo));
@@ -898,13 +898,13 @@ int GetOutputDeviceCollection()
 				goto nextdevice;
 			}
 
-			//	Get parameters for this device
+			// Get parameters for this device
 
 			err = snd_pcm_hw_params_any(pcm, pars);
- 
+
 			snd_pcm_hw_params_get_channels_min(pars, &min);
 			snd_pcm_hw_params_get_channels_max(pars, &max);
-			
+
 			snd_pcm_hw_params_get_rate_min(pars, &ratemin, NULL);
 			snd_pcm_hw_params_get_rate_max(pars, &ratemax, NULL);
 
@@ -930,14 +930,14 @@ int GetOutputDeviceCollection()
 nextdevice:
 			if (snd_ctl_pcm_next_device(handle, &dev) < 0)
 				break;
-	    }
+		}
 		snd_ctl_close(handle);
 
 nextcard:
-			
+
 		Debugprintf("");
 
-		if (snd_card_next(&card) < 0)		// No more cards
+		if (snd_card_next(&card) < 0)  // No more cards
 			break;
 	}
 
@@ -971,13 +971,13 @@ int GetInputDeviceCollection()
 	ReadDevices = NULL;
 	ReadDeviceCount = 0;
 
-	//	Add virtual device ARDOP so ALSA plugins can be used if needed
+	// Add virtual device ARDOP so ALSA plugins can be used if needed
 
 	ReadDevices = realloc(ReadDevices,(ReadDeviceCount + 1) * sizeof(ReadDevices));
 	ReadDevices[ReadDeviceCount++] = strdup("ARDOP");
 
-	//	Get Device List  from ALSA
-	
+	// Get Device List  from ALSA
+
 	snd_ctl_card_info_alloca(&info);
 	snd_pcm_info_alloca(&pcminfo);
 	snd_pcm_hw_params_alloca(&pars);
@@ -987,7 +987,7 @@ int GetInputDeviceCollection()
 	unsigned min, max, ratemin, ratemax;
 	int card, err, dev, nsubd;
 	snd_pcm_stream_t stream = SND_PCM_STREAM_CAPTURE;
-	
+
 	card = -1;
 
 	if(snd_card_next(&card) < 0)
@@ -1006,16 +1006,16 @@ int GetInputDeviceCollection()
 		sprintf(hwdev, "hw:%d", card);
 		err = snd_ctl_open(&handle, hwdev, 0);
 		err = snd_ctl_card_info(handle, info);
-    
+
 		Debugprintf("Card %d, ID `%s', name `%s'", card, snd_ctl_card_info_get_id(info),
-                snd_ctl_card_info_get_name(info));
+			snd_ctl_card_info_get_name(info));
 
 		dev = -1;
-			
-		if (snd_ctl_pcm_next_device(handle, &dev) < 0)		// No Devicdes
+
+		if (snd_ctl_pcm_next_device(handle, &dev) < 0)  // No Devicdes
 		{
 			snd_ctl_close(handle);
-			goto nextcard;      
+			goto nextcard;
 		}
 
 		while(dev >= 0)
@@ -1024,10 +1024,10 @@ int GetInputDeviceCollection()
 			snd_pcm_info_set_subdevice(pcminfo, 0);
 			snd_pcm_info_set_stream(pcminfo, stream);
 			err= snd_ctl_pcm_info(handle, pcminfo);
-	
+
 			if (err == -ENOENT)
 				goto nextdevice;
-	
+
 			nsubd= snd_pcm_info_get_subdevices_count(pcminfo);
 			Debugprintf("  Device hw:%d,%d ID `%s', name `%s', %d subdevices (%d available)",
 				card, dev, snd_pcm_info_get_id(pcminfo), snd_pcm_info_get_name(pcminfo),
@@ -1036,15 +1036,15 @@ int GetInputDeviceCollection()
 			sprintf(hwdev, "hw:%d,%d", card, dev);
 
 			err = snd_pcm_open(&pcm, hwdev, stream, SND_PCM_NONBLOCK);
-	
+
 			if (err)
-			{	
+			{
 				Debugprintf("Error %d opening input device", err);
 				goto nextdevice;
 			}
 
 			err = snd_pcm_hw_params_any(pcm, pars);
- 
+
 			snd_pcm_hw_params_get_channels_min(pars, &min);
 			snd_pcm_hw_params_get_channels_max(pars, &max);
 			snd_pcm_hw_params_get_rate_min(pars, &ratemin, NULL);
@@ -1072,7 +1072,7 @@ int GetInputDeviceCollection()
 nextdevice:
 			if (snd_ctl_pcm_next_device(handle, &dev) < 0)
 				break;
-	    }
+		}
 		snd_ctl_close(handle);
 nextcard:
 
@@ -1097,7 +1097,7 @@ int blnFirstOpenSoundPlayback = True;  // used to only log warning about -A opti
 int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, char * ErrorMsg)
 {
 	unsigned int intRate;  // reported number of frames per second
-	unsigned int intPeriodTime = 0; // reported duration of one period in microseconds.
+	unsigned int intPeriodTime = 0;  // reported duration of one period in microseconds.
 	snd_pcm_uframes_t periodSize = 0;  // reported number of frames per period
 
 	int intDir;
@@ -1107,9 +1107,9 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 	char buf1[100];
 	char * ptr;
 
-	// Choose the number of frames per period.  This avoids possible ALSA misconfiguration 
+	// Choose the number of frames per period.  This avoids possible ALSA misconfiguration
 	// errors that may result in a TX symbol timing error if the default value is accepted.
-	// The value chosen is a tradeoff between avoiding excessive CPU load caused by too 
+	// The value chosen is a tradeoff between avoiding excessive CPU load caused by too
 	// small of a value and increased latency associated with too large a value.
 	snd_pcm_uframes_t setPeriodSize = m_sampleRate / 100;
 
@@ -1119,16 +1119,17 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 		playhandle = NULL;
 	}
 
-	strcpy(SavedPlaybackDevice, PlaybackDevice);	// Saved so we can reopen in error recovery
+	strcpy(SavedPlaybackDevice, PlaybackDevice);  // Saved so we can reopen in error recovery
 	SavedPlaybackRate = m_sampleRate;
 
 	strcpy(buf1, PlaybackDevice);
 
 	ptr = strchr(buf1, ' ');
-	if (ptr) *ptr = 0;				// Get Device part of name
+	if (ptr)
+		*ptr = 0;  // Get Device part of name
 
 	snd_pcm_hw_params_t *hw_params;
-	
+
 	if ((err = snd_pcm_open(&playhandle, buf1, SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK)) < 0) {
 		if (ErrorMsg)
 			sprintf (ErrorMsg, "cannot open playback audio device %s (%s)",  buf1, snd_strerror(err));
@@ -1136,7 +1137,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 			Debugprintf("cannot open playback audio device %s (%s)",  buf1, snd_strerror(err));
 		return false;
 	}
-		   
+
 	if ((err = snd_pcm_hw_params_malloc (&hw_params)) < 0) {
 		if (ErrorMsg)
 			sprintf (ErrorMsg, "cannot allocate hardware parameter structure (%s)", snd_strerror(err));
@@ -1144,7 +1145,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 			Debugprintf("cannot allocate hardware parameter structure (%s)", snd_strerror(err));
 		return false;
 	}
-				 
+
 	if ((err = snd_pcm_hw_params_any (playhandle, hw_params)) < 0) {
 		if (ErrorMsg)
 			sprintf (ErrorMsg, "cannot initialize hardware parameter structure (%s)", snd_strerror(err));
@@ -1152,7 +1153,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 			Debugprintf("cannot initialize hardware parameter structure (%s)", snd_strerror(err));
 		return false;
 	}
-	
+
 	if ((err = snd_pcm_hw_params_set_access (playhandle, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED)) < 0) {
 		if (ErrorMsg)
 			sprintf (ErrorMsg, "cannot set playback access type (%s)", snd_strerror (err));
@@ -1182,10 +1183,10 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 	if ((err = snd_pcm_hw_params_set_channels (playhandle, hw_params, channels)) < 0)
 	{
 		Debugprintf("cannot set play channel count to %d (%s)", channels, snd_strerror(err));
-		
+
 		if (channels == 2)
-			return false;				// Shouldn't happen as should have worked before
-		
+			return false;  // Shouldn't happen as should have worked before
+
 		channels = 2;
 
 		if ((err = snd_pcm_hw_params_set_channels (playhandle, hw_params, 2)) < 0)
@@ -1194,7 +1195,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 			return false;
 		}
 	}
-	
+
 	if (FixTiming) {
 		if ((err = snd_pcm_hw_params_set_period_size (playhandle, hw_params, setPeriodSize, 0)) < 0) {
 			if (ErrorMsg)
@@ -1223,10 +1224,10 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 	}
 	if (m_sampleRate != intRate) {
 		if (ErrorMsg)
-			sprintf (ErrorMsg, "Unable to correctly set playback rate.  Got %d instead of %d.", 
+			sprintf (ErrorMsg, "Unable to correctly set playback rate.  Got %d instead of %d.",
 				intRate, m_sampleRate);
 		else
-			Debugprintf("Unable to correctly set playback rate.  Got %d instead of %d.", 
+			Debugprintf("Unable to correctly set playback rate.  Got %d instead of %d.",
 				intRate, m_sampleRate);
 		return false;
 	}
@@ -1241,10 +1242,10 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 	}
 	if (FixTiming && (setPeriodSize != periodSize)) {
 		if (ErrorMsg)
-			sprintf (ErrorMsg, "Unable to correctly set playback period size.  Got %lu instead of %lu.", 
+			sprintf (ErrorMsg, "Unable to correctly set playback period size.  Got %lu instead of %lu.",
 				periodSize, setPeriodSize);
 		else
-			Debugprintf("Unable to correctly set playback period size.  Got %d instead of %d.", 
+			Debugprintf("Unable to correctly set playback period size.  Got %d instead of %d.",
 				periodSize, setPeriodSize);
 		return false;
 	}
@@ -1260,7 +1261,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 
 	if (FixTiming && (intPeriodTime * intRate != periodSize * 1000000)) {
 		if (ErrorMsg)
-			sprintf (ErrorMsg, 
+			sprintf (ErrorMsg,
 				"\n\nERROR: Inconsistent playback settings: %d * %d != %lu * 1000000."
 				"  Please report this error to the ardop users group at ardop.groups.io"
 				" or by creating an issue at www.github.com/pflarue/ardop."
@@ -1284,11 +1285,11 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 			intPeriodTime, intRate, periodSize);
 		WriteDebugLog(LOGWARNING, "This will result in a playblack sample rate of %f instead of %d.",
 			periodSize * 1000000.0 / intPeriodTime, intRate);
-		WriteDebugLog(LOGWARNING, 
+		WriteDebugLog(LOGWARNING,
 			"This is an error of about %fppm.  Per the Ardop spec +/-100ppm should work well and +/-1000 ppm"
 			" should work with some performance degredation.",
 			(intRate - (periodSize * 1000000.0 / intPeriodTime))/intRate * 1000000);
-		WriteDebugLog(LOGWARNING, 
+		WriteDebugLog(LOGWARNING,
 			"\n\nWARNING: The -A option was specified.  So, ALSA misconfiguration will be accepted and ignored."
 			"  This option is primarily intended for testing/debuging.  However, it may also be useful if"
 			" ardopcf will not run without it.  In this case, please report this problem to the ardop users"
@@ -1296,10 +1297,10 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 	}
 	blnFirstOpenSoundPlayback = False;
 	// WriteDebugLog(LOGINFO, "Period time=%d (microsecond). Sample Rate=%d (Hz).  Period Size=%d (samples).",
-	//	intPeriodTime, intRate, periodSize);
-	
+	//  intPeriodTime, intRate, periodSize);
+
 	snd_pcm_hw_params_free(hw_params);
-	
+
 	if ((err = snd_pcm_prepare (playhandle)) < 0) {
 		Debugprintf("cannot prepare audio interface for use (%s)", snd_strerror(err));
 		return false;
@@ -1327,14 +1328,15 @@ int OpenSoundCapture(char * CaptureDevice, int m_sampleRate, char * ErrorMsg)
 		rechandle = NULL;
 	}
 
-	strcpy(SavedCaptureDevice, CaptureDevice);	// Saved so we can reopen in error recovery
+	strcpy(SavedCaptureDevice, CaptureDevice);  // Saved so we can reopen in error recovery
 	SavedCaptureRate = m_sampleRate;
 
 	strcpy(buf1, CaptureDevice);
 
 	ptr = strchr(buf1, ' ');
-	if (ptr) *ptr = 0;				// Get Device part of name
-	
+	if (ptr)
+		*ptr = 0;  // Get Device part of name
+
 	if ((err = snd_pcm_open (&rechandle, buf1, SND_PCM_STREAM_CAPTURE, 0)) < 0) {
 		if (ErrorMsg)
 			sprintf (ErrorMsg, "cannot open capture audio device %s (%s)",  buf1, snd_strerror(err));
@@ -1342,18 +1344,18 @@ int OpenSoundCapture(char * CaptureDevice, int m_sampleRate, char * ErrorMsg)
 			Debugprintf("cannot open capture audio device %s (%s)",  buf1, snd_strerror(err));
 		return false;
 	}
-	   
+
 	if ((err = snd_pcm_hw_params_malloc (&hw_params)) < 0) {
 		Debugprintf("cannot allocate capture hardware parameter structure (%s)", snd_strerror(err));
 		return false;
 	}
-				 
+
 	if ((err = snd_pcm_hw_params_any (rechandle, hw_params)) < 0) {
 		Debugprintf("cannot initialize capture hardware parameter structure (%s)", snd_strerror(err));
 		return false;
 	}
-	
-//craiger add frames per period
+
+// craiger add frames per period
 
 	fpp = 600;
 	dir = 0;
@@ -1369,12 +1371,12 @@ int OpenSoundCapture(char * CaptureDevice, int m_sampleRate, char * ErrorMsg)
 		Debugprintf("cannot set capture access type (%s)", snd_strerror (err));
 		return false;
 	}
-	if ((err = snd_pcm_hw_params_set_format (rechandle, hw_params, SND_PCM_FORMAT_S16_LE)) < 0) 
+	if ((err = snd_pcm_hw_params_set_format (rechandle, hw_params, SND_PCM_FORMAT_S16_LE)) < 0)
 	{
 		Debugprintf("cannot set capture sample format (%s)", snd_strerror(err));
 		return false;
 	}
-	
+
 	if ((err = snd_pcm_hw_params_set_rate (rechandle, hw_params, m_sampleRate, 0)) < 0)
 	{
 		if (ErrorMsg)
@@ -1387,15 +1389,15 @@ int OpenSoundCapture(char * CaptureDevice, int m_sampleRate, char * ErrorMsg)
 	m_recchannels = 1;
 
 	if (UseLeftRX == 0 || UseRightRX == 0)
-		m_recchannels = 2;					// L/R implies stereo
-	
+		m_recchannels = 2;  // L/R implies stereo
+
 	if ((err = snd_pcm_hw_params_set_channels (rechandle, hw_params, m_recchannels)) < 0)
 	{
 		if (ErrorMsg)
 			sprintf (ErrorMsg, "cannot set rec channel count to %d (%s)" ,m_recchannels, snd_strerror(err));
 		else
 			Debugprintf("cannot set rec channel count to %d (%s)", m_recchannels, snd_strerror(err));
-	
+
 		if (m_recchannels  == 1)
 		{
 			m_recchannels = 2;
@@ -1411,14 +1413,14 @@ int OpenSoundCapture(char * CaptureDevice, int m_sampleRate, char * ErrorMsg)
 				Debugprintf("Record channel count set to 2 (%s)", snd_strerror(err));
 		}
 	}
-	
+
 	if ((err = snd_pcm_hw_params (rechandle, hw_params)) < 0) {
 		fprintf (stderr, "cannot set parameters (%s)", snd_strerror(err));
 		return false;
 	}
-	
+
 	snd_pcm_hw_params_free(hw_params);
-	
+
 	if ((err = snd_pcm_prepare (rechandle)) < 0) {
 		Debugprintf("cannot prepare audio interface for use (%s)", snd_strerror(err));
 		return FALSE;
@@ -1426,13 +1428,13 @@ int OpenSoundCapture(char * CaptureDevice, int m_sampleRate, char * ErrorMsg)
 
 	snd_pcm_start(rechandle);  // without this avail stuck at 0
 
- 	return TRUE;
+	return TRUE;
 }
 
 int OpenSoundCard(char * CaptureDevice, char * PlaybackDevice, int c_sampleRate, int p_sampleRate, char * ErrorMsg)
 {
 	int Channels = 1;
-	
+
 	if (UseLeftRX == 1 && UseRightRX == 1)
 	{
 		printf("Using Both Channels of soundcard for RX\n");
@@ -1460,14 +1462,14 @@ int OpenSoundCard(char * CaptureDevice, char * PlaybackDevice, int c_sampleRate,
 	Debugprintf("Opening Playback Device %s Rate %d", PlaybackDevice, p_sampleRate);
 
 	if (UseLeftTX == 0 || UseRightTX == 0)
-		Channels = 2;						// L or R implies stereo
+		Channels = 2;  // L or R implies stereo
 
 	if (OpenSoundPlayback(PlaybackDevice, p_sampleRate, Channels, ErrorMsg))
 	{
 #ifdef SHARECAPTURE
 
 		// Close playback device so it can be shared
-		
+
 		if (playhandle)
 		{
 			snd_pcm_close(playhandle);
@@ -1510,7 +1512,7 @@ int SoundCardWrite(short * input, unsigned int nSamples)
 	if (playhandle == NULL)
 		return 0;
 
-	//	Stop Capture
+	// Stop Capture
 
 	if (rechandle)
 	{
@@ -1532,7 +1534,7 @@ int SoundCardWrite(short * input, unsigned int nSamples)
 		if (avail < 0)
 			Debugprintf("avail play after recovery returned %d", (int)avail);
 	}
-	
+
 	maxavail = avail;
 
 //	Debugprintf("Samples %d Tosend %d Avail %d", SampleNo, nSamples, (int)avail);
@@ -1611,8 +1613,8 @@ int xSoundCardClearInput()
 	if (rechandle == NULL)
 		return 0;
 
-	// Clear queue 
-	
+	// Clear queue
+
 	avail = snd_pcm_avail_update(rechandle);
 
 	if (avail < 0)
@@ -1709,7 +1711,7 @@ int SoundCardRead(short * input, unsigned int nSamples)
 		else
 			start = 1;
 
-		for (n = start; n < (ret * 2); n+=2)			// return alternate
+		for (n = start; n < (ret * 2); n+=2)  // return alternate
 		{
 			*(input++) = samples[n];
 		}
@@ -1736,10 +1738,10 @@ int SoundCardRead(short * input, unsigned int nSamples)
 
 int PriorSize = 0;
 
-int Index = 0;				// DMA Buffer being used 0 or 1
-int inIndex = 0;				// DMA Buffer being used 0 or 1
+int Index = 0;  // DMA Buffer being used 0 or 1
+int inIndex = 0;  // DMA Buffer being used 0 or 1
 
-BOOL DMARunning = FALSE;		// Used to start DMA on first write
+BOOL DMARunning = FALSE;  // Used to start DMA on first write
 
 short * SendtoCard(short * buf, int n)
 {
@@ -1747,7 +1749,7 @@ short * SendtoCard(short * buf, int n)
 	{
 		// Loop back   to decode for testing
 
-		ProcessNewSamples(buf, 1200);		// signed
+		ProcessNewSamples(buf, 1200);  // signed
 	}
 
 	if (playhandle)
@@ -1755,17 +1757,17 @@ short * SendtoCard(short * buf, int n)
 	if (txwff != NULL)
 		WriteWav(&buffer[Index][0], n, txwff);
 
-//	txSleep(10);				// Run buckground while waiting 
+//	txSleep(10);  // Run buckground while waiting
 
 	return &buffer[Index][0];
 }
 
-short loopbuff[1200];		// Temp for testing - loop sent samples to decoder
+short loopbuff[1200];  // Temp for testing - loop sent samples to decoder
 
 
-//		// This generates a nice musical pattern for sound interface testing
-//    for (t = 0; t < sizeof(buffer); ++t)
-//        buffer[t] =((((t * (t >> 8 | t >> 9) & 46 & t >> 8)) ^ (t & t >> 13 | t >> 6)) & 0xFF);
+// This generates a nice musical pattern for sound interface testing
+// for (t = 0; t < sizeof(buffer); ++t)
+//  buffer[t] =((((t * (t >> 8 | t >> 9) & 46 & t >> 8)) ^ (t & t >> 13 | t >> 6)) & 0xFF);
 
 
 
@@ -1779,7 +1781,7 @@ int InitSound(BOOL Quiet)
 }
 
 int min = 0, max = 0, lastlevelreport = 0, lastlevelGUI = 0;
-UCHAR CurrentLevel = 0;		// Peak from current samples
+UCHAR CurrentLevel = 0;  // Peak from current samples
 
 
 void PollReceivedSamples()
@@ -1806,17 +1808,17 @@ void PollReceivedSamples()
 			ptr++;
 		}
 
-		CurrentLevel = ((max - min) * 75) /32768;	// Scale to 150 max
+		CurrentLevel = ((max - min) * 75) /32768;  // Scale to 150 max
 		wg_send_currentlevel(0, CurrentLevel);
 
-		if ((Now - lastlevelGUI) > 2000)	// 2 Secs
+		if ((Now - lastlevelGUI) > 2000)  // 2 Secs
 		{
-			if (WaterfallActive == 0 && SpectrumActive == 0)				// Don't need to send as included in Waterfall Line
-				SendtoGUI('L', &CurrentLevel, 1);	// Signal Level
-			
+			if (WaterfallActive == 0 && SpectrumActive == 0)  // Don't need to send as included in Waterfall Line
+				SendtoGUI('L', &CurrentLevel, 1);  // Signal Level
+
 			lastlevelGUI = Now;
 
-			if ((Now - lastlevelreport) > 10000)	// 10 Secs
+			if ((Now - lastlevelreport) > 10000)  // 10 Secs
 			{
 				lastlevelreport = Now;
 				// Report input peaks to host if in debug mode or if close to clipping
@@ -1830,19 +1832,22 @@ void PollReceivedSamples()
 					// A user NOT in debug mode will see this message if they are clipping
 					if (ConsoleLogLevel <= LOGINFO)
 					{
-						WriteDebugLog(LOGINFO, "Your input signal is probably clipping. \
-If you see this message repeated in the next 20-30 seconds, \
-Turn down your RX input until this message stops repeating.");
+						WriteDebugLog(LOGINFO,
+							"Your input signal is probably clipping. If you see"
+							" this message repeated in the next 20-30 seconds,"
+							" Turn down your RX input until this message stops"
+							" repeating."
+						);
 					}
 				}
 			}
-			min = max = 0;							// Every 2 secs
+			min = max = 0;  // Every 2 secs
 		}
 
 		if (Capturing && Loopback == FALSE)
 			ProcessNewSamples(&inbuffer[0][0], ReceiveSize);
 	}
-} 
+}
 
 void StopCapture()
 {
@@ -1882,7 +1887,7 @@ void StartCapture()
 //	Debugprintf("Start Capture");
 }
 void CloseSound()
-{ 
+{
 	CloseSoundCard();
 }
 
@@ -1894,7 +1899,7 @@ int WriteLog(char * msg, int Log)
 
 	UCHAR Value[256];
 	int vlen;
-	
+
 	int hh;
 	int mm;
 	int ss;
@@ -1903,7 +1908,7 @@ int WriteLog(char * msg, int Log)
 	float wavss;
 
 	clock_gettime(CLOCK_REALTIME, &tp);
-	
+
 	if (logfile[Log] == NULL)
 	{
 		struct tm * tm;
@@ -1926,7 +1931,7 @@ int WriteLog(char * msg, int Log)
 		if ((logfile[Log] = fopen(Value, "a")) == NULL)
 			return -1;
 	}
-	ss = tp.tv_sec % 86400;		// Secs int day
+	ss = tp.tv_sec % 86400;  // Secs int day
 	hh = ss / 3600;
 	mm = (ss - (hh * 3600)) / 60;
 	ss = ss % 60;
@@ -1971,8 +1976,8 @@ unsigned short * SoundInit()
 	Index = 0;
 	return &buffer[0][0];
 }
-	
-//	Called at end of transmission
+
+// Called at end of transmission
 
 void SoundFlush()
 {
@@ -1986,7 +1991,7 @@ void SoundFlush()
 	int txlenMs = 0;
 	snd_pcm_sframes_t avail;
 
-	AddTrailer();			// add the trailer.
+	AddTrailer();  // add the trailer.
 
 	if (Loopback)
 		ProcessNewSamples(&buffer[Index][0], Number);
@@ -1998,7 +2003,7 @@ void SoundFlush()
 	// samples sent is is in SampleNo, time started in mS is in pttOnTime.
 	// calculate time to stop
 
-	txlenMs = SampleNo / 12 + 20;		// 12000 samples per sec. 20 mS TXTAIL
+	txlenMs = SampleNo / 12 + 20;  // 12000 samples per sec. 20 mS TXTAIL
 
 	WriteDebugLog(LOGDEBUG, "Tx Time %d Time till end = %d", txlenMs, (pttOnTime + txlenMs) - Now);
 
@@ -2016,22 +2021,22 @@ void SoundFlush()
 
 		Debugprintf("Waiting for complete. Avail %d Max %d last %d", avail, MaxAvail, lastavail);
 
-		snd_pcm_status_alloca(&status);					// alloca allocates once per function, does not need a free
+		snd_pcm_status_alloca(&status);  // alloca allocates once per function, does not need a free
 
 		if ((err=snd_pcm_status(playhandle, status))!=0)
 		{
-    		Debugprintf("snd_pcm_status() failed: %s",snd_strerror(err));
+			Debugprintf("snd_pcm_status() failed: %s",snd_strerror(err));
 			break;
 		}
-	 
+
 		res = snd_pcm_status_get_state(status);
 
 		Debugprintf("PCM Status = %d", res);
 
 		// Some cards seem to stop sending but not report not running, so also check that avail is decreasing
 
-		if (res != SND_PCM_STATE_RUNNING || lastavail == avail)			// If sound system is not running then it needs data
-//		if (MaxAvail - avail < 100)	
+		if (res != SND_PCM_STATE_RUNNING || lastavail == avail)  // If sound system is not running then it needs data
+//		if (MaxAvail - avail < 100)
 		{
 			// Send complete - Restart Capture
 			break;
@@ -2055,10 +2060,10 @@ void SoundFlush()
 #endif
 	SoundIsPlaying = FALSE;
 
-	if (blnEnbARQRpt > 0 || blnDISCRepeating)	// Start Repeat Timer if frame should be repeated
+	if (blnEnbARQRpt > 0 || blnDISCRepeating)  // Start Repeat Timer if frame should be repeated
 		dttNextPlay = Now + intFrameRepeatInterval + extraDelay;
 
-	KeyPTT(FALSE);		 // Unkey the Transmitter
+	KeyPTT(FALSE);  // Unkey the Transmitter
 	if (txwff != NULL)
 	{
 		CloseWav(txwff);
@@ -2067,8 +2072,8 @@ void SoundFlush()
 	// writing unfiltered tx audio to WAV disabled
 	// if (txwfu != NULL)
 	// {
-	// 	CloseWav(txwfu);
-	// 	txwfu = NULL;
+		// CloseWav(txwfu);
+		// txwfu = NULL;
 	// }
 
 	if (strcmp(PlaybackDevice, "NOSOUND") != 0)
@@ -2081,7 +2086,7 @@ void SoundFlush()
 	return;
 }
 
-VOID RadioPTT(int PTTState)	
+VOID RadioPTT(int PTTState)
 {
 #ifdef __ARM_ARCH
 	if (useGPIO)
@@ -2112,7 +2117,7 @@ VOID RadioPTT(int PTTState)
 	}
 }
 
-//  Function to send PTT TRUE or PTT FALSE commanad to Host or if local Radio control Keys radio PTT 
+// Function to send PTT TRUE or PTT FALSE commanad to Host or if local Radio control Keys radio PTT
 
 const char BoolString[2][6] = {"FALSE", "TRUE"};
 
@@ -2121,7 +2126,7 @@ BOOL KeyPTT(BOOL blnPTT)
 	// Returns TRUE if successful False otherwise
 
 	if (blnLastPTT &&  !blnPTT)
-		dttStartRTMeasure = Now;	 // start a measurement on release of PTT.
+		dttStartRTMeasure = Now;  // start a measurement on release of PTT.
 
 	if (!RadioControl)
 		if (blnPTT)
@@ -2146,17 +2151,17 @@ static struct speed_struct
 	int	user_speed;
 	speed_t termios_speed;
 } speed_table[] = {
-	{300,         B300},
-	{600,         B600},
-	{1200,        B1200},
-	{2400,        B2400},
-	{4800,        B4800},
-	{9600,        B9600},
-	{19200,       B19200},
-	{38400,       B38400},
-	{57600,       B57600},
-	{115200,      B115200},
-	{-1,          B0}
+	{300, B300},
+	{600, B600},
+	{1200, B1200},
+	{2400, B2400},
+	{4800, B4800},
+	{9600, B9600},
+	{19200, B19200},
+	{38400, B38400},
+	{57600, B57600},
+	{115200, B115200},
+	{-1, B0}
 };
 
 
@@ -2166,9 +2171,9 @@ static struct speed_struct
 #ifdef __ARM_ARCH
 
 /*
-   tiny_gpio.c
-   2016-04-30
-   Public Domain
+	tiny_gpio.c
+	2016-04-30
+	Public Domain
 */
 #include <stdio.h>
 #include <unistd.h>
@@ -2188,7 +2193,7 @@ static struct speed_struct
 #define GPLEV0 13
 #define GPLEV1 14
 
-#define GPPUD     37
+#define GPPUD 37
 #define GPPUDCLK0 38
 #define GPPUDCLK1 39
 
@@ -2204,25 +2209,25 @@ static volatile uint32_t  *gpioReg = MAP_FAILED;
 
 void gpioSetMode(unsigned gpio, unsigned mode)
 {
-   int reg, shift;
+	int reg, shift;
 
-   reg   =  gpio/10;
-   shift = (gpio%10) * 3;
+	reg   =  gpio/10;
+	shift = (gpio%10) * 3;
 
-   gpioReg[reg] = (gpioReg[reg] & ~(7<<shift)) | (mode<<shift);
+	gpioReg[reg] = (gpioReg[reg] & ~(7<<shift)) | (mode<<shift);
 }
 
 int gpioGetMode(unsigned gpio)
 {
-   int reg, shift;
+	int reg, shift;
 
-   reg   =  gpio/10;
-   shift = (gpio%10) * 3;
+	reg   =  gpio/10;
+	shift = (gpio%10) * 3;
 
-   return (*(gpioReg + reg) >> shift) & 7;
+	return (*(gpioReg + reg) >> shift) & 7;
 }
 
-/* Values for pull-ups/downs off, pull-down and pull-up. */
+// Values for pull-ups/downs off, pull-down and pull-up.
 
 #define PI_PUD_OFF  0
 #define PI_PUD_DOWN 1
@@ -2230,150 +2235,170 @@ int gpioGetMode(unsigned gpio)
 
 void gpioSetPullUpDown(unsigned gpio, unsigned pud)
 {
-   *(gpioReg + GPPUD) = pud;
+	*(gpioReg + GPPUD) = pud;
 
-   usleep(20);
+	usleep(20);
 
-   *(gpioReg + GPPUDCLK0 + PI_BANK) = PI_BIT;
+	*(gpioReg + GPPUDCLK0 + PI_BANK) = PI_BIT;
 
-   usleep(20);
-  
-   *(gpioReg + GPPUD) = 0;
+	usleep(20);
 
-   *(gpioReg + GPPUDCLK0 + PI_BANK) = 0;
+	*(gpioReg + GPPUD) = 0;
+
+	*(gpioReg + GPPUDCLK0 + PI_BANK) = 0;
 }
 
 int gpioRead(unsigned gpio)
 {
-   if ((*(gpioReg + GPLEV0 + PI_BANK) & PI_BIT) != 0) return 1;
-   else                                         return 0;
+	if ((*(gpioReg + GPLEV0 + PI_BANK) & PI_BIT) != 0)
+		return 1;
+	else
+		return 0;
 }
 void gpioWrite(unsigned gpio, unsigned level)
 {
-   if (level == 0)
-	   *(gpioReg + GPCLR0 + PI_BANK) = PI_BIT;
-   else
-	   *(gpioReg + GPSET0 + PI_BANK) = PI_BIT;
+	if (level == 0)
+		*(gpioReg + GPCLR0 + PI_BANK) = PI_BIT;
+	else
+		*(gpioReg + GPSET0 + PI_BANK) = PI_BIT;
 }
 
 void gpioTrigger(unsigned gpio, unsigned pulseLen, unsigned level)
 {
-   if (level == 0) *(gpioReg + GPCLR0 + PI_BANK) = PI_BIT;
-   else            *(gpioReg + GPSET0 + PI_BANK) = PI_BIT;
+	if (level == 0)
+		*(gpioReg + GPCLR0 + PI_BANK) = PI_BIT;
+	else
+		*(gpioReg + GPSET0 + PI_BANK) = PI_BIT;
 
-   usleep(pulseLen);
+	usleep(pulseLen);
 
-   if (level != 0) *(gpioReg + GPCLR0 + PI_BANK) = PI_BIT;
-   else            *(gpioReg + GPSET0 + PI_BANK) = PI_BIT;
+	if (level != 0)
+		*(gpioReg + GPCLR0 + PI_BANK) = PI_BIT;
+	else
+		*(gpioReg + GPSET0 + PI_BANK) = PI_BIT;
 }
 
-/* Bit (1<<x) will be set if gpio x is high. */
+// Bit (1<<x) will be set if gpio x is high.
 
-uint32_t gpioReadBank1(void) { return (*(gpioReg + GPLEV0)); }
-uint32_t gpioReadBank2(void) { return (*(gpioReg + GPLEV1)); }
+uint32_t gpioReadBank1(void) {
+	return (*(gpioReg + GPLEV0));
+}
+uint32_t gpioReadBank2(void) {
+	return (*(gpioReg + GPLEV1));
+}
 
-/* To clear gpio x bit or in (1<<x). */
+// To clear gpio x bit or in (1<<x).
 
-void gpioClearBank1(uint32_t bits) { *(gpioReg + GPCLR0) = bits; }
-void gpioClearBank2(uint32_t bits) { *(gpioReg + GPCLR1) = bits; }
+void gpioClearBank1(uint32_t bits) {
+	*(gpioReg + GPCLR0) = bits;
+}
+void gpioClearBank2(uint32_t bits) {
+	*(gpioReg + GPCLR1) = bits;
+}
 
-/* To set gpio x bit or in (1<<x). */
+// To set gpio x bit or in (1<<x).
 
-void gpioSetBank1(uint32_t bits) { *(gpioReg + GPSET0) = bits; }
-void gpioSetBank2(uint32_t bits) { *(gpioReg + GPSET1) = bits; }
+void gpioSetBank1(uint32_t bits) {
+	*(gpioReg + GPSET0) = bits;
+}
+void gpioSetBank2(uint32_t bits) {
+	*(gpioReg + GPSET1) = bits;
+}
 
 unsigned gpioHardwareRevision(void)
 {
-   static unsigned rev = 0;
+	static unsigned rev = 0;
 
-   FILE * filp;
-   char buf[512];
-   char term;
-   int chars=4; /* number of chars in revision string */
+	FILE * filp;
+	char buf[512];
+	char term;
+	int chars=4;  // number of chars in revision string
 
-   if (rev) return rev;
+	if (rev)
+		return rev;
 
-   piModel = 0;
+	piModel = 0;
 
-   filp = fopen ("/proc/cpuinfo", "r");
+	filp = fopen ("/proc/cpuinfo", "r");
 
-   if (filp != NULL)
-   {
-      while (fgets(buf, sizeof(buf), filp) != NULL)
-      {
-         if (piModel == 0)
-         {
-            if (!strncasecmp("model name", buf, 10))
-            {
-               if (strstr (buf, "ARMv6") != NULL)
-               {
-                  piModel = 1;
-                  chars = 4;
-               }
-               else if (strstr (buf, "ARMv7") != NULL)
-               {
-                  piModel = 2;
-                  chars = 6;
-               }
-               else if (strstr (buf, "ARMv8") != NULL)
-               {
-                  piModel = 2;
-                  chars = 6;
-               }
-            }
-         }
+	if (filp != NULL)
+	{
+		while (fgets(buf, sizeof(buf), filp) != NULL)
+		{
+			if (piModel == 0)
+			{
+				if (!strncasecmp("model name", buf, 10))
+				{
+					if (strstr (buf, "ARMv6") != NULL)
+					{
+						piModel = 1;
+						chars = 4;
+					}
+					else if (strstr (buf, "ARMv7") != NULL)
+					{
+						piModel = 2;
+						chars = 6;
+					}
+					else if (strstr (buf, "ARMv8") != NULL)
+					{
+						piModel = 2;
+						chars = 6;
+					}
+				}
+			}
 
-         if (!strncasecmp("revision", buf, 8))
-         {
-            if (sscanf(buf+strlen(buf)-(chars+1),
-               "%x%c", &rev, &term) == 2)
-            {
-               if (term != '\n') rev = 0;
-            }
-         }
-      }
+			if (!strncasecmp("revision", buf, 8))
+			{
+				if (sscanf(buf+strlen(buf)-(chars+1),
+					"%x%c", &rev, &term) == 2)
+				{
+					if (term != '\n')
+						rev = 0;
+				}
+			}
+		}
 
-      fclose(filp);
-   }
-   return rev;
+		fclose(filp);
+	}
+	return rev;
 }
 
 int gpioInitialise(void)
 {
-   int fd;
+	int fd;
 
-   piRev = gpioHardwareRevision(); /* sets piModel and piRev */
+	piRev = gpioHardwareRevision();  // sets piModel and piRev
 
-   fd = open("/dev/gpiomem", O_RDWR | O_SYNC) ;
+	fd = open("/dev/gpiomem", O_RDWR | O_SYNC) ;
 
-   if (fd < 0)
-   {
-      fprintf(stderr, "failed to open /dev/gpiomem\n");
-      return -1;
-   }
+	if (fd < 0)
+	{
+		fprintf(stderr, "failed to open /dev/gpiomem\n");
+		return -1;
+	}
 
-   gpioReg = (uint32_t *)mmap(NULL, 0xB4, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+	gpioReg = (uint32_t *)mmap(NULL, 0xB4, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
 
-   close(fd);
+	close(fd);
 
-   if (gpioReg == MAP_FAILED)
-   {
-      fprintf(stderr, "Bad, mmap failed\n");
-      return -1;
-   }
-   return 0;
+	if (gpioReg == MAP_FAILED)
+	{
+		fprintf(stderr, "Bad, mmap failed\n");
+		return -1;
+	}
+	return 0;
 }
 
 
-	
+
 #endif
 
 
 
 int stricmp(const unsigned char * pStr1, const unsigned char *pStr2)
 {
-    unsigned char c1, c2;
-    int  v;
+	unsigned char c1, c2;
+	int  v;
 
 	if (pStr1 == NULL)
 	{
@@ -2386,14 +2411,14 @@ int stricmp(const unsigned char * pStr1, const unsigned char *pStr2)
 	}
 
 
-    do {
-        c1 = *pStr1++;
-        c2 = *pStr2++;
-        /* The casts are necessary when pStr1 is shorter & char is signed */
-        v = tolower(c1) - tolower(c2);
-    } while ((v == 0) && (c1 != '\0') && (c2 != '\0') );
+	do {
+		c1 = *pStr1++;
+		c2 = *pStr2++;
+		// The casts are necessary when pStr1 is shorter & char is signed
+		v = tolower(c1) - tolower(c2);
+	} while ((v == 0) && (c1 != '\0') && (c2 != '\0') );
 
-    return v;
+	return v;
 }
 
 char Leds[8]= {0};
@@ -2411,7 +2436,7 @@ void DrawTXMode(const char * Mode)
 {
 	unsigned char Msg[64];
 	strcpy(Msg, Mode);
-	SendtoGUI('T', Msg, strlen(Msg) + 1);		// TX Frame
+	SendtoGUI('T', Msg, strlen(Msg) + 1);  // TX Frame
 
 }
 
@@ -2419,16 +2444,16 @@ void DrawTXFrame(const char * Frame)
 {
 	unsigned char Msg[64];
 	strcpy(Msg, Frame);
-	SendtoGUI('T', Msg, strlen(Msg) + 1);		// TX Frame
+	SendtoGUI('T', Msg, strlen(Msg) + 1);  // TX Frame
 }
 
 void DrawRXFrame(int State, const char * Frame)
 {
 	unsigned char Msg[64];
 
-	Msg[0] = State;				// Pending/Good/Bad
+	Msg[0] = State;  // Pending/Good/Bad
 	strcpy(&Msg[1], Frame);
-	SendtoGUI('R', Msg, strlen(Frame) + 1);	// RX Frame
+	SendtoGUI('R', Msg, strlen(Frame) + 1);  // RX Frame
 }
 UCHAR Pixels[4096];
 UCHAR * pixelPointer = Pixels;
@@ -2437,7 +2462,7 @@ UCHAR * pixelPointer = Pixels;
 void mySetPixel(unsigned char x, unsigned char y, unsigned int Colour)
 {
 	// Used on Windows for constellation. Save points and send to GUI at end
-	
+
 	*(pixelPointer++) = x;
 	*(pixelPointer++) = y;
 	*(pixelPointer++) = Colour;
@@ -2451,21 +2476,17 @@ void clearDisplay()
 }
 void updateDisplay()
 {
-//	 SendtoGUI('C', Pixels, pixelPointer - Pixels);	
+//	 SendtoGUI('C', Pixels, pixelPointer - Pixels);
 }
 void DrawAxes(int Qual, char * Mode)
 {
 	UCHAR Msg[80];
-	SendtoGUI('C', Pixels, pixelPointer - Pixels);	
+	SendtoGUI('C', Pixels, pixelPointer - Pixels);
 	wg_send_pixels(0, Pixels, pixelPointer - Pixels);
 	pixelPointer = Pixels;
 
 	sprintf(Msg, "%s Quality: %d", Mode, Qual);
-	SendtoGUI('Q', Msg, strlen(Msg) + 1);	
+	SendtoGUI('Q', Msg, strlen(Msg) + 1);
 }
 void DrawDecode(char * Decode)
 {}
-
-
-
-

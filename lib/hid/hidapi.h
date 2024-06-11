@@ -1,28 +1,28 @@
 /*******************************************************
- HIDAPI - Multi-Platform library for
- communication with HID devices.
+	HIDAPI - Multi-Platform library for
+	communication with HID devices.
 
- Alan Ott
- Signal 11 Software
+	Alan Ott
+	Signal 11 Software
 
- 8/22/2009
+	8/22/2009
 
- Copyright 2009, All Rights Reserved.
+	Copyright 2009, All Rights Reserved.
 
- At the discretion of the user of this library,
- this software may be licensed under the terms of the
- GNU Public License v3, a BSD-Style license, or the
- original HIDAPI license as outlined in the LICENSE.txt,
- LICENSE-gpl3.txt, LICENSE-bsd.txt, and LICENSE-orig.txt
- files located at the root of the source distribution.
- These files may also be found in the public source
- code repository located at:
-        http://github.com/signal11/hidapi .
+	At the discretion of the user of this library,
+	this software may be licensed under the terms of the
+	GNU Public License v3, a BSD-Style license, or the
+	original HIDAPI license as outlined in the LICENSE.txt,
+	LICENSE-gpl3.txt, LICENSE-bsd.txt, and LICENSE-orig.txt
+	files located at the root of the source distribution.
+	These files may also be found in the public source
+	code repository located at:
+		http://github.com/signal11/hidapi .
 ********************************************************/
 
 /** @file
- * @defgroup API hidapi API
- */
+	* @defgroup API hidapi API
+*/
 
 #ifndef HIDAPI_H__
 #define HIDAPI_H__
@@ -30,12 +30,12 @@
 #include <wchar.h>
 
 #ifdef _WIN32
-//      #define HID_API_EXPORT __declspec(dllexport)		// BPQ
-      #define HID_API_EXPORT
-	  #define HID_API_CALL
+//	#define HID_API_EXPORT __declspec(dllexport)  // BPQ
+	#define HID_API_EXPORT
+	#define HID_API_CALL
 #else
-      #define HID_API_EXPORT /**< API export macro */
-      #define HID_API_CALL /**< API call macro */
+	#define HID_API_EXPORT /**< API export macro */
+	#define HID_API_CALL /**< API call macro */
 #endif
 
 #define HID_API_EXPORT_CALL HID_API_EXPORT HID_API_CALL /**< API export and call macro*/
@@ -57,22 +57,22 @@ extern "C" {
 			/** Serial Number */
 			wchar_t *serial_number;
 			/** Device Release Number in binary-coded decimal,
-			    also known as Device Version Number */
+				also known as Device Version Number */
 			unsigned short release_number;
 			/** Manufacturer String */
 			wchar_t *manufacturer_string;
 			/** Product string */
 			wchar_t *product_string;
 			/** Usage Page for this Device/Interface
-			    (Windows/Mac only). */
+				(Windows/Mac only). */
 			unsigned short usage_page;
 			/** Usage for this Device/Interface
-			    (Windows/Mac only).*/
+				(Windows/Mac only).*/
 			unsigned short usage;
 			/** The USB interface which this logical device
-			    represents. Valid on both Linux implementations
-			    in all cases, and valid on the Windows implementation
-			    only if the device contains more than one interface. */
+				represents. Valid on both Linux implementations
+				in all cases, and valid on the Windows implementation
+				only if the device contains more than one interface. */
 			int interface_number;
 
 			/** Pointer to the next device */
@@ -88,7 +88,7 @@ extern "C" {
 			needed.  This function should be called at the beginning of
 			execution however, if there is a chance of HIDAPI handles
 			being opened by different threads simultaneously.
-			
+
 			@ingroup API
 
 			@returns
@@ -104,7 +104,7 @@ extern "C" {
 
 			@ingroup API
 
-		    @returns
+			@returns
 				This function returns 0 on success and -1 on error.
 		*/
 		int HID_API_EXPORT HID_API_CALL hid_exit(void);
@@ -122,21 +122,21 @@ extern "C" {
 			@param product_id The Product ID (PID) of the types of
 				device to open.
 
-		    @returns
-		    	This function returns a pointer to a linked list of type
-		    	struct #hid_device, containing information about the HID devices
-		    	attached to the system, or NULL in the case of failure. Free
-		    	this linked list by calling hid_free_enumeration().
+			@returns
+				This function returns a pointer to a linked list of type
+				struct #hid_device, containing information about the HID devices
+				attached to the system, or NULL in the case of failure. Free
+				this linked list by calling hid_free_enumeration().
 		*/
 		struct hid_device_info HID_API_EXPORT * HID_API_CALL hid_enumerate(unsigned short vendor_id, unsigned short product_id);
 
 		/** @brief Free an enumeration Linked List
 
-		    This function frees a linked list created by hid_enumerate().
+			This function frees a linked list created by hid_enumerate().
 
 			@ingroup API
-		    @param devs Pointer to a list of struct_device returned from
-		    	      hid_enumerate().
+			@param devs Pointer to a list of struct_device returned from
+				hid_enumerate().
 		*/
 		void  HID_API_EXPORT HID_API_CALL hid_free_enumeration(struct hid_device_info *devs);
 
@@ -150,7 +150,7 @@ extern "C" {
 			@param vendor_id The Vendor ID (VID) of the device to open.
 			@param product_id The Product ID (PID) of the device to open.
 			@param serial_number The Serial Number of the device to open
-				               (Optionally NULL).
+				(Optionally NULL).
 
 			@returns
 				This function returns a pointer to a #hid_device object on
@@ -165,7 +165,7 @@ extern "C" {
 			Linux).
 
 			@ingroup API
-		    @param path The path name of the device to open
+			@param path The path name of the device to open
 
 			@returns
 				This function returns a pointer to a #hid_device object on
@@ -224,7 +224,7 @@ extern "C" {
 		/** @brief Read an Input report from a HID device.
 
 			Input reports are returned
-		    to the host through the INTERRUPT IN endpoint. The first byte will
+			to the host through the INTERRUPT IN endpoint. The first byte will
 			contain the Report number if the device uses numbered reports.
 
 			@ingroup API
@@ -252,8 +252,8 @@ extern "C" {
 			@ingroup API
 			@param device A device handle returned from hid_open().
 			@param nonblock enable or not the nonblocking reads
-			 - 1 to enable nonblocking
-			 - 0 to disable nonblocking.
+				- 1 to enable nonblocking
+				- 0 to disable nonblocking.
 
 			@returns
 				This function returns 0 on success and -1 on error.

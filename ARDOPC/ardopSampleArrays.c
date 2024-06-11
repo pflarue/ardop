@@ -1,8 +1,8 @@
-//	These Templates are used to save lots of calculations when
-//	generating samples. They are pre-calculated (by Calctemplates.c)
-//  so they can be stored in ROM on embedded platforms
+// These Templates are used to save lots of calculations when
+// generating samples. They are pre-calculated (by Calctemplates.c)
+// so they can be stored in ROM on embedded platforms
 
-const short int50BaudTwoToneLeaderTemplate[240] = {	// holds just 1 symbol (20 ms) of the 50 Baud leader
+const short int50BaudTwoToneLeaderTemplate[240] = {  // holds just 1 symbol (20 ms) of the 50 Baud leader
 
 	0, -263, 0, 793, 1496, 1322, 0, -1849, -2988, -2375,
 	0, 2901, 4474, 3424, 0, -3944, -5945, -4462, 0, 4978,
@@ -131,8 +131,8 @@ const short intFSK50bdCarTemplate[4][240] = {
 	-10944, -26832, -25482, -7763, 14943, 28050, 23137, 3361, -18574, -28577,
 	-20223, 1122, 21747, 28401, 16810, -5579, -24385, -27526, -12984, 9898,
 	26422, 25972, 8837, -13974, -27809, -23780, -4474, 17706, 28511, 21001}
-};	
-	
+};
+
 
 // obsolete versions of this code accommodated multi-carrier FSK
 // Template for 4FSK carriers spaced at 100 Hz, 100 baud
@@ -195,7 +195,7 @@ const short intFSK100bdCarTemplate[4][120] = {
 
 // Template for 4FSK carriers spaced at 600 Hz, 600 baud  (used for FM only)
 
-const short intFSK600bdCarTemplate[4][20] = 
+const short intFSK600bdCarTemplate[4][20] =
 {
 	{0, 8837, 16810, 23137, 27200, 28599, 27200, 23137, 16810, 8837,
 	0, -8837, -16810, -23137, -27200, -28599, -27200, -23137, -16810, -8837},
@@ -211,11 +211,11 @@ const short intFSK600bdCarTemplate[4][20] =
 };
 
 
-const short intPSK100bdCarTemplate[9][4][120] = 
+const short intPSK100bdCarTemplate[9][4][120] =
 
 // The actual templates over 9 carriers for 4 phase values and 120 samples
 // (only positive Phase values are in the table, sign reversal
-//  is used to get the negative phase values) This reduces the table size from 7680 to 3840 integers
+// is used to get the negative phase values) This reduces the table size from 7680 to 3840 integers
 
 {{
 	{0, 279, 1020, 1956, 2725, 2964, 2411, 993, -1133, -3597,
@@ -657,6 +657,5 @@ const short intPSK100bdCarTemplate[9][4][120] =
 	-12740, 6277, 16979, 7481, -10032, -14869, -2321, 11965, 11479, -2049,
 	-12076, -7486, 5122, 10644, 3594, -6641, -8168, -424, 6633, 5273,
 	-1584, -5383, -2602, 2234, 3380, 709, -1599, -1223, 36, 0}
-
 	}
 };

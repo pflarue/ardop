@@ -6,20 +6,20 @@
 extern const char ProductName[];
 extern const char ProductVersion[];
 
-//#define USE_SOUNDMODEM
+// #define USE_SOUNDMODEM
 
-//	Sound interface buffer size
+// Sound interface buffer size
 
-#define SendSize 1200		// 100 mS for now
-#define ReceiveSize 240	// Must be 1024 for FFT (or we will need torepack frames)
+#define SendSize 1200  // 100 mS for now
+#define ReceiveSize 240  // Must be 1024 for FFT (or we will need torepack frames)
 #define NumberofinBuffers 4
 
 
-#ifndef _WIN32_WINNT		// Allow use of features specific to Windows XP or later.                   
-#define _WIN32_WINNT 0x0501	// Change this to the appropriate value to target other versions of Windows.
-#endif						
+#ifndef _WIN32_WINNT  // Allow use of features specific to Windows XP or later.
+#define _WIN32_WINNT 0x0501  // Change this to the appropriate value to target other versions of Windows.
+#endif
 
-#define WIN32_LEAN_AND_MEAN		// Exclude rarely-used stuff from Windows headers
+#define WIN32_LEAN_AND_MEAN  // Exclude rarely-used stuff from Windows headers
 #define _CRT_SECURE_NO_DEPRECATE
 
 #ifndef WIN32
@@ -33,12 +33,12 @@ unsigned int getTicks();
 
 #define Now getTicks()
 
-// DebugLog Severity Levels 
+// DebugLog Severity Levels
 
-#define LOGEMERGENCY 0 
+#define LOGEMERGENCY 0
 #define LOGALERT 1
-#define LOGCRIT 2 
-#define LOGERROR 3 
+#define LOGCRIT 2
+#define LOGERROR 3
 #define LOGWARNING 4
 #define LOGNOTICE 5
 #define LOGINFO 6
@@ -59,7 +59,7 @@ extern const char strLogLevels[9][13];
 #undef M_PI
 #endif
 
-#define M_PI       3.1415926f
+#define M_PI 3.1415926f
 
 #ifndef WIN32
 #define LINUX
@@ -69,7 +69,7 @@ extern const char strLogLevels[9][13];
 #define ARMLINUX
 #endif
 
-#define UseGUI			// Enable GUI Front End Support
+#define UseGUI  // Enable GUI Front End Support
 
 #ifdef UseGUI
 
@@ -89,7 +89,7 @@ extern const char strLogLevels[9][13];
 #define WHITE 0
 #define Tomato 1
 #define Gold 2
-#define Lime 3	
+#define Lime 3
 #define Yellow 4
 #define Orange 5
 #define Khaki 6
@@ -97,7 +97,7 @@ extern const char strLogLevels[9][13];
 #define DeepSkyBlue 8
 #define RoyalBlue 9
 #define Navy 10
-#define Black 11 
+#define Black 11
 #define Goldenrod 12
 #define Fuchsia 13
 
@@ -128,7 +128,7 @@ BOOL KeyPTT(BOOL State);
 
 UCHAR FrameCode(char * strFrameName);
 BOOL FrameInfo(UCHAR bytFrameType, int * blnOdd, int * intNumCar, char * strMod,
-   int * intBaud, int * intDataLen, int * intRSLen, UCHAR * bytQualThres, char * strType);
+int * intBaud, int * intDataLen, int * intRSLen, UCHAR * bytQualThres, char * strType);
 
 void ClearDataToSend();
 int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigned char * bytEncodedBytes);
@@ -145,7 +145,7 @@ void AddDataToDataToSend(UCHAR * bytNewData, int Len);
 BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL blnSendID);
 void SendID(BOOL blnEnableCWID);
 BOOL CheckGSSyntax(char * GS);
-//void SetARDOPProtocolState(int value);
+// void SetARDOPProtocolState(int value);
 unsigned int GenCRC16(unsigned char * Data, unsigned short length);
 void SendCommandToHost(char * Cmd);
 void TCPSendCommandToHost(char * Cmd);
@@ -198,7 +198,7 @@ VOID COMClearRTS(HANDLE fd);
 VOID COMClearDTR(HANDLE fd);
 void CM108_set_ptt(int PTTState);
 
-//#ifdef WIN32
+// #ifdef WIN32
 void ProcessNewSamples(short * Samples, int nSamples);
 VOID Debugprintf(const char * format, ...);
 VOID WriteDebugLog(int LogLevel, const char * format, ...);
@@ -208,7 +208,7 @@ void GenerateFSKTemplates();
 void printtick(char * msg);
 void InitValidFrameTypes();
 void setProtocolMode(char* strMode);
-//#endif
+// #endif
 
 extern void Generate50BaudTwoToneLeaderTemplate();
 extern BOOL blnDISCRepeating;
@@ -242,7 +242,7 @@ VOID LostHost();
 int ReadCOMBlock(HANDLE fd, char * Block, int MaxLength);
 VOID ProcessDEDModeFrame(UCHAR * rxbuffer, unsigned int Length);
 
-int SendtoGUI(char Type, unsigned char * Msg, int Len);	
+int SendtoGUI(char Type, unsigned char * Msg, int Len);
 void DrawTXFrame(const char * Frame);
 void DrawRXFrame(int State, const char * Frame);
 void mySetPixel(unsigned char x, unsigned char y, unsigned int Colour);
@@ -259,7 +259,7 @@ extern int stcLastPingintQuality;
 extern time_t stcLastPingdttTimeReceived;
 
 #ifndef ARDOPCHEADERDEFINED
-enum _ReceiveState		// used for initial receive testing...later put in correct protocol states
+enum _ReceiveState  // used for initial receive testing...later put in correct protocol states
 {
 	SearchingForLeader,
 	AcquireSymbolSync,
@@ -284,9 +284,9 @@ enum _ARDOPState
 	DISC,
 	ISS,
 	IRS,
-	IDLE,     // ISS in quiet state ...no transmissions)
-	IRStoISS, // IRS during transition to ISS waiting for ISS's ACK from IRS's BREAK
- 	FECSend,
+	IDLE,  // ISS in quiet state ...no transmissions)
+	IRStoISS,  // IRS during transition to ISS waiting for ISS's ACK from IRS's BREAK
+	FECSend,
 	FECRcv
 };
 #endif
@@ -369,20 +369,20 @@ extern BOOL useGPIO;
 extern int pttGPIOPin;
 extern BOOL pttGPIOInvert;
 
-extern HANDLE hCATDevice;		// port for Rig Control
+extern HANDLE hCATDevice;  // port for Rig Control
 extern char CATPort[80];
 extern int CATBAUD;
 extern int EnableHostCATRX;
 
-extern HANDLE hPTTDevice;			// port for PTT
-extern char PTTPort[80];			// Port for Hardware PTT - may be same as control port.
+extern HANDLE hPTTDevice;  // port for PTT
+extern char PTTPort[80];  // Port for Hardware PTT - may be same as control port.
 extern int PTTBAUD;
 
-#define PTTRTS		1
-#define PTTDTR		2
-#define PTTCI_V		4
-#define PTTCM108	8
-#define PTTHAMLIB	16
+#define PTTRTS 1
+#define PTTDTR 2
+#define PTTCI_V 4
+#define PTTCM108 8
+#define PTTHAMLIB 16
 
 extern UCHAR PTTOnCmd[];
 extern UCHAR PTTOnCmdLen;
@@ -390,7 +390,7 @@ extern UCHAR PTTOnCmdLen;
 extern UCHAR PTTOffCmd[];
 extern UCHAR PTTOffCmdLen;
 
-extern int PTTMode;				// PTT Control Flags.
+extern int PTTMode;  // PTT Control Flags.
 
 
 
@@ -401,7 +401,7 @@ extern char * PlaybackDevices;
 extern int dttCodecStarted;
 extern int dttStartRTMeasure;
 
-extern int intCalcLeader;        // the computed leader to use based on the reported Leader Length
+extern int intCalcLeader;  // the computed leader to use based on the reported Leader Length
 
 extern BOOL Capturing;
 extern BOOL SoundIsPlaying;
@@ -500,7 +500,7 @@ extern int int4FSKQualityCnts;
 extern int intFSKSymbolsDecoded;
 extern int intPSKQuality[2];
 extern int intPSKQualityCnts[2];
-extern int intPSKSymbolsDecoded; 
+extern int intPSKSymbolsDecoded;
 
 extern int intQAMQuality;
 extern int intQAMQualityCnts;
@@ -518,7 +518,7 @@ extern int LastBusyOn;
 extern int LastBusyOff;
 extern int dttLastLeaderDetect;
 
-extern int initMode;		 // 0 - 4PSK 1 - 8PSK 2 = 16QAM
+extern int initMode;  // 0 - 4PSK 1 - 8PSK 2 = 16QAM
 
 extern int extraDelay;
 
@@ -527,11 +527,11 @@ extern int extraDelay;
 BOOL EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, enum _ARQBandwidth ARQBandwidth, UCHAR * bytReturn);
 
 
-#define PTTRTS		1
-#define PTTDTR		2
-#define PTTCI_V		4
-#define PTTCM108	8
-#define PTTHAMLIB	16
+#define PTTRTS 1
+#define PTTDTR 2
+#define PTTCI_V 4
+#define PTTCM108 8
+#define PTTHAMLIB 16
 
 #endif
 
