@@ -1,0 +1,20 @@
+* text=auto
+*.md text
+*.txt text
+
+Makefile text=auto
+*.c text=auto
+*.css text=auto
+*.h text=auto
+*.html text=auto
+*.js text=auto
+
+*.bash text eol=lf
+*.sh text eol=lf
+
+*.doc binary
+*.pdf binary
+
+*.vcproj text eol=crlf
+*.{cmd,[cC][mM][dD]} text eol=crlf
+*.{bat,[bB][aA][tT]} text eol=crlf
