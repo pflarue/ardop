@@ -157,14 +157,11 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 	DrawTXFrame(strType);
 	wg_send_txframet(0, strType);
 
+	// obsolete versions of this code accommodated inNumCar > 1
 	if (intBaud == 50)
 		initFilter(200,1500);
-	else if (intNumCar == 1)
+	else
 		initFilter(500,1500);
-	else if (intNumCar == 2)
-		initFilter(1000,1500);
-	else if (intNumCar == 4)
-		initFilter(2000,1500);
 
 //	If Not (strType = "DataACK" Or strType = "DataNAK" Or strType = "IDFrame" Or strType.StartsWith("ConReq") Or strType.StartsWith("ConAck")) Then
  //               strLastWavStream = strType
@@ -195,288 +192,55 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 
 	intDataPtr = 2;
 
-	switch(intNumCar)
+	// obsolete versions of this code accommodated inNumCar > 1
+	dblCarScalingFactor = 1.0; //  (scaling factors determined emperically to minimize crest factor) 
+
+	sprintf(DebugMess, "Mod4FSKDataAndPlay 1Car tones :");
+	for (m = 0; m < intDataBytesPerCar; m++)  // For each byte of input data
 	{
-	case 1:			 // use carriers 0-3
-		
-		dblCarScalingFactor = 1.0; //  (scaling factors determined emperically to minimize crest factor) 
-
-		sprintf(DebugMess, "Mod4FSKDataAndPlay 1Car tones :");
-		for (m = 0; m < intDataBytesPerCar; m++)  // For each byte of input data
+		bytMask = 0xC0;		 // Initialize mask each new data byte
+		sprintf(DebugMess + strlen(DebugMess), " ");
+		for (k = 0; k < 4; k++)		// for 4 symbol values per byte of data
 		{
-			bytMask = 0xC0;		 // Initialize mask each new data byte
-			sprintf(DebugMess + strlen(DebugMess), " ");
-			for (k = 0; k < 4; k++)		// for 4 symbol values per byte of data
-			{
-				bytSymToSend = (bytMask & bytEncodedBytes[intDataPtr]) >> (2 * (3 - k)); // Values 0-3
-				sprintf(DebugMess + strlen(DebugMess), "%d", bytSymToSend);
+			bytSymToSend = (bytMask & bytEncodedBytes[intDataPtr]) >> (2 * (3 - k)); // Values 0-3
+			sprintf(DebugMess + strlen(DebugMess), "%d", bytSymToSend);
 
-				for (n = 0; n < intSampPerSym; n++)	 // Sum for all the samples of a symbols 
+			for (n = 0; n < intSampPerSym; n++)	 // Sum for all the samples of a symbols 
+			{
+				if((k & 1) == 0)
 				{
-					if((k & 1) == 0)
-					{
-						if(intBaud == 50)
-							intSample = intFSK50bdCarTemplate[bytSymToSend][n];
-						else
-							intSample = intFSK100bdCarTemplate[bytSymToSend][n];
-							
-						SampleSink(intSample);
-					}
+					if(intBaud == 50)
+						intSample = intFSK50bdCarTemplate[bytSymToSend][n];
 					else
- 					{
-						if(intBaud == 50)
-							intSample = -intFSK50bdCarTemplate[bytSymToSend][n];
-						else
-							intSample = -intFSK100bdCarTemplate[bytSymToSend][n];
-							
-						SampleSink(intSample);	
-					}
-				}
-
-				bytMask = bytMask >> 2;
-			}
-			intDataPtr += 1;
-		}
-		// Include these tone values in debug log only if FileLogLevel is LOGDEBUGPLUS
-		if (intDataBytesPerCar == 0)
-			sprintf(DebugMess + strlen(DebugMess), "(None)");
-		WriteDebugLog(LOGDEBUGPLUS, "%s", DebugMess);
-
-		Flush();
-
-		break;
-
-	case 2:			// use carriers 8-15 (100 baud only)
-
-		dblCarScalingFactor = 0.51f; //  (scaling factors determined emperically to minimize crest factor)
-
-		for (m = 0; m < intDataBytesPerCar; m++)	  // For each byte of input data 
-		{
-			bytMask = 0xC0;	// Initialize mask each new data byte
-                        			
-			for (k = 0; k < 4; k++)		// for 4 symbol values per byte of data
-			{
-				for (n = 0; n < intSampPerSym; n++)	 // for all the samples of a symbol for 2 carriers
-				{
-					//' First carrier
-                      
-					bytSymToSend = (bytMask & bytEncodedBytes[intDataPtr]) >> (2 * (3 - k)); // Values 0-3
-					intSample = intFSK100bdCarTemplate[8 + bytSymToSend][n];
-					// Second carrier
-                    
-					bytSymToSend = (bytMask & bytEncodedBytes[intDataPtr + intDataBytesPerCar]) >> (2 * (3 - k));	// Values 0-3
-					intSample = dblCarScalingFactor * (intSample + intFSK100bdCarTemplate[12 + bytSymToSend][n]);
-			
-					SampleSink(intSample);
-				}
-				bytMask = bytMask >> 2;
-			}
-			intDataPtr += 1;
-		}
-             
-		Flush();
-
-		break;
-
-	case 4:		 // use carriers 4-19 (100 baud only)
-
- 		dblCarScalingFactor = 0.27f; //  (scaling factors determined emperically to minimize crest factor)
-
-		for (m = 0; m < intDataBytesPerCar; m++)	  // For each byte of input data 
-		{
-			bytMask = 0xC0;	// Initialize mask each new data byte
-                        			
-			for (k = 0; k < 4; k++)		// for 4 symbol values per byte of data
-			{
-				for (n = 0; n < intSampPerSym; n++)	 // for all the samples of a symbol for 2 carriers
-				{
-					//' First carrier
-                      
-					bytSymToSend = (bytMask & bytEncodedBytes[intDataPtr]) >> (2 * (3 - k)); // Values 0-3
-					intSample = intFSK100bdCarTemplate[4 + bytSymToSend][n];
-					// Second carrier
-                    
-					bytSymToSend = (bytMask & bytEncodedBytes[intDataPtr + intDataBytesPerCar]) >> (2 * (3 - k));	// Values 0-3
-					intSample = intSample + intFSK100bdCarTemplate[8 + bytSymToSend][n];
-			
-					//' Third carrier
-					
-					bytSymToSend = (bytMask & bytEncodedBytes[intDataPtr + 2 * intDataBytesPerCar]) >> (2 * (3 - k));	// Values 0-3
-					intSample = intSample + intFSK100bdCarTemplate[12 + bytSymToSend][n];
-
-					// ' Fourth carrier
-   
-					bytSymToSend = (bytMask & bytEncodedBytes[intDataPtr + 3 * intDataBytesPerCar]) >> (2 * (3 - k));	// Values 0-3
-					intSample = dblCarScalingFactor * (intSample + intFSK100bdCarTemplate[16 + bytSymToSend][n]);
+						intSample = intFSK100bdCarTemplate[bytSymToSend][n];
 
 					SampleSink(intSample);
 				}
-				bytMask = bytMask >> 2;
-			}
-			intDataPtr += 1;
-		}       
-		Flush();
-		break;
-	}
-}
-
-// Function to Modulate encoded data to 8FSK and send to sound interface
-
-void Mod8FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen)
-{
-	// Function to Modulate data encoded for 8FSK, create
-	// the 16 bit samples and send to sound interface
-
-	int intBaud, intDataLen, intRSLen, intDataPtr, intSampPerSym, intDataBytesPerCar;
-	BOOL blnOdd;
-	int intNumCar;
-
-	short intSample;
-	unsigned int intThreeBytes = 0;
-
-    char strType[18] = "";
-    char strMod[16] = "";
-
-	UCHAR bytSymToSend, bytMinQualThresh;
-	int intMask = 0;
-	int k, m, n;
-
-	if (Len < 0) {
-		WriteDebugLog(LOGERROR, "ERROR: In Mod8FSKDataAndPlay() Invalid Len (%d).", Len);
-		return;
-	}
-
-	if (!FrameInfo(Type, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType))
-		return;
-
-	if (strcmp(strMod, "8FSK") != 0)
-		return;
-
-	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
-	DrawTXFrame(strType);
-	wg_send_txframet(0, strType);
-
-	initFilter(200,1500);
-
-//	If Not (strType = "DataACK" Or strType = "DataNAK" Or strType = "IDFrame" Or strType.StartsWith("ConReq") Or strType.StartsWith("ConAck")) Then
- //               strLastWavStream = strType
-  //          End If
-
-
-	intSampPerSym = 240;
-	
-	intDataBytesPerCar = (Len - 2) / intNumCar;		// We queue the samples here, so dont copy below
-    
-	SendLeaderAndSYNC(bytEncodedBytes, intLeaderLen);
-
-	intSampPerSym = 480;			// 25 Baud
-
-	intDataPtr = 2;
-
- 	for (m = 0; m < intDataBytesPerCar; m += 3)  // For each byte of input data
-	{
-		intThreeBytes = bytEncodedBytes[intDataPtr++];
-		intThreeBytes = (intThreeBytes << 8) + bytEncodedBytes[intDataPtr++];
-		intThreeBytes = (intThreeBytes << 8) + bytEncodedBytes[intDataPtr++];
-		intMask = 0xE00000;
-                 
-		for (k = 0; k < 8; k++)
-		{
-			bytSymToSend = (intMask & intThreeBytes) >> (3 * (7 - k));
-
-			// note value of "+ 4" below allows using 16FSK template for 8FSK using only the "inner" 8 tones around 1500
-
-			for (n = 0; n < intSampPerSym; n++)	 // Sum for all the samples of a symbols 
-			{
-				if((k & 1) == 0)
-					intSample = intFSK25bdCarTemplate[bytSymToSend + 4][n]; // Symbol vlaues 4- 11 (surrounding 1500 Hz)  
 				else
-					intSample = -intFSK25bdCarTemplate[bytSymToSend + 4][n]; // Symbol vlaues 4- 11 (surrounding 1500 Hz)  
+					{
+					if(intBaud == 50)
+						intSample = -intFSK50bdCarTemplate[bytSymToSend][n];
+					else
+						intSample = -intFSK100bdCarTemplate[bytSymToSend][n];
 
-				SampleSink(intSample);
+					SampleSink(intSample);	
+				}
 			}
-			intMask = intMask >> 3;
+
+			bytMask = bytMask >> 2;
 		}
+		intDataPtr += 1;
 	}
+	// Include these tone values in debug log only if FileLogLevel is LOGDEBUGPLUS
+	if (intDataBytesPerCar == 0)
+		sprintf(DebugMess + strlen(DebugMess), "(None)");
+	WriteDebugLog(LOGDEBUGPLUS, "%s", DebugMess);
+
 	Flush();
 }
 
-// Function to Modulate encoded data to 16FSK and send to sound interface
-
-void Mod16FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen)
-{
-	// Function to Modulate data encoded for 16FSK, create
-	// the 16 bit samples and send to sound interface
-
-	int intBaud, intDataLen, intRSLen, intDataPtr, intSampPerSym, intDataBytesPerCar;
-	BOOL blnOdd;
-	int intNumCar;
-
-	short intSample;
-	unsigned int intThreeBytes = 0;
-
-    char strType[18] = "";
-    char strMod[16] = "";
-
-	UCHAR bytSymToSend, bytMask, bytMinQualThresh;
-
-	int intMask = 0;
-	int k, m, n;
-
-	if (Len < 0) {
-		WriteDebugLog(LOGERROR, "ERROR: In Mod16FSKDataAndPlay() Invalid Len (%d).", Len);
-		return;
-	}
-
-	if (!FrameInfo(Type, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType))
-		return;
-
-	if (strcmp(strMod, "16FSK") != 0)
-		return;
-
-	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
-	DrawTXFrame(strType);
-	wg_send_txframet(0, strType);
-
-	initFilter(500,1500);
-
-//	If Not (strType = "DataACK" Or strType = "DataNAK" Or strType = "IDFrame" Or strType.StartsWith("ConReq") Or strType.StartsWith("ConAck")) Then
- //               strLastWavStream = strType
-  //          End If
-
-	intDataBytesPerCar = (Len - 2) / intNumCar;		// We queue the samples here, so dont copy below    
-	intSampPerSym = 480;			// 25 Baud
-
-	SendLeaderAndSYNC(bytEncodedBytes, intLeaderLen);
-
-	intDataPtr = 2;
-
-	for (m = 0; m < intDataBytesPerCar; m++)  // For each byte of input data 
-	{
-		bytMask = 0xF0;	 // Initialize mask each new data byte
-		for (k = 0; k < 2; k++)	// for 2 symbol values per byte of data
-		{
-			bytSymToSend = (bytMask & bytEncodedBytes[intDataPtr]) >> (4 * (1 - k)); // Values 0 - 15
-
-			for (n = 0; n < intSampPerSym; n++)	 // Sum for all the samples of a symbols 
-			{
-				if((k & 1) == 0)
-					intSample = intFSK25bdCarTemplate[bytSymToSend][n];
-				else
-					intSample = -intFSK25bdCarTemplate[bytSymToSend][n];
-
-				SampleSink(intSample);
-			}
-			bytMask = bytMask >> 4;
-		}
-		intDataPtr++;
-	}
-	Flush();
-}
 
 //	Function to Modulate data encoded for 4FSK High baud rate and create the integer array of 32 bit samples suitable for playing 
-
-
 
 void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen)
 {
@@ -716,10 +480,8 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
                 
 			bytLastSym[intCarIndex] = bytSymToSend;
 
-			if (intBaud == 100)
-				intSample += intPSK100bdCarTemplate[intCarIndex][0][n];  // double the symbol value during template lookup for 4PSK. (skips over odd PSK 8 symbols)
-			else
-				intSample += intPSK200bdCarTemplate[intCarIndex][0][n]; // subtract 2 from the symbol value before doubling and subtract value of table 
+			// obsolete versions of this code accommodated intBaud == 200 as well as 100.
+			intSample += intPSK100bdCarTemplate[intCarIndex][0][n];  // double the symbol value during template lookup for 4PSK. (skips over odd PSK 8 symbols)
 
 			intCarIndex += 1;
 			if (intCarIndex == 4)
@@ -749,20 +511,11 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 						bytSym = (bytMask & bytEncodedBytes[intDataPtr + i * intDataBytesPerCar]) >> (2 * (3 - k));
 						bytSymToSend = ((bytLastSym[intCarIndex] + bytSym) & 3);  // Values 0-3
 			
-						if (intBaud == 100)
-						{
-							if (bytSymToSend < 2)
-								intSample += intPSK100bdCarTemplate[intCarIndex][bytSymToSend * 2][n];  // double the symbol value during template lookup for 4PSK. (skips over odd PSK 8 symbols)
-							else
-								intSample -= intPSK100bdCarTemplate[intCarIndex][2 * (bytSymToSend - 2)][n]; // subtract 2 from the symbol value before doubling and subtract value of table 
-						}
+						// obsolete versions of this code accommodated intBaud == 200 as well as 100.
+						if (bytSymToSend < 2)
+							intSample += intPSK100bdCarTemplate[intCarIndex][bytSymToSend * 2][n];  // double the symbol value during template lookup for 4PSK. (skips over odd PSK 8 symbols)
 						else
-						{
-							if (bytSymToSend < 2)
-								intSample += intPSK200bdCarTemplate[intCarIndex][bytSymToSend * 2][n];  // double the symbol value during template lookup for 4PSK. (skips over odd PSK 8 symbols)
-							else
-								intSample -= intPSK200bdCarTemplate[intCarIndex][2 * (bytSymToSend - 2)][n]; // subtract 2 from the symbol value before doubling and subtract value of table 
-						}
+							intSample -= intPSK100bdCarTemplate[intCarIndex][2 * (bytSymToSend - 2)][n]; // subtract 2 from the symbol value before doubling and subtract value of table 
 						if (n == intSampPerSym - 1)		// Last sample?
 							bytLastSym[intCarIndex] = bytSymToSend;
 
@@ -808,21 +561,11 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 						bytSym = GetSym8PSK(intDataPtr, k, i, bytEncodedBytes, intDataBytesPerCar);
 						bytSymToSend = ((bytLastSym[intCarIndex] + bytSym) & 7);	// mod 8
 				
-						if (intBaud == 100)
-						{
-							if (bytSymToSend < 4) // This uses the symmetry of the symbols to reduce the table size by a factor of 2
-								intSample += intPSK100bdCarTemplate[intCarIndex][bytSymToSend][n]; // positive phase values template lookup for 8PSK.
-							else
-								intSample -= intPSK100bdCarTemplate[intCarIndex][bytSymToSend - 4][n]; // negative phase values,  subtract value of table 
-						}
+						// obsolete versions of this code accommodated intBaud == 200 as well as 100.
+						if (bytSymToSend < 4) // This uses the symmetry of the symbols to reduce the table size by a factor of 2
+							intSample += intPSK100bdCarTemplate[intCarIndex][bytSymToSend][n]; // positive phase values template lookup for 8PSK.
 						else
-						{
-							if (bytSymToSend < 4) // This uses the symmetry of the symbols to reduce the table size by a factor of 2
-								intSample += intPSK200bdCarTemplate[intCarIndex][bytSymToSend][n]; // positive phase values template lookup for 8PSK.
-							else
-								intSample -= intPSK200bdCarTemplate[intCarIndex][bytSymToSend - 4][n]; // negative phase values,  subtract value of table 
-						}
-
+							intSample -= intPSK100bdCarTemplate[intCarIndex][bytSymToSend - 4][n]; // negative phase values,  subtract value of table 
 						if (n == intSampPerSym - 1)		// Last sample?
 							bytLastSym[intCarIndex] = bytSymToSend;
 
@@ -864,8 +607,6 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 						bytSym = (bytMask & bytEncodedBytes[intDataPtr + i * intDataBytesPerCar]) >> (4 * (1 - k));
 						bytSymToSend = (bytLastSym[intCarIndex] + (bytSym & 7)) & 7;  // Values 0-7
 								
-					//if (intBaud == 100) only use 100
-					//{
 						if (bytSym < 8)
 						{
 							if (bytSymToSend < 4) // This uses the symmetry of the symbols to reduce the table size by a factor of 2
@@ -880,7 +621,6 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 							else
 								intSample -= 0.5f * intPSK100bdCarTemplate[intCarIndex][bytSymToSend - 4][n]; // negative phase values,  subtract value of table 
 						}
-					//}	
 						if (n == intSampPerSym - 1)		// Last sample?
 							bytLastSym[intCarIndex] = bytSymToSend;
 					
@@ -951,16 +691,6 @@ void RemodulateLastFrame()
 		else
 			Mod4FSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame 
 
-		return;
-	}
-	if (strcmp(strMod, "16FSK") == 0)
-	{
-		Mod16FSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame 
-		return;
-	}
-	if (strcmp(strMod, "8FSK") == 0)
-	{
-		Mod8FSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame 
 		return;
 	}
 	ModPSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame 

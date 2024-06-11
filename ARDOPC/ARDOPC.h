@@ -141,8 +141,6 @@ int EncodeDATAACK(int intQuality, UCHAR bytSessionID, UCHAR * bytreturn);
 int EncodeDATANAK(int intQuality , UCHAR bytSessionID, UCHAR * bytreturn);
 void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);
 void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);
-void Mod16FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);
-void Mod8FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);
 void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);
 BOOL IsDataFrame(UCHAR intFrameType);
 BOOL CheckValidCallsignSyntax(char * strTargetCallsign);
@@ -368,8 +366,6 @@ extern const short int50BaudTwoToneLeaderTemplate[240];  // holds just 1 symbol 
 
 extern const short intPSK100bdCarTemplate[9][4][120];	// The actual templates over 9 carriers for 4 phase values and 120 samples
     //   (only positive Phase values are in the table, sign reversal is used to get the negative phase values) This reduces the table size from 7680 to 3840 integers
-extern const short intPSK200bdCarTemplate[9][4][72];		// Templates for 200 bd with cyclic prefix
-extern const short intFSK25bdCarTemplate[16][480];		// Template for 16FSK carriers spaced at 25 Hz, 25 baud
 extern const short intFSK50bdCarTemplate[4][240];		// Template for 4FSK carriers spaced at 50 Hz, 50 baud
 extern const short intFSK100bdCarTemplate[20][120];		// Template for 4FSK carriers spaced at 100 Hz, 100 baud
 extern const short intFSK600bdCarTemplate[4][20];		// Template for 4FSK carriers spaced at 600 Hz, 600 baud  (used for FM only)
@@ -547,10 +543,6 @@ extern int intConReqQuality;
 
 extern int int4FSKQuality;
 extern int int4FSKQualityCnts;
-extern int int8FSKQuality;
-extern int int8FSKQualityCnts;
-extern int int16FSKQuality;
-extern int int16FSKQualityCnts;
 extern int intFSKSymbolsDecoded;
 extern int intPSKQuality[2];
 extern int intPSKQualityCnts[2];
