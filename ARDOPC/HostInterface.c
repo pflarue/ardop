@@ -27,8 +27,6 @@ extern BOOL NeedPing;
 extern BOOL PingCount;
 extern char ConnectToCall[16];
 extern enum _ARQBandwidth CallBandwidth;
-extern int PORTT1;			// L2 TIMEOUT
-extern int PORTN2;			// RETRIES
 extern int extraDelay ;		// Used for long delay paths eg Satellite
 extern BOOL WG_DevMode;
 extern int intARQDefaultDlyMs;
@@ -39,9 +37,6 @@ int wg_send_bandwidth(int cnum);
 int wg_send_hostmsg(int cnum, char msgtype, char *strText);
 int wg_send_hostdatab(int cnum, char *prefix, unsigned char *data, int datalen);
 int wg_send_hostdatat(int cnum, char *prefix, unsigned char *data, int datalen);int wg_send_drivelevel(int cnum);
-
-#define L2TICK 10			// Timer called every 1/10 sec
-
 
 int SerialMode = 0;
 
@@ -1006,101 +1001,6 @@ void ProcessCommandFromHost(char * strCMD)
 
 		goto cmddone;
 	}
-
-	if (strcmp(strCMD, "PAC") == 0)
-	{
-		// Packet Mode Subcommands
-
-//extern int pktNumCar;
-//extern int pktDataLen;
-//extern int pktRSLen;
-//extern char pktMod[4][8];
-//extern int pktMode;
-
-
-		if (ptrParams)
-		{
-			char * PacVal = strlop(ptrParams, ' ');
-
-			if (strcmp(ptrParams, "MODE") == 0)
-			{
-				int i;
-
-				if (PacVal == NULL)
-				{
-					sprintf(cmdReply, "PAC MODE %s", &pktMod[initMode][0]);
-					SendReplyToHost(cmdReply);
-					goto cmddone;
-				}
-
-				for (i = 0; i < pktModeLen; i++)
-				{
-					if (strcmp(PacVal, &pktMod[i][0]) == 0)
-					{
-						initMode = i;
-						sprintf(cmdReply, "PAC MODE now %s", PacVal);
-						SendReplyToHost(cmdReply);
-						goto cmddone;
-					}
-				}
-	
-				sprintf(strFault, "Syntax Err: PAC MODE %s", PacVal);
-				goto cmddone;
-			}
-
-			if (strcmp(ptrParams, "RETRIES") == 0)
-			{
-				int i;
-
-				if (PacVal == NULL)
-				{
-					sprintf(cmdReply, "PAC RETRIES %d", PORTN2);
-					SendReplyToHost(cmdReply);
-					goto cmddone;
-				}
-
-				i = atoi(PacVal);
-				
-				if (i >= 3  && i <= 30)
-					PORTN2 = i;
-
-				sprintf(cmdReply, "PAC RETRIES now %d", PORTN2);
-				SendReplyToHost(cmdReply);
-				goto cmddone;
-			}
-
-			//PORTT1 = 4 * L2TICK
-
-			if (strcmp(ptrParams, "FRACK") == 0)
-			{
-				int i;
-
-				if (PacVal == NULL)
-				{
-					sprintf(cmdReply, "PAC FRACK %d", PORTT1 / L2TICK);
-					SendReplyToHost(cmdReply);
-					goto cmddone;
-				}
-
-				i = atoi(PacVal);
-				
-				if (i >= 2  && i <= 15)
-					PORTT1 = i * L2TICK;
-
-				sprintf(cmdReply, "PAC FRACK now %d",  PORTT1 / L2TICK);
-				SendReplyToHost(cmdReply);
-				goto cmddone;
-			}
-
-			SendReplyToHost(_strupr(cmdCopy)); // echo command back to host.
-			goto cmddone;
-		}
-
-		sprintf(strFault, "Syntax Err: %s", cmdCopy);
-
-		goto cmddone;
-	}
-
 
 	if (strcmp(strCMD, "PLAYBACK") == 0)
 	{

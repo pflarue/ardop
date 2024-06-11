@@ -20,20 +20,11 @@
 VOID ProcessSCSPacket(UCHAR * rxbuffer, int Length);
 BOOL WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite);
 int ReadCOMBlock(HANDLE fd, char * Block, int MaxLength);
-VOID ProcessKISSBytes(UCHAR * RXBuffer, int Read);
-void KISSTCPPoll();
 SOCKET OpenSocket4(int port);
 
 extern int port;
-extern BOOL UseKISS;			// Enable Packet (KISS) interface
 int Speed;
 int PollDelay;
-
-extern SOCKET PktSock;
-extern SOCKET PktListenSock;
-
-extern BOOL PKTCONNECTED;
-
 
 BOOL NewVCOM;
 
@@ -308,12 +299,6 @@ BOOL SerialHostInit()
 		hDevice = 0;
 	}
 
-	if (UseKISS && pktport)
-	{
-		WSAStartup(MAKEWORD(2, 0), &WsaData);
-		WriteDebugLog(LOGALERT, "ARDOPC listening for KISS frames on port %d", pktport);
-		PktListenSock = OpenSocket4(pktport);
-	}
 	return TRUE;
 }
 

@@ -18,11 +18,6 @@
 #include "wav.h"
 #include "../lib/rockliff/rrs.h"
 
-#ifdef USE_DIREWOLF
-#include "direwolf/fsk_demod_state.h"
-#include "direwolf/demod_afsk.h"
-#endif
-
 #pragma comment(lib, "winmm.lib")
 void printtick(char * msg);
 void PollReceivedSamples();
@@ -402,8 +397,6 @@ int main(int argc, char * argv[])
 
 	if (HostPort[0])
 	{		
-		char *pkt = strlop(HostPort, '/');
-
 		if (_memicmp(HostPort, "COM", 3) == 0)
 		{
 			SerialMode = 1;
@@ -411,9 +404,6 @@ int main(int argc, char * argv[])
 		}
 		else
 			port = atoi(HostPort);
-
-		if (pkt)
-			pktport = atoi(pkt);
 	}
 
 	_strupr(CaptureDevice);

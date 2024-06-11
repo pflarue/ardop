@@ -307,9 +307,6 @@ void SerialHostPoll()
 		RXBPtr += Read;
 		ProcessSCSPacket(RXBUFFER, RXBPtr);
 	}
-
-//	if (UseKISS)
-//		KISSTCPPoll();
 }
 
 void PutString(unsigned char * Msg)

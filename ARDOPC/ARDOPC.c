@@ -43,16 +43,13 @@ void CheckTimers();
 BOOL GetNextARQFrame();
 BOOL TCPHostInit();
 BOOL SerialHostInit();
-BOOL KISSInit();
 void SerialHostPoll();
 void TCPHostPoll();
 BOOL MainPoll();
-VOID PacketStartTX();
 void PlatformSleep();
 BOOL BusyDetect2(float * dblMag, int intStart, int intStop);
 BOOL IsPingToMe(char * strCallsign);
-void LookforPacket(float * dblMag, float dblMagAvg, int count, float * real, float * imag);
-void PktARDOPStartTX();
+
 void WebguiInit();
 void WebguiPoll();
 int wg_send_fftdata(float *mags, int magsLen);
@@ -74,11 +71,6 @@ BOOL NeedConReq = FALSE;	// ARQCALL Command Flag
 BOOL NeedPing = FALSE;		// PING Command Flag
 BOOL NeedTwoToneTest = FALSE;
 enum _ARQBandwidth CallBandwidth = UNDEFINED;
-// UseKISS set to FALSE May 2024 by LaRue
-// Pkt/KISS is no longer supported by ardopcf.
-// Setting UseKISS to FALSE is part of the first
-// phase of disabling and removing this support.
-BOOL UseKISS = FALSE;			// Enable Packet (KISS) interface
 int PingCount;
 
 BOOL blnPINGrepeating = False;
@@ -117,7 +109,6 @@ int BusyDet = 5;
 enum _ARQBandwidth ARQBandwidth = B2000MAX;
 char HostPort[80] = "";
 int port = 8515;
-int pktport = 0;
 BOOL RadioControl = FALSE;
 BOOL SlowCPU = FALSE;
 BOOL AccumulateStats = TRUE;
@@ -228,7 +219,7 @@ void SendPING(char * strMycall, char * strTargetCall, int intRpt);
 
 int intRepeatCnt;
 
-extern SOCKET TCPControlSock, TCPDataSock, PktSock;
+extern SOCKET TCPControlSock, TCPDataSock;
 
 BOOL blnClosing = FALSE;
 BOOL blnCodecStarted = FALSE;
@@ -250,7 +241,7 @@ const UCHAR bytValidFrameTypesALL[]=
 	0x60,0x61,0x62,0x63,0x64,0x65,						// 60 - 6F
 	0x70,0x71,0x72,0x73,0x74,0x75,0x7A,0x7B,0x7C,0x7D,	// 70 - 7F
 
- PktFrameHeader, 208, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234,
+ 208, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234,
  124, 125, 208, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234,
  235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248,
  249, 250, 251, 252, 253, 254, 255};
@@ -265,7 +256,7 @@ const UCHAR bytValidFrameTypesISS[]=		// ACKs, NAKs, END, DISC, BREAK
 // Con req and Con ACK
  49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60,
  //ACK
- PktFrameHeader, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239,
+ 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239,
  240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255};
 
 
@@ -490,7 +481,7 @@ const char strFrameType[256][18] = {
 	"","","","","","","","","","","","","","","","",
 	"","","","","","","","","","","","","","","","",
 	"","","","","","","","","","","","","","","","",
-	"PktHddr","PktData","","","","","","","","","","","","","","", //C0
+	"","","","","","","","","","","","","","","","", //C0
 
 	//Frame Types 0xA0 to 0xDF reserved for experimentation 
 	"SOUND2K" //D0
@@ -617,7 +608,7 @@ const char shortFrameType[256][12] = {
 	"","","","","","","","","","","","","","","","",
 	"","","","","","","","","","","","","","","","",
 	"","","","","","","","","","","","","","","","",
-	"PktHDDR","PktData","","","","","","","","","","","","","","", //C0
+	"","","","","","","","","","","","","","","","", //C0
 
 	//Frame Types 0xA0 to 0xDF reserved for experimentation 
 	"SOUND2K" //D0
@@ -805,16 +796,6 @@ void ardopmain()
 		WebguiInit();
 	}
 
-	if (UseKISS)
-	{
-		KISSInit();
-#ifdef USE_SOUNDMODEM
-		afskInit();
-#endif
-	}
-//	while (1)
-//		testRS();
-
 	tmrPollOBQueue = Now + 10000;
 
 	if (InitRXO)
@@ -859,7 +840,6 @@ void ardopmain()
 	{
 		closesocket(TCPControlSock);
 		closesocket(TCPDataSock);
-		closesocket(PktSock);
 	}
 	return;
 }
@@ -1230,43 +1210,6 @@ BOOL FrameInfo(UCHAR bytFrameType, int * blnOdd, int * intNumCar, char * strMod,
 		*intBaud = 600;
 		*bytQualThres = 30;
 		break;
-
-	case PktFrameHeader:
-
-		// Special Variable Length frame
-
-		// This defines the header, 4PSK.500.100. Length is 6 bytes
-		// Once we have that we receive the rest of the packet in the 
-		// mode defined in the header.
-		// Header is 4 bits Type 12 Bits Len 2 bytes CRC 2 bytes RS
-
-		*blnOdd = 0;
-		*intNumCar = 1;
-		*intDataLen = 2;
-		*intRSLen = 2;
-		strcpy(strMod, "4FSK");
-		*intBaud = 100;
-		*bytQualThres = 50;
- 		break;
-
-	case PktFrameData:
-
-		// Special Variable Length frame
-
-		// This isn't ever transmitted but is used to define the
-		// current setting for the data frame. Mode and Length 
-		// are variable
-		
-
-		*blnOdd = 1;
-		*intNumCar = pktCarriers[pktMode];
-		*intDataLen = pktDataLen;
-		*intRSLen = pktRSLen;
-		strcpy(strMod, &pktMod[pktMode][0]);
-		strlop(strMod, '/');
-		*intBaud = 100;
-		*bytQualThres = 50;
- 		break;
 
 	default:
 		WriteDebugLog(LOGCRIT, "No data for frame type = 0x" ,bytFrameType);
@@ -2385,15 +2328,6 @@ BOOL MainPoll()
 			// As we will send the frame if one is available, and won't return
 			// till it is all sent, I don't think I have to do anything here
 		}
-
-		// Send anything on Packet Queue
-
-		if (UseKISS)
-			if (State == SearchingForLeader)	// Dont send while receiving
-//				if (blnBusyStatus == FALSE)
-//					PacketStartTX();		// Won't return till all sent
-					PktARDOPStartTX();
-
 	}
 //            If Not SoundIsPlaying Then
 //               SendIDToolStripMenuItem.Enabled = objProtocol.GetARDOPSetARDOPProtocolState(ProtocolState.DISC
@@ -2723,9 +2657,6 @@ void UpdateBusyDetector(short * bytNewSamples)
 		dblMagMin = min(dblMagMin, dblMagSpectrum[i]);
 #endif
 	}
-
-//	LookforPacket(dblMag, dblMagAvg, 206, &dblReF[25], &dblImF[25]);
-//	packet_process_samples(bytNewSamples, 1200);
 
 	intDelta = (ExtractARQBandwidth() / 2 + TuningRange) / 11.719f;
 

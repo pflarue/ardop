@@ -157,28 +157,14 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 	DrawTXFrame(strType);
 	wg_send_txframet(0, strType);
 
-	if (Type == PktFrameHeader)
-	{
-		// Meader is 4FSK which needs 500 filter
-
-		if (pktBW[pktMode] < 1000)
-			initFilter(500,1500);
-		else if (pktBW[pktMode] < 2000)
-			initFilter(1000,1500);
-		else
-			initFilter(2000,1500);
-	}
-	else
-	{
-		if (intBaud == 50)
-			initFilter(200,1500);
-		else if (intNumCar == 1)
-			initFilter(500,1500);
-		else if (intNumCar == 2)
-			initFilter(1000,1500);
-		else if (intNumCar == 4)
-			initFilter(2000,1500);
-	}
+	if (intBaud == 50)
+		initFilter(200,1500);
+	else if (intNumCar == 1)
+		initFilter(500,1500);
+	else if (intNumCar == 2)
+		initFilter(1000,1500);
+	else if (intNumCar == 4)
+		initFilter(2000,1500);
 
 //	If Not (strType = "DataACK" Or strType = "DataNAK" Or strType = "IDFrame" Or strType.StartsWith("ConReq") Or strType.StartsWith("ConAck")) Then
  //               strLastWavStream = strType
@@ -208,8 +194,6 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 	SendLeaderAndSYNC(bytEncodedBytes, intLeaderLen);
 
 	intDataPtr = 2;
-
-Reenter:
 
 	switch(intNumCar)
 	{
@@ -257,49 +241,6 @@ Reenter:
 		if (intDataBytesPerCar == 0)
 			sprintf(DebugMess + strlen(DebugMess), "(None)");
 		WriteDebugLog(LOGDEBUGPLUS, "%s", DebugMess);
-
-		if (Type == PktFrameHeader)
-		{
-		
-			// just sent packet header. Send rest in current mode
-			// Assumes we are using 4FSK for Packet Header
-
-			Type = 0;			// Prevent reentry
-	
-			strcpy(strMod, &pktMod[pktMode][0]);
-			intDataBytesPerCar = pktDataLen + pktRSLen + 3;
-			intDataPtr = 11;		// Over Header
-			intNumCar = pktCarriers[pktMode];
-
-			// This assumes Packet Data is sent as PSK/QAM
-
-			switch(intNumCar)
-			{		
-			case 1:
-		//		intCarStartIndex = 4;
-				dblCarScalingFactor = 1.0f; // Starting at 1500 Hz  (scaling factors determined emperically to minimize crest factor)  TODO:  needs verification
-				break;
-			case 2:
-		//		intCarStartIndex = 3;
-				dblCarScalingFactor = 0.53f; // Starting at 1400 Hz
-				break;
-			case 4:
-		//		intCarStartIndex = 2;
-				dblCarScalingFactor = 0.29f; // Starting at 1200 Hz
-				break;
-			case 8:
-		//		intCarStartIndex = 0;
-				dblCarScalingFactor = 0.17f; // Starting at 800 Hz
-			}
-			
-			// Reenter to send rest of variable length packet frame
-		
-			if (pktFSK[pktMode])
-				goto Reenter;
-			else
-				ModPSKDataAndPlay(PktFrameData, bytEncodedBytes, 0, 0);
-			return;
-		}
 
 		Flush();
 
@@ -727,34 +668,10 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 
 	intSampPerSym = 120;
 
-	if (Type == PktFrameData)
-	{
-		intDataBytesPerCar = pktDataLen + pktRSLen + 3;
-		intDataPtr = 11;		// Over Header
-		goto PktLoopBack;
-	}
-	
 	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
 	wg_send_txframet(0, strType);
 
-/*	// DOnt use PSK Header at the moment
-	if (Type == PktFrameHeader)
-	{
-		// Header is always 200 but Packet Data may vary
-
-		if (pktNumCar == 1)
-			initFilter(200,1500);
-		else if (pktNumCar == 2)
-			initFilter(500,1500);
-		else if (pktNumCar == 4)
-			initFilter(1000,1500);
-		else if (pktNumCar == 8)
-			initFilter(2000,1500);
-	}
-	else
-	{
-*/
 	if (intNumCar == 1)
 		initFilter(200,1500);
 	else if (intNumCar == 2)
@@ -782,9 +699,6 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 	intPeakAmp = 0;
 
 	intDataPtr = 2;  // initialize pointer to start of data.
-
-PktLoopBack:		// Reenter here to send rest of variable length packet frame
-
            
 	// Now create a reference symbol for each carrier
       
@@ -992,47 +906,7 @@ PktLoopBack:		// Reenter here to send rest of variable length packet frame
 			intDataPtr += 1;
 		}
 	}
-	if (Type == PktFrameHeader)
-	{
-		// just sent packet header. Send rest in current mode
 
-		Type = 0;			// Prevent reentry
-
-		strcpy(strMod, &pktMod[pktMode][0]);
-		intDataBytesPerCar = pktDataLen + pktRSLen + 3;
-		intDataPtr = 11;		// Over Header
-		intNumCar = pktCarriers[pktMode];
-
-		switch(intNumCar)
-		{		
-		case 1:
-			intCarStartIndex = 4;
-//			dblCarScalingFactor = 1.0f; // Starting at 1500 Hz  (scaling factors determined emperically to minimize crest factor)  TODO:  needs verification
-			dblCarScalingFactor = 1.2f; // Starting at 1500 Hz  Selected to give < 13% clipped values yielding a PAPR = 1.6 Constellation Quality >98
-			break;
-		case 2:
-			intCarStartIndex = 3;
-//			dblCarScalingFactor = 0.53f;
-			if (strcmp(strMod, "16QAM") == 0)
-				dblCarScalingFactor = 0.67f; // Carriers at 1400 and 1600 Selected to give < 2.5% clipped values yielding a PAPR = 2.17, Constellation Quality >92
-			else
-				dblCarScalingFactor = 0.65f; // Carriers at 1400 and 1600 Selected to give < 4% clipped values yielding a PAPR = 2.0, Constellation Quality >95
-			break;
-		case 4:
-			intCarStartIndex = 2;
-//			dblCarScalingFactor = 0.29f; // Starting at 1200 Hz
-			dblCarScalingFactor = 0.4f;  // Starting at 1200 Hz  Selected to give < 3% clipped values yielding a PAPR = 2.26, Constellation Quality >95
-			break;
-		case 8:
-			intCarStartIndex = 0;
-//			dblCarScalingFactor = 0.17f; // Starting at 800 Hz
-			if (strcmp(strMod, "16QAM") == 0)
-				dblCarScalingFactor = 0.27f; // Starting at 800 Hz  Selected to give < 1% clipped values yielding a PAPR = 2.64, Constellation Quality >94
-			else
-				dblCarScalingFactor = 0.25f; // Starting at 800 Hz  Selected to give < 2% clipped values yielding a PAPR = 2.5, Constellation Quality >95
-		} 
-		goto PktLoopBack;		// Reenter to send rest of variable length packet frame
-	}
 	Flush();
 	if (intSoftClipCnt > 0)
 		WriteDebugLog(LOGDEBUG, "Soft Clips %d ", intSoftClipCnt);

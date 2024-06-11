@@ -35,12 +35,6 @@ void CatWrite(char * Buffer, int Len);
 int RadioPoll();
 void ProcessCommandFromHost(char * strCMD);
 BOOL GetNextARQFrame();
-VOID ProcessKISSBytes(UCHAR * RXBUFFER, int Read);
-BOOL CheckKISS(UCHAR * SCSReply);
-UCHAR * PacketSessionPoll(UCHAR * NextChan);
-BOOL CheckForPktData(int Channel);
-VOID ProcessPktData(int Channel, UCHAR * Buffer, int Len);
-BOOL ProcessPktCommand(int Channel, char *Buffer, int Len);
 
 #ifdef LOGTOHOST
 
@@ -605,16 +599,6 @@ VOID ProcessSCSHostFrame(UCHAR *  Buffer, int Length)
 			return;
 		}
 
-		// Send KISS data in response to gen poll
-
-		if (CheckKISS(SCSReply))	// only used in Native mode
-		{
-			// got a message
-
-			return;
-		}
-
-
 		if (newStatus)
 		{
 			newStatus = FALSE;
@@ -644,9 +628,6 @@ VOID ProcessSCSHostFrame(UCHAR *  Buffer, int Length)
 				*(NextChan++) = DataChannel; // Something for this channel
 			else
 				*(NextChan++) = 34;		// Native mode data channel
-
-		// Disabling Pkt support
-		// NextChan = PacketSessionPoll(NextChan);	// See if anythinkg from packet Sessions
 
 #ifdef LOGTOHOST
 //		if (LogToHostBufferLen)	// only used in Native mode
@@ -772,48 +753,12 @@ VOID ProcessSCSHostFrame(UCHAR *  Buffer, int Length)
 		goto AckIt;
 	}
 
-	if (Channel == 250)			// KISS Interface
-	{
-		if (Command == 1 && Buffer[3] == 'G')	
-		{
-			// Poll for KISS Data
-
-			memcpy(&SCSReply[5], CatRXbuffer, CatRXLen);
-			SCSReply[2] = Channel;
-			SCSReply[3] = 7;
-			SCSReply[4] = CatRXLen - 1;
-
-			ReplyLen = CatRXLen + 5;
-			EmCRCStuffAndSend(SCSReply, ReplyLen);
-			CatRXLen = 0;
-			return;
-		}
-
-		Len = Buffer[2] + 1;
-		Buffer[Len + 3] = 0;
-
-		ProcessKISSBytes(&Buffer[3], Len);
-
-		goto AckIt;
-	}
-
-
-
 	if (Command == 0)
 	{
 		// Data Frame
 
 //		WriteDebugLog(LOGDEBUG, "Data Frame Channel %d", Channel);
 
-		// Disabling Pkt support
-		/*
-		if (Channel < 11)			// Packet Data
-		{
-			ProcessPktData(Channel, &Buffer[3], Buffer[2] + 1);
-			return;
-		}
-		else
-		*/
 		if (Channel == 31)			// PTC Mode Data
 			AddDataToDataToSend(&Buffer[3], Buffer[2] + 1);
 
@@ -847,16 +792,6 @@ VOID ProcessSCSHostFrame(UCHAR *  Buffer, int Length)
 
 	// Command Frame
 
-	// Disabling Pkt support
-	/*
-	if (Channel < 11 && Buffer[3] != 'G')
-	{
-		// Packet Channel Command
-
-		ProcessPktCommand(Channel, &Buffer[3], Len);
-		return;
-	}
-	*/
 	switch (Buffer[3])
 	{
 	case 'J':				// JHOST
@@ -909,12 +844,6 @@ VOID ProcessSCSHostFrame(UCHAR *  Buffer, int Length)
 
 	case 'G':				// Specific Poll
 	
-		// Disabling Pkt support
-		/*
-		if (Channel > 0 && Channel < 11)
-			if (CheckForPktData(Channel))
-				return;				// It has sent reply
-		*/
 		if (PTCMode)
 		{
 			if (CheckStatusChange())
@@ -1090,14 +1019,6 @@ VOID ProcessSCSTextCommand(char * Command, int Len)
 
 	Command[Len - 1] = 0;		// Remove 
 
-	if (Command[0] == -64 && Command[1] == -1 && Command[2] == -64)
-	{
-		// Exit KISS
-
-		WriteDebugLog(LOGDEBUG, "Exit KISS Command");
-		goto SendPrompt;	
-
-	}
 	WriteDebugLog(LOGDEBUG, "SCS Command %s", Command);
 
 	if (Len == 1)
@@ -1262,18 +1183,6 @@ VOID ProcessSCSTextCommand(char * Command, int Len)
 
 		PutString(Resp);
 	}
-	else if (PACMode)
-	{
-		if (_memicmp(Command, "BAUD 1200", 9) == 0) 
-			pktMaxBandwidth = 1000;
-		else if (_memicmp(Command, "BAUD 9600", 9) == 0) 
-			pktMaxBandwidth = 2000;
-		else if (_memicmp(Command, "MAX ", 4) == 0) 
-			pktMaxFrame = atoi(&Command[4]);
-		else if (_memicmp(Command, "PACL", 4) == 0)
-			pktPacLen = atoi(&Command[4]);
-
-	}
 	else 
 	{
 		// Process as an ARDOP Command
@@ -1372,8 +1281,6 @@ VOID ProcessSCSPacket(UCHAR * rxbuffer, unsigned int Length)
 			return;
 		}
 
-		// Disabling Pkt support
-		// ProcessDEDModeFrame(rxbuffer, Length);
 		RXBPtr = 0;
 		return;		
 	}		

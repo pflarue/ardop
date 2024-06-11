@@ -61,7 +61,6 @@ VOID WriteDebugLog(int Level, const char * format, ...);
 int initdisplay();
 
 extern BOOL blnDISCRepeating;
-extern BOOL UseKISS;			// Enable Packet (KISS) interface
 
 extern char * CM108Device;
 
@@ -567,17 +566,12 @@ int main(int argc, char * argv[])
 
 	if (HostPort[0])
 	{		
-		char *pkt = strlop(HostPort, '/');
-
 		if (_memicmp(HostPort, "COM", 3) == 0)
 		{
 			SerialMode = 1;
 		}
 		else
 			port = atoi(HostPort);
-
-		if (pkt)
-			pktport = atoi(pkt);
 	}
 
 	
@@ -718,9 +712,6 @@ int main(int argc, char * argv[])
 		Debugprintf("ARDOPC Using a pseudotty symlinked to %s", HostPort);
 	else
 		Debugprintf("ARDOPC listening on port %d", port);
-
-	if (UseKISS && pktport)
-		Debugprintf("ARDOPC listening for KISS frames on port %d", pktport);
 
 	// Get Time Reference
 		
