@@ -1,9 +1,9 @@
 "use strict"
 /////////////////////////////////////////////////////////////////////////////
 //
-//  The protocol used to communicate with ardopcf via a WebSocket connection
-//  should be considered unstable and undocumented.  It is subject to change
-//  in future releases of ardopcf.
+// The protocol used to communicate with ardopcf via a WebSocket connection
+// should be considered unstable and undocumented.  It is subject to change
+// in future releases of ardopcf.
 //
 /////////////////////////////////////////////////////////////////////////////
 
@@ -22,10 +22,10 @@ let colormap = [
 	[0xf0, 0x5b, 0x12, alpha], [0xd6, 0x35, 0x06, alpha],
 	[0xaf, 0x18, 0x01, alpha], [0x7a, 0x04, 0x03, alpha],
 	// special values
-	[0x00, 0x00, 0x00, alpha], // 16 black
-	[0xFF, 0xFF, 0xFF, alpha], // 17 white
-	[0xD0, 0xD0, 0xD0, alpha], // 18 light gray (for bw lines when !isbusy)
-	[0xFF, 0x00, 0xFF, alpha], // 19 fuscia (for bw lines when isbusy)
+	[0x00, 0x00, 0x00, alpha],  // 16 black
+	[0xFF, 0xFF, 0xFF, alpha],  // 17 white
+	[0xD0, 0xD0, 0xD0, alpha],  // 18 light gray (for bw lines when !isbusy)
+	[0xFF, 0x00, 0xFF, alpha],  // 19 fuscia (for bw lines when isbusy)
 ];
 
 let bandwidth = -1;  // in Hz.  -1 = unknown
@@ -104,7 +104,7 @@ window.addEventListener("load", function(evt) {
 			const byte = rdata.buf[rdata.offset];
 			rdata.offset += 1;
 			result |= (byte & 0x7f) << shift;
-			//console.log("With byte=" + byte + " result becomes " + result);
+			// console.log("With byte=" + byte + " result becomes " + result);
 			shift += 7;
 			if ((0x80 & byte) === 0) {
 				return result;
@@ -171,7 +171,7 @@ window.addEventListener("load", function(evt) {
 				console.log("Open WS connection to ", url);
 				ws = new WebSocket(url);
 			}
-			ws.binaryType = "arraybuffer"; // otherwise defaults to blob
+			ws.binaryType = "arraybuffer";  // otherwise defaults to blob
 			ws.onopen = function() {
 				is_connected = true;
 				if(exports.onOpen){
@@ -444,9 +444,9 @@ window.addEventListener("load", function(evt) {
 		rdata.buf.set(new Uint8Array(wsdata), rdata.len);
 		rdata.len += wsdata.byteLength;
 		let msglen;
-		let startoffset = rdata.offset; // offset of msglen
+		let startoffset = rdata.offset;  // offset of msglen
 		while((msglen = decodeUvint(rdata)) >= 0) {
-			let msgoffset = rdata.offset; // offset after msglen
+			let msgoffset = rdata.offset;  // offset after msglen
 			if (msglen == 0) {
 				// An empty message.  Do nothing.
 				// update startoffset before parsing next msglen
@@ -572,30 +572,30 @@ window.addEventListener("load", function(evt) {
 						rxe.classList.add("rxstate_none");
 					}
 					switch (rxstatus) {
-					  case "P":
+					case "P":
 						rxe.classList.add("rxstate_pending");
 						// Assume that this will always be folowed
 						// by a rxstate_ok or rxstate_fail, so don't
 						// set a timer to clear it.
 						// Don't write pending rx to txtlog
 						break;
-					  case "O":
+					case "O":
 						rxe.classList.add("rxstate_ok");
 						clearrxtimer = setTimeout(() => {
 							rxe.innerHTML = "";
 							rxe.classList.remove("rxstate_ok");
 							rxe.classList.add("rxstate_none");
-						}, 5000);  /// clear after 5 seconds
+						}, 5000);  // clear after 5 seconds
 						txtlog.value += "RX: " + rxfrtype + " PASS\n";
 						txtlog.scrollTo(0, txtlog.scrollHeight);
 						break;
-					  case "F":
+					case "F":
 						rxe.classList.add("rxstate_fail");
 						clearrxtimer = setTimeout(() => {
 							rxe.innerHTML = "";
 							rxe.classList.remove("rxstate_fail");
 							rxe.classList.add("rxstate_none");
-						}, 5000);  /// clear after 5 seconds
+						}, 5000);  // clear after 5 seconds
 						txtlog.value += "RX: " + rxfrtype + " FAIL\n";
 						txtlog.scrollTo(0, txtlog.scrollHeight);
 						break;
@@ -613,21 +613,21 @@ window.addEventListener("load", function(evt) {
 					let hostmsg = decodestr(rdata, -1);
 					let prefix = ""
 					switch (hostmsgtype) {
-						case 'Q':
-							prefix = "QueueCommandToHost(): ";
-							break;
-						case 'C':
-							prefix = "SendCommandToHost(): ";
-							break;
-						case 'T':
-							prefix = "SendCommandToHostQuiet(): ";
-							break;
-						case 'R':
-							prefix = "SendReplyToHost(): ";
-							break;
-						case 'F':
-							prefix = "CommandFromHost(): ";
-							break;
+					case 'Q':
+						prefix = "QueueCommandToHost(): ";
+						break;
+					case 'C':
+						prefix = "SendCommandToHost(): ";
+						break;
+					case 'T':
+						prefix = "SendCommandToHostQuiet(): ";
+						break;
+					case 'R':
+						prefix = "SendReplyToHost(): ";
+						break;
+					case 'F':
+						prefix = "CommandFromHost(): ";
+						break;
 					}
 					txtlog.value += prefix + hostmsg + "\n";
 					txtlog.scrollTo(0, txtlog.scrollHeight);
@@ -724,15 +724,15 @@ window.addEventListener("load", function(evt) {
 						rcvoe.classList.remove("dnone");
 						rcvoverflowtimer = setTimeout(() => {
 							rcvoe.classList.add("dnone");
-						}, 5000);  /// display for 5 seconds
+						}, 5000);  // display for 5 seconds
 					}
 					if (rlevel <= 2) {
-						clearTimeout(rcvunderflowtimer); // eliminate old timer
+						clearTimeout(rcvunderflowtimer);  // eliminate old timer
 						let rcvue = document.getElementById("rcvunderflow");
 						rcvue.classList.remove("dnone");
 						rcvunderflowtimer = setTimeout(() => {
 							rcvue.classList.add("dnone");
-						}, 1000);  /// display for 1 second
+						}, 1000);  // display for 1 second
 					}
 					break;
 				}
@@ -893,7 +893,7 @@ window.addEventListener("load", function(evt) {
 			return;
 		// Up and Down arrows can be used to scroll back and forward through
 		// past commands.
-		if (evt.keyCode == 38) { // up arrow
+		if (evt.keyCode == 38) {  // up arrow
 			if (cmdhistory.length == 0)
 				return;
 			if (cmdhistory_index == -1)
@@ -903,7 +903,7 @@ window.addEventListener("load", function(evt) {
 			evt.target.value = cmdhistory[cmdhistory_index];
 			return;
 		}
-		if (evt.keyCode == 40) { // down arrow
+		if (evt.keyCode == 40) {  // down arrow
 			if (cmdhistory.length == 0 || cmdhistory_index == -1)
 				return;
 			if (cmdhistory_index == cmdhistory.length - 1) {
@@ -967,7 +967,7 @@ window.addEventListener("load", function(evt) {
 				plotscale * (spHeight - (values[i] & 0x0F)*(spHeight/16)));
 		}
 		spCtx.lineTo(plotscale * spWidth, plotscale * spHeight);
-		spCtx.moveTo(0, plotscale * spHeight); // close for fill
+		spCtx.moveTo(0, plotscale * spHeight);  // close for fill
 		spCtx.fillStyle = "#CCC";
 		spCtx.strokeStyle = "#CCC";
 		spCtx.fill();
@@ -1006,31 +1006,31 @@ window.addEventListener("load", function(evt) {
 			plotscale * wfHeight);
 		// expand values (4-bit uint per pixel) to colormap values (RGBA per pixel)
 		let colorValues = new Uint8ClampedArray(
-			plotscale * (2 * values.length) * 4); // filled with 0
+			plotscale * (2 * values.length) * 4);  // filled with 0
 		for(var i=0; i<values.length; i++) {  // 2 frequency values per i
 			for (var k=0; k<plotscale; k++) {
 				for (var j=0; j<4; j++) {  // r, g, b
 					// first of two freqencies encoded in this byte
 					colorValues[
 						((plotscale*(2*i) + k) * 4) + j
-					] = colormap[(values[i] >> 4)][j]; // RGBA
+					] = colormap[(values[i] >> 4)][j];  // RGBA
 					// second of two freqencies encoded in this byte
 					colorValues[
 						((plotscale*(2*i + 1) + k) * 4) + j
-					] = colormap[(values[i] & 0x0F)][j]; // RGBA
+					] = colormap[(values[i] & 0x0F)][j];  // RGBA
 				}
 			}
 		}
 		// overwrite centerline and bandwidth lines
 		let bwcolor;
 		if (isbusy)
-			bwcolor = 19 // fuscia bandwidth
+			bwcolor = 19  // fuscia bandwidth
 		else
 			bwcolor = 17
 		for (var j=0; j<4; j++) {  // r, g, b
 			colorValues[
 				plotscale * values.length*4 + j
-			] = colormap[16][j]; // black centerline
+			] = colormap[16][j];  // black centerline
 			colorValues[
 				Math.round(
 					plotscale * (values.length + (bandwidth/2) / 11.719)
@@ -1080,12 +1080,12 @@ window.addEventListener("load", function(evt) {
 					for (var j=0; j<3; j++) {  // r, g, b
 						// ignore color data in pixels[3*i + 2], since this
 						// is an index to a palette not currently defined
-						//  here. plot everything as white.
+						// here. plot everything as white.
 						// alpha is unchanged at 0xFF
 						data[
 							(plotscale * pixels[3*i] + kx
 							+ ((plotscale * pixels[3*i+1] + ky) * plotscale
-							* cnstWidth)) * 4 + j] = 0xFF // white
+							* cnstWidth)) * 4 + j] = 0xFF;  // white
 					}
 				}
 			}
