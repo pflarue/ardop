@@ -24,34 +24,34 @@
 #include "../../ARDOPCommonCode/ardopcommon.h"
 
 /* Simple Raw HID functions for Windows - for use with Teensy RawHID example
- * http://www.pjrc.com/teensy/rawhid.html
- * Copyright (c) 2009 PJRC.COM, LLC
- *
- *  rawhid_open - open 1 or more devices
- *  rawhid_recv - receive a packet
- *  rawhid_send - send a packet
- *  rawhid_close - close a device
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- * 
- * The above description, website URL and copyright notice and this permission
- * notice shall be included in all copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- *
- * Version 1.0: Initial Release
- */
+* http://www.pjrc.com/teensy/rawhid.html
+* Copyright (c) 2009 PJRC.COM, LLC
+*
+*  rawhid_open - open 1 or more devices
+*  rawhid_recv - receive a packet
+*  rawhid_send - send a packet
+*  rawhid_close - close a device
+*
+* Permission is hereby granted, free of charge, to any person obtaining a copy
+* of this software and associated documentation files (the "Software"), to deal
+* in the Software without restriction, including without limitation the rights
+* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+* copies of the Software, and to permit persons to whom the Software is
+* furnished to do so, subject to the following conditions:
+*
+* The above description, website URL and copyright notice and this permission
+* notice shall be included in all copies or substantial portions of the Software.
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+* THE SOFTWARE.
+*
+* Version 1.0: Initial Release
+*/
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -66,7 +66,7 @@ typedef USHORT USAGE;
 
 typedef struct _HIDD_CONFIGURATION {
 	PVOID cookie;
- 	ULONG size;
+	ULONG size;
 	ULONG RingBufferSize;
 } HIDD_CONFIGURATION, *PHIDD_CONFIGURATION;
 
@@ -79,22 +79,22 @@ typedef struct _HIDD_ATTRIBUTES {
 
 
 typedef struct _HIDP_CAPS {
-  USAGE  Usage;
-  USAGE  UsagePage;
-  USHORT  InputReportByteLength;
-  USHORT  OutputReportByteLength;
-  USHORT  FeatureReportByteLength;
-  USHORT  Reserved[17];
-  USHORT  NumberLinkCollectionNodes;
-  USHORT  NumberInputButtonCaps;
-  USHORT  NumberInputValueCaps;
-  USHORT  NumberInputDataIndices;
-  USHORT  NumberOutputButtonCaps;
-  USHORT  NumberOutputValueCaps;
-  USHORT  NumberOutputDataIndices;
-  USHORT  NumberFeatureButtonCaps;
-  USHORT  NumberFeatureValueCaps;
-  USHORT  NumberFeatureDataIndices;
+	USAGE  Usage;
+	USAGE  UsagePage;
+	USHORT  InputReportByteLength;
+	USHORT  OutputReportByteLength;
+	USHORT  FeatureReportByteLength;
+	USHORT  Reserved[17];
+	USHORT  NumberLinkCollectionNodes;
+	USHORT  NumberInputButtonCaps;
+	USHORT  NumberInputValueCaps;
+	USHORT  NumberInputDataIndices;
+	USHORT  NumberOutputButtonCaps;
+	USHORT  NumberOutputValueCaps;
+	USHORT  NumberOutputDataIndices;
+	USHORT  NumberFeatureButtonCaps;
+	USHORT  NumberFeatureValueCaps;
+	USHORT  NumberFeatureDataIndices;
 } HIDP_CAPS, *PHIDP_CAPS;
 
 
@@ -128,13 +128,13 @@ void print_win32_err(void);
 
 
 
-//  rawhid_recv - receive a packet
-//    Inputs:
+//	rawhid_recv - receive a packet
+//		Inputs:
 //	num = device to receive from (zero based)
 //	buf = buffer to receive packet
 //	len = buffer's size
 //	timeout = time to wait, in milliseconds
-//    Output:
+//		Output:
 //	number of bytes received, or -1 on error
 //
 int rawhid_recv(int num, void *buf, int len, int timeout)
@@ -175,13 +175,13 @@ return_error:
 	return -1;
 }
 
-//  rawhid_send - send a packet
-//    Inputs:
+//	rawhid_send - send a packet
+//		Inputs:
 //	num = device to transmit to (zero based)
 //	buf = buffer containing packet to send
 //	len = number of bytes to transmit
 //	timeout = time to wait, in milliseconds
-//    Output:
+//		Output:
 //	number of bytes sent, or -1 on error
 //
 int rawhid_send(int num, void *buf, int len, int timeout)
@@ -240,7 +240,7 @@ HANDLE rawhid_open(char * Device)
 		FILE_SHARE_READ|FILE_SHARE_WRITE, NULL,
 		OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
 
-	if (h == INVALID_HANDLE_VALUE) 
+	if (h == INVALID_HANDLE_VALUE)
 		return 0;
 
 	hid = (struct hid_struct *)malloc(sizeof(struct hid_struct));
@@ -257,11 +257,11 @@ HANDLE rawhid_open(char * Device)
 }
 
 
-//  rawhid_close - close a device
+//	rawhid_close - close a device
 //
-//    Inputs:
+//		Inputs:
 //	num = device to close (zero based)
-//    Output
+//		 Output
 //	(nothing)
 //
 void rawhid_close(int num)
@@ -455,16 +455,16 @@ BOOL OpenHIDPort()
 		return FALSE;
 
 	fd = open (HIDDevice, O_RDWR);
-		
+
 	if (fd == -1)
 	{
-          printf ("Could not open %s, errno=%d\n", HIDDevice, errno);
-          return FALSE;
+		printf ("Could not open %s, errno=%d\n", HIDDevice, errno);
+		return FALSE;
 	}
 
 	ioctl(fd, FIONBIO, &param);
 	printf("Rigcontrol HID Device %s opened", HIDDevice);
-	
+
 	CM108Handle = fd;
 #endif
 	if (CM108Handle == 0)
@@ -494,7 +494,7 @@ void CM108_set_ptt(int PTTState)
 
 	if (!handle) {
 		printf("unable to open device\n");
- 		return;
+		return;
 	}
 
 	n = hid_write(handle, io, 5);
@@ -503,7 +503,7 @@ void CM108_set_ptt(int PTTState)
 		Debugprintf("Unable to write()\n");
 		Debugprintf("Error: %ls\n", hid_error(handle));
 	}
-	
+
 	hid_close(handle);
 
 #else
@@ -511,13 +511,13 @@ void CM108_set_ptt(int PTTState)
 	int fd;
 
 	fd = open (CM108Device, O_WRONLY);
-	
+
 	if (fd == -1)
 	{
-          printf ("Could not open %s for write, errno=%d\n", CM108Device, errno);
-          return;
+		printf ("Could not open %s for write, errno=%d\n", CM108Device, errno);
+		return;
 	}
-	
+
 	io[0] = 0;
 	io[1] = 0;
 	io[2] = 1 << (3 - 1);
@@ -527,7 +527,7 @@ void CM108_set_ptt(int PTTState)
 	n = write (fd, io, 5);
 	if (n != 5)
 		printf ("Write to %s failed, n=%d, errno=%d\n", CM108Device, n, errno);
-	
+
 	close (fd);
 #endif
 	return;
@@ -540,7 +540,7 @@ void DecodeCM108(char * ptr)
 #ifdef WIN32
 
 	// Next Param is VID and PID - 0xd8c:0x8 or Full device name
-	// On Windows device name is very long and difficult to find, so 
+	// On Windows device name is very long and difficult to find, so
 	//	easier to use VID/PID, but allow device in case more than one needed
 
 	char * next;
@@ -560,7 +560,7 @@ void DecodeCM108(char * ptr)
 			PID = strtol(++next, &next, 0);
 
 		// Look for Device
-	
+
 		devs = hid_enumerate(0,0); // so we list devices(USHORT)VID, (USHORT)PID);
 		cur_dev = devs;
 		while (cur_dev)
@@ -571,7 +571,7 @@ void DecodeCM108(char * ptr)
 				Debugprintf("HID Device %s VID %04x PID %04x %s", product, cur_dev->vendor_id, cur_dev->product_id, cur_dev->path);
 			else
 				Debugprintf("HID Device %s VID %04x PID %04x %s", "Missing Product", cur_dev->vendor_id, cur_dev->product_id, cur_dev->path);
-				
+
 			if (cur_dev->vendor_id == VID && cur_dev->product_id == PID)
 				path_to_open = _strdup(cur_dev->path);
 
@@ -579,7 +579,7 @@ void DecodeCM108(char * ptr)
 		}
 		hid_free_enumeration(devs);
 	}
-	
+
 	if (path_to_open)
 	{
 		handle = hid_open_path(path_to_open);
@@ -605,7 +605,7 @@ void DecodeCM108(char * ptr)
 		free(path_to_open);
 	}
 #else
-		
+
 	// Linux - Param is HID Device, eg /dev/hidraw0
 
 	CM108Device = strdup(ptr);
