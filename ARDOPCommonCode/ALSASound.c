@@ -440,12 +440,8 @@ unsigned int getTicks()
 
 void PlatformSleep(int mS)
 {
-	if (SerialMode)
-		SerialHostPoll();
-	else {
-		TCPHostPoll();
-		WebguiPoll();
-	}
+	TCPHostPoll();
+	WebguiPoll();
 
 	if (strcmp(PlaybackDevice, "NOSOUND") != 0)
 		Sleep(mS);
@@ -557,15 +553,7 @@ int main(int argc, char * argv[])
 	}
 
 	if (HostPort[0])
-	{		
-		if (_memicmp(HostPort, "COM", 3) == 0)
-		{
-			SerialMode = 1;
-		}
-		else
-			port = atoi(HostPort);
-	}
-
+		port = atoi(HostPort);
 	
 	if (CATPort[0])
 	{
@@ -698,10 +686,7 @@ int main(int argc, char * argv[])
 	}	
 
 
-	if (SerialMode)
-		Debugprintf("ARDOPC Using a pseudotty symlinked to %s", HostPort);
-	else
-		Debugprintf("ARDOPC listening on port %d", port);
+	Debugprintf("ARDOPC listening on port %d", port);
 
 	// Get Time Reference
 		
@@ -742,11 +727,6 @@ int main(int argc, char * argv[])
 
 	ardopmain();
 
-	// if PTY used, remove it
-
-	if (SerialMode)
-		unlink (HostPort);
-
 	return (0);
 }
 
@@ -755,12 +735,8 @@ void txSleep(int mS)
 	// called while waiting for next TX buffer or to delay response.
 	// Run background processes
 
-	if (SerialMode)
-		SerialHostPoll();
-	else {
-		TCPHostPoll();
-		WebguiPoll();
-	}
+	TCPHostPoll();
+	WebguiPoll();
 
 	if (strcmp(PlaybackDevice, "NOSOUND") != 0)
 		Sleep(mS);

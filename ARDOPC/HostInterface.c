@@ -36,8 +36,6 @@ int wg_send_hostmsg(int cnum, char msgtype, char *strText);
 int wg_send_hostdatab(int cnum, char *prefix, unsigned char *data, int datalen);
 int wg_send_hostdatat(int cnum, char *prefix, unsigned char *data, int datalen);int wg_send_drivelevel(int cnum);
 
-int SerialMode = 0;
-
 extern BOOL NeedTwoToneTest;
 
 #ifndef WIN32
@@ -1384,10 +1382,7 @@ cmddone:
 
 void SendCommandToHost(char * strText)
 {
-	if (SerialMode)
-		SCSSendCommandToHost(strText);
-	else
-		TCPSendCommandToHost(strText);
+	TCPSendCommandToHost(strText);
 	if (WG_DevMode)
 		wg_send_hostmsg(0, 'C', strText);
 }
@@ -1395,43 +1390,28 @@ void SendCommandToHost(char * strText)
 
 void SendCommandToHostQuiet(char * strText)		// Higher Debug Level for PTT
 {
-	if (SerialMode)
-		SCSSendCommandToHostQuiet(strText);
-	else
-		TCPSendCommandToHostQuiet(strText);
+	TCPSendCommandToHostQuiet(strText);
 	if (WG_DevMode)
 		wg_send_hostmsg(0, 'T', strText);
 }
 
 void QueueCommandToHost(char * strText)
 {
-	if (SerialMode)
-		SCSQueueCommandToHost(strText);
-	else
-		TCPQueueCommandToHost(strText);
+	TCPQueueCommandToHost(strText);
 	if (WG_DevMode)
 		wg_send_hostmsg(0, 'Q', strText);
 }
 
 void SendReplyToHost(char * strText)
 {
-	if (SerialMode) {
-		SCSSendReplyToHost(strText);
-		if (WG_DevMode)
-			wg_send_hostmsg(0, 'R', strText);
-	}
-	else
-		// This redirects to SendCommandToHost(), so don't do duplicate wg_send_hostmsg()
-		TCPSendReplyToHost(strText);
+	// This redirects to SendCommandToHost(), so don't do duplicate wg_send_hostmsg()
+	TCPSendReplyToHost(strText);
 }
 //  Subroutine to add a short 3 byte tag (ARQ, FEC, ERR, or IDF) to data and send to the host 
 
 void AddTagToDataAndSendToHost(UCHAR * bytData, char * strTag, int Len)
 {
-	if (SerialMode)
-		SCSAddTagToDataAndSendToHost(bytData, strTag, Len);
-	else
-		TCPAddTagToDataAndSendToHost(bytData, strTag, Len);
+	TCPAddTagToDataAndSendToHost(bytData, strTag, Len);
 	if (WG_DevMode) {
 		if (utf8_check(bytData, Len) == NULL)
 			wg_send_hostdatat(0, strTag, bytData, Len);

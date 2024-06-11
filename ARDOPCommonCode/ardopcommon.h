@@ -151,10 +151,8 @@ BOOL CheckGSSyntax(char * GS);
 unsigned int GenCRC16(unsigned char * Data, unsigned short length);
 void SendCommandToHost(char * Cmd);
 void TCPSendCommandToHost(char * Cmd);
-void SCSSendCommandToHost(char * Cmd);
 void SendCommandToHostQuiet(char * Cmd);
 void TCPSendCommandToHostQuiet(char * Cmd);
-void SCSSendCommandToHostQuiet(char * Cmd);
 void UpdateBusyDetector(short * bytNewSamples);
 void SetARDOPProtocolState(int value);
 BOOL BusyDetect3(float * dblMag, int intStart, int intStop);
@@ -180,11 +178,9 @@ void GenCRC16FrameType(char * Data, int Length, UCHAR bytFrameType);
 BOOL CheckCRC16FrameType(unsigned char * Data, int Length, UCHAR bytFrameType);
 char * strlop(char * buf, char delim);
 void QueueCommandToHost(char * Cmd);
-void SCSQueueCommandToHost(char * Cmd);
 void TCPQueueCommandToHost(char * Cmd);
 void SendReplyToHost(char * strText);
 void TCPSendReplyToHost(char * strText);
-void SCSSendReplyToHost(char * strText);
 void LogStats();
 int GetNextFrameData(int * intUpDn, UCHAR * bytFrameTypeToSend, UCHAR * strMod, BOOL blnInitialize);
 void SendData();
@@ -233,7 +229,6 @@ void InitializeConnection();
 
 void AddTagToDataAndSendToHost(UCHAR * Msg, char * Type, int Len);
 void TCPAddTagToDataAndSendToHost(UCHAR * Msg, char * Type, int Len);
-void SCSAddTagToDataAndSendToHost(UCHAR * Msg, char * Type, int Len);
 
 void RemoveDataFromQueue(int Len);
 void RemodulateLastFrame();
@@ -532,8 +527,6 @@ extern int dttLastLeaderDetect;
 extern int initMode;		 // 0 - 4PSK 1 - 8PSK 2 = 16QAM
 
 extern int extraDelay;
-
-extern BOOL SerialMode;			// Set if using SCS Mode, Unset for TCP Mode
 
 // Has to follow enum defs
 
