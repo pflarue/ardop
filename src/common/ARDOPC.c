@@ -1668,13 +1668,32 @@ void ASCIIto6Bit(const char * Padded, UCHAR * Compressed)
 	// Input must be 8 bytes which will convert to 6 bytes of packed 6 bit characters and
 	// inputs must be the ASCII character set values from 32 to 95....
 
+	// Ensure string is exactly 8 characters long, right-padding with spaces
+	char work[9];
+	snprintf(work, sizeof(work), "%-8s", Padded ? Padded : "");
+
+	// Filter invalid characters
+	for (size_t pos = 0; pos < sizeof(work) - 1; ++pos) {
+		if (work[pos] >= ' ' && work[pos] <= '_') {
+			// pass
+		}
+		else if (work[pos] >= 'a' && work[pos] <= 'z') {
+			// to ascii uppercase
+			work[pos] = work[pos] - 32;
+		}
+		else {
+			// filter
+			work[pos] = ' ';
+		}
+	}
+
 	unsigned long long intSum = 0;
 
 	int i;
 
 	for (i=0; i<4; i++)
 	{
-		intSum = (64 * intSum) + Padded[i] - 32;
+		intSum = (64 * intSum) + work[i] - 32;
 	}
 
 	Compressed[0] = (UCHAR)(intSum >> 16) & 255;
@@ -1685,7 +1704,7 @@ void ASCIIto6Bit(const char * Padded, UCHAR * Compressed)
 
 	for (i=4; i<8; i++)
 	{
-		intSum = (64 * intSum) + Padded[i] - 32;
+		intSum = (64 * intSum) + work[i] - 32;
 	}
 
 	Compressed[3] = (UCHAR)(intSum >> 16) & 255;
