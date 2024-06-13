@@ -7,8 +7,25 @@
 
 #include "common/ARDOPC.h"
 
+extern void ASCIIto6Bit(const char *Padded, UCHAR *Compressed);
+extern void Bit6ToASCII(const UCHAR *Padded, UCHAR *UnCompressed);
 extern void DeCompressCallsign(const char *bytCallsign, char *returned, size_t returnlen);
 extern void CompressCallsign(const char *Callsign, UCHAR *Compressed);
+
+/*
+ * Check that the 8-character ASCII string `out` compresses and
+ * decompresses back into `expect`. The input must be an 8-character
+ * string. Unused characters should be padded with spaces (U+0020).
+ */
+static void assert_6bit_inout(const char* out, const char* expect) {
+	UCHAR compressed[6];
+	char decompressed[9];
+
+	ASCIIto6Bit(out, compressed);
+	Bit6ToASCII(compressed, decompressed);
+	decompressed[8] = '\0';
+	assert_string_equal(decompressed, expect);
+}
 
 /*
  * Check that the given `call`sign (with optional SSID) has the given
@@ -45,6 +62,18 @@ static void assert_callsign_inout(const char *call_in, const char *call_out)
 	CompressCallsign(call_in, compressed);
 	DeCompressCallsign(compressed, out, sizeof(out));
 	assert_string_equal(call_out, out);
+}
+
+/* test string-packing compression and decompression */
+static void test_ascii_6bit(void **state)
+{
+	(void)state; /* unused */
+
+	assert_6bit_inout("        ", "        ");
+	assert_6bit_inout("AZ09-_  ", "AZ09-_  ");
+	assert_6bit_inout("A      Z", "A      Z");
+	assert_6bit_inout("HI\0\0\0\0\0U", "HI      ");
+	assert_6bit_inout("abcxyz  ", "ABCXYZ  ");
 }
 
 /* test callsign wireline representation */
@@ -93,6 +122,7 @@ static void test_decompress_callsign(void **state)
 int main(void)
 {
 	const struct CMUnitTest tests[] = {
+		cmocka_unit_test(test_ascii_6bit),
 		cmocka_unit_test(test_compress_callsign),
 		cmocka_unit_test(test_decompress_callsign),
 	};
