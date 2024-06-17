@@ -3,7 +3,7 @@
 First, ensure that you are invoking ardopcf correctly. Normally, ardopcf is invoked like this:
 
 `./ardopcf 8515 plughw:1,0 plughw:1,0` 
-- `8515` is the default port that host applications (like PAT) expect an ardop-compatible tcp interface. If you specify audio device
+- `8515` is the default port that host applications (like PAT) expect an ardop-compatible tcp interface.
 - `plughw:1,0` is the audio device used for receiving or transmitting. If you use the same audio device (such as a SignaLink or DigiRig or a built-in radio sound card) then yes, you must specify it twice, otherwise you will get an audio error.
 
 Then, review your logs to see if you can figure out why an issue is happening.
@@ -71,9 +71,7 @@ If you have discovered a bug (not just an issue with your own setup) - please cr
 
 Please be sure to include your log files 
 
-### Terminology used in this document
-
-# Terminology used in this document
+## Terminology used in this document
 
 | Term | Definition |
 |------|------------|
