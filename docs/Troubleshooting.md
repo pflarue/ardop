@@ -50,6 +50,8 @@ Otherwise, if you know you have a good radio link (via voice or other data mode)
    1. Check your ALC meter on your radio. Adjust either computer audio or the gain on the radio where ALC is as low as possible, but your transmit power is as close to your setting as possible.
 3. Are you on the correct frequency?
    1. The "center frequency" of ARDOP is 1500Hz in the audio passband. Sometimes radios will have an automatic dial frequency adjustment that will offset the display, or sometimes stations will communicate the "center" frequency instead of the "dial" frequency. Try offsetting by 1500Hz either direction, or adjust the offset in your radio menu.
+4. Have you selected the appropriate bandwidth?
+   1. If you have always selected 2000MAX as your session bandwidth, ardopcf will always try to reach these bandwidths (high data rates) and it may cause your connection to fail. Try 500MAX for a resonably robust connection with reasonable data transfer rates.
 
 #### Transferring Data
 
