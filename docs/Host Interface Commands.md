@@ -1,16 +1,48 @@
 # TCP Host Interface Commands
 
-Please read the ARDOP overview document before reading this document.
 
-When writing host applications, commands are issued to the modem's TCP socket (default 8515). By default, ardopcf listens on 0.0.0.0. 
+
+When writing host applications, commands are issued to the modem's TCP socket (default 8515). By default, ardopcf listens on 0.0.0.0 (all interfaces, meaning unless you set up a firewall, any computer on your network can access ardopcf's tcp interface)
 
 Commands sent to the ardopcf command socket can be upper or lowercase, but must be terminated with a `/r` (carriage return) `0x0d` ascii byte.
 
 For example, sending `BUFFER/r` to the command socket will return `BUFFER N/r` where N is the decimal length of any data currently loaded into ardopcf's buffer via its data socket.
 
+**Disclaimer**: The content of this documentation is DESCRIPTIVE of the current TCP host interface, not PRESCRIPTIVE - meaning that we went through and tried to understand what the commands do based on review of the source code and older (possibly out of date) documentation. This means that the behavior of some of these commands under certain situations may not be as expected, and some may cause a crash. Some commands are not fully understood, and some responses are not fully documented, but this documentation will be updated as they are experimented with or after further code review. Feel free to clone the respository and submit a PR or to open up an issue with what should be changed and why.
+
+### Interfacing Example
+
+In python3 to send a command, this can be done like this:
+```
+import socket
+sock_cmd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock_cmd.connect('localhost', 8515)
+
+def send_command(string: str):
+  string += '\r'
+  sock_cmd.sendall(string.encode()) # it will expect 'bytes'
+
+send_command(`BUFFER`) # this will store 'BUFFER n\r' in the socket when ardop responds
+```
+To simply read the command response buffer, it can be done like this:
+```
+def read_command_response() -> str:
+  line = b''
+  while True:
+    part = sock_cmd.recv(1)
+    if part != b"\r":
+        line+=part
+    elif part == b"\r":
+        break
+  return(line.decode())
+```
+Note that the above is the simpliest example, and this will block the main thread if there is no data to read from the socket. You can make this asyncronous via multiple methods, but what works reasonably well is running the function in its own thread, setting `sock_cmd.set_blocking('False')` and wrapping the socket reading loop with a try/except block (terminating on a threading.Event being false), continuing on a `BlockingIOError`. If you find a better way to do this, please let us know!
+
+
+
 ## ARDOP Modes
 
-Not all commands are for all modes. There are three main operating modes of ardopcf, and each have their own commands.
+Not all commands are for all modes. There are three main operating modes of ardopcf, and each have their own subset of commands.
 
 **ARQ** (Automatic Repeat reQuest)
 
@@ -36,11 +68,12 @@ Not all commands are for all modes. There are three main operating modes of ardo
 >`FECREPEATS 0`
 >`FECMODE 4FSK.500.100S`
 
-**RX0** (Decode all frames with extra debug output)
+**RXO** (Decode all frames with extra debug output)
   This mode is mainly used for logging/debugging purposes. It will decode any heard frame.
+  (O as in Oscar, not 0 as in zero)
   You may set this protocol mode via:
 >`INITIALIZE`
->`PROTOCOLMODE RX0`
+>`PROTOCOLMODE RXO`
 
 
 ## ARDOPCF Command List
@@ -387,7 +420,7 @@ SoundInput.c:1425
 
 Enables/disables monitoring of FEC or ARQ Data Frames, ID frames, or Connect request in disconnected ARQ state.
 
-Does this make that data avaliable to a host application? I think funcationality confusion around this is why RX0 was implemented.
+Does this make that data avaliable to a host application? I think funcationality confusion around this is why RXO was implemented.
 
 - Mode: ANY
 - Arguments: None, `TRUE`or `FALSE`
@@ -448,7 +481,7 @@ Returns the currently used playback device. This may be supposed to return a lis
 Part of initialization, sets the ardop operating mode.
 
 - Mode: ANY
-- Arguments: None, FEC, ARQ, RX0
+- Arguments: None, FEC, ARQ, RXO
 - `PROTOCOLMODE` returns `PROTOCOLMODE ARQ`
 - `PROTOCOLMODE FEC` returns `PROTOCOLMODE now FEC`
 
@@ -627,7 +660,7 @@ This is used primarially when your station is scanning multiple frequencies for 
 - An `ARQ` frame header is not intended for this station
 - A `CONREQ` frame header is recognized but decoded improperly
 - A `PING` frame header is recognized but decoded improperly
-- A `PING` frame header is received but not decoded when ardopcf is not in `DISC` state or `RX0` mode. (duplicate?)
+- A `PING` frame header is received but not decoded when ardopcf is not in `DISC` state or `RXO` mode. (duplicate?)
 
 
 #### CONNECTED
