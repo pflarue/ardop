@@ -1,10 +1,14 @@
 # Troubleshooting Suggestions
 
-First, ensure that you are invoking ardopcf correctly. Normally, ardopcf is invoked like this:
+First, ensure that you are invoking ardopcf correctly. Normally, ardopcf is invoked on Linux like this:
 
 `./ardopcf 8515 plughw:1,0 plughw:1,0` 
 - `8515` is the default port that host applications (like PAT) expect an ardop-compatible tcp interface.
 - `plughw:1,0` is the audio device used for receiving or transmitting. If you use the same audio device (such as a SignaLink or DigiRig or a built-in radio sound card) then yes, you must specify it twice, otherwise you will get an audio error.
+
+Windows: `stub`
+
+MacOS: `stub`
 
 Then, review your logs to see if you can figure out why an issue is happening.
 
@@ -13,7 +17,7 @@ By default, ardopcf generates two sources of debug information
   - A log file in the directory where it was launched.
 
 
-## Audio Device Related Issues
+## Audio Device Related Issues (Linux)
 
 If you get an error message in the console like this:
 ```
@@ -28,6 +32,10 @@ This means that you did not invoke ardopcf correctly (see the top of this page),
 
 You may run into issues as well (device or resource busy) if you have another program (like Direwolf) trying to access the same audio device (radio) at the same time. ardopcf is not a jack/pulseaudio/portaudio/oss/pipewire aware program, and alsa does not do mixing and audio redirecting between sources and sinks by default. You might be able to use alsa plugins like dsnoop or create a new pcm definition in ~/.asoundrc to do point to the PulseAudio default device, but your mileage may vary and this author has not tested it. If you find an elegant solution, please open a github issue or let us know in the users groups. 
 
+
+## Audio Device Related Issues (Windows)
+
+Stub.
 
 ## Over-the-air Connection Issues
 
@@ -69,7 +77,7 @@ If none of these help you, the best place to seek assistance is the ARDOP users 
 
 If you have discovered a bug (not just an issue with your own setup) - please create a github issue here with as much information as you can: https://github.com/pflarue/ardop/issues
 
-Please be sure to include your log files 
+Please be sure to include your log files.
 
 ## Terminology used in this document
 

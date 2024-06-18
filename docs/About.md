@@ -33,17 +33,30 @@ See the [releases](https://github.com/pflarue/ardop/releases) page to download '
 #### Compiling ardopcf
 
 If you wish to compile and test the latest development branch:
+Linux:
 ```
 git clone -b develop https://github.com/pflarue/ardop
 cd ardop/ARDOPC
 make -j4
 ```
 
+Windows:
+```
+Stub.
+```
+
+MacOS:
+```
+Stub.
+```
+
 ### Usage
 
 ardopcf can be normally invoked like this, assuming you are using an external sound card device like a SignaLink USB or a DigiRig, or a radio's built-in sound card:
 
-`./ardopcf 8515 plughw:1,0 plughw:1,0`
+Linux: `./ardopcf 8515 plughw:1,0 plughw:1,0`
+Windows: `stub`
+MacOS: `stub`
 
 Yes, you must specify the sound device twice. See the [Troubleshooting](Troubleshooting.md) guide if you have issues connecting with another station (if not a host application issue)
 
@@ -61,7 +74,7 @@ Then you will need software that uses ardopcf as a transport, which is called a 
 
 ### Contributing to ardopcf
 
-It is the hope of the authors that this project can be an effective learning tool for amatuers that intend to get involved with software modem development. Contributing to this software is welcome, especially when it comes to finding and fixing bugs, improving user experience, and improving performance (without breaking compatibility with host applications or other ARDOP implementations)
+It is the hope of the authors that this project can be an effective learning tool for amatuers that intend to get involved with software modem development. Contributing to this software is welcome, especially when it comes to finding and fixing bugs, improving user experience, and improving performance (without breaking compatibility with host applications or other ARDOP implementations). Please see [CONTIBUTING](CONTRIBUTING.md).
 
 If you fork this project and make any changes are made that break compatibility with other ARDOP-compatible stations, your fork should not carry the ARDOP name, to avoid confusion for users.
 
