@@ -286,8 +286,8 @@ If enabled, ardopcf returns a `DATAACK` frame to acknowledge the a `PING`
 
 - Mode: ANY
 - Arguments: None, `TRUE` or `FALSE`
-- `ENABLEPINGBACK` returns `ENABLEPINGBACK TRUE`
-- `ENABLEPINGBACK FALSE` returns `ENABLEPINGBACK now FALSE`
+- `ENABLEPINGACK` returns `ENABLEPINGACK TRUE`
+- `ENABLEPINGACK FALSE` returns `ENABLEPINGACK now FALSE`
   
 #### EXTRADELAY
 
