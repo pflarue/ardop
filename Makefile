@@ -1,6 +1,7 @@
 #	ardopcf Makefile
-#		For Linux, the default build requires only gcc and libraries typically
-#		installed by default.
+#		For Linux, the default build requires gcc, make, and development
+#		libraries for ALSA.
+#			sudo apt install build-essential libasound2-dev
 #			cd ardop/ARDOPC
 #			make
 #
@@ -12,8 +13,31 @@
 #		environments may also work but are not tested.
 #			cd ardop\ARDOPC
 #			mingw32-make
+#
+#	`make test` which builds the executable and also runs some tests also
+#	requires installation of cmocka, which is not required for the default build.
+#		On Debian/Ubuntu this is easily installed with:
+#			sudo apt install libcmocka-dev
+#
+#		Package managers for other Linux distributions are also likely to
+#		provide easy installation of cmocka.
+#
+#		In the following description of how to install cmocka for Windows, a
+#		winlibs MinGW installation is assumed to be located at `C:\winlibs`
+#		If installed elsewhere, substitute the appropriate path.  Putting the
+#		cmocka files into the winlibs install directory avoids the need for further
+#		configuration.  This uses git (available from https://git-scm.com/downloads/win)
+#		to download the cmocka source code.
+#
+#		git clone https://git.cryptomilk.org/projects/cmocka.git
+#		cd cmocka
+#		mkdir build
+#		cd build
+#		cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="C:\winlibs" ..
+#		mingw32-make
+#		mingw32-make install
 
-.PHONY: all
+.PHONY: all buildtest test
 
 # list all object files and their directories
 # keep sorted by filename
@@ -42,6 +66,15 @@ OBJS = \
 
 OBJS_EXE = \
 	src/common/ardopcf.o \
+
+TESTS = \
+	test/ardop/test_ARDOPC \
+
+# define newline for use with foreach to run tests
+define newline
+
+
+endef
 
 # Configuration:
 CPPFLAGS += -Isrc -Ilib
@@ -89,6 +122,19 @@ endif
 src/common/gen-%.c:: webgui/% | $(TXT2C)
 	$(TXT2C) $< $@ $(subst .,_,$(notdir $<))
 
+# `make buildtest` builds the test-case executables but does not run them
+buildtest: $(TESTS)
+
+# `make test` prints the name of each test file and then runs that test.
+# running the test should indicate the tests run and whether they passed
+# or failed.
+test: buildtest
+	$(foreach test, $(TESTS), @echo $(test):$(newline)@$(test)$(newline))
+
+# rule to make test-case executables from their sources
+test/ardop/%: test/ardop/%.c $(OBJS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) $^ -o $@ $(LOADLIBES) $(LDLIBS) -lcmocka
+
 -include *.d
 
 # 'make clean' deletes files produced by the build process.
@@ -103,6 +149,9 @@ CLEAN += \
 	$(OBJS:.o=.d) \
 	$(OBJS_EXE) \
 	$(OBJS_EXE:.o=.d) \
+	$(TESTS) \
+	$(TESTS:%=%.exe) \
+	$(TESTS:%=%.d) \
 	output.map \
 
 ifeq ($(OS),Windows_NT)
