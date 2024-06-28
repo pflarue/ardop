@@ -1,4 +1,17 @@
 #	ardopcf Makefile
+#		For Linux, the default build requires only gcc and libraries typically
+#		installed by default.
+#			cd ardop/ARDOPC
+#			make
+#
+#		Fow Windows, the default build requires installation of a MinGW build
+#		environment.  The easily installable packages from https://winlibs.com
+#		available for 32-bit or 64-bit builds are suggested.  These are used to
+#		build the Windows releases.  Installing these in `C:\Program Files` is
+#		not recommended since that may require admin privileges.  Other build
+#		environments may also work but are not tested.
+#			cd ardop\ARDOPC
+#			mingw32-make
 
 .PHONY: all
 
@@ -34,5 +47,10 @@ ardopcf: $(OBJS)
 
 -include *.d
 
+# 'make clean' deletes files produced by the build process.
+# After using git checkout change branches, it is sometimes neccessary to run
+# 'make clean' before running 'make' to produce a successful build.  Failure
+# to run 'make clean' before using git checkout may sometimes leave build
+# related files that must then be manually deleted.
 clean :
 	$(RM) ardopcf ardopcf $(OBJS) $(OBJS:.o=.d) output.map
