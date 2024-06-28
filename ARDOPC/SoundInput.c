@@ -454,7 +454,7 @@ void Filter75Hz(short * intFilterOut, BOOL blnInitialise, int intSamplesToFilter
 
 	if (dblCoef[2] == 0)
 	{
-		for (i = 0; i <= 3; i++)
+		for (i = 0; i < 3; i++)
 		{
 			dblCoef[i] = 2 * dblR * cosf(2 * M_PI * (29 + i)/ intN);  // For Frequency = bin 29, 30, 31
 		}
