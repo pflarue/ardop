@@ -2,7 +2,7 @@
 #include <complex.h>
 #include <math.h>
 
-#include "../ARDOPCommonCode/ardopcommon.h"
+#include "ardopcommon.h"
 #include "sdft.h"
 
 // For validation/debugging only

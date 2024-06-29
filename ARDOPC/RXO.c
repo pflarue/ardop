@@ -1,5 +1,5 @@
 #include "ARDOPC.h"
-#include "../ARDOPCommonCode/ardopcommon.h"
+#include "ardopcommon.h"
 #include "RXO.h"
 
 extern UCHAR bytSessionID;

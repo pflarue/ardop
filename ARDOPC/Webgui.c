@@ -2,7 +2,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include "../ARDOPCommonCode/ardopcommon.h"
+#include "ardopcommon.h"
 #include "../lib/ws_server/ws_server.h"
 
 /////////////////////////////////////////////////////////////////////////////

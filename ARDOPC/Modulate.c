@@ -6,7 +6,7 @@
 #endif
 
 #include "ARDOPC.h"
-#include "../ARDOPCommonCode/wav.h"
+#include "wav.h"
 
 unsigned int pttOnTime;
 

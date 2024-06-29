@@ -37,8 +37,8 @@ OBJS += LinSerial.o ALSASound.o
 LDLIBS += -lrt -lasound
 endif
 
-vpath %.c ../ARDOPCommonCode ../lib/rockliff ../lib/hid ../lib/rawhid ../lib/ws_server
-vpath %.h ../ARDOPCommonCode ../lib/rockliff
+vpath %.c ../lib/rockliff ../lib/hid ../lib/rawhid ../lib/ws_server
+vpath %.h ../lib/rockliff
 vpath %.o ./
 
 all: ardopcf
