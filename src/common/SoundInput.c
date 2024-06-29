@@ -5,10 +5,10 @@
 #include <windows.h>
 #endif
 
-#include "ARDOPC.h"
-#include "RXO.h"
-#include "sdft.h"
-#include "../lib/rockliff/rrs.h"
+#include "common/ARDOPC.h"
+#include "common/RXO.h"
+#include "common/sdft.h"
+#include "rockliff/rrs.h"
 
 #pragma warning(disable : 4244)  // Code does lots of float to int
 

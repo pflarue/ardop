@@ -13,8 +13,8 @@
 #include <mmsystem.h>
 #include <stdbool.h>
 
-#include "wav.h"
-#include "../lib/rockliff/rrs.h"
+#include "common/wav.h"
+#include "rockliff/rrs.h"
 
 #pragma comment(lib, "winmm.lib")
 void printtick(char * msg);
@@ -30,7 +30,7 @@ void DecodeCM108(char * ptr);
 
 #include <math.h>
 
-#include "ardopcommon.h"
+#include "common/ardopcommon.h"
 
 void GetSoundDevices();
 

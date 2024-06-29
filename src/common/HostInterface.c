@@ -1,7 +1,7 @@
 // ARDOP TNC Host Interface
 //
 
-#include "ARDOPC.h"
+#include "common/ARDOPC.h"
 
 BOOL blnHostRDY = FALSE;
 extern int intFECFramesSent;

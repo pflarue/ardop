@@ -1,6 +1,6 @@
-#include "ARDOPC.h"
-#include "ardopcommon.h"
-#include "RXO.h"
+#include "common/ARDOPC.h"
+#include "common/ardopcommon.h"
+#include "common/RXO.h"
 
 extern UCHAR bytSessionID;
 extern UCHAR bytFrameData1[760];

@@ -5,7 +5,7 @@
 // definition of ProductVersion moved to version.h
 // This simplifies test builds with using local version numbers independent
 //   of version numbers pushed to git repository.
-#include "version.h"
+#include "common/version.h"
 
 #ifdef WIN32
 #define _CRT_SECURE_NO_DEPRECATE
@@ -30,8 +30,8 @@
 #include <ctype.h>
 #include <getopt.h>
 
-#include "ardopcommon.h"
-#include "wav.h"
+#include "common/ardopcommon.h"
+#include "common/wav.h"
 
 void ProcessCommandFromHost(char * strCMD);
 

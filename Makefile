@@ -15,12 +15,33 @@
 
 .PHONY: all
 
-OBJS = ARDOPCommon.o BusyDetect.o \
-ARDOPC.o ardopSampleArrays.o ARQ.o FFT.o FEC.o HostInterface.o Modulate.o rrs.o txframe.o \
-SoundInput.o TCPHostInterface.o wav.o RXO.o sdft.o rawhid.o \
-ws_server.o Webgui.o webgui/gen-webgui.html.o webgui/gen-webgui.js.o
+# list all object files and their directories
+# keep sorted by filename
+OBJS = \
+	lib/rawhid/rawhid.o \
+	lib/rockliff/rrs.o \
+	lib/ws_server/ws_server.o \
+	src/common/ARDOPC.o \
+	src/common/ARDOPCommon.o \
+	src/common/ardopSampleArrays.o \
+	src/common/ARQ.o \
+	src/common/BusyDetect.o \
+	src/common/FEC.o \
+	src/common/FFT.o \
+	src/common/HostInterface.o \
+	src/common/Modulate.o \
+	src/common/RXO.o \
+	src/common/sdft.o \
+	src/common/SoundInput.o \
+	src/common/TCPHostInterface.o \
+	src/common/txframe.o \
+	src/common/wav.o \
+	src/common/gen-webgui.html.o \
+	src/common/gen-webgui.js.o \
+	src/common/Webgui.o \
 
 # Configuration:
+CPPFLAGS += -Isrc -Ilib
 CFLAGS = -g -MMD
 LDLIBS = -lm -lpthread
 LDFLAGS = -Xlinker -Map=output.map
@@ -30,16 +51,16 @@ CC = gcc
 TXT2C ?=
 
 ifeq ($(OS),Windows_NT)
-OBJS += Waveout.o hid.o
+OBJS += \
+	src/windows/Waveout.o \
+	lib/hid/hid.o
 LDLIBS += -lwsock32 -lwinmm -lsetupapi -lws2_32
 else
-OBJS += LinSerial.o ALSASound.o
+OBJS += \
+	src/linux/ALSASound.o \
+	src/linux/LinSerial.o
 LDLIBS += -lrt -lasound
 endif
-
-vpath %.c ../lib/rockliff ../lib/hid ../lib/rawhid ../lib/ws_server
-vpath %.h ../lib/rockliff
-vpath %.o ./
 
 all: ardopcf
 
@@ -48,7 +69,7 @@ ardopcf: $(OBJS)
 
 # if txt2c is not provided, build it
 ifeq ($(TXT2C),)
-TXT2C := ../lib/txt2c/txt2c
+TXT2C := lib/txt2c/txt2c
 
 # build txt2c directly and without our link libraries (none are required)
 $(TXT2C): $(TXT2C).c
@@ -62,7 +83,7 @@ endif
 #   The C symbol name will be FOO_xyz.
 #   This is used to convert HTML and JavaScript to C sources.
 #   The implicit rule will then compile them to FOO.xyz.o.
-webgui/gen-%.c:: webgui/% | $(TXT2C)
+src/common/gen-%.c:: webgui/% | $(TXT2C)
 	$(TXT2C) $< $@ $(subst .,_,$(notdir $<))
 
 -include *.d
