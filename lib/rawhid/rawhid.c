@@ -18,10 +18,10 @@
 #include <stdio.h>
 #include <errno.h>
 
-#include "../hid/hidapi.h"
+#include "hid/hidapi.h"
 
 #ifdef WIN32
-#include "../../ARDOPCommonCode/ardopcommon.h"
+#include "common/ardopcommon.h"
 
 /* Simple Raw HID functions for Windows - for use with Teensy RawHID example
 * http://www.pjrc.com/teensy/rawhid.html
