@@ -40,7 +40,7 @@ int _memicmp(unsigned char *a, unsigned char *b, int n);
 
 #define MAX_PENDING_CONNECTS 4
 
-#include "ARDOPC.h"
+#include "common/ARDOPC.h"
 
 #define GetBuff() _GetBuff(__FILE__, __LINE__)
 #define ReleaseBuffer(s) _ReleaseBuffer(s, __FILE__, __LINE__)

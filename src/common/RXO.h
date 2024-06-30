@@ -1,4 +1,4 @@
-#include "ARDOPC.h"
+#include "common/ARDOPC.h"
 
 float RxoComputeDecodeDistance(int * intToneMags, UCHAR bytFrameType);
 BOOL RxoDecodeSessionID(UCHAR bytFrameType, int * intToneMags, float dblMaxDistance);

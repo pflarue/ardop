@@ -2,8 +2,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "ardopcommon.h"
-#include "wav.h"
+#include "common/ardopcommon.h"
+#include "common/wav.h"
 
 // PCM WAV file header
 char WavHeader[] = {

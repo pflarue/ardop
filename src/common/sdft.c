@@ -2,8 +2,8 @@
 #include <complex.h>
 #include <math.h>
 
-#include "../ARDOPCommonCode/ardopcommon.h"
-#include "sdft.h"
+#include "common/ardopcommon.h"
+#include "common/sdft.h"
 
 // For validation/debugging only
 void GoertzelRealImag(short intRealIn[], int intPtr, int N, float m, float * dblReal, float * dblImag);

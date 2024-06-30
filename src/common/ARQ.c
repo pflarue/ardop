@@ -11,7 +11,7 @@
 #pragma comment(lib, "winmm.lib")
 #endif
 
-#include "ARDOPC.h"
+#include "common/ARDOPC.h"
 
 extern unsigned int PKTLEDTimer;
 extern UCHAR bytData[];

@@ -29,8 +29,8 @@ const char ProductName[] = "ardopcf";
 #define closesocket close
 #endif
 
-#include "ARDOPC.h"
-#include "../lib/rockliff/rrs.h"
+#include "common/ARDOPC.h"
+#include "rockliff/rrs.h"
 
 UCHAR bytDataToSend[DATABUFFERSIZE];
 int bytDataToSendLength = 0;

@@ -20,9 +20,9 @@
 
 #define HANDLE int
 
-#include "ardopcommon.h"
-#include "wav.h"
-#include "../lib/rockliff/rrs.h"
+#include "common/ardopcommon.h"
+#include "common/wav.h"
+#include "rockliff/rrs.h"
 
 #define SHARECAPTURE  // if defined capture device is opened and closed for each transission
 

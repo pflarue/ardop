@@ -2,8 +2,8 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include "../ARDOPCommonCode/ardopcommon.h"
-#include "../lib/ws_server/ws_server.h"
+#include "common/ardopcommon.h"
+#include "ws_server/ws_server.h"
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -131,7 +131,7 @@ void WebguiInit() {
 	// These resources are included into the executable as literal strings
 	// so that ardopcf can be run without explicit installation that would
 	// put the corresponding files into predictable directories where they
-	// can easily be found.  See the /ARDOPC/webgui directory for the
+	// can easily be found.  See the /webgui directory for the
 	// original source files and information about how the corresponding
 	// c source files are generated.
 	ws_add_httptarget_data("/", webgui_html, strlen(webgui_html), "text/html");

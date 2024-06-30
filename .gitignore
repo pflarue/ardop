@@ -1,11 +1,10 @@
 # Executables
-/ARDOPC/ardopcf
-/ARDOPC/webgui/txt2c
-/ARDOPC/CalcTemplates
+ardopcf
+CalcTemplates
 /lib/txt2c/txt2c
 
 # temporary version of ardopSamples.c produced by CalcTemplates.
-/ARDOPC/newArdopSampleArrays.c
+newArdopSampleArrays.c
 
 # Log files
 *.log

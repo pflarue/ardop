@@ -5,8 +5,8 @@
 #include <windows.h>
 #endif
 
-#include "ARDOPC.h"
-#include "../ARDOPCommonCode/wav.h"
+#include "common/ARDOPC.h"
+#include "common/wav.h"
 
 unsigned int pttOnTime;
 
