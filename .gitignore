@@ -2,6 +2,7 @@
 /ARDOPC/ardopcf
 /ARDOPC/webgui/txt2c
 /ARDOPC/CalcTemplates
+/lib/txt2c/txt2c
 
 # temporary version of ardopSamples.c produced by CalcTemplates.
 /ARDOPC/newArdopSampleArrays.c

@@ -1,3 +1,0 @@
-This directory contains some files that are tracked as a part of this repository, but which are not directly used to build ardopcf.
-
-webgui_html.c and webgui_js.c in the parent directory are used to build ardopcf.  However, rather than edit them directly if changes are required, it is more convenient to edit webgui.html and webgui.js in this directory, and then run make in this directory to rebuild them.  make in this directory will also first build txt2c if necessary.  This small utility converts any text file into a corresponding c source file which defines a single const char[] string containing the contents of the the text file.
