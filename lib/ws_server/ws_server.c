@@ -202,7 +202,7 @@ static void sha1_block(unsigned char m[64], unsigned int h[5]) {
 	unsigned int k[4] = {0x5a827999, 0x6ed9eba1, 0x8f1bbcdc, 0xca62c1d6};
 	// prepare the message schedule per section 6.1.2 step 1
 	for (int i = 0; i < 16; i++)
-		w[i] = (m[i * 4]<<24) + m[ i * 4 + 1] * 65536
+		w[i] = ((unsigned int)(m[i * 4])<<24) + m[ i * 4 + 1] * 65536
 			+ m[i * 4 + 2]*256 + m[i * 4 + 3];
 	for (int i = 16; i < 80; i++) {
 		t = w[i-3] ^ w[i-8] ^ w[i-14] ^ w[i-16];
