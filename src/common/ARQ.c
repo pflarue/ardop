@@ -276,6 +276,7 @@ void SetARDOPProtocolState(int value)
 		wg_send_issled(0, false);
 		wg_send_irsled(0, false);
 		wg_send_rcall(0, "");
+		bytLastACKedDataFrameType = 0;
 		break;
 
 	case FECRcv:
