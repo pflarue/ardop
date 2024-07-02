@@ -358,7 +358,9 @@ void FSMixFilter2000Hz(short * intMixedSamples, int intMixedSamplesLength)
 	float intFilteredSample = 0;  // Filtered sample
 
 	if (intFilteredMixedSamplesLength < 0)
-		WriteDebugLog(LOGERROR, "Corrupt intFilteredMixedSamplesLength");
+		WriteDebugLog(LOGERROR,
+			"Corrupt intFilteredMixedSamplesLength (%d) in FSMixFilter2000Hz().",
+			intFilteredMixedSamplesLength);
 
 	dblRn = powf(xdblR, xintN);
 
@@ -417,7 +419,9 @@ void FSMixFilter2000Hz(short * intMixedSamples, int intMixedSamplesLength)
 	memmove(intPriorMixedSamples, &intMixedSamples[intMixedSamplesLength - xintN], intPriorMixedSamplesLength * 2);
 
 	if (intFilteredMixedSamplesLength > 5000)
-		WriteDebugLog(LOGERROR, "Corrupt intFilteredMixedSamplesLength");
+		WriteDebugLog(LOGERROR,
+			"Corrupt intFilteredMixedSamplesLength (%d) in FSMixFilter2000Hz().",
+			intFilteredMixedSamplesLength);
 
 }
 
@@ -779,8 +783,10 @@ void ProcessNewSamples(short * Samples, int nSamples)
 
 		intFilteredMixedSamplesLength -= intMFSReadPtr;
 
-			if (intFilteredMixedSamplesLength < 0)
-		WriteDebugLog(LOGDEBUG, "Corrupt intFilteredMixedSamplesLength");
+		if (intFilteredMixedSamplesLength < 0)
+			WriteDebugLog(LOGERROR,
+				"Corrupt intFilteredMixedSamplesLength (%d) at State == AcquireFrameSync.",
+				intFilteredMixedSamplesLength);
 
 
 		memmove(intFilteredMixedSamples,
@@ -840,7 +846,9 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			intFilteredMixedSamplesLength -= intMFSReadPtr;
 
 			if (intFilteredMixedSamplesLength < 0)
-				WriteDebugLog(LOGDEBUG, "Corrupt intFilteredMixedSamplesLength");
+				WriteDebugLog(LOGERROR,
+					"Corrupt intFilteredMixedSamplesLength (%d) at State == AcquireFrameTypeType.",
+					intFilteredMixedSamplesLength);
 
 			memmove(intFilteredMixedSamples,
 				&intFilteredMixedSamples[intMFSReadPtr], intFilteredMixedSamplesLength * 2);
@@ -2170,13 +2178,21 @@ int Acquire4FSKFrameType()
 	int NewType = 0;
 	char Offset[32];
 
-	if ((intFilteredMixedSamplesLength - intMFSReadPtr) < (240 * 10))
-		return -2;  // Check for 12 available 4FSK Symbols (but only 10 are used)
+	// Check for sufficient audio available for 10.5 4FSK Symbols.
+	// Only 10 will nominally be used, but slightly more may be consumed.
+	// Requiring too many excess samples might result in unacceptable
+	// delays in decoding, and thus delayed response.
+	if ((intFilteredMixedSamplesLength - intMFSReadPtr) < (240 * 10.5))
+		return -2;  // Wait for more samples
 
 	if (!DemodFrameType4FSK(intMFSReadPtr, intFilteredMixedSamples, &intToneMags[0]))
 	{
-		Update4FSKConstellation(&intToneMags[0], &intLastRcvdFrameQuality);
-		intMFSReadPtr += (240 * 10);
+		WriteDebugLog(LOGWARNING,
+			"Unexpected return from DemodFrameType4FSK indicating insufficient"
+			" audio samples availale.  intFilteredMixedSamplesLength=%d."
+			" intMFSReadPtr=%d.",
+			intFilteredMixedSamplesLength,
+			intMFSReadPtr);
 		return -1;
 	}
 
@@ -2235,20 +2251,24 @@ BOOL Demod1Car4FSK()
 
 	while (State == AcquireFrame)
 	{
-		if (intFilteredMixedSamplesLength < ((intSampPerSym * 4) + 20))  // allow for correcrions
+		// Check for sufficient audio available for 4.5 4FSK Symbols.
+		// Only 4 will nominally be used, but slightly more may be consumed.
+		if (intFilteredMixedSamplesLength < (intSampPerSym * 4.5))
 		{
 			// Move any unprocessessed data down buffer
 
 			// (while checking process - will use cyclic buffer eventually
 
 			if (intFilteredMixedSamplesLength < 0)
-				WriteDebugLog(LOGERROR, "Corrupt intFilteredMixedSamplesLength");
+				WriteDebugLog(LOGERROR,
+					"Corrupt intFilteredMixedSamplesLength (%d) in Demod1Car4FSK().",
+					intFilteredMixedSamplesLength);
 
 			if (intFilteredMixedSamplesLength > 0)
 				memmove(intFilteredMixedSamples,
 					&intFilteredMixedSamples[Start], intFilteredMixedSamplesLength * 2);
 
-			return FALSE;
+			return FALSE;  // Wait for more samples
 		}
 
 		if (UseSDFT)
@@ -2540,14 +2560,18 @@ BOOL Demod1Car4FSK600()
 
 	while (State == AcquireFrame)
 	{
-		if (intFilteredMixedSamplesLength < ((intSampPerSym * 4) + 20))  // allow for correcrions
+		// Check for sufficient audio available for 4.5 Symbols.
+		// Only 4 will nominally be used, but slightly more may be consumed.
+		if (intFilteredMixedSamplesLength < (intSampPerSym * 4.5))
 		{
 			// Move any unprocessessed data down buffer
 
 			// (while checking process - will use cyclic buffer eventually
 
 			if (intFilteredMixedSamplesLength < 0)
-				WriteDebugLog(LOGDEBUG, "Corrupt intFilteredMixedSamplesLength");
+				WriteDebugLog(LOGERROR,
+					"Corrupt intFilteredMixedSamplesLength (%d) in Demod1Car4FSK600().",
+					intFilteredMixedSamplesLength);
 
 			if (intFilteredMixedSamplesLength > 0)
 				memmove(intFilteredMixedSamples,
@@ -4229,7 +4253,9 @@ void DemodPSK()
 
 	while (State == AcquireFrame)
 	{
-		if (intFilteredMixedSamplesLength < intPSKMode * intSampPerSym + 10)  // allow for a few phase corrections
+		// Check for sufficient audio available for 1.5 Symbols.
+		// Only 1 will nominally be used, but slightly more may be consumed.
+		if (intFilteredMixedSamplesLength < 1.5 * intPSKMode * intSampPerSym)
 		{
 			// Move any unprocessessed data down buffer
 
@@ -4239,14 +4265,16 @@ void DemodPSK()
 				memmove(intFilteredMixedSamples,
 					&intFilteredMixedSamples[Start], intFilteredMixedSamplesLength * 2);
 
-			return;
+			return;  // Wait for more samples
 		}
 
 
 		if (PSKInitDone == 0)  // First time through
 		{
-			if (intFilteredMixedSamplesLength < 2 * intPSKMode * intSampPerSym + 10)
-				return;  // Wait for at least 2 chars worth
+			// Check for sufficient audio available for 2.5 Symbols.
+			// Only 2 will nominally be used, but slightly more may be consumed.
+			if (intFilteredMixedSamplesLength < 2.5 * intPSKMode * intSampPerSym)
+				return;  // Wait for more samples
 
 			InitDemodPSK();
 			intFilteredMixedSamplesLength -= intSampPerSym;
