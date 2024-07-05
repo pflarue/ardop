@@ -215,8 +215,7 @@ void InitValidFrameTypes();
 extern void Generate50BaudTwoToneLeaderTemplate();
 extern BOOL blnDISCRepeating;
 
-BOOL DemodDecode4FSKID(UCHAR bytFrameType, char * strCallID, char * strGridSquare);
-void DeCompressCallsign(char * bytCallsign, char * returned);
+void DeCompressCallsign(const char * bytCallsign, char * returned, size_t returnlen);
 void DeCompressGridSquare(char * bytGS, char * returned);
 void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDecodedOK);
 void ProcessUnconnectedConReqFrame(int intFrameType, UCHAR * bytData);

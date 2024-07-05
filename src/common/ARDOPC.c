@@ -35,9 +35,9 @@ const char ProductName[] = "ardopcf";
 UCHAR bytDataToSend[DATABUFFERSIZE];
 int bytDataToSendLength = 0;
 
-void CompressCallsign(char * Callsign, UCHAR * Compressed);
+void CompressCallsign(const char *Callsign, UCHAR *Compressed);
 void CompressGridSquare(char * Square, UCHAR * Compressed);
-void  ASCIIto6Bit(char * Padded, UCHAR * Compressed);
+void ASCIIto6Bit(const char * Padded, UCHAR * Compressed);
 void GetTwoToneLeaderWithSync(int intSymLen);
 void SendID(BOOL blnEnableCWID);
 void PollReceivedSamples();
@@ -1663,10 +1663,29 @@ void Send5SecTwoTone()
 }
 
 
-void  ASCIIto6Bit(char * Padded, UCHAR * Compressed)
+void ASCIIto6Bit(const char * Padded, UCHAR * Compressed)
 {
 	// Input must be 8 bytes which will convert to 6 bytes of packed 6 bit characters and
 	// inputs must be the ASCII character set values from 32 to 95....
+
+	// Ensure string is exactly 8 characters long, right-padding with spaces
+	char work[9];
+	snprintf(work, sizeof(work), "%-8s", Padded ? Padded : "");
+
+	// Filter invalid characters
+	for (size_t pos = 0; pos < sizeof(work) - 1; ++pos) {
+		if (work[pos] >= ' ' && work[pos] <= '_') {
+			// pass
+		}
+		else if (work[pos] >= 'a' && work[pos] <= 'z') {
+			// to ascii uppercase
+			work[pos] = work[pos] - 32;
+		}
+		else {
+			// filter
+			work[pos] = ' ';
+		}
+	}
 
 	unsigned long long intSum = 0;
 
@@ -1674,7 +1693,7 @@ void  ASCIIto6Bit(char * Padded, UCHAR * Compressed)
 
 	for (i=0; i<4; i++)
 	{
-		intSum = (64 * intSum) + Padded[i] - 32;
+		intSum = (64 * intSum) + work[i] - 32;
 	}
 
 	Compressed[0] = (UCHAR)(intSum >> 16) & 255;
@@ -1685,7 +1704,7 @@ void  ASCIIto6Bit(char * Padded, UCHAR * Compressed)
 
 	for (i=4; i<8; i++)
 	{
-		intSum = (64 * intSum) + Padded[i] - 32;
+		intSum = (64 * intSum) + work[i] - 32;
 	}
 
 	Compressed[3] = (UCHAR)(intSum >> 16) & 255;
@@ -1693,7 +1712,7 @@ void  ASCIIto6Bit(char * Padded, UCHAR * Compressed)
 	Compressed[5] = (UCHAR)intSum & 255;
 }
 
-void Bit6ToASCII(UCHAR * Padded, UCHAR * UnCompressed)
+void Bit6ToASCII(const UCHAR * Padded, UCHAR * UnCompressed)
 {
 	// uncompress 6 to 8
 
@@ -1730,37 +1749,34 @@ void Bit6ToASCII(UCHAR * Padded, UCHAR * UnCompressed)
 
 // Function to compress callsign (up to 7 characters + optional "-"SSID   (-0 to -15 or -A to -Z)
 
-void CompressCallsign(char * inCallsign, UCHAR * Compressed)
+void CompressCallsign(const char * inCallsign, UCHAR * Compressed)
 {
-	char Callsign[10] = "";
-	char Padded[16];
-	int SSID;
-	char * Dash;
+	const char* inp = inCallsign ? inCallsign : "";
+	char work[9];
 
-	memcpy(Callsign, inCallsign, 10);
-	Dash = strchr(Callsign, '-');
+	// split string at SSID separator
+	size_t callsign_len = strcspn(inp, "-");
+	if (callsign_len > 7)
+		callsign_len = 7;
 
-	if (Dash == 0)  // if No SSID
-	{
-		strcpy(Padded, Callsign);
-		strcat(Padded, "    ");
-		Padded[7] = '0';  // "0" indicates no SSID
-	}
-	else
-	{
-		*(Dash++) = 0;
-		SSID = atoi(Dash);
+	// format the non-SSID part, right-padding with spaces
+	snprintf(work, sizeof(work), "%-7.*s0", (int)callsign_len, inp);
 
-		strcpy(Padded, Callsign);
-		strcat(Padded, "    ");
+	// read SSID if present
+	if (callsign_len > 0 && inp[callsign_len] == '-') {
+		char ssid = inp[callsign_len + 1];
+		int ssid_numeric = atoi(&inp[callsign_len + 1]);
+		if (ssid_numeric >= 10 && ssid_numeric <= 15)
+		{
+			// map SSID -10 to -15 to : ; < = > ?
+			ssid = ':' + ssid_numeric - 10;
+		}
 
-		if (SSID >= 10)  // handles special case of -10 to -15 : ; < = > ?
-			Padded[7] = ':' + SSID - 10;
-		else
-			Padded[7] = *(Dash);
+		// the SSID is always the last character of the compression buffer
+		work[7] = ssid;
 	}
 
-	ASCIIto6Bit(Padded, Compressed);  // compress to 8 6 bit characters   6 bytes total
+	ASCIIto6Bit(work, Compressed); // compress to 8 6 bit characters   6 bytes total
 }
 
 // Function to compress Gridsquare (up to 8 characters)
@@ -1780,25 +1796,34 @@ void CompressGridSquare(char * Square, UCHAR * Compressed)
 
 // Function to decompress 6 byte call sign to 7 characters plus optional -SSID of -0 to -15 or -A to -Z
 
-void DeCompressCallsign(char * bytCallsign, char * returned)
+void DeCompressCallsign(const char * bytCallsign, char * returned, size_t returnlen)
 {
-	char bytTest[10] = "";
-	char SSID[8] = "";
+	char work[9] = "";
+	Bit6ToASCII(bytCallsign, work);
 
-	Bit6ToASCII(bytCallsign, bytTest);
+	// the last byte is reserved for the SSID
+	char ssid = work[7];
+	work[7] = '\0';
 
-	memcpy(returned, bytTest, 7);
-	returned[7] = 0;
-	strlop(returned, ' ');  // remove trailing space
+	// trim any padding
+	size_t callsign_len = strcspn(work, " ");
 
-	if (bytTest[7] == '0')  // Value of "0" so No SSID
-		returned[6] = 0;
-	else if (bytTest[7] >= 58 && bytTest[7] <= 63)  // handles special case for -10 to -15
-		sprintf(SSID, "-%d", bytTest[7] - 48);
+	int ssid_numeric = 0;
+	if (ssid == '0') {
+		// no ssid
+		snprintf(returned, returnlen, "%.*s", (int)callsign_len, work);
+	}
+	else if (ssid >= ':' && ssid <= '?')
+	{
+		// numeric ssid
+		ssid_numeric = ssid - ':' + 10;
+		snprintf(returned, returnlen, "%.*s-%d", (int)callsign_len, work, ssid_numeric);
+	}
 	else
-		sprintf(SSID, "-%c", bytTest[7]);
-
-	strcat(returned, SSID);
+	{
+		// alphabetical ssid
+		snprintf(returned, returnlen, "%.*s-%c", (int)callsign_len, work, ssid);
+	}
 }
 
 

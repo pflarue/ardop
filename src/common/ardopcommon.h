@@ -213,8 +213,7 @@ void setProtocolMode(char* strMode);
 extern void Generate50BaudTwoToneLeaderTemplate();
 extern BOOL blnDISCRepeating;
 
-BOOL DemodDecode4FSKID(UCHAR bytFrameType, char * strCallID, char * strGridSquare);
-void DeCompressCallsign(char * bytCallsign, char * returned);
+void DeCompressCallsign(const char * bytCallsign, char * returned, size_t returnedlen);
 void DeCompressGridSquare(char * bytGS, char * returned);
 
 int RSEncode(UCHAR * bytToRS, UCHAR * bytRSEncoded, int MaxErr, int Len);

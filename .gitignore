@@ -2,6 +2,9 @@
 ardopcf
 CalcTemplates
 /lib/txt2c/txt2c
+/test/ardop/*
+!/test/ardop/*.[ch]
+!/test/ardop/*.bin
 
 # temporary version of ardopSamples.c produced by CalcTemplates.
 newArdopSampleArrays.c
@@ -55,3 +58,6 @@ newArdopSampleArrays.c
 *.su
 *.idb
 *.pdb
+
+# Editor garbage
+/.vscode/**

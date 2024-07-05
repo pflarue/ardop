@@ -344,7 +344,7 @@ BOOL CtrlHandler(DWORD fdwCtrlType)
 
 
 
-int main(int argc, char * argv[])
+int platform_main(int argc, char * argv[])
 {
 	TIMECAPS tc;
 	unsigned int     wTimerRes;
