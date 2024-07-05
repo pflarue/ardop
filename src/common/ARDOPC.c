@@ -218,34 +218,44 @@ extern BOOL InitRXO;
 extern bool DeprecationWarningsIssued;
 
 const UCHAR bytValidFrameTypesALL[] = {
-	0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-	16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
-	35, 36, 41, 44, 45,
-	46, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, PINGACK, PING,
+	DataNAKmin, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+	0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+	0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+	0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, DataNAKmax,
+	BREAK, IDLEFRAME, DISCFRAME, END, ConRejBusy, ConRejBW, IDFRAME,
+	ConReq200M, ConReq500M, ConReq1000M, ConReq2000M,
+	ConReq200F, ConReq500F, ConReq1000F, ConReq2000F,
+	ConAck200, ConAck500, ConAck1000, ConAck2000, PINGACK, PING,
 
-	0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46,0x47,0x48,0x49,  // 40 - 4F
+	DataFRAMEmin, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46,0x47,0x48,0x49,  // 40 - 4F
 	0x4A, 0x4B, 0x4C, 0x4D,
 	0x50, 0x51, 0x52, 0x53, 0x54, 0x55,  // 50 - 5F
 	0x60, 0x61, 0x62, 0x63, 0x64, 0x65,  // 60 - 6F
-	0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x7A, 0x7B, 0x7C, 0x7D,  // 70 - 7F
+	0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x7A, 0x7B, 0x7C, DataFRAMEmax,  // 70 - 7F
 
-	208, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234,
-	124, 125, 208, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234,
-	235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248,
-	249, 250, 251, 252, 253, 254, 255
+	DataACKmin, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE7,
+	0xE8, 0xE9, 0xEA, 0xEB, 0xEC, 0xED, 0xEE, 0xEF,
+	0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7,
+	0xF8, 0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE, DataACKmax
 };
 
 const UCHAR bytValidFrameTypesISS[] = {  // ACKs, NAKs, END, DISC, BREAK
 	// NAK
-	0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-	16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+	DataNAKmin, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+	0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+	0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+	0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, DataNAKmax,
 	// BREAK, DISC, or END
 	BREAK, DISCFRAME, END, ConRejBusy, ConRejBW,
 	// Con req and Con ACK
-	49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60,
+	ConReq200M, ConReq500M, ConReq1000M, ConReq2000M,
+	ConReq200F, ConReq500F, ConReq1000F, ConReq2000F,
+	ConAck200, ConAck500, ConAck1000, ConAck2000,
 	// ACK
-	224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239,
-	240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255
+	DataACKmin, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE7,
+	0xE8, 0xE9, 0xEA, 0xEB, 0xEC, 0xED, 0xEE, 0xEF,
+	0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7,
+	0xF8, 0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE, DataACKmax
 };
 
 
@@ -762,10 +772,10 @@ void ardopmain()
 
 const char * Name(UCHAR bytID)
 {
-	if (bytID < 0x20)
+	if (bytID <= DataNAKmax)
 		return strFrameType[0];
-	else if (bytID >= 0xE0)
-		return strFrameType[0xE0];
+	else if (bytID >= DataACKmin)
+		return strFrameType[DataACKmin];
 	else
 		return strFrameType[bytID];
 }
@@ -774,10 +784,10 @@ const char * Name(UCHAR bytID)
 
 const char * shortName(UCHAR bytID)
 {
-	if (bytID < 0x20)
+	if (bytID <= DataNAKmax)
 		return shortFrameType[0];
-	else if (bytID >= 0xE0)
-		return shortFrameType[0xE0];
+	else if (bytID >= DataACKmin)
+		return shortFrameType[DataACKmin];
 	else
 		return shortFrameType[bytID];
 }
@@ -792,7 +802,7 @@ BOOL FrameInfo(UCHAR bytFrameType, int * blnOdd, int * intNumCar, char * strMod,
 
 	// 1 Carrier 4FSK control frames
 
-	if ((bytFrameType >= 0 &&  bytFrameType <= 0x1F) || bytFrameType >= 0xE0)
+	if ((bytFrameType >= DataNAKmin &&  bytFrameType <= DataNAKmax) || bytFrameType >= DataACKmin)
 	{
 		*blnOdd = (1 & bytFrameType) != 0;
 		*intNumCar = 1;
@@ -807,9 +817,9 @@ BOOL FrameInfo(UCHAR bytFrameType, int * blnOdd, int * intNumCar, char * strMod,
 
 		switch(bytFrameType)
 		{
-		case 0x23:
-		case 0x24:
-		case 0x29:
+		case BREAK:  // 0x23
+		case IDLEFRAME:  // 0x24
+		case DISCFRAME:  // 0x29
 
 			*blnOdd = (1 & bytFrameType) != 0;
 			*intNumCar = 1;
@@ -820,9 +830,9 @@ BOOL FrameInfo(UCHAR bytFrameType, int * blnOdd, int * intNumCar, char * strMod,
 			*bytQualThres = 60;
 			break;
 
-		case 0x2C:
-		case 0x2D:
-		case 0x2E:
+		case END:  // 0x2C
+		case ConRejBusy:  // 0x2D
+		case ConRejBW:  // 0x2E
 
 			*blnOdd = (1 & bytFrameType) != 0;
 			*intNumCar = 1;
@@ -833,16 +843,16 @@ BOOL FrameInfo(UCHAR bytFrameType, int * blnOdd, int * intNumCar, char * strMod,
 			*bytQualThres = 60;
 			break;
 
-		case 0x30:
-		case 0x31:
-		case 0x32:
-		case 0x33:
-		case 0x34:
-		case 0x35:
-		case 0x36:
-		case 0x37:
-		case 0x38:
-		case 0x3E:  // Ping
+		case IDFRAME:  // 0x30
+		case ConReq200M:  // 0x31
+		case ConReq500M:
+		case ConReq1000M:
+		case ConReq2000M:
+		case ConReq200F:
+		case ConReq500F:
+		case ConReq1000F:
+		case ConReq2000F:  // 0x36
+		case PING:  // 0x3E
 
 			*blnOdd = (1 & bytFrameType) != 0;
 			*intNumCar = 1;
@@ -853,11 +863,11 @@ BOOL FrameInfo(UCHAR bytFrameType, int * blnOdd, int * intNumCar, char * strMod,
 			*bytQualThres = 50;
 			break;
 
-		case 0x39:
-		case 0x3A:
-		case 0x3B:
-		case 0x3C:
-		case 0x3D:
+		case ConAck200:  // 0x39
+		case ConAck500:
+		case ConAck1000:
+		case ConAck2000:  // 0x3C
+		case PINGACK:  // 0x3D
 
 			*blnOdd = (1 & bytFrameType) != 0;
 			*intNumCar = 1;
@@ -868,7 +878,7 @@ BOOL FrameInfo(UCHAR bytFrameType, int * blnOdd, int * intNumCar, char * strMod,
 			*bytQualThres = 50;
 			break;
 
-		case 0xe0:
+		case DataACKmin:  // 0xE0
 
 			*blnOdd = (1 & bytFrameType) != 0;
 			*intNumCar = 1;
@@ -1125,11 +1135,11 @@ BOOL FrameInfo(UCHAR bytFrameType, int * blnOdd, int * intNumCar, char * strMod,
 		}
 	}
 
-	if (bytFrameType >= 0 && bytFrameType <= 0x1F)
-		strcpy(strType,strFrameType[0]);
+	if (bytFrameType >= DataNAKmin && bytFrameType <= DataNAKmax)
+		strcpy(strType,strFrameType[DataNAKmin]);
 	else
-		if (bytFrameType >= 0xE0)
-			strcpy(strType,strFrameType[0xE0]);
+		if (bytFrameType >= DataACKmin)
+			strcpy(strType,strFrameType[DataACKmin]);
 		else
 			strcpy(strType,strFrameType[bytFrameType]);
 
@@ -1404,22 +1414,22 @@ BOOL EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, enum _A
 		}
 	}
 	if (ARQBandwidth == B200MAX)
-		bytReturn[0] = 0x31;
+		bytReturn[0] = ConReq200M;
 	else if (ARQBandwidth == B500MAX)
-		bytReturn[0] = 0x32;
+		bytReturn[0] = ConReq500M;
 	else if (ARQBandwidth == B1000MAX)
-		bytReturn[0] = 0x33;
+		bytReturn[0] = ConReq1000M;
 	else if (ARQBandwidth == B2000MAX)
-		bytReturn[0] = 0x34;
+		bytReturn[0] = ConReq2000M;
 
 	else if (ARQBandwidth == B200FORCED)
-		bytReturn[0] = 0x35;
+		bytReturn[0] = ConReq200F;
 	else if (ARQBandwidth == B500FORCED)
-		bytReturn[0] = 0x36;
+		bytReturn[0] = ConReq500F;
 	else if (ARQBandwidth == B1000FORCED)
-		bytReturn[0] = 0x37;
+		bytReturn[0] = ConReq1000F;
 	else if (ARQBandwidth == B2000FORCED)
-		bytReturn[0] = 0x38;
+		bytReturn[0] = ConReq2000F;
 	else
 	{
 		// Logs.Exception("[EncodeModulate.EncodeFSK500_1S] Bandwidth error.  Bandwidth = " & strBandwidth)
@@ -1484,8 +1494,8 @@ int Encode4FSKIDFrame(char * Callsign, char * Square, unsigned char * bytreturn)
 		return 0;
 	}
 
-	bytreturn[0] = 0x30;
-	bytreturn[1] = 0x30 ^ 0xFF;
+	bytreturn[0] = IDFRAME;
+	bytreturn[1] = IDFRAME ^ 0xFF;
 
 	// Modified May 9, 2015 to use RS instead of 2 byte CRC.
 
@@ -1526,7 +1536,7 @@ int EncodeConACKwTiming(UCHAR bytFrameType, int intRcvdLeaderLenMs, UCHAR bytSes
 {
 	// Encodes a Connect ACK with one byte Timing info. (Timing info repeated 2 times for redundancy)
 
-	// If intFrameCode < 0x39 Or intFrameCode > 0x3C Then
+	// If intFrameCode < ConAckmin Or intFrameCode > ConAckmax Then
 	//        Logs.Exception("[EncodeConACKwTiming] Illegal Frame code: " & Format(intFrameCode, "X"))
 	//        return Nothing
 	//    End If
@@ -1584,7 +1594,7 @@ int EncodeDATAACK(int intQuality, UCHAR bytSessionID, UCHAR * bytreturn)
 
 	intScaledQuality = max(0, (intQuality / 2) - 19);  // scale quality value to fit 5 bit field of 0 represents Q <= of 38 (pretty poor)
 
-	bytreturn[0] = 0xE0 + intScaledQuality;  // ACKs 0xE0 - 0xFF
+	bytreturn[0] = DataACKmin + intScaledQuality;  // ACKs 0xE0 - 0xFF
 	bytreturn[1] = bytreturn[0] ^ bytSessionID;
 
 	return 2;
@@ -1646,7 +1656,7 @@ void SendID(BOOL blnEnableCWID)
 		p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17]);
 
 
-	Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
+	Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
 
 	if (blnEnableCWID)
 		sendCWID(Callsign, FALSE);
@@ -2051,7 +2061,7 @@ void CheckTimers()
 			WriteDebugLog(LOGERROR, "ERROR: In CheckTimers() sending IDFrame before DIC Invalid EncLen (%d).", EncLen);
 			return;
 		}
-		Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
+		Mod4FSKDataAndPlay(DISCFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
 		dttLastFECIDSent = Now;
 
 		if (AccumulateStats)
@@ -2065,11 +2075,11 @@ void CheckTimers()
 		// Thread.Sleep(2000)
 		ClearDataToSend();
 
-		if ((EncLen = Encode4FSKControl(0x29, bytSessionID, bytEncodedBytes)) <= 0) {
+		if ((EncLen = Encode4FSKControl(DISCFRAME, bytSessionID, bytEncodedBytes)) <= 0) {
 			WriteDebugLog(LOGERROR, "ERROR: In CheckTimers() sending DISC Invalid EncLen (%d).", EncLen);
 			return;
 		}
-		Mod4FSKDataAndPlay(0x29, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
+		Mod4FSKDataAndPlay(DISCFRAME, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 
 		intFrameRepeatInterval = 2000;
 		SetARDOPProtocolState(DISC);
@@ -2126,7 +2136,7 @@ void CheckTimers()
 				WriteDebugLog(LOGERROR, "ERROR: In CheckTimers() sending IDFrame  Invalid EncLen (%d).", EncLen);
 				return;
 			}
-			Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
+			Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
 			dttLastFECIDSent = Now;
 		}
 	}
