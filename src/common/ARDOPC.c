@@ -1199,7 +1199,7 @@ int EncodePSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 
 	for (i = 0; i < intNumCar; i++)  // across all carriers
 	{
-		memset(bytToRS, 0x69, intDataLen + 3 + intRSLen);
+		memset(bytToRS, 0x00, intDataLen + 3 + intRSLen);  // prefill with zeros
 		intCarDataCnt = Length - bytDataToSendLengthPtr;
 
 		if (intCarDataCnt > intDataLen)  // why not > ??
@@ -1296,7 +1296,7 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 
 		for (i = 0; i < intNumCar; i++)  // across all carriers
 		{
-			memset(bytToRS, 0x66, intDataLen + 3 + intRSLen);
+			memset(bytToRS, 0x00, intDataLen + 3 + intRSLen);  // prefill with zeros
 			intCarDataCnt = Length - bytDataToSendLengthPtr;
 
 			if (intCarDataCnt >= intDataLen)  // why not > ??
@@ -1342,7 +1342,7 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 
 	for (i = 0; i < 3; i++)		 // for three blocks of RS data
 	{
-		memset(bytToRS, 0x66, intDataLen / 3  + 3 + intRSLen / 3);
+		memset(bytToRS, 0x00, intDataLen / 3  + 3 + intRSLen / 3);  // prefill with zeros
 		intCarDataCnt = Length - bytDataToSendLengthPtr;
 
 		if (intCarDataCnt >= intDataLen /3 )  // why not > ??
