@@ -136,10 +136,10 @@ VOID DoTrueFalseCmd(char * strCMD, char * ptrParams, BOOL * Value)
 void ProcessCommandFromHost(char * strCMD)
 {
 	char * ptrParams;
-	// cmdCopy expanded from 80 to 2100 to accomodate
+	// cmdCopy expanded from 80 to 3000 to accomodate
 	// TXFRAME with data up to 1024 bytes written as hex
 	// requiring 2 string chars per data byte
-	char cmdCopy[2100] = "";
+	char cmdCopy[3000] = "";
 	char strFault[100] = "";
 	char cmdReply[1024];
 	if (WG_DevMode)

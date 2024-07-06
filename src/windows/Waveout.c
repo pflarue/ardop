@@ -354,6 +354,20 @@ int platform_main(int argc, char * argv[])
 	int rslen_set[] = {2, 4, 8, 16, 32, 36, 50, 64};
 	init_rs(rslen_set, 8);
 
+	char cmdstr[3000] = "";
+	for (int i = 0; i < argc; i++) {
+		if ((int)(sizeof(cmdstr) - strlen(cmdstr))
+			<= snprintf(
+				cmdstr + strlen(cmdstr),
+				sizeof(cmdstr) - strlen(cmdstr),
+				"%s ",
+				argv[i])
+		) {
+			printf("ERROR: cmdstr[%d] insufficient to hold fill command string for logging.\n", sizeof(cmdstr));
+			break;
+		}
+	}
+
 	SetConsoleCtrlHandler((PHANDLER_ROUTINE)CtrlHandler, TRUE);
 
 	if (timeGetDevCaps(&tc, sizeof(TIMECAPS)) != TIMERR_NOERROR)
@@ -381,6 +395,7 @@ int platform_main(int argc, char * argv[])
 		"See https://github.com/pflarue/ardop/blob/master/LICENSE for licence details including\n"
 		"  information about authors of external libraries used and their licenses."
 	);
+	WriteDebugLog(LOGDEBUG, "Command line: %s", cmdstr);
 
 	if (DecodeWav[0])
 	{
