@@ -343,20 +343,46 @@ struct SEM
 
 extern struct SEM Semaphore;
 
-
+// FRAME is appended to some frame types where the frame type
+// is also used to define a state (DISC, IDLE)
+#define DataNAKmin 0x00
+#define DataNAKmax 0x1F
+// 0x20 - 0x22 Unused
 #define BREAK 0x23
 #define IDLEFRAME 0x24
+// 0x25 - 0x28 Unused
 #define DISCFRAME 0x29
+// 0x2A, 0x2B Unused
 #define END 0x2C
 #define ConRejBusy 0x2D
 #define ConRejBW 0x2E
-
+// 0x2F Unused
+#define IDFRAME 0x30
+#define ConReqmin 0x31
+#define ConReq200M 0x31
+#define ConReq500M 0x32
+#define ConReq1000M 0x33
+#define ConReq2000M 0x34
+#define ConReq200F 0x35
+#define ConReq500F 0x36
+#define ConReq1000F 0x37
+#define ConReq2000F 0x38
+#define ConReqmax 0x38
+#define ConAckmin 0x39
 #define ConAck200 0x39
 #define ConAck500 0x3A
 #define ConAck1000 0x3B
 #define ConAck2000 0x3C
+#define ConAckmax 0x3C
 #define PINGACK 0x3D
 #define PING 0x3E
+// 0x3F Unused
+#define DataFRAMEmin 0x40
+// Some values between DataFRAMEmin and DataFRAMEmax are Unused
+#define DataFRAMEmax 0x7D
+// 0x7E - 0xDF Unused
+#define DataACKmin 0xE0
+#define DataACKmax 0xFF
 
 extern const short intTwoToneLeaderTemplate[120];  // holds just 1 symbol (0 ms) of the leader
 extern const short int50BaudTwoToneLeaderTemplate[240];  // holds just 1 symbol (20 ms) of the leader

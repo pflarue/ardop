@@ -296,7 +296,7 @@ sendit:
 				WriteDebugLog(LOGERROR, "ERROR: In GetNextFECFrame() IDFrame Invalid EncLen (%d).", EncLen);
 				return FALSE;
 			}
-			Mod4FSKDataAndPlay(0x30, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
+			Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
 
 			dttLastFECIDSent = Now;
 			return TRUE;

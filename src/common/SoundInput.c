@@ -257,11 +257,11 @@ BOOL DemodQAM();
 
 BOOL IsShortControlFrame(UCHAR bytType)
 {
-	if (bytType <= 0x1F)
+	if (bytType <= DataNAKmax)
 		return TRUE;  // NAK
-	if (bytType == 0x23 || bytType == 0x24 || bytType == 0x29 || bytType == 0x2C || bytType == 0x2D || bytType == 0x2E)
+	if (bytType == BREAK || bytType == IDLEFRAME || bytType == DISCFRAME || bytType == END || bytType == ConRejBusy || bytType == ConRejBW)
 		return TRUE;  // BREAK, IDLE, DISC, END, ConRejBusy, ConRejBW
-	if (bytType >= 0xE0)
+	if (bytType >= DataACKmin)
 		return TRUE;  // ACK
 	return FALSE;
 }
@@ -875,7 +875,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 				wg_send_rxframet(0, 1, Name(intFrameType));
 
 
-				if (ProtocolState == IRStoISS && intFrameType >= 0xe0)
+				if (ProtocolState == IRStoISS && intFrameType >= DataACKmin)
 				{
 					// In this state transition to ISS if  ACK frame
 
@@ -1075,7 +1075,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			goto skipDecode;
 		}
 
-		if (ProtocolState == IRStoISS && intFrameType >= 0xe0)
+		if (ProtocolState == IRStoISS && intFrameType >= DataACKmin)
 		{
 			// In this state transition to ISS if  ACK frame
 
@@ -1127,9 +1127,9 @@ ProcessFrame:
 			{
 				if (IsDataFrame(intFrameType))	// check to see if a data frame
 					ProcessRcvdFECDataFrame(intFrameType, bytData, blnFrameDecodedOK);
-				else if (intFrameType == 0x30)
+				else if (intFrameType == IDFRAME)
 					AddTagToDataAndSendToHost(bytData, "IDF", frameLen);
-				else if (intFrameType >= 0x31 && intFrameType <= 0x38)
+				else if (intFrameType >= ConReqmin && intFrameType <= ConReqmax)
 					ProcessUnconnectedConReqFrame(intFrameType, bytData);
 				else if (intFrameType == PING)
 					ProcessPingFrame(bytData);
@@ -1163,9 +1163,9 @@ ProcessFrame:
 				// If still in DISC monitor it
 
 				if (ProtocolState == DISC && Monitor) {  // allows ARQ mode to operate like FEC when not connected
-					if (intFrameType == 0x30)
+					if (intFrameType == IDFRAME)
 						AddTagToDataAndSendToHost(bytData, "IDF", frameLen);
-					else if (intFrameType >= 0x31 && intFrameType <= 0x38)
+					else if (intFrameType >= ConReqmin && intFrameType <= ConReqmax)
 						ProcessUnconnectedConReqFrame(intFrameType, bytData);
 					else if (IsDataFrame(intFrameType))  // check to see if a data frame
 						ProcessRcvdFECDataFrame(intFrameType, bytData, blnFrameDecodedOK);
@@ -1198,7 +1198,7 @@ ProcessFrame:
 			{
 				if (IsDataFrame(intFrameType))  // check to see if a data frame
 					ProcessRcvdFECDataFrame(intFrameType, bytData, blnFrameDecodedOK);
-				else if (intFrameType == 0x30)
+				else if (intFrameType == IDFRAME)
 					AddTagToDataAndSendToHost(bytData, "ERR", frameLen);
 			}
 			else if (ProtocolMode == RXO)
@@ -1209,7 +1209,7 @@ ProcessFrame:
 			{
 				if (ProtocolState == DISC)  // allows ARQ mode to operate like FEC when not connected
 				{
-					if (intFrameType == 0x30)
+					if (intFrameType == IDFRAME)
 						AddTagToDataAndSendToHost(bytData, "ERR", frameLen);
 
 					else if (IsDataFrame(intFrameType))  // check to see if a data frame
@@ -1998,7 +1998,7 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 	{
 		// This handles the special case of a DISC command received from the prior session (where the station sending DISC did not receive an END).
 
-		if (intIatMinDistance1 == 0x29 && intIatMinDistance3 == 0x29 && ((dblMinDistance1 < 0.3) || (dblMinDistance3 < 0.3)))
+		if (intIatMinDistance1 == DISCFRAME && intIatMinDistance3 == DISCFRAME && ((dblMinDistance1 < 0.3) || (dblMinDistance3 < 0.3)))
 		{
 			snprintf(strDecodeCapture + strlen(strDecodeCapture), sizeof(strDecodeCapture) - strlen(strDecodeCapture),
 				" MD Decode;1 ID=H%X, Type=H29: %s, D1= %.2f, D3= %.2f",
@@ -2084,7 +2084,7 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 				" MD Decode;7 ID=H%X, Type=H%X:%s, D1= %.2f, D3= %.2f",
 				bytSessionID, intIatMinDistance1, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance3);
 
-			if (intIatMinDistance1 >= 0x31 && intIatMinDistance1 <= 0x38 && ((dblMinDistance1 < 0.3) || (dblMinDistance3 < 0.3)))  // Check for ConReq (ISS must have missed previous ConAck
+			if (intIatMinDistance1 >= ConReqmin && intIatMinDistance1 <= ConReqmax && ((dblMinDistance1 < 0.3) || (dblMinDistance3 < 0.3)))  // Check for ConReq (ISS must have missed previous ConAck
 			{
 				dblOffsetLastGoodDecode = dblOffsetHz;
 				dttLastGoodFrameTypeDecode = Now;  // This allows restricting tuning changes to about +/- 4Hz from last dblOffsetHz
@@ -2109,8 +2109,8 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 
 		if (intIatMinDistance1 == intIatMinDistance2)  // matching indexes at minimal distances so high probablity of correct decode.
 		{
-			if ((intIatMinDistance1 >= 0xE0 && intIatMinDistance1 <=0xFF) || (intIatMinDistance1 == 0x23) ||
-				(intIatMinDistance1 == 0x2C) || (intIatMinDistance1 == 0x29))  // Check for critical ACK, BREAK, END, or DISC frames
+			if ((intIatMinDistance1 >= DataACKmin && intIatMinDistance1 <= DataACKmax) || (intIatMinDistance1 == BREAK) ||
+				(intIatMinDistance1 == END) || (intIatMinDistance1 == DISCFRAME))  // Check for critical ACK, BREAK, END, or DISC frames
 			{
 				snprintf(strDecodeCapture + strlen(strDecodeCapture), sizeof(strDecodeCapture) - strlen(strDecodeCapture),
 					" MD Decode;8 ID=H%X, Critical Type=H%X: %s, D1= %.2f, D2= %.2f",
@@ -2209,7 +2209,7 @@ int Acquire4FSKFrameType()
 	else  // not connected and not pending so use &FF (FEC or ARQ unconnected session ID
 		NewType = MinimalDistanceFrameType(&intToneMags[0], 0xFF);
 
-	if ((NewType > 0x30 && NewType < 0x39) || NewType == PING)
+	if ((NewType >= ConReqmin && NewType <= ConReqmax) || NewType == PING)
 		QueueCommandToHost("PENDING");  // early pending notice to stop scanners
 
 	sprintf(Offset, "Offset %5.1f", dblOffsetHz);
@@ -2728,13 +2728,13 @@ BOOL Decode4FSKConReq()
 
 	// Recheck the returned data by reencoding
 
-	if (intFrameType == 0x31)
+	if (intFrameType == ConReq200M)
 		intBW = 200;
-	else if (intFrameType == 0x32)
+	else if (intFrameType == ConReq500M)
 		intBW = 500;
-	else if (intFrameType == 0x33)
+	else if (intFrameType == ConReq1000M)
 		intBW = 1000;
-	else if (intFrameType == 0x34)
+	else if (intFrameType == ConReq2000M)
 		intBW = 2000;
 
 	if (FrameOK)
@@ -3025,7 +3025,7 @@ void DemodulateFrame(int intFrameType)
 
 	// DataACK/NAK and short control frames
 
-	if ((intFrameType >= 0 && intFrameType <= 0x1f) ||  intFrameType == 0xe0)  // DataACK/NAK
+	if ((intFrameType >= DataNAKmin && intFrameType <= DataNAKmax) ||  intFrameType >= DataACKmin)  // DataACK/NAK
 	{
 		// blnDecodeOK = DecodeACKNAK(intFrameType, intRcvdQuality)
 		//  stcStatus.Text = objFrameInfo.Name(intFrameType) & strRcvFrameTag
@@ -3038,7 +3038,7 @@ void DemodulateFrame(int intFrameType)
 		return;
 	}
 
-	if ((intFrameType >= 0x30 && intFrameType <= 0x38) || intFrameType == PING)
+	if (intFrameType == IDFRAME || (intFrameType >= ConReqmin && intFrameType <= ConReqmax) || intFrameType == PING)
 	{
 		// ID and CON Req
 
@@ -3048,10 +3048,10 @@ void DemodulateFrame(int intFrameType)
 
 	switch (intFrameType)
 	{
-		case 0x39:
-		case 0x3A:
-		case 0x3B:
-		case 0x3C:  // Connect ACKs with Timing
+		case ConAck200:
+		case ConAck500:
+		case ConAck1000:
+		case ConAck2000:  // Connect ACKs with Timing
 		case PINGACK:
 
 		Demod1Car4FSK();
@@ -3198,7 +3198,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 	if (CarrierOk[0] != 0 && CarrierOk[0] != 1)
 		CarrierOk[0] = 0;
 
-	if ((intFrameType >= 0 && intFrameType <= 0x1F) || intFrameType >= 0xE0)  // DataACK/NAK
+	if ((intFrameType >= DataNAKmin && intFrameType <= DataNAKmax) || intFrameType >= DataACKmin)  // DataACK/NAK
 	{
 		blnDecodeOK = DecodeACKNAK(intFrameType, &intRcvdQuality);
 		if (blnDecodeOK) {
@@ -3232,10 +3232,10 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 
 	switch (intFrameType)
 	{
-		case 0x39:
-		case 0x3A:
-		case 0x3B:
-		case 0x3C:  // Connect ACKs with Timing
+		case ConAck200:
+		case ConAck500:
+		case ConAck1000:
+		case ConAck2000:  // Connect ACKs with Timing 0x39-0x3C
 
 			blnDecodeOK = Decode4FSKConACK(intFrameType, &intTiming);
 
@@ -3263,9 +3263,9 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			break;
 
 
-		case 0x30:  // ID Frame,
+		case IDFRAME:  // 0x30
 
-			blnDecodeOK = Decode4FSKID(0x30, strIDCallSign, sizeof(strIDCallSign), strGridSQ);
+			blnDecodeOK = Decode4FSKID(IDFRAME, strIDCallSign, sizeof(strIDCallSign), strGridSQ);
 
 			frameLen = sprintf(bytData, "ID:%s %s:" , strIDCallSign, strGridSQ);
 
@@ -3276,14 +3276,14 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 
 			break;
 
-		case 0x31:
-		case 0x32:
-		case 0x33:
-		case 0x34:
-		case 0x35:
-		case 0x36:
-		case 0x37:
-		case 0x38:
+		case ConReq200M:
+		case ConReq500M:
+		case ConReq1000M:
+		case ConReq2000M:
+		case ConReq200F:
+		case ConReq500F:
+		case ConReq1000F:
+		case ConReq2000F:  // 0x31-0x38
 
 			blnDecodeOK = Decode4FSKConReq();
 			if (blnDecodeOK) {
@@ -3455,7 +3455,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 		WriteDebugLog(LOGINFO, "[DecodeFrame] Frame: %s Decode PASS,  Quality= %d,  RS fixed %d (of %d max).", Name(intFrameType),  intLastRcvdFrameQuality, totalRSErrors, (intRSLen / 2) * intNumCar);
 		wg_send_quality(0, intLastRcvdFrameQuality, totalRSErrors, (intRSLen / 2) * intNumCar);
 #ifdef PLOTCONSTELLATION
-		if (intFrameType >= 0x30 && intFrameType <= 0x38)
+		if (intFrameType == IDFRAME || (intFrameType >= ConReqmin && intFrameType <= ConReqmax))
 			DrawDecode(lastGoodID);  // ID or CONREQ
 		else
 			DrawDecode("PASS");
@@ -3487,7 +3487,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 
 returnframe:
 
-	if (blnDecodeOK && intFrameType >= 0x40 && intFrameType <= 0x7F)
+	if (blnDecodeOK && intFrameType >= DataFRAMEmin && intFrameType <= DataFRAMEmax)
 		bytLastReceivedDataFrameType = intFrameType;
 
 //	if (blnDecodeOK)
