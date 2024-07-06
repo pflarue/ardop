@@ -62,7 +62,7 @@ int hex2int(char *ptr, unsigned int len, unsigned char *output) {
 			else if (half < 'A' || half > 'f' || (half > 'F' && half < 'a'))
 				return (1);
 			else
-				half &= 0x07;
+				half = 0x09 + (half & 0x07);
 			output[i] = (output[i] << 4) + half;
 		}
 	}
