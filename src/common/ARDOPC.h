@@ -134,6 +134,7 @@ int * intBaud, int * intDataLen, int * intRSLen, UCHAR * bytQualThres, char * st
 void ClearDataToSend();
 int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigned char * bytEncodedBytes);
 int EncodePSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigned char * bytEncodedBytes);
+int EncodePing(char * strMyCallsign, char * strTargetCallsign, UCHAR * bytReturn);
 int Encode4FSKIDFrame(char * Callsign, char * Square, unsigned char * bytreturn);
 int EncodeDATAACK(int intQuality, UCHAR bytSessionID, UCHAR * bytreturn);
 int EncodeDATANAK(int intQuality , UCHAR bytSessionID, UCHAR * bytreturn);
@@ -189,6 +190,8 @@ int GetNextFrameData(int * intUpDn, UCHAR * bytFrameTypeToSend, UCHAR * strMod, 
 void SendData();
 int ComputeInterFrameInterval(int intRequestedIntervalMS);
 int Encode4FSKControl(UCHAR bytFrameType, UCHAR bytSessionID, UCHAR * bytreturn);
+int EncodeConACKwTiming(UCHAR bytFrameType, int intRcvdLeaderLenMs, UCHAR bytSessionID, UCHAR * bytreturn);
+int EncodePingAck(int bytFrameType, int intSN, int intQuality, UCHAR * bytreturn);
 VOID WriteExceptionLog(const char * format, ...);
 void SaveQueueOnBreak();
 VOID Statsprintf(const char * format, ...);
@@ -250,8 +253,6 @@ extern int WaterfallActive;
 extern int SpectrumActive;
 extern unsigned int PKTLEDTimer;
 
-extern char stcLastPingstrSender[10];
-extern char stcLastPingstrTarget[10];
 extern int stcLastPingintRcvdSN;
 extern int stcLastPingintQuality;
 extern time_t stcLastPingdttTimeReceived;
@@ -393,9 +394,12 @@ extern const short intFSK50bdCarTemplate[4][240];  // Template for 4FSK carriers
 extern const short intFSK100bdCarTemplate[20][120];  // Template for 4FSK carriers spaced at 100 Hz, 100 baud
 extern const short intFSK600bdCarTemplate[4][20];  // Template for 4FSK carriers spaced at 600 Hz, 600 baud  (used for FM only)
 
+#define CALL_BUF_SIZE 10  // size of buffer for callsign strings
+#define AUXCALLS_ALEN 10  // length of AuxCalls array
+#define COMP_SIZE 6  // size of compressed callsign or gridsquare
 // Config Params
 extern char GridSquare[9];
-extern char Callsign[10];
+extern char Callsign[CALL_BUF_SIZE];
 extern BOOL wantCWID;
 extern BOOL CWOnOff;
 extern int LeaderLength;
@@ -497,7 +501,7 @@ extern BOOL AccumulateStats;
 extern unsigned char bytEncodedBytes[1800];
 extern int EncLen;
 
-extern char AuxCalls[10][10];
+extern char AuxCalls[AUXCALLS_ALEN][CALL_BUF_SIZE];
 extern int AuxCallsLength;
 
 extern int bytValidFrameTypesLength;
@@ -589,6 +593,6 @@ extern int initMode;  // 0 - 4PSK 1 - 8PSK 2 = 16QAM
 
 // Has to follow enum defs
 
-BOOL EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, enum _ARQBandwidth ARQBandwidth, UCHAR * bytReturn);
+int EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, enum _ARQBandwidth ARQBandwidth, UCHAR * bytReturn);
 
 #endif

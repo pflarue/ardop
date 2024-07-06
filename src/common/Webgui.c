@@ -27,8 +27,8 @@ extern BOOL blnPending;
 extern BOOL NeedTwoToneTest;
 extern BOOL NeedID;
 extern BOOL WG_DevMode;
-extern char Callsign[10];
-extern char strRemoteCallsign[10];
+extern char Callsign[CALL_BUF_SIZE];
+extern char strRemoteCallsign[CALL_BUF_SIZE];
 extern float wS1;
 int ExtractARQBandwidth();
 void ProcessCommandFromHost(char * strCMD);
@@ -452,8 +452,8 @@ int wg_send_avglen(int cnum) {
 
 // Provide a zero length string to clear remote callsign.
 int wg_send_rcall(int cnum, char *call) {
-	char msg[24];  // should be more than enough
-	if (strlen(call) > sizeof(msg) - 3) {
+	char msg[CALL_BUF_SIZE + 2];
+	if (strlen(call) >= CALL_BUF_SIZE) {
 		WriteDebugLog(LOGWARNING, "Remote callsign (%s) too long for wg_send_rcall().", call);
 		return (0);
 	}
@@ -463,8 +463,8 @@ int wg_send_rcall(int cnum, char *call) {
 
 // Provide a zero length string to clear my callsign.
 int wg_send_mycall(int cnum, char *call) {
-	char msg[24];  // should be more than enough
-	if (strlen(call) > sizeof(msg) - 3) {
+	char msg[CALL_BUF_SIZE + 2];
+	if (strlen(call) >= CALL_BUF_SIZE) {
 		WriteDebugLog(LOGWARNING, "My callsign (%s) too long for wg_send_mycall().", call);
 		return (0);
 	}
@@ -770,7 +770,9 @@ void WebguiPoll() {
 				wg_send_msg(cnum, "D|", 2);
 			break;
 		case '2':
-			if (ProtocolState == DISC)
+			if (ProtocolMode == RXO)
+				wg_send_alert(cnum, "Cannot transmit in RXO ProtocolMode.");
+			else if (ProtocolState == DISC)
 				NeedTwoToneTest = true;
 			else
 				wg_send_alert(cnum, "Cannot send Two Tone Test from ProtocolState = %s.",
@@ -791,7 +793,9 @@ void WebguiPoll() {
 			ProcessCommandFromHost(tmpdata);
 			break;
 		case 'I':
-			if (ProtocolState != DISC)
+			if (ProtocolMode == RXO)
+				wg_send_alert(cnum, "Cannot transmit in RXO ProtocolMode.");
+			else if (ProtocolState != DISC)
 				wg_send_alert(cnum, "Cannot send ID from ProtocolState = %s.",
 					ARDOPStates[ProtocolState]);
 			else if (Callsign[0] == 0x00)

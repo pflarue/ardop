@@ -58,7 +58,7 @@ extern const short FrameSize[256];
 
 // ARQ State Variables
 
-char AuxCalls[10][10] = {0};
+char AuxCalls[AUXCALLS_ALEN][CALL_BUF_SIZE] = {0};
 int AuxCallsLength = 0;
 
 int intBW;  // Requested connect speed
@@ -75,9 +75,9 @@ const char ARQSubStates[10][11] = {
 	"IRSConAck", "IRSData", "IRSBreak", "IRSfromISS", "DISCArqEnd"
 };
 
-char strRemoteCallsign[10];
-char strLocalCallsign[10];
-char strFinalIDCallsign[10];
+char strRemoteCallsign[CALL_BUF_SIZE];
+char strLocalCallsign[CALL_BUF_SIZE];
+char strFinalIDCallsign[CALL_BUF_SIZE];
 
 UCHAR bytLastARQSessionID;
 BOOL blnEnbARQRpt;
@@ -132,7 +132,6 @@ int intACKctr = 0;
 UCHAR bytLastACKedDataFrameType;
 
 int Encode4FSKControl(UCHAR bytFrameType, UCHAR bytSessionID, UCHAR * bytreturn);
-int EncodeConACKwTiming(UCHAR bytFrameType, int intRcvdLeaderLenMs, UCHAR bytSessionID, UCHAR * bytreturn);
 int IRSNegotiateBW(int intConReqFrameType);
 int GetNextFrameData(int * intUpDn, UCHAR * bytFrameTypeToSend, UCHAR * strMod, BOOL blnInitialize);
 BOOL CheckForDisconnect();
@@ -497,9 +496,13 @@ BOOL GetNextARQFrame()
 
 UCHAR GenerateSessionID(char * strCallingCallSign, char *strTargetCallsign)
 {
-	char bytToCRC[20];
+	char bytToCRC[CALL_BUF_SIZE*2];
 
-	int Len = sprintf(bytToCRC, "%s%s", strCallingCallSign, strTargetCallsign);
+	if (snprintf(bytToCRC, sizeof(bytToCRC), "%s%s", strCallingCallSign, strTargetCallsign) >= (int)sizeof(bytToCRC))
+		WriteDebugLog(LOGWARNING,
+			"WARNING: Excessive length of callsigns ('%s', '%s') passed to"
+			" GenerateSessionID() has probably resulted in an invalid SessionID.",
+			strCallingCallSign, strTargetCallsign);
 
 	UCHAR ID = GenCRC8(bytToCRC);
 
