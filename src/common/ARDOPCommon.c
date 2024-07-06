@@ -89,7 +89,7 @@ char DecodeWav[256] = "";  // Pathname of WAV file to decode.
 // HostCommands may contain one or more semicolon separated host commands
 // provided as a command line parameter.  These are to be interpreted at
 // startup of ardopcf as if they were issued by a connected host program
-char HostCommands[2048] = "";
+char HostCommands[3000] = "";
 bool DeprecationWarningsIssued = false;
 
 int PTTMode = PTTRTS;  // PTT Control Flags.
@@ -240,6 +240,10 @@ char HelpScreen[] =
 
 void processargs(int argc, char * argv[])
 {
+	// Since the log directory and log levels have not yet been set, don't
+	// write to the log in this function.  Instead, print warnings and errors
+	// to the console.
+
 	int val;
 	UCHAR * ptr1;
 	UCHAR * ptr2;
@@ -250,6 +254,7 @@ void processargs(int argc, char * argv[])
 		int option_index = 0;
 
 		c = getopt_long(argc, argv, "l:H:v:V:c:p:g::k:u:e:G:x:hLRyt:rzwTd:nsA", long_options, &option_index);
+
 
 		// Check for end of operation or error
 		if (c == -1)
@@ -271,7 +276,7 @@ void processargs(int argc, char * argv[])
 
 		case 'H':
 			if (strlen(optarg) >= sizeof(HostCommands)) {
-				printf("ERROR: --hostcommands (or -H) argument too long.  Ignoring this parameter.\r");
+				printf("ERROR: --hostcommands (or -H) argument too long.  Ignoring this parameter.\n");
 				break;
 			}
 			strcpy(HostCommands, optarg);
@@ -282,7 +287,7 @@ void processargs(int argc, char * argv[])
 			break;
 
 		case 'v':
-			WriteDebugLog(LOGERROR,
+			printf(
 				"*********************************************************************\n"
 				"* WARNING: The -v and --verboselog parameters are DEPRECATED.  They *\n"
 				"* will be eliminated in a future release of ardopcf.  So, their use *\n"
@@ -302,7 +307,7 @@ void processargs(int argc, char * argv[])
 			break;
 
 		case 'V':
-			WriteDebugLog(LOGERROR,
+			printf(
 				"*********************************************************************\n"
 				"* WARNING: The -V and --verboseconsole parameters are DEPRECATED.   *\n"
 				"* They will be eliminated in a future release of ardopcf.  So,      *\n"
@@ -332,10 +337,10 @@ void processargs(int argc, char * argv[])
 
 			ptr1 = optarg;
 			ptr2 = PTTOnCmd;
-
 			if (ptr1 == NULL)
+
 			{
-				printf("RADIOPTTON command string missing\r");
+				printf("RADIOPTTON command string missing\n");
 				break;
 			}
 
@@ -365,7 +370,7 @@ void processargs(int argc, char * argv[])
 
 			if (ptr1 == NULL)
 			{
-				printf("RADIOPTTOFF command string missing\r");
+				printf("RADIOPTTOFF command string missing\n");
 				break;
 			}
 
@@ -429,7 +434,7 @@ void processargs(int argc, char * argv[])
 			break;
 
 		case 'x':
-			WriteDebugLog(LOGERROR,
+			printf(
 				"*********************************************************************\n"
 				"* WARNING: The -x and --leaderlength parameters are DEPRECATED.     *\n"
 				"* They will be eliminated in a future release of ardopcf.  So,      *\n"
@@ -442,7 +447,7 @@ void processargs(int argc, char * argv[])
 			break;
 
 		case 't':
-			WriteDebugLog(LOGERROR,
+			printf(
 				"*********************************************************************\n"
 				"* WARNING: The -t and --trailerlength parameters are DEPRECATED.    *\n"
 				"* They will be eliminated in a future release of ardopcf.  So,      *\n"
@@ -455,7 +460,7 @@ void processargs(int argc, char * argv[])
 			break;
 
 		case 'r':
-			WriteDebugLog(LOGERROR,
+			printf(
 				"*********************************************************************\n"
 				"* WARNING: The -r and --receiveonly parameters are DEPRECATED.      *\n"
 				"* They will be eliminated in a future release of ardopcf.  So,      *\n"
@@ -479,7 +484,7 @@ void processargs(int argc, char * argv[])
 			break;
 
 		case 'n':
-			WriteDebugLog(LOGERROR,
+			printf(
 				"*********************************************************************\n"
 				"* WARNING: The -n and --twotonetest parameters are DEPRECATED.      *\n"
 				"* They will be eliminated in a future release of ardopcf.  So,      *\n"
@@ -533,27 +538,27 @@ void processargs(int argc, char * argv[])
 		WG_DevMode = TRUE;
 	}
 	if (HostPort[0] != 0x00 && wg_port == atoi(HostPort)) {
-		WriteDebugLog(LOGERROR,
+		printf(
 			"WebGui port (%d) may not be the same as host port (%s)",
 			wg_port, HostPort);
 		exit(0);
 	}
 	else if (HostPort[0] != 0x00 && wg_port == atoi(HostPort) + 1) {
-		WriteDebugLog(LOGERROR,
+		printf(
 			"WebGui port (%d) may not be one greater than host port (%s)"
 			" since that is used as the host data port.",
 			wg_port, HostPort);
 		exit(0);
 	}
 	else if (wg_port == 8515) {
-		WriteDebugLog(LOGERROR,
+		printf(
 			"WebGui port (%d) may not be equal to the default host port (8515)"
 			" when an alternative host port is not specified.",
 			wg_port);
 		exit(0);
 	}
 	else if (wg_port == 8516) {
-		WriteDebugLog(LOGERROR,
+		printf(
 			"WebGui port (%d) may not be equal to one greater than the default"
 			" host port (8515 + 1 = 8516) when an alternative host port is not"
 			" specified since that is used as the host data port.",
