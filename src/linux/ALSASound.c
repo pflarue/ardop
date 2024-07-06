@@ -1119,9 +1119,6 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 		playhandle = NULL;
 	}
 
-	strcpy(SavedPlaybackDevice, PlaybackDevice);  // Saved so we can reopen in error recovery
-	SavedPlaybackRate = m_sampleRate;
-
 	strcpy(buf1, PlaybackDevice);
 
 	ptr = strchr(buf1, ' ');
@@ -1328,9 +1325,6 @@ int OpenSoundCapture(char * CaptureDevice, int m_sampleRate, char * ErrorMsg)
 		rechandle = NULL;
 	}
 
-	strcpy(SavedCaptureDevice, CaptureDevice);  // Saved so we can reopen in error recovery
-	SavedCaptureRate = m_sampleRate;
-
 	strcpy(buf1, CaptureDevice);
 
 	ptr = strchr(buf1, ' ');
@@ -1464,6 +1458,8 @@ int OpenSoundCard(char * CaptureDevice, char * PlaybackDevice, int c_sampleRate,
 	if (UseLeftTX == 0 || UseRightTX == 0)
 		Channels = 2;  // L or R implies stereo
 
+	strcpy(SavedPlaybackDevice, PlaybackDevice);  // Saved so we can reopen in error recovery
+	SavedPlaybackRate = p_sampleRate;
 	if (OpenSoundPlayback(PlaybackDevice, p_sampleRate, Channels, ErrorMsg))
 	{
 #ifdef SHARECAPTURE
@@ -1477,6 +1473,9 @@ int OpenSoundCard(char * CaptureDevice, char * PlaybackDevice, int c_sampleRate,
 		}
 #endif
 		Debugprintf("Opening Capture Device %s Rate %d", CaptureDevice, c_sampleRate);
+
+		strcpy(SavedCaptureDevice, CaptureDevice);  // Saved so we can reopen in error recovery
+		SavedCaptureRate = c_sampleRate;
 		return OpenSoundCapture(CaptureDevice, c_sampleRate, ErrorMsg);
 	}
 	else

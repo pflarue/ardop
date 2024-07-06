@@ -147,9 +147,14 @@ void ProcessCommandFromHost(char * strCMD)
 
 	strFault[0] = 0;
 
-	memcpy(cmdCopy, strCMD, sizeof(cmdCopy));  // save before we truncate or split it up
+	if (strlen(strCMD) >= sizeof(cmdCopy)) {
+		WriteDebugLog(LOGERROR,
+			"Host command too long to process (%d).  Ignoring. '%.40s...'",
+			strlen(strCMD), strCMD);
+		return;
+	}
 
-	strCMD[79] = 0;  // in case cmd handler gets garbage
+	memcpy(cmdCopy, strCMD, strlen(strCMD) + 1);  // save before we uppercase or split it up
 
 	_strupr(strCMD);
 
