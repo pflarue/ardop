@@ -52,6 +52,7 @@ OBJS = \
 	src/common/FFT.o \
 	src/common/HostInterface.o \
 	src/common/Modulate.o \
+	src/common/Packed6.o \
 	src/common/RXO.o \
 	src/common/sdft.o \
 	src/common/SoundInput.o \
@@ -69,6 +70,7 @@ OBJS_EXE = \
 # unit test executables
 TESTS = \
 	test/ardop/test_ARDOPC \
+	test/ardop/test_Packed6 \
 
 # unit test common code
 TEST_OBJS_COMMON = \
