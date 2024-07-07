@@ -562,6 +562,13 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 		return bytRawData[0];  // don't do it again
 	}
 
+	// An earlier version did CheckCRC16FrameType() here, before rs_correct.
+	// While unlikely, a case was encountered in which this returned True, even
+	// though bytRawData was corrupted.  However, rs_correct() was able to
+	// successfully correct it.  So, always do rs_correct() before
+	// CheckCRC16FrameType().  The increased computational burden is relatively
+	// low, and it reduces the likelyhood of an undetected error.
+	/*
 	if (CheckCRC16FrameType(bytRawData, intDataLen + 1, bytFrameType))  // No RS correction needed
 	{
 		// return the actual data
@@ -571,6 +578,7 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 		CarrierOk[Carrier] = TRUE;
 		return bytRawData[0];
 	}
+	*/
 
 	// Try correcting with RS Parity
 	NErrors = rs_correct(bytRawData, intDataLen + 3 + intRSLen, intRSLen, true, false);
@@ -584,7 +592,7 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 		// Unfortunately, Reed Solomon correction will sometimes return a
 		// non-negative result indicating that the data is OK when it is not.
 		// This is most likely to occur if the number of errors exceeds
-		// intRSLen.  However, espectially for small intRSLen, it may also
+		// intRSLen.  However, especially for small intRSLen, it may also
 		// occur even if the number of errors is less than or equal to
 		// intRSLen.  The test for invalid corrections in the padding bytes
 		// performed by rs_correct() can reduce the likelyhood of this,
