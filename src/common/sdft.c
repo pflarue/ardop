@@ -344,17 +344,31 @@ int sdft(short * intSamples, int intToneMags[4096], int *intToneMagsIndex, int i
 			peak_index_var_sum = sdft_var_sum[snum];
 		}
 	}
-	/*
-	If decision_index based on leader/sync and prior symbols is already
-	correct, then peak_index will be equal to intDftLen / 2.  If
-	not, then adjust decision_index to be closer to peak_index.
-	*/
-	// Use +0.5 so that implicit conversion from float to int converts
-	// to the nearest int rather than always rounding down.
-	decision_index = 0.5 + (
-		intDftLen / 2
-		+ decision_damping*(peak_index - intDftLen / 2)
-	);
+	if (peak_index_var_sum - sdft_var_sum[intDftLen / 2 - search_dist + 1]
+		< (peak_index_var_sum / 20)
+		|| peak_index_var_sum - sdft_var_sum[intDftLen / 2 + search_dist]
+		< (peak_index_var_sum / 20))
+	{
+		// If the sdft_var_sum at peak_index is not significantly greater than
+		// the values at the ends of the search range, it is probably because
+		// one or both of the adjacent symbols is the same as this symbol,
+		// preventing the formation of a clear local maximum.  In this case,
+		// do not adjust decision index.  Keep it at intDftLen, the value
+		// predicted by prior symbols which did show clearer results.
+		decision_index = intDftLen / 2;
+	} else {
+		/*
+		If decision_index based on leader/sync and prior symbols is already
+		correct, then peak_index will be equal to intDftLen / 2.  If
+		not, then adjust decision_index to be closer to peak_index.
+		*/
+		// Use +0.5 so that implicit conversion from float to int converts
+		// to the nearest int rather than always rounding down.
+		decision_index = 0.5 + (
+			intDftLen / 2
+			+ decision_damping*(peak_index - intDftLen / 2)
+		);
+	}
 
 	// Put results from decision_index into intToneMags[].
 	// The values in intToneMags[] are sdft_s magnitude squared.
