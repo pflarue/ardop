@@ -389,7 +389,7 @@ int platform_main(int argc, char * argv[])
 		sprintf(&LogName[2][0], "%s/%s", LogDir, "ARDOPSession");
 	}
 
-	WriteDebugLog(LOGALERT, "%s Version %s (https://www.github.com/pflarue/ardop)", ProductName, ProductVersion);
+	WriteDebugLog(LOGALERT, "\n\n%s Version %s (https://www.github.com/pflarue/ardop)", ProductName, ProductVersion);
 	WriteDebugLog(LOGALERT, "Copyright (c) 2014-2024 Rick Muething, John Wiseman, Peter LaRue");
 	WriteDebugLog(LOGALERT,
 		"See https://github.com/pflarue/ardop/blob/master/LICENSE for licence details including\n"

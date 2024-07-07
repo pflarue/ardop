@@ -553,7 +553,7 @@ int platform_main(int argc, char * argv[])
 
 	setlinebuf(stdout);  // So we can redirect output to file and tail
 
-	Debugprintf("%s Version %s (https://www.github.com/pflarue/ardop)", ProductName, ProductVersion);
+	Debugprintf("\n\n%s Version %s (https://www.github.com/pflarue/ardop)", ProductName, ProductVersion);
 	Debugprintf("Copyright (c) 2014-2024 Rick Muething, John Wiseman, Peter LaRue");
 	Debugprintf(
 		"See https://github.com/pflarue/ardop/blob/master/LICENSE for licence details including\n"
