@@ -99,8 +99,9 @@ char strMod[16] = "";
 UCHAR bytMinQualThresh;
 int intPSKMode;
 
-#define MAX_RAW_LENGTH	256  // I think! Max length of an RS block
-#define MAX_DATA_LENGTH	8 * 128  // I think! 16QAM.2000.100
+#define MAX_RAW_LENGTH 256  // I think! Max length of an RS block
+// 16QAM.2000.100 requires 8*128.  Add 1.
+#define MAX_DATA_LENGTH 8 * 128 + 1
 
 // obsolete versions of this code accommodated multi-carrier FSK modes, for
 // which intToneMags was intToneMags[4][16 * MAX_RAW_LENGTH]
