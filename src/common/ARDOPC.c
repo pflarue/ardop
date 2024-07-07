@@ -2019,8 +2019,6 @@ void GenCRC16FrameType(char * Data, int Length, UCHAR bytFrameType)
 
 // Function to compute a 16 bit CRC value and check it against the last 2 bytes of Data (the CRC) XORing LS byte with bytFrameType..
 
-unsigned short int compute_crc(unsigned char *buf,int len);
-
 BOOL  CheckCRC16FrameType(unsigned char * Data, int Length, UCHAR bytFrameType)
 {
 	// returns TRUE if CRC matches, else FALSE
@@ -2028,8 +2026,6 @@ BOOL  CheckCRC16FrameType(unsigned char * Data, int Length, UCHAR bytFrameType)
 	// intSeed is the seed value for the shift register and must be in the range 0-0xFFFF
 
 	unsigned int CRC = GenCRC16(Data, Length);
-	unsigned short CRC2 =  compute_crc(Data, Length);
-	CRC2 ^= 0xffff;
 
 	// Compare the register with the last two bytes of Data (the CRC)
 
