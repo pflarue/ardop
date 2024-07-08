@@ -6,8 +6,15 @@ CalcTemplates
 !/test/ardop/*.[ch]
 !/test/ardop/*.bin
 
+# Python tests may write a variety of temporary files to /test/python/tmp/
+/test/python/tmp/*
+
 # temporary version of ardopSamples.c produced by CalcTemplates.
 newArdopSampleArrays.c
+
+# python bytecode
+/test/python/__pycaches__
+*.pyc
 
 # Log files
 *.log
