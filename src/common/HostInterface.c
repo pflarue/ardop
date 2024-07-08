@@ -23,7 +23,7 @@ extern BOOL NeedID;  // SENDID Command Flag
 extern BOOL NeedConReq;  // ARQCALL Command Flag
 extern BOOL NeedPing;
 extern BOOL PingCount;
-extern char ConnectToCall[16];
+extern char ConnectToCall[CALL_BUF_SIZE];
 extern enum _ARQBandwidth CallBandwidth;
 extern int extraDelay ;  // Used for long delay paths eg Satellite
 extern BOOL WG_DevMode;
@@ -816,7 +816,7 @@ void ProcessCommandFromHost(char * strCMD)
 
 		AuxCallsLength = 0;
 
-		while (ptr && AuxCallsLength < 10)
+		while (ptr && AuxCallsLength < AUXCALLS_ALEN)
 		{
 			if (CheckValidCallsignSyntax(ptr))
 				strcpy(AuxCalls[AuxCallsLength++], ptr);

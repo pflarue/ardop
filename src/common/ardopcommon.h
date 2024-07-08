@@ -1,4 +1,4 @@
-
+#include "common/ARDOPC.h"
 
 #ifndef ARDOPCOMMONDEFINED
 #define ARDOPCOMMONDEFINED
@@ -251,8 +251,6 @@ extern int WaterfallActive;
 extern int SpectrumActive;
 extern unsigned int PKTLEDTimer;
 
-extern char stcLastPingstrSender[10];
-extern char stcLastPingstrTarget[10];
 extern int stcLastPingintRcvdSN;
 extern int stcLastPingintQuality;
 extern time_t stcLastPingdttTimeReceived;
@@ -331,7 +329,7 @@ extern struct SEM Semaphore;
 
 // Config Params
 extern char GridSquare[9];
-extern char Callsign[10];
+extern char Callsign[CALL_BUF_SIZE];
 extern BOOL wantCWID;
 extern BOOL CWOnOff;
 extern int LeaderLength;
@@ -432,7 +430,7 @@ extern BOOL AccumulateStats;
 
 extern int EncLen;
 
-extern char AuxCalls[10][10];
+extern char AuxCalls[AUXCALLS_ALEN][CALL_BUF_SIZE];
 extern int AuxCallsLength;
 
 extern int bytValidFrameTypesLength;

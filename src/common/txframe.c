@@ -11,72 +11,13 @@
 #include <stdio.h>
 #include <string.h>
 
-#define FALSE 0  // defined in ARDOPC.h
-#define TRUE 1  // defined in ARDOPC.h
-#define VOID void  // defined in ARDOPC.h
-typedef unsigned char UCHAR;  // defined in ARDOPC.h
-typedef int BOOL;  // defined in ARDOPC.h
-#define LOGERROR 3  // defined in ARDOPC.h
-#define LOGWARNING 4  // defined in ARDOPC.h
-#define LOGDEBUG 7  // defined in ARDOPC.h
+#include "common/ARDOPC.h"
 
-
-#define BREAK 0x23  // defined in ARDOPC.h
-#define IDLEFRAME 0x24  // defined in ARDOPC.h
-#define DISCFRAME 0x29  // defined in ARDOPC.h
-#define END 0x2C  // defined in ARDOPC.h
-#define ConRejBusy 0x2D  // defined in ARDOPC.h
-#define ConRejBW 0x2E  // defined in ARDOPC.h
-
-#define ConAck200 0x39  // defined in ARDOPC.h
-#define ConAck500 0x3A  // defined in ARDOPC.h
-#define ConAck1000 0x3B  // defined in ARDOPC.h
-#define ConAck2000 0x3C  // defined in ARDOPC.h
-#define PINGACK 0x3D  // defined in ARDOPC.h
-#define PING 0x3E  // defined in ARDOPC.h
-
-extern const char strFrameType[256][18];  // defined in ARDOPC.c
-extern int LeaderLength;  // defined in ARDOPC.c
 extern int intLastRcvdFrameQuality;  // defined in ARDOPC.c
-
-extern unsigned char bytEncodedBytes[1800];  // defined in ARDOPC.c, extern in ARDOPC.h
-extern int EncLen;  // defined in ARDOPC.C, extern in ARDOPC.h
-extern char Callsign[10];  // defined in ARDOPC.c. extern in ARDOPC.h
-extern char GridSquare[9];  // defined in ARDOPC.c. extern in ARDOPC.h
-extern int ARQBandwidth;  // defined as enum _ARQBandwidth ARQBandwidth in ARDOPC.c. extern in ARDOPC.h
-extern int  CallBandwidth;  // defined as enum _ARQBandwidth CallBandwidth in ARDOPC.c. extern in ARDOPC.h
-extern int stcLastPingintRcvdSN;  // defined in ARDOPC.c updated in SoundInput.c
-extern int stcLastPingintQuality;  // defined in ARDOPC.c updated in SoundInput.c
-
-#define UNDEFINED 8  // Implicit in enum _ARQBandwidth in ARDOPC.h
 
 extern UCHAR bytSessionID;  // defined in ARQ.c
 extern BOOL blnEnbARQRpt;  // defined in ARQ.c
-extern const char ARQBandwidths[9][12];  // defined in ARQ.c. ref in ARDOPC.h
-
 extern int intLeaderRcvdMs;  // defined and updated in SoundInput.c. ref in ARQ.c
-
-VOID WriteDebugLog(int LogLevel, const char * format, ...);  // defined in ALSASound.c and Wavout.c. ref in ardopcommon.h and ARDOPC.h
-
-int EncodeDATANAK(int intQuality , UCHAR bytSessionID, UCHAR * bytreturn);  // defined in ARDOPC.c. ref in ARDOPC.h
-int Encode4FSKControl(UCHAR bytFrameType, UCHAR bytSessionID, UCHAR * bytreturn);  // defined in ARDOPC.c. ref in ARDOPC.h
-int Encode4FSKIDFrame(char * Callsign, char * Square, unsigned char * bytreturn);  // defined in ARDOPC.c. ref in ARDOPC.h
-// TODO: Fix bug changing this from BOOL to int
-// Changed type of ARQBandwidth here from enum to int
-BOOL EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, int ARQBandwidth, UCHAR * bytReturn);  // defined in ARDOPC.c. ref in ARDOPC.h
-int EncodeConACKwTiming(UCHAR bytFrameType, int intRcvdLeaderLenMs, UCHAR bytSessionID, UCHAR * bytreturn);  // defined in ARDOPC.c
-int EncodePingAck(int bytFrameType, int intSN, int intQuality, UCHAR * bytreturn);  // defined in ARDOPC.c
-int EncodePing(char * strMyCallsign, char * strTargetCallsign, UCHAR * bytReturn);
-int EncodeDATAACK(int intQuality, UCHAR bytSessionID, UCHAR * bytreturn);  // defined in ARDOPC.c. ref in ARDOPC.h
-int EncodePSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigned char * bytEncodedBytes);  // defined in ARDOPC.c. ref in ARDOPC.h
-int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigned char * bytEncodedBytes);
-
-BOOL FrameInfo(UCHAR bytFrameType, int * blnOdd, int * intNumCar, char * strMod, int * intBaud, int * intDataLen, int * intRSLen, UCHAR * bytQualThres, char * strType);  // defined in ARDOPC.c.  ref in ARDOPC.h
-
-void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);  // defined in Modulate.c. ref in ARDOPC.h
-void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);  // defined in Modulate.c. ref in ARDOPC.h
-void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);  // defined in Modulate.c. ref in ARDOPC.h
-
 
 int parse_params(char *paramstr, char *parsed[10]) {
 	int paramcount = 1;
@@ -95,6 +36,12 @@ int parse_params(char *paramstr, char *parsed[10]) {
 		}
 		*(parsed[paramcount])++ = 0x00;
 		paramcount++;
+	}
+	// Allow TXFRAME to interpret /NONE/ as an empty string.  This can be
+	// useful for diagnostic purposes.
+	for (int i = 0; i < paramcount; i++) {
+		if (strcmp(parsed[i], "/NONE/") == 0)
+			parsed[i][0] = 0x00;
 	}
 	return paramcount;
 }
@@ -120,11 +67,6 @@ int hex2int(char *ptr, unsigned int len, unsigned char *output) {
 		}
 	}
 	return (0);
-}
-
-void strtoupper(char * str) {
-	for (size_t i = 0; i < strlen(str); i++)
-		str[i] = toupper(str[i]);
 }
 
 // return 0 on success, 1 on failure
@@ -267,19 +209,23 @@ int txframe(char * frameParams) {
 		// 0x2F unused
 		// 0x30 IDFrame
 		// Uses globals: Callsign, GridSquare
-		char callsign[10];
+		char callsign[CALL_BUF_SIZE];
 		char gridsquare[9];
-		if (paramcount > 2 && strcmp(params[2], "_") != 0)
-			// TODO: check whether callsign is valid?
-			strncpy(callsign, params[2], 9);
-		else if (Callsign[0] != 0x00)
-			strncpy(callsign, Callsign, 9);
+		if (paramcount > 2 && strcmp(params[2], "_") != 0) {
+			if (!CheckValidCallsignSyntax(params[2])) {
+				WriteDebugLog(LOGWARNING,
+					"Invalid callsign, '%s', for TXFRAME IDFrame.",
+					params[2]);
+				return(1);
+			}
+			strncpy(callsign, params[2], CALL_BUF_SIZE);
+		} else if (Callsign[0] != 0x00)
+			strncpy(callsign, Callsign, CALL_BUF_SIZE);
 		else {
 			WriteDebugLog(LOGWARNING,
 				"TXFRAME IDFrame requires an implicit or explicit callsign.");
 			return (1);
 		}
-		callsign[9] = 0x00;  // ensure NULL terminated
 		if (paramcount > 3 && strcmp(params[3], "_") != 0)
 			// TODO: check whether gridsquare is valid?
 			strncpy(gridsquare, params[3], 8);
@@ -291,10 +237,6 @@ int txframe(char * frameParams) {
 			return (1);
 		}
 		gridsquare[8] = 0x00;  // ensure NULL terminated
-		// Encode4FSKIDFrame() quietly produces bad results if callsign and gridsquare
-		// are not both entirely upper case.
-		strtoupper(callsign);
-		strtoupper(gridsquare);
 		WriteDebugLog(LOGDEBUG, "TXFRAME IDFrame %s %s", callsign, gridsquare);
 		if ((EncLen = Encode4FSKIDFrame(callsign, gridsquare, bytEncodedBytes)) <= 0) {
 			WriteDebugLog(LOGERROR, "ERROR: In txframe() IDFrame Invalid EncLen (%d).", EncLen);
@@ -309,29 +251,37 @@ int txframe(char * frameParams) {
 		// accept a parameter in the form used for ARQBW, else default to value set
 		// with ARQBW Host Command
 		// Uses globals: Callsign. CallBandwidth, ARQBandwidth
-		char targetcallsign[10];
-		char callsign[10];
+		char targetcallsign[CALL_BUF_SIZE];
+		char callsign[CALL_BUF_SIZE];
 		int bandwidth_num = -1;  // This is an enum value, not an actual bandwith value
-		if (paramcount > 2 && strcmp(params[2], "_") != 0)
-			// TODO: check whether targetcallsign is valid?
-			strncpy(targetcallsign, params[2], 9);
-		else {
+		if (paramcount > 2 && strcmp(params[2], "_") != 0) {
+			if (!CheckValidCallsignSyntax(params[2])) {
+				WriteDebugLog(LOGWARNING,
+					"Invalid targetcallsign, '%s', for TXFRAME ConReq.",
+					params[2]);
+				return(1);
+			}
+			strncpy(targetcallsign, params[2], CALL_BUF_SIZE);
+		} else {
 			WriteDebugLog(LOGWARNING,
 				"TXFRAME ConReq requires an explicit targetcallsign.");
 			return (1);
 		}
-		targetcallsign[9] = 0x00;  // ensure NULL terminated
-		if (paramcount > 3 && strcmp(params[3], "_") != 0)
-			// TODO: check whether callsign is valid?
-			strncpy(callsign, params[3], 9);
-		else if (Callsign[0] != 0x00)
-			strncpy(callsign, Callsign, 9);
+		if (paramcount > 3 && strcmp(params[3], "_") != 0) {
+			if (!CheckValidCallsignSyntax(params[3])) {
+				WriteDebugLog(LOGWARNING,
+					"Invalid callsign, '%s', for TXFRAME ConReq.",
+					params[3]);
+				return(1);
+			}
+			strncpy(callsign, params[3], CALL_BUF_SIZE);
+		} else if (Callsign[0] != 0x00)
+			strncpy(callsign, Callsign, CALL_BUF_SIZE);
 		else {
 			WriteDebugLog(LOGWARNING,
 				"TXFRAME ConReq requires an implicit or explicit callsign.");
 			return (1);
 		}
-		callsign[9] = 0x00;  // ensure NULL terminated
 		if (strlen(params[1]) > 6) {
 			// Notice that the order here corresponds to ARQBandwidths defined in
 			// ARQ.c, rather than the order of the ConReq frames by frame type.
@@ -347,8 +297,7 @@ int txframe(char * frameParams) {
 					"TXFRAME ConReq: invalid bandwidth indicator. '%s'.", params[1]);
 				return (1);
 			}
-		}
-		else if (paramcount > 4 && strcmp(params[4], "_") != 0) {
+		} else if (paramcount > 4 && strcmp(params[4], "_") != 0) {
 			// processing of bandwidth is based on processing of Host Command ARQBW
 			int i;
 			for (i = 0; i < UNDEFINED; i++) {
@@ -361,8 +310,7 @@ int txframe(char * frameParams) {
 				return (1);
 			} else
 				bandwidth_num = i;
-		}
-		else if (CallBandwidth != UNDEFINED)
+		} else if (CallBandwidth != UNDEFINED)
 			bandwidth_num = CallBandwidth;
 		else if (ARQBandwidth != UNDEFINED)
 			// Fallback if CallBandwidth is not set
@@ -373,10 +321,6 @@ int txframe(char * frameParams) {
 				"TXFRAME ConReq requires an implicit or explicit bandwidth.");
 			return (1);
 		}
-		// EncodeARQConRequest() quietly produces bad results if callsign and
-		// targetcallsign are not both entirely upper case.
-		strtoupper(callsign);
-		strtoupper(targetcallsign);
 		WriteDebugLog(LOGDEBUG, "TXFRAME ConReq%s %s %s", ARQBandwidths[bandwidth_num], targetcallsign, callsign);
 		if ((EncLen = EncodeARQConRequest(callsign, targetcallsign, bandwidth_num, bytEncodedBytes)) <= 0) {
 			WriteDebugLog(LOGERROR, "ERROR: In txframe() ConReq Invalid EncLen (%d).", EncLen);
@@ -469,32 +413,36 @@ int txframe(char * frameParams) {
 		// TXFRAME Ping targetcallsign [mycallsign]
 		// 0x3$
 		// Uses globals: Callsign
-		char targetcallsign[10];
-		char callsign[10];
-		if (paramcount > 2 && strcmp(params[2], "_") != 0)
-			// TODO: check whether targetcallsign is valid?
-			strncpy(targetcallsign, params[2], 9);
-		else {
+		char targetcallsign[CALL_BUF_SIZE];
+		char callsign[CALL_BUF_SIZE];
+		if (paramcount > 2 && strcmp(params[2], "_") != 0) {
+			if (!CheckValidCallsignSyntax(params[2])) {
+				WriteDebugLog(LOGWARNING,
+					"Invalid targetcallsign, '%s', for TXFRAME Ping.",
+					params[2]);
+				return(1);
+			}
+			strncpy(targetcallsign, params[2], CALL_BUF_SIZE);
+		} else {
 			WriteDebugLog(LOGWARNING,
 				"TXFRAME Ping requires an explicit targetcallsign.");
 			return (1);
 		}
-		targetcallsign[9] = 0x00;  // ensure NULL terminated
-		if (paramcount > 3 && strcmp(params[3], "_") != 0)
-			// TODO: check whether callsign is valid?
-			strncpy(callsign, params[3], 9);
-		else if (Callsign[0] != 0x00)
-			strncpy(callsign, Callsign, 9);
+		if (paramcount > 3 && strcmp(params[3], "_") != 0) {
+			if (!CheckValidCallsignSyntax(params[3])) {
+				WriteDebugLog(LOGWARNING,
+					"Invalid callsign, '%s', for TXFRAME IDFrame.",
+					params[3]);
+				return(1);
+			}
+			strncpy(callsign, params[3], CALL_BUF_SIZE);
+		} else if (Callsign[0] != 0x00)
+			strncpy(callsign, Callsign, CALL_BUF_SIZE);
 		else {
 			WriteDebugLog(LOGWARNING,
 				"TXFRAME Ping requires an implicit or explicit callsign.");
 			return (1);
 		}
-		callsign[9] = 0x00;  // ensure NULL terminated
-		// EncodePing() quietly produces bad results if callsign and
-		// targetcallsign are not both entirely upper case.
-		strtoupper(callsign);
-		strtoupper(targetcallsign);
 		WriteDebugLog(LOGDEBUG, "TXFRAME Ping %s %s", targetcallsign, callsign);
 		if ((EncLen = EncodePing(callsign, targetcallsign, bytEncodedBytes)) <= 0) {
 			WriteDebugLog(LOGERROR, "ERROR: In txframe() Ping Invalid EncLen (%d).", EncLen);

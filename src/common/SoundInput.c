@@ -211,7 +211,7 @@ extern UCHAR bytSessionID;
 int dttLastGoodFrameTypeDecod;
 int dttStartRmtLeaderMeasure;
 
-char lastGoodID[11] = "";
+char lastGoodID[CALL_BUF_SIZE] = "";
 
 int GotBitSyncTicks;
 
@@ -2686,9 +2686,9 @@ extern int intBW;
 
 BOOL Decode4FSKConReq()
 {
-	UCHAR strCaller[32];
-	UCHAR strTarget [32];
-	UCHAR bytCall[6];
+	UCHAR strCaller[CALL_BUF_SIZE];
+	UCHAR strTarget[CALL_BUF_SIZE];
+	UCHAR bytCall[COMP_SIZE];
 	BOOL FrameOK;
 
 	// Modified May 24, 2015 to use RS encoding vs CRC (similar to ID Frame)
@@ -2715,9 +2715,9 @@ BOOL Decode4FSKConReq()
 		WriteDebugLog(LOGDEBUG, "CONREQ Still bad after RS");
 		FrameOK = FALSE;
 	}
-	memcpy(bytCall, bytFrameData1, 6);
+	memcpy(bytCall, bytFrameData1, COMP_SIZE);
 	DeCompressCallsign(bytCall, strCaller, sizeof(strCaller));
-	memcpy(bytCall, &bytFrameData1[6], 6);
+	memcpy(bytCall, &bytFrameData1[COMP_SIZE], COMP_SIZE);
 	DeCompressCallsign(bytCall, strTarget, sizeof(strTarget));
 
 //	printtick(strCaller);
@@ -2738,7 +2738,7 @@ BOOL Decode4FSKConReq()
 		intBW = 2000;
 
 	if (FrameOK)
-		memcpy(lastGoodID, strCaller, 10);
+		memcpy(lastGoodID, strCaller, CALL_BUF_SIZE);
 	else
 		SendCommandToHost("CANCELPENDING");
 
@@ -2799,9 +2799,9 @@ int Compute4FSKSN()
 
 BOOL Decode4FSKPing()
 {
-	UCHAR strCaller[10];
-	UCHAR strTarget [10];
-	UCHAR bytCall[6];
+	UCHAR strCaller[CALL_BUF_SIZE];
+	UCHAR strTarget[CALL_BUF_SIZE];
+	UCHAR bytCall[COMP_SIZE];
 	BOOL FrameOK;
 
 	int NErrors = rs_correct(bytFrameData1, 16, 4, true, false);
@@ -2827,9 +2827,9 @@ BOOL Decode4FSKPing()
 		FrameOK = FALSE;
 	}
 
-	memcpy(bytCall, bytFrameData1, 6);
+	memcpy(bytCall, bytFrameData1, COMP_SIZE);
 	DeCompressCallsign(bytCall, strCaller, sizeof(strCaller));
-	memcpy(bytCall, &bytFrameData1[6], 6);
+	memcpy(bytCall, &bytFrameData1[COMP_SIZE], COMP_SIZE);
 	DeCompressCallsign(bytCall, strTarget, sizeof(strTarget));
 
 //	printtick(strCaller);
@@ -2859,8 +2859,6 @@ BOOL Decode4FSKPing()
 		WriteDebugLog(LOGDEBUG, "[DemodDecode4FSKPing] PING %s>%s S:N=%d Q=%d", strCaller, strTarget, intSNdB, intLastRcvdFrameQuality);
 
 		stcLastPingdttTimeReceived = time(NULL);
-		memcpy(stcLastPingstrSender, strCaller, 10);
-		memcpy(stcLastPingstrTarget, strTarget, 10);
 		stcLastPingintRcvdSN = intSNdB;
 		stcLastPingintQuality = intLastRcvdFrameQuality;
 
@@ -2949,7 +2947,7 @@ BOOL Decode4FSKPingACK(UCHAR bytFrameType, int * intSNdB, int * intQuality)
 
 BOOL Decode4FSKID(UCHAR bytFrameType, char * strCallID, size_t strCallIDLen, char * strGridSquare)
 {
-	UCHAR bytCall[10];
+	UCHAR bytCall[COMP_SIZE];
 	UCHAR temp[20];
 	BOOL FrameOK;
 	unsigned char * p = bytFrameData1;
@@ -2981,9 +2979,9 @@ BOOL Decode4FSKID(UCHAR bytFrameType, char * strCallID, size_t strCallIDLen, cha
 		FrameOK = FALSE;
 	}
 
-	memcpy(bytCall, bytFrameData1, 6);
+	memcpy(bytCall, bytFrameData1, COMP_SIZE);
 	DeCompressCallsign(bytCall, strCallID, strCallIDLen);
-	memcpy(bytCall, &bytFrameData1[6], 6);
+	memcpy(bytCall, &bytFrameData1[COMP_SIZE], COMP_SIZE);
 	DeCompressGridSquare(bytCall, temp);
 
 	if (strlen(temp) > 5)
@@ -3001,7 +2999,7 @@ BOOL Decode4FSKID(UCHAR bytFrameType, char * strCallID, size_t strCallIDLen, cha
 	}
 
 	if (FrameOK)
-		memcpy(lastGoodID, strCallID, 10);
+		memcpy(lastGoodID, strCallID, CALL_BUF_SIZE);
 
 	return FrameOK;
 }
@@ -3181,9 +3179,7 @@ BOOL DecodeACKNAK(int intFrameType, int *  intQuality)
 BOOL DecodeFrame(int xxx, UCHAR * bytData)
 {
 	BOOL blnDecodeOK = FALSE;
-	char strCallerCallsign[10] = "";
-	char strTargetCallsign[10] = "";
-	char strIDCallSign[11] = "";
+	char strIDCallSign[CALL_BUF_SIZE] = "";
 	char strGridSQ[20] = "";
 	int intTiming;
 	int intRcvdQuality;

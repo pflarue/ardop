@@ -64,7 +64,7 @@ void ProcessCommandFromHost(char * strCMD);
 // Config parameters
 
 char GridSquare[9] = "";
-char Callsign[10] = "";
+char Callsign[CALL_BUF_SIZE] = "";
 BOOL wantCWID = FALSE;
 BOOL CWOnOff = FALSE;
 BOOL NeedID = FALSE;  // SENDID Command Flag
@@ -82,7 +82,7 @@ int intPINGRepeats = 0;
 int WaterfallActive = 1;  // Waterfall display on
 int SpectrumActive = 0;  // Spectrum display off
 
-char ConnectToCall[16] = "";
+char ConnectToCall[CALL_BUF_SIZE] = "";
 
 int LeaderLength = 240;
 unsigned int ARQTimeout = 120;
@@ -146,8 +146,6 @@ int intQAMQualityCnts;
 int intQAMSymbolsDecoded;
 
 
-char stcLastPingstrSender[10];
-char stcLastPingstrTarget[10];
 int stcLastPingintRcvdSN;
 int stcLastPingintQuality;
 time_t stcLastPingdttTimeReceived;
@@ -192,9 +190,9 @@ enum _ProtocolMode ProtocolMode = FEC;
 
 extern BOOL blnEnbARQRpt;
 extern BOOL blnDISCRepeating;
-extern char strRemoteCallsign[10];
-extern char strLocalCallsign[10];
-extern char strFinalIDCallsign[10];
+extern char strRemoteCallsign[CALL_BUF_SIZE];
+extern char strLocalCallsign[CALL_BUF_SIZE];
+extern char strFinalIDCallsign[CALL_BUF_SIZE];
 extern int dttTimeoutTrip;
 extern unsigned int dttLastFECIDSent;
 extern int intFrameRepeatInterval;
@@ -574,6 +572,14 @@ void FreeSemaphore()
 BOOL CheckValidCallsignSyntax(char * strCallsign)
 {
 	// Function for checking valid call sign syntax
+	// TODO: Re-evaluate whether these checks are all appropriate, and/or
+	// whether additional tests should be added.
+	if (strlen(strCallsign) >= CALL_BUF_SIZE) {
+		WriteDebugLog(LOGWARNING,
+			"WARNING: In CheckValidCallsign(): Callsign string, '%s', too long.",
+			strCallsign);
+		return FALSE;
+	}
 
 	char * Dash = strchr(strCallsign, '-');
 	int callLen = strlen(strCallsign);
@@ -585,23 +591,49 @@ BOOL CheckValidCallsignSyntax(char * strCallsign)
 		callLen = Dash - strCallsign;
 
 		SSID = atoi(Dash + 1);
-		if (SSID > 15)
+		if (SSID > 15) {
+			WriteDebugLog(LOGWARNING,
+				"WARNING: in CheckValidCallsign(), '%s' is invalid because"
+				" the optional numerical SSID is greater than 15.",
+				strCallsign);
 			return FALSE;
+		}
 
-		if (strlen(Dash + 1) > 2)
+		if (strlen(Dash + 1) > 2) {
+			WriteDebugLog(LOGWARNING,
+				"WARNING: in CheckValidCallsign(), '%s' is invalid because"
+				" the optional SSID is has a length greater than 2.",
+				strCallsign);
 			return FALSE;
+		}
 
-		if (!isalnum(*(Dash + 1)))
+		if (!isalnum(*(Dash + 1))) {
+			WriteDebugLog(LOGWARNING,
+				"WARNING: in CheckValidCallsign(), '%s' is invalid because"
+				" the optional SSID begins with a non-alphanumeric character.",
+				strCallsign);
 			return FALSE;
+		}
 	}
 
-	if (callLen > 7 || callLen < 3)
-			return FALSE;
+	if (callLen > 7 || callLen < 3) {
+		WriteDebugLog(LOGWARNING,
+			"WARNING: in CheckValidCallsign(), '%s' is invalid because"
+			" the callsign (excluding the optional SSID) has a length greater"
+			" than 7 or less than 3.",
+			strCallsign);
+		return FALSE;
+	}
 
 	while (callLen--)
 	{
-		if (!isalnum(*(ptr++)))
+		if (!isalnum(*(ptr++))) {
+			WriteDebugLog(LOGWARNING,
+				"WARNING: in CheckValidCallsign(), '%s' is invalid because"
+				" the callsign contains a non-alphanumeric character.",
+				strCallsign);
 			return FALSE;
+		}
 	}
 	return TRUE;
 }
@@ -1392,7 +1424,7 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 
 // Function to encode ConnectRequest frame
 
-BOOL EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, enum _ARQBandwidth ARQBandwidth, UCHAR * bytReturn)
+int EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, enum _ARQBandwidth ARQBandwidth, UCHAR * bytReturn)
 {
 	// Encodes a 4FSK 200 Hz BW Connect Request frame ( ~ 1950 ms with default leader/trailer)
 
@@ -1693,6 +1725,11 @@ void ASCIIto6Bit(const char * Padded, UCHAR * Compressed)
 		}
 		else {
 			// filter
+			WriteDebugLog(LOGWARNING,
+				"WARNING: Invalid character '%C' in string to be compressed"
+				" for transmission of a callsign or grid square.  Replacing"
+				" with a space.",
+				work[pos]);
 			work[pos] = ' ';
 		}
 	}
@@ -1758,16 +1795,34 @@ void Bit6ToASCII(const UCHAR * Padded, UCHAR * UnCompressed)
 
 
 // Function to compress callsign (up to 7 characters + optional "-"SSID   (-0 to -15 or -A to -Z)
+// However, the callsign string is truncated to a length of (CALL_BUF_SIZE-1),
+// so that a 7-character callsign cannot be used with a 2-digit SSID.
 
 void CompressCallsign(const char * inCallsign, UCHAR * Compressed)
 {
-	const char* inp = inCallsign ? inCallsign : "";
+	char inp[CALL_BUF_SIZE];
 	char work[9];
+
+	if (inCallsign == NULL) {
+		WriteDebugLog(LOGWARNING,
+			"WARNING: Null pointer passed to CompressCallsign() as inCallsign.");
+		inp[0] = 0x00;
+	} else if (snprintf(inp, CALL_BUF_SIZE, "%s", inCallsign) >= CALL_BUF_SIZE) {
+		WriteDebugLog(LOGWARNING,
+			"WARNING: In CompressCallsign(): Callsign string, '%s', too long."
+			" It is being truncated to '%s'.",
+			inCallsign, inp);
+	}
 
 	// split string at SSID separator
 	size_t callsign_len = strcspn(inp, "-");
-	if (callsign_len > 7)
+	if (callsign_len > 7) {
+		WriteDebugLog(LOGWARNING,
+			"WARNING: In CompressCallsign: Callsign string excluding the"
+			" optional SSID is too long.  '%.*s' is being truncated to '%.7s'",
+			callsign_len, inp, inp);
 		callsign_len = 7;
+	}
 
 	// format the non-SSID part, right-padding with spaces
 	snprintf(work, sizeof(work), "%-7.*s0", (int)callsign_len, inp);
@@ -1780,6 +1835,12 @@ void CompressCallsign(const char * inCallsign, UCHAR * Compressed)
 		{
 			// map SSID -10 to -15 to : ; < = > ?
 			ssid = ':' + ssid_numeric - 10;
+		} else if (ssid_numeric > 15) {
+			WriteDebugLog(LOGWARNING,
+				"WARNING: A numerical SSID greater than 15 cannot be compressed"
+				"/encoded.  So, while %d was given, only %c will be"
+				" transmitted.",
+				ssid_numeric, ssid);
 		}
 
 		// the SSID is always the last character of the compression buffer
@@ -1811,6 +1872,13 @@ void DeCompressCallsign(const char * bytCallsign, char * returned, size_t return
 	char work[9] = "";
 	Bit6ToASCII(bytCallsign, work);
 
+	if (returnlen < CALL_BUF_SIZE) {
+		WriteDebugLog(LOGWARNING,
+			"WARNING: DeCompressCallsing() should not be called with returnlen<"
+			"CALL_BUF_SIZE (%d)",
+			CALL_BUF_SIZE);
+	}
+
 	// the last byte is reserved for the SSID
 	char ssid = work[7];
 	work[7] = '\0';
@@ -1819,21 +1887,28 @@ void DeCompressCallsign(const char * bytCallsign, char * returned, size_t return
 	size_t callsign_len = strcspn(work, " ");
 
 	int ssid_numeric = 0;
+	size_t lencheck = returnlen;
 	if (ssid == '0') {
 		// no ssid
-		snprintf(returned, returnlen, "%.*s", (int)callsign_len, work);
+		lencheck = snprintf(returned, returnlen, "%.*s", (int)callsign_len, work);
 	}
 	else if (ssid >= ':' && ssid <= '?')
 	{
 		// numeric ssid
 		ssid_numeric = ssid - ':' + 10;
-		snprintf(returned, returnlen, "%.*s-%d", (int)callsign_len, work, ssid_numeric);
+		lencheck = snprintf(returned, returnlen, "%.*s-%d", (int)callsign_len, work, ssid_numeric);
 	}
 	else
 	{
 		// alphabetical ssid
-		snprintf(returned, returnlen, "%.*s-%c", (int)callsign_len, work, ssid);
+		lencheck = snprintf(returned, returnlen, "%.*s-%c", (int)callsign_len, work, ssid);
 	}
+
+	if (lencheck >= returnlen)
+		WriteDebugLog(LOGWARNING,
+			"LOGIC-ERROR: returnlen (%d) passed to DeCompressCallsign was too"
+			" small, so callsign was truncated.",
+			returnlen);
 }
 
 
