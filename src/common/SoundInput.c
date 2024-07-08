@@ -3459,6 +3459,19 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 	{
 		WriteDebugLog(LOGINFO, "[DecodeFrame] Frame: %s Decode PASS,  Quality= %d,  RS fixed %d (of %d max).", Name(intFrameType),  intLastRcvdFrameQuality, totalRSErrors, (intRSLen / 2) * intNumCar);
 		wg_send_quality(0, intLastRcvdFrameQuality, totalRSErrors, (intRSLen / 2) * intNumCar);
+
+		if (frameLen > 0) {
+			char Msg[3000] = "";
+
+			snprintf(Msg, sizeof(Msg), "[Decoded bytData] %d bytes as hex values: ", frameLen);
+			for (int i = 0; i < frameLen; i++)
+				snprintf(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg) - 1, "%02X ", bytData[i]);
+			WriteDebugLog(LOGDEBUGPLUS, "%s", Msg);
+
+			if (utf8_check(bytData, frameLen) == NULL)
+				WriteDebugLog(LOGDEBUGPLUS, "[Decoded bytData] %d bytes as utf8 text: '%.*s'", frameLen, frameLen, bytData);
+		}
+
 #ifdef PLOTCONSTELLATION
 		if (intFrameType == IDFRAME || (intFrameType >= ConReqmin && intFrameType <= ConReqmax))
 			DrawDecode(lastGoodID);  // ID or CONREQ

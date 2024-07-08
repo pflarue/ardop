@@ -30,6 +30,7 @@ int wg_send_state(int cnum);
 int wg_send_rcall(int cnum, char *call);
 int wg_send_irsled(int cnum, bool isOn);
 int wg_send_issled(int cnum, bool isOn);
+unsigned char *utf8_check(unsigned char *s, size_t slen);
 
 int intLastFrameIDToHost = 0;
 int	intLastFailedFrameID = 0;
@@ -888,6 +889,18 @@ void SendData()
 			dttTimeoutTrip = Now;
 			blnEnbARQRpt = TRUE;
 			ARQState = ISSData;  // Should not be necessary
+
+
+			char Msg[3000] = "";
+
+			snprintf(Msg, sizeof(Msg), "[Encoding Data to TX] %d bytes as hex values: ", Len);
+			for (int i = 0; i < Len; i++)
+				snprintf(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg) - 1, "%02X ", bytDataToSend[i]);
+			WriteDebugLog(LOGDEBUGPLUS, "%s", Msg);
+
+			if (utf8_check(bytDataToSend, Len) == NULL)
+				WriteDebugLog(LOGDEBUGPLUS, "[Encoding Data to TX] %d bytes as utf8 text: '%.*s'", Len, Len, bytDataToSend);
+
 
 			if (strcmp(strMod, "4FSK") == 0)
 			{

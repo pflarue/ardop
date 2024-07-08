@@ -79,6 +79,16 @@ extern UCHAR bytSessionID;
 
 void AddDataToDataToSend(UCHAR * bytNewData, int Len)
 {
+	char Msg[3000] = "";
+
+	snprintf(Msg, sizeof(Msg), "[bytNewData: Add to TX queue] %d bytes as hex values: ", Len);
+	for (int i = 0; i < Len; i++)
+		snprintf(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg) - 1, "%02X ", bytNewData[i]);
+	WriteDebugLog(LOGDEBUGPLUS, "%s", Msg);
+
+	if (utf8_check(bytNewData, Len) == NULL)
+		WriteDebugLog(LOGDEBUGPLUS, "[bytNewData: Add to TX queue] %d bytes as utf8 text: '%.*s'", Len, Len, bytNewData);
+
 	char HostCmd[32];
 
 	if (Len == 0)
@@ -1422,6 +1432,16 @@ void SendReplyToHost(char * strText)
 
 void AddTagToDataAndSendToHost(UCHAR * bytData, char * strTag, int Len)
 {
+	char Msg[3000] = "";
+
+	snprintf(Msg, sizeof(Msg), "[RX Data: Send To Host with TAG=%s] %d bytes as hex values: ", strTag, Len);
+	for (int i = 0; i < Len; i++)
+		snprintf(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg) - 1, "%02X ", bytData[i]);
+	WriteDebugLog(LOGDEBUGPLUS, "%s", Msg);
+
+	if (utf8_check(bytData, Len) == NULL)
+		WriteDebugLog(LOGDEBUGPLUS, "[RX Data: Send To Host with TAG=%s] %d bytes as utf8 text: '%.*s'", strTag, Len, Len, bytData);
+
 	TCPAddTagToDataAndSendToHost(bytData, strTag, Len);
 	if (WG_DevMode) {
 		if (utf8_check(bytData, Len) == NULL)
