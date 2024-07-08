@@ -522,6 +522,20 @@ int platform_main(int argc, char * argv[])
 	int rslen_set[] = {2, 4, 8, 16, 32, 36, 50, 64};
 	init_rs(rslen_set, 8);
 
+	char cmdstr[3000] = "";
+	for (int i = 0; i < argc; i++) {
+		if ((int)(sizeof(cmdstr) - strlen(cmdstr))
+			<= snprintf(
+				cmdstr + strlen(cmdstr),
+				sizeof(cmdstr) - strlen(cmdstr),
+				"%s ",
+				argv[i])
+		) {
+			printf("ERROR: cmdstr[%d] insufficient to hold fill command string for logging.\n", sizeof(cmdstr));
+			break;
+		}
+	}
+
 //	Sleep(1000);  // Give LinBPQ time to complete init if exec'ed by linbpq
 
 	processargs(argc, argv);
@@ -539,12 +553,13 @@ int platform_main(int argc, char * argv[])
 
 	setlinebuf(stdout);  // So we can redirect output to file and tail
 
-	Debugprintf("%s Version %s (https://www.github.com/pflarue/ardop)", ProductName, ProductVersion);
+	Debugprintf("\n\n%s Version %s (https://www.github.com/pflarue/ardop)", ProductName, ProductVersion);
 	Debugprintf("Copyright (c) 2014-2024 Rick Muething, John Wiseman, Peter LaRue");
 	Debugprintf(
 		"See https://github.com/pflarue/ardop/blob/master/LICENSE for licence details including\n"
 		"  information about authors of external libraries used and their licenses."
 	);
+	WriteDebugLog(LOGDEBUG, "Command line: %s", cmdstr);
 
 	if (DecodeWav[0])
 	{
