@@ -63,6 +63,7 @@ OBJS = \
 	src/common/RXO.o \
 	src/common/sdft.o \
 	src/common/SoundInput.o \
+	src/common/StationId.o \
 	src/common/TCPHostInterface.o \
 	src/common/txframe.o \
 	src/common/wav.o \
@@ -91,6 +92,7 @@ TESTS = \
 	test/ardop/test_Locator \
 	test/ardop/test_log \
 	test/ardop/test_Packed6 \
+	test/ardop/test_StationId \
 
 # unit test common code
 TEST_OBJS_COMMON = \
