@@ -921,7 +921,16 @@ window.addEventListener("load", function(evt) {
 		// User has pressed Enter.  Send the command, update command histroy.
 		var text = evt.target.value;
 		if(text.length > 0) {
-			send_msg(encoder.encode("H~" + text), 2 + text.length);
+			// text is normally intended to be sent to ardopcf.  However,
+			// this interface may also be used to plot constellation data
+			// pasted into the input box as a hex string.  Such data must
+			// be prefixed with "CPLOT ".  Data of this format may be copied
+			// from the debug log.
+			if (text.indexOf("CPLOT ") == 0) {
+				drawConstellation(fromHexString(text.slice(6)));
+			} else {
+				send_msg(encoder.encode("H~" + text), 2 + text.length);
+			}
 		}
 		cmdhistory.push(text);
 		if (cmdhistory.length > cmdhistory_limit)
