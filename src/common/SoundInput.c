@@ -540,11 +540,75 @@ void MixNCOFilter(short * intNewSamples, int Length, float dblOffsetHz)
 
 }
 
+// Calculate the number of 1 bits in a byte
+// Inplementation from:
+// https://stackoverflow.com/questions/9949935/calculate-number-of-bits-set-in-byte
+UCHAR CountOnes(UCHAR Byte) {
+	static const UCHAR NIBBLE_LOOKUP[16] = {
+		0, 1, 1, 2, 1, 2, 2, 3,
+		1, 2, 2, 3, 2, 3, 3, 4
+	};
+	return NIBBLE_LOOKUP[Byte & 0x0F] + NIBBLE_LOOKUP[Byte >> 4];
+}
+
+// Calculate and write to the log the transmission bit error rate for this
+// carrier.  Optionally, also write a "map" of the error locations.
+//
+// For data that was successfully corrected by rs_correct(), comparison of the
+// corrected data to the uncorrected data can be used to calculate the number of
+// bit errors.  If the distribution of the errors is non-uniform, that pattern
+// may provide useful insight.
+//
+// This is a transmission bit error rate since it considers all transmitted data
+// (intended payload + overhead) and is calculated for uncorrected data.  This
+// can only be done when the rs_correct() successfully returned the error free
+// intended payload (as confirmed by the matching CRC value).  Thus, it is a
+// measure of the effectiveness of the demodulator, and it provides diagnostic
+// data that may be of interest when demodulation is less than perfect, but
+// still within the limits of what RS correction can fix.
+void CountErrors(const UCHAR * Uncorrected, const UCHAR * Corrected, int Len, int Carrier, bool LogMap) {
+	int BitErrorCount = 0;
+	int CharErrorCount = 0;
+	UCHAR BitErrors;
+	char ErrMap[300] = " [";
+
+	for (int i = 0; i < Len; ++i) {
+		BitErrors = CountOnes(Uncorrected[i] ^ Corrected[i]);
+		snprintf(ErrMap + strlen(ErrMap), sizeof(ErrMap) - strlen(ErrMap), "%d", BitErrors);
+		BitErrorCount += BitErrors;
+		if (BitErrors)
+			++CharErrorCount;
+	}
+	if (LogMap)
+		snprintf(ErrMap + strlen(ErrMap), sizeof(ErrMap) - strlen(ErrMap), "]");
+	else
+		// Make ErrMap an empty string so that it won't be written to the log
+		ErrMap[0] = 0x00;
+
+	WriteDebugLog(LOGDEBUGPLUS,
+		"Carrier[%d] %d raw bytes. CER=%.1f%% BER=%.1f%%%s",
+		Carrier,
+		Len,
+		100.0 * CharErrorCount / Len,
+		100.0 * BitErrorCount / (8 * Len),
+		ErrMap);
+}
+
 // Function to Correct Raw demodulated data with Reed Solomon FEC
 
 int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDataLen, int intRSLen, int bytFrameType, int Carrier)
 {
 	int NErrors;
+	// rs_correct() attempts to correct bytRawData in place.  So, preserve a
+	// copy of the uncorrected data so that it can be used for CountBitErrors().
+	// This includes a single byte that indicates the length of the data
+	// intended to be transmitted, that data intended to be transmitted, the
+	// RS bytes, and a 2-byte checksum.
+	int CombinedLength = intDataLen + intRSLen + 3;
+	UCHAR RawDataCopy[256];
+	if (FileLogLevel >= LOGDEBUGPLUS || ConsoleLogLevel >= LOGDEBUGPLUS)
+		memcpy(RawDataCopy, bytRawData, CombinedLength);
+
 	// Dim bytNoRS(1 + intDataLen + 2 - 1) As Byte  // 1 byte byte Count, Data, 2 byte CRC
 	// Array.Copy(bytRawData, 0, bytNoRS, 0, bytNoRS.Length)
 
@@ -558,6 +622,10 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 
 		memcpy(bytCorrectedData, &bytRawData[1], bytRawData[0]);
 
+		WriteDebugLog(LOGDEBUGPLUS,
+			"Carrier[%d] %d raw bytes. CER and BER not calculated (previously decoded)",
+			Carrier,
+			CombinedLength);
 		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] Carrier %d (%d bytes) already decoded", Carrier, intDataLen);
 		return bytRawData[0];  // don't do it again
 	}
@@ -581,7 +649,7 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 	*/
 
 	// Try correcting with RS Parity
-	NErrors = rs_correct(bytRawData, intDataLen + 3 + intRSLen, intRSLen, true, false);
+	NErrors = rs_correct(bytRawData, CombinedLength, intRSLen, true, false);
 
 	if (NErrors == 0)
 	{
@@ -603,13 +671,18 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 	}
 	else  // NErrors < 0
 	{
+		WriteDebugLog(LOGDEBUGPLUS,
+			"Carrier[%d] %d raw bytes. CER and BER too high. (rs_correct() failed)",
+			Carrier,
+			CombinedLength);
 		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] RS Says Can't Correct (%d bytes) (>%d max corrections)", intDataLen, intRSLen/2);
 		goto returnBad;
 	}
 
 	if (NErrors >= 0 && CheckCRC16FrameType(bytRawData, intDataLen + 1, bytFrameType))  // RS correction successful
 	{
-		int intFailedByteCnt = 0;
+		if (FileLogLevel >= LOGDEBUGPLUS || ConsoleLogLevel >= LOGDEBUGPLUS)
+			CountErrors(RawDataCopy, bytRawData, CombinedLength, Carrier, true);
 		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] OK (%d bytes) with RS %d (of max %d) corrections", intDataLen, NErrors, intRSLen/2);
 		totalRSErrors += NErrors;
 
