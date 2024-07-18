@@ -9,6 +9,7 @@ successfully decoded.  Additional information is listed about each failure.
 When finished, a summary of failures is printed.
 """
 
+import argparse
 from random import randbytes
 import re
 import os
@@ -17,8 +18,7 @@ import subprocess
 # ardop_parameters.py contains constants required for these tests
 from ardop_parameters import *
 
-
-def test_contol_wav_io(quiet=False):
+def test_contol_wav_io(verbose=1):
     """
     This function tests all short control frame types.  These frame types mostly
     carry little or no data.  So, no effort is made to validate any carried data.
@@ -68,7 +68,7 @@ def test_contol_wav_io(quiet=False):
             res.stdout.decode("iso-8859-1")
         )
         if m is None:
-            if not quiet:
+            if verbose > 0:
                 print("ERROR parsing stdout from ardopcf.")
                 print("stdout:\n", res.stdout.decode("iso-8859-1"))
                 print("stderr:\n", res.stdout.decode("iso-8859-1"))
@@ -104,7 +104,7 @@ def test_contol_wav_io(quiet=False):
                     check=True,
                 )
             except subprocess.CalledProcessError as err:
-                if not quiet:
+                if verbose > 0:
                     print("Error decoding", err)
                     print(
                         f"The WAV file, {wavpath}, has not been erased.  So it"
@@ -114,7 +114,10 @@ def test_contol_wav_io(quiet=False):
                             "This error occured when the experiemental SDFT"
                             " demodulator was used.")
                 faillist.append(
-                    f"Error decoding {frametype} from {wavpath} {sdftstr}")
+                    f"Error decoding {frametype} from {wavpath} {sdftstr}."
+                    f" This should only occur when a serious error was"
+                    f" encountered.  Re-attempting to decode this wav file may"
+                    f" provide additional details.")
                 fail = True
                 continue
 
@@ -124,7 +127,7 @@ def test_contol_wav_io(quiet=False):
                     res.stdout.decode("iso-8859-1")
             )
             if m is None:
-                if not quiet:
+                if verbose > 0:
                     print(f"FAILURE TO DECODE {frametype}")
                     print(
                         f"The WAV file, {wavpath}, has not been erased.  So it"
@@ -137,7 +140,7 @@ def test_contol_wav_io(quiet=False):
                     "Failure to decode {frametype} from {wavpath} {sdtfstr}")
                 fail = True
                 continue
-            if not quiet:
+            if verbose > 0:
                 print(
                     f"FrameType='{m.group(1)}' decoded. {sdftstr}"
                 )
@@ -169,8 +172,27 @@ QAM2000_NOTE = (
     " the usefulness of this frame type once it is fixed."
 )
 
+def parse_ber_results(logstr, cars, print_bermap=False):
+    """For each carrier, print the Bit Error Rate data"""
+    # Parse Bit Error results
+    for car in range(cars):
+        m = re.search(
+            f"(Carrier\[{car}\] [0-9]+ raw bytes\. CER[^\n\[]+)[^\n]*",
+            logstr
+        )
+        if m is None:
+            print(f"Unable to parse CER and BER for Carrier[{car+1}].")
+            print(logstr)
+            raise ValueError
+        if m is not None and "BER=0.0%" not in m.group(0):
+            if print_bermap:
+                print("  ", m.group(0))
+            else:
+                print("  ", m.group(1))
 
-def test_data_wav_io(quiet=False, sessionid=0xFF):
+
+
+def test_data_wav_io(verbose=1, sessionid=0xFF):
     """
     For each data frame type, create a wav file of that frame with random data.
     Then read/decode that frame to confirm that the data encoded matches the
@@ -247,7 +269,7 @@ def test_data_wav_io(quiet=False, sessionid=0xFF):
                     res.stdout.decode("iso-8859-1")
                 )
                 if m is None:
-                    if not quiet:
+                    if verbose > 0:
                         print("ERROR parsing stdout from ardopcf.")
                         print("stdout:\n", res.stdout.decode("iso-8859-1"))
                         print("stderr:\n", res.stdout.decode("iso-8859-1"))
@@ -280,11 +302,12 @@ def test_data_wav_io(quiet=False, sessionid=0xFF):
                                 # LOGLEVEL 0 (LOGEMERGENCY) should prevent most
                                 # writes to the log file, which is not used for
                                 # this testing.
-                                # CONSOLELOG 7 (LOGDEBUG) ensures that
-                                # [DecodeFrame] and [Frame Type Decode Fail] are
-                                # written to stdout as well as the hex
-                                # representation of the decoded data.
-                                'LOGLEVEL 0;CONSOLELOG 7',
+                                # CONSOLELOG 8 (LOGDEBUGPLUS) ensures that
+                                # [DecodeFrame] and [Frame Type Decode Fail],
+                                # the hex representation of the decoded data,
+                                # and Bit Error results are written to stdout so
+                                # that they can be parsed from res.stdout.
+                                'LOGLEVEL 0;CONSOLELOG 8',
                                 # No port number of sound devices are required
                                 # when using the --decodewav option.
                             ],
@@ -292,7 +315,7 @@ def test_data_wav_io(quiet=False, sessionid=0xFF):
                             check=True,
                         )
                     except subprocess.CalledProcessError as err:
-                        if not quiet:
+                        if verbose > 0:
                             print(
                                 f"{err}\n"
                                 f"An error occured while attempting to decode"
@@ -303,11 +326,14 @@ def test_data_wav_io(quiet=False, sessionid=0xFF):
                             if sdftstr != "":
                                 print(
                                     "This error occured when the experiemental"
-                                    f" SDFT demodulator was used.")
+                                    " SDFT demodulator was used.")
                         faillist.append(
                             f"ERROR decoding {frametype[:-1]}{suffix}"
                             f" ({payload_used}/{payload_capacity} bytes) from"
-                            f" {wavpath} {sdftstr}")
+                            f" {wavpath} {sdftstr}.  This should only occur when"
+                            f" a serious error was encountered.  Re-attempting"
+                            f" to decode this wav file may provide additional"
+                            f" details.")
                         fail = True
                         continue
                     # Parse stdout for results of success
@@ -318,9 +344,11 @@ def test_data_wav_io(quiet=False, sessionid=0xFF):
                         res.stdout.decode("iso-8859-1")
                     )
                     if m is None:
-                        if not quiet:
+                        if verbose > 0:
                             print(
                                 f"FAILURE TO DECODE {frametype[:-1]}{suffix}"
+                                f" carrying {payload_used}"
+                                f" (of {payload_capacity} max) bytes of data."
                                 f" {rdatahex} 0x{hex(sessionid)[2:]:>02}"
                             )
                             print(
@@ -330,12 +358,18 @@ def test_data_wav_io(quiet=False, sessionid=0xFF):
                             if sdftstr != "":
                                 print(
                                     "This error occured when the experiemental"
-                                    f" SDFT demodulator was used.")
+                                    " SDFT demodulator was used.")
 
                             if frametype == "16QAM.2000.100.E":
                                 print(
                                     "NOTE: This failure is not unexpected.  See"
                                     " note included in summary for more detail.")
+                            if verbose > 1:
+                                parse_ber_results(
+                                    res.stdout.decode("iso-8859-1"),
+                                    cars,
+                                    verbose > 2
+                                )
                         faillist.append(
                             f"Failure to decode {frametype[:-1]}{suffix}"
                             f" ({payload_used}/{payload_capacity} bytes) from"
@@ -343,7 +377,7 @@ def test_data_wav_io(quiet=False, sessionid=0xFF):
                         fail = True
                         continue
                     # The frame was reportedly successfully decoded.
-                    if not quiet:
+                    if verbose > 0:
                         print(
                             f"FrameType='{m.group(1)}' carrying {payload_used}"
                             f" (of {payload_capacity} max) bytes of data."
@@ -351,6 +385,16 @@ def test_data_wav_io(quiet=False, sessionid=0xFF):
                             f" {m.group(4)} of {m.group(5)} possible errors."
                             f"  {sdftstr}"
                         )
+                        if verbose > 1:
+                            if ".600." in frametype:
+                                additional_pseudocarriers = 2
+                            else:
+                                additional_pseudocarriers = 0
+                            parse_ber_results(
+                                res.stdout.decode("iso-8859-1"),
+                                cars + additional_pseudocarriers,
+                                verbose > 2
+                            )
                     # Further parse stdout for decoded data as space delimited
                     # hex string so that it can be compared to the encoded data.
                     m = re.search(
@@ -359,7 +403,7 @@ def test_data_wav_io(quiet=False, sessionid=0xFF):
                         res.stdout.decode("iso-8859-1")
                     )
                     if m is None:
-                        if not quiet:
+                        if verbose > 0:
                             print(
                                 f"While ardopcf reported that the data frame was"
                                 f" correctly decoded, this test script failed to"
@@ -386,7 +430,7 @@ def test_data_wav_io(quiet=False, sessionid=0xFF):
                         fail = True
                         continue
                     if m.group(3).replace(' ', '') != rdatahex.upper():
-                        if not quiet:
+                        if verbose > 0:
                             print(
                                 f"While ardopcf reported that the data frame was"
                                 f" correctly decoded, the decoded data does not"
@@ -428,9 +472,25 @@ def test_data_wav_io(quiet=False, sessionid=0xFF):
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        nargs='?',
+        const=2,
+        type=int,
+        help="Change output verbosity"
+    )
+    args = parser.parse_args()
+    # By default, use verbose=1. so -v 1 has no effect.
+    # Using -v (which is eqivalent to -v 2), or -v 3 increase the verbosity
+    # Using -v 0 decreases the verbosity.
+    if args.verbose is None:
+        args.verbose = 1
+
     full_faillist = []
-    full_faillist.extend(test_contol_wav_io(quiet=False))
-    full_faillist.extend(test_data_wav_io(quiet=False))
+    full_faillist.extend(test_contol_wav_io(verbose=args.verbose))
+    full_faillist.extend(test_data_wav_io(verbose=args.verbose))
     if full_faillist:
         print(f"\n{len(full_faillist)} failures occured in test_wav_io.py.")
         for failnum, failstr in enumerate(full_faillist):

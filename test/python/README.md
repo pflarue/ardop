@@ -12,4 +12,6 @@ Running these tests with ardopcf which has been compiled with ASAN/UBSAN may be 
 
 Each file whose filename has the form `test_*.py` is a python script that will perform one or more tests.  On any computer where `python` is installed, running `python test_wav_io.py` from within the `test/python` directory should run the tests, where `test_wav_io.py` is the test file to be run.  On Linux machines where `/usr/bin/python` exists and `test_wav_io.py` is set to be an executable file, it should also be possible to simply type './test_wav_io.py' in the `test/python` directory.  These test scripts require that the ardopcf executable be available in the root directory of the repository.
 
+Some test scripts may include `--verbose` and `-v` options.  In those cases `-v 0` will reduce the amount of data printed, `-v 1` will have no effect because this is the default level, `-v 2` (which is also equivalent to `-v`) and possibly `-v 3` will increase the amount of data printed.
+
 These test scripts may write quite a bit of text to the console while running, but will normally print a more compact summary of the results at the end.
