@@ -592,6 +592,17 @@ void CountErrors(const UCHAR * Uncorrected, const UCHAR * Corrected, int Len, in
 		100.0 * CharErrorCount / Len,
 		100.0 * BitErrorCount / (8 * Len),
 		ErrMap);
+
+	// log hex string of Uncorrected and Corrected
+	char HexData[1024];
+	snprintf(HexData, sizeof(HexData), "Uncorrected: ");
+	for (int i = 0; i < Len; ++i)
+		snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", Uncorrected[i]);
+	WriteDebugLog(LOGDEBUGPLUS, "%s", HexData);
+	snprintf(HexData, sizeof(HexData), "Corrected:   ");
+	for (int i = 0; i < Len; ++i)
+		snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", Corrected[i]);
+	WriteDebugLog(LOGDEBUGPLUS, "%s", HexData);
 }
 
 // Function to Correct Raw demodulated data with Reed Solomon FEC
@@ -3797,9 +3808,13 @@ int UpdatePhaseConstellation(short * intPhases, short * intMag, char * strMod, B
 		intY = yCenter + dblRad * sinf(dblPlotRotation + intPhases[i] / 1000.0f);
 
 
-		if (intX > 0 && intY > 0)
-			if (intX != xCenter && intY != yCenter)
-				mySetPixel(intX, intY, Yellow);  // don't plot on top of axis
+		// 20240718 LaRue, It may be less attractive on Wiseman's GUI, but it is
+		// more useful for diagnostic purposes to include all points (and WebGUI
+		// plots the axis lines after all points are plotted).
+		mySetPixel(intX, intY, Yellow);
+//		if (intX > 0 && intY > 0)
+//			if (intX != xCenter && intY != yCenter)
+//				mySetPixel(intX, intY, Yellow);  // don't plot on top of axis
 #endif
 	}
 
@@ -4060,7 +4075,6 @@ int Track1CarPSK(int intCarFreq, char * strPSKMod, float dblUnfilteredPhase, BOO
 		return 1;
 	}
 	// Debug.WriteLine("Filtered Phase = " & Format(dblFilteredPhaseOffset, "00.000") & "  Offset = " & Format(dblPhaseOffset, "00.000") & "  Unfiltered = " & Format(dblUnfilteredPhase, "00.000"))
-
 	return 0;
 }
 
@@ -4555,7 +4569,7 @@ int Demod1CarPSKChar(int Start, int Carrier)
 	int intMiliRadPerSample = intCarFreq * M_PI / 6;
 	int i;
 	int intNumOfSymbols = intPSKMode;
-	int origStart = Start;;
+	int origStart = Start;
 
 	if (CarrierOk[Carrier])  // Already decoded this carrier?
 	{
@@ -4814,23 +4828,23 @@ BOOL DemodQAM()
 
 			DecodeCompleteTime = Now;
 
-		CorrectPhaseForTuningOffset(&intPhases[0][0], intPhasesLen, strMod);
+			CorrectPhaseForTuningOffset(&intPhases[0][0], intPhasesLen, strMod);
 
-//		if (intNumCar > 1)
-//			CorrectPhaseForTuningOffset(&intPhases[1][0], intPhasesLen, strMod);
+//			if (intNumCar > 1)
+//				CorrectPhaseForTuningOffset(&intPhases[1][0], intPhasesLen, strMod);
 
-		if (intNumCar > 2)
-		{
-//			CorrectPhaseForTuningOffset(&intPhases[2][0], intPhasesLen, strMod);
-//			CorrectPhaseForTuningOffset(&intPhases[3][0], intPhasesLen, strMod);
-		}
-		if (intNumCar > 4)
-		{
-//			CorrectPhaseForTuningOffset(&intPhases[4][0], intPhasesLen, strMod);
-//			CorrectPhaseForTuningOffset(&intPhases[5][0], intPhasesLen, strMod);
-//			CorrectPhaseForTuningOffset(&intPhases[6][0], intPhasesLen, strMod);
-//			CorrectPhaseForTuningOffset(&intPhases[7][0], intPhasesLen, strMod);
-		}
+			if (intNumCar > 2)
+			{
+//				CorrectPhaseForTuningOffset(&intPhases[2][0], intPhasesLen, strMod);
+//				CorrectPhaseForTuningOffset(&intPhases[3][0], intPhasesLen, strMod);
+			}
+			if (intNumCar > 4)
+			{
+//				CorrectPhaseForTuningOffset(&intPhases[4][0], intPhasesLen, strMod);
+//				CorrectPhaseForTuningOffset(&intPhases[5][0], intPhasesLen, strMod);
+//				CorrectPhaseForTuningOffset(&intPhases[6][0], intPhasesLen, strMod);
+//				CorrectPhaseForTuningOffset(&intPhases[7][0], intPhasesLen, strMod);
+			}
 
 			intLastRcvdFrameQuality = UpdatePhaseConstellation(&intPhases[intNumCar - 1][0], &intMags[intNumCar - 1][0], strMod, TRUE);
 
@@ -4844,26 +4858,26 @@ BOOL DemodQAM()
 
 			}
 
-		if (intNumCar > 2)
-		{
-			Decode1CarQAM(bytFrameData3, 2);
-			Decode1CarQAM(bytFrameData4, 3);
-			frameLen +=  CorrectRawDataWithRS(bytFrameData3, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 2);
-			frameLen +=  CorrectRawDataWithRS(bytFrameData4, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 3);
+			if (intNumCar > 2)
+			{
+				Decode1CarQAM(bytFrameData3, 2);
+				Decode1CarQAM(bytFrameData4, 3);
+				frameLen +=  CorrectRawDataWithRS(bytFrameData3, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 2);
+				frameLen +=  CorrectRawDataWithRS(bytFrameData4, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 3);
 
-		}
-		if (intNumCar > 4)
-		{
-			Decode1CarQAM(bytFrameData5, 4);
-			Decode1CarQAM(bytFrameData6, 5);
-			Decode1CarQAM(bytFrameData7, 6);
-			Decode1CarQAM(bytFrameData8, 7);
-			frameLen +=  CorrectRawDataWithRS(bytFrameData5, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 4);
-			frameLen +=  CorrectRawDataWithRS(bytFrameData6, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 5);
-			frameLen +=  CorrectRawDataWithRS(bytFrameData7, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 6);
-			frameLen +=  CorrectRawDataWithRS(bytFrameData8, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 7);
+			}
+			if (intNumCar > 4)
+			{
+				Decode1CarQAM(bytFrameData5, 4);
+				Decode1CarQAM(bytFrameData6, 5);
+				Decode1CarQAM(bytFrameData7, 6);
+				Decode1CarQAM(bytFrameData8, 7);
+				frameLen +=  CorrectRawDataWithRS(bytFrameData5, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 4);
+				frameLen +=  CorrectRawDataWithRS(bytFrameData6, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 5);
+				frameLen +=  CorrectRawDataWithRS(bytFrameData7, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 6);
+				frameLen +=  CorrectRawDataWithRS(bytFrameData8, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 7);
 
-		}
+			}
 
 
 
@@ -4934,7 +4948,7 @@ int Demod1CarQAMChar(int Start, int Carrier)
 	int intMiliRadPerSample = intCarFreq * M_PI / 6;
 	int i;
 	int intNumOfSymbols = 2;
-	int origStart = Start;;
+	int origStart = Start;
 
 	if (CarrierOk[Carrier])  // Already decoded this carrier?
 	{
