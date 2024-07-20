@@ -311,27 +311,6 @@ void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len,
 }
 
 
-// Function to extract an 8PSK symbol from an encoded data array
-
-UCHAR GetSym8PSK(int intDataPtr, int k, int intCar, UCHAR * bytEncodedBytes, int intDataBytesPerCar)
-{
-	int int3Bytes = bytEncodedBytes[intDataPtr + intCar * intDataBytesPerCar];
-//	int intMask  = 7;
-	int intSym;
-	UCHAR bytSym;
-
-	int3Bytes = int3Bytes << 8;
-	int3Bytes += bytEncodedBytes[intDataPtr + intCar * intDataBytesPerCar + 1];
-	int3Bytes = int3Bytes << 8;
-	int3Bytes += bytEncodedBytes[intDataPtr + intCar * intDataBytesPerCar + 2];  // now have 3 bytes, 24 bits or 8 8PSK symbols
-//	intMask = intMask << (3 * (7 - k));
-	intSym = int3Bytes >> (3 * (7 - k));
-	bytSym = intSym & 7;  // (intMask && int3Bytes) >> (3 * (7 - k));
-
-	return bytSym;
-}
-
-
 // Function to soft clip combined waveforms.
 int SoftClip(int intInput)
 {
@@ -349,27 +328,137 @@ int SoftClip(int intInput)
 	return intInput;
 }
 
+
+// Build an array of PSK/QAM symbols from byte data for a single carrier.
+// Each value in Symbols represents a phase and magnitude.  The low 3-bits
+// are an index from 0 to 7 representing 0, 45, 90, 135, 180, 225, 270,
+// and 315 degrees respectively.  If (Symbol & 0x08) is set to 1, then the
+// magnitude is half of full scale, else it is full scale.  The high 4 bits
+// of Symbols are not used and shall be 0.
+// Return SymbolCount
+int Calc1CarPSKSymbols(unsigned char *Symbols, char *strMod, unsigned char *bytSrc, int SrcLen) {
+	// A 2-byte buffer is required for 8PSK whose 3 bits per symbol cannot
+	// divide each 8-bit byte into an integral number of symbols.
+	unsigned short databuf = 0x0000;
+	int bitsbuffered = 0;  // number of bits remaining in databuf
+	int bitsPerSymbol;  // number of bits used to encode each symbol
+	int SymSet = 1;  // 1, except for 4FSK which uses only even phases
+	unsigned char bytSym;
+
+	if (strcmp(strMod, "4PSK") == 0) {
+		SymSet = 2;
+		bitsPerSymbol = 2;
+	} else if (strcmp(strMod, "8PSK") == 0)
+		bitsPerSymbol = 3;
+	else if (strcmp(strMod, "16QAM") == 0)
+		bitsPerSymbol = 4;
+
+	// Number of Symbols to be encoded.
+	int SymbolCount = SrcLen * 8 / bitsPerSymbol;
+	for (int SymNum = 0; SymNum < SymbolCount; ++SymNum) {
+		if (bitsbuffered < bitsPerSymbol) {
+			databuf += (*bytSrc++ << (8 - bitsbuffered));
+			bitsbuffered += 8;
+		}
+		// bytSym is the raw symbol to be encoded
+		bytSym = databuf >> (16 - bitsPerSymbol);
+		databuf <<= bitsPerSymbol;
+		bitsbuffered -= bitsPerSymbol;
+		// The phase angle (represented by the low 3 bits of Symbols) is
+		// incremented by (bytSym * SymSet)
+		// Because SymSet=2 for 4PSK, the full range of 0 to 7 is always used.
+		if (SymNum == 0)
+			// Implicit prior phase = 0 for reference symbol phase at start.
+			// If phase = 0 was not always used for the reference symbol (as a
+			// comment in earlier versions of the source code suggested might
+			// be an option), then this would need to be adjusted to use a value
+			// passed by argument or global variable for the phase of the
+			// referennce symbols.
+			Symbols[SymNum] = (bytSym * SymSet) & 7;
+		else
+			Symbols[SymNum] = (Symbols[SymNum - 1] + bytSym * SymSet) & 7;
+		// For 16QAM, magnitude is based on the raw symbol (bytSym) & 0x08.
+		// It is not incremented from the prior value like the phase angle
+		// encoded in the low 3 bits.
+		Symbols[SymNum] += bytSym & 0x08;
+	}
+	return SymbolCount;
+}
+
+
+// Play a sequence of multi-carrier PSK/QAM data whose phase and magnitude are
+// encoded in Symbols for one or more carriers.
+void PlayPSKSymbols(unsigned char Symbols[8][462], int intNumCars, int SymbolCount, double dblCarScalingFactor) {
+	const int intSampPerSym = 120;
+	int intCarStartIndex;
+	int intSample;
+	int intCarIndex;
+
+	// intPSK100bdCarTemplate contains sample data for 9 audio carrier
+	// frequencies.  Carrier 4 is used only for single-carrier frames,
+	// while all others are used for multi-carrier frames.  Set intCarStartIndex
+	// to the index of the lowest audio frequency carrier to be used.
+	switch(intNumCars) {
+	case 1:
+		intCarStartIndex = 4;
+		break;
+	case 2:
+		intCarStartIndex = 3;
+		break;
+	case 4:
+		intCarStartIndex = 2;
+		break;
+	case 8:
+		intCarStartIndex = 0;
+	}
+
+	// At each time step, the audio sample to be played is the sum values
+	// for all of the carriers multiplied by the specified scale factor.
+	// The scale factor is chosen so that most of the samples will fit
+	// in the 16-bit integer values to be passed to the soundcard.  By allowing
+	// a small number of values to exceed this range, a higher average power
+	// level is produced.  SoftClip() is used to scale results which exceed
+	// this range back into it.  Then SampleSink() sends the result to the
+	// soundcard.
+	for (int m = 0; m < SymbolCount; m++) {  // For each symbol per carrier
+		for (int n = 0; n < intSampPerSym; n++) {  // Sum for all the samples of a symbols
+			intSample = 0;
+			intCarIndex = intCarStartIndex;  // initialize the carrrier index
+			for (int i = 0; i < intNumCars ; i++) {  // across all carriers
+				// Using >> (Symbols[i][m] >> 3) reduces the sample magnitude
+				// by 2 where required
+				if ((Symbols[i][m] & 0x07) < 4)
+					intSample += intPSK100bdCarTemplate[intCarIndex][Symbols[i][m] & 0x07][n] >> (Symbols[i][m] >> 3);
+				else
+					// phases 4 to 7 are the negatives of phases 0 to 3.
+					intSample -= intPSK100bdCarTemplate[intCarIndex][(Symbols[i][m] & 0x07) - 4][n] >> (Symbols[i][m] >> 3);
+				intCarIndex += 1;
+				if (intCarIndex == 4)
+					intCarIndex += 1;  // skip over 1500 Hz for multi carrier modes (multi carrier modes all use even hundred Hz tones)
+			}
+			intSample *= dblCarScalingFactor;  // on the last carrier rescale value based on # of carriers to bound output
+			intSample = SoftClip(intSample);
+			SampleSink(intSample);
+		}
+	}
+}
+
 // Function to Modulate data encoded for PSK and 16QAM, create
 // the 16 bit samples and send to sound interface
 
 void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen)
 {
-	int intNumCar, intBaud, intDataLen, intRSLen, intDataPtr, intSampPerSym, intDataBytesPerCar;
+	int intNumCar, intBaud, intDataLen, intRSLen, intDataPtr;
 	BOOL blnOdd;
 
-	int intSample;
 	char strType[18] = "";
 	char strMod[16] = "";
-	UCHAR bytSym, bytSymToSend, bytMask, bytMinQualThresh;
+	UCHAR bytMinQualThresh;
 	float dblCarScalingFactor;
-	int intMask = 0;
 	int intLeaderLenMS;
-	int i, k, m, n;
-	int intCarStartIndex;
 	int intPeakAmp;
-	int intCarIndex;
 
-	UCHAR bytLastSym[9];  // = {0};  // Holds the last symbol sent (per carrier). bytLastSym(4) is 1500 Hz carrier (only used on 1 carrier modes)
+	intSoftClipCnt = 0;
 
 	if (Len < 0) {
 		WriteDebugLog(LOGERROR, "ERROR: In ModPSKDataAndPlay() Invalid Len (%d).", Len);
@@ -379,30 +468,23 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 	if (!FrameInfo(Type, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType))
 		return;
 
-	intDataBytesPerCar = (Len - 2) / intNumCar;  // We queue the samples here, so dont copy below
-
 	switch(intNumCar)
 	{
 		// These new scaling factor combined with soft clipping to provide near optimum scaling Jan 6, 2018
 		// The Test form was changed to calculate the Peak power to RMS power (PAPR) of the test waveform and count the number of "soft clips" out of ~ 50,000 samples.
 		// These values arrived at emperically using the Test form (Quick brown fox message) to minimize PAPR at a minor decrease in maximum constellation quality
 
-
 		// Rick uses these for QAM
-
 		// dblCarScalingFactor = 1.2  // Starting at 1500 Hz  Selected to give < 9% clipped values yielding a PAPR = 1.77 Constellation Quality >98
 		// dblCarScalingFactor = 0.67  // Carriers at 1400 and 1600 Selected to give < 2.5% clipped values yielding a PAPR = 2.17, Constellation Quality >92
 		// dblCarScalingFactor = 0.4  // Starting at 1200 Hz  Selected to give < 1.5% clipped values yielding a PAPR = 2.48, Constellation Quality >92
 		// dblCarScalingFactor = 0.27  // Starting at 800 Hz  Selected to give < 1% clipped values yielding a PAPR = 2.64, Constellation Quality >94
 
-
 	case 1:
-		intCarStartIndex = 4;
 //		dblCarScalingFactor = 1.0f;  // Starting at 1500 Hz  (scaling factors determined emperically to minimize crest factor)  TODO:  needs verification
 		dblCarScalingFactor = 1.2f;  // Starting at 1500 Hz  Selected to give < 13% clipped values yielding a PAPR = 1.6 Constellation Quality >98
 		break;
 	case 2:
-		intCarStartIndex = 3;
 //		dblCarScalingFactor = 0.53f;
 		if (strcmp(strMod, "16QAM") == 0)
 			dblCarScalingFactor = 0.67f;  // Carriers at 1400 and 1600 Selected to give < 2.5% clipped values yielding a PAPR = 2.17, Constellation Quality >92
@@ -410,20 +492,16 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 			dblCarScalingFactor = 0.65f;  // Carriers at 1400 and 1600 Selected to give < 4% clipped values yielding a PAPR = 2.0, Constellation Quality >95
 		break;
 	case 4:
-		intCarStartIndex = 2;
 //		dblCarScalingFactor = 0.29f;  // Starting at 1200 Hz
 		dblCarScalingFactor = 0.4f;  // Starting at 1200 Hz  Selected to give < 3% clipped values yielding a PAPR = 2.26, Constellation Quality >95
 		break;
 	case 8:
-		intCarStartIndex = 0;
 //		dblCarScalingFactor = 0.17f;  // Starting at 800 Hz
 		if (strcmp(strMod, "16QAM") == 0)
 			dblCarScalingFactor = 0.27f;  // Starting at 800 Hz  Selected to give < 1% clipped values yielding a PAPR = 2.64, Constellation Quality >94
 		else
 			dblCarScalingFactor = 0.25f;  // Starting at 800 Hz  Selected to give < 2% clipped values yielding a PAPR = 2.5, Constellation Quality >95
 	}
-
-	intSampPerSym = 120;
 
 	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
@@ -447,201 +525,45 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 	else
 		intLeaderLenMS = intLeaderLen;
 
-	intSoftClipCnt = 0;
-
 	// Create the leader
-
 	SendLeaderAndSYNC(bytEncodedBytes, intLeaderLen);
-
 	intPeakAmp = 0;
-
 	intDataPtr = 2;  // initialize pointer to start of data.
 
+	int bytesPerCarrier = intDataLen + intRSLen + 3;
+	int SymbolCount;
+	unsigned char Symbols[8][462];
+
 	// Now create a reference symbol for each carrier
+	for (int car = 0; car < intNumCar; ++car) {
+		// Define reference symbol.  A Symbol value of 0 represents a phase
+		// angle of 0 with full magnitude.  If 0 was not always used for this
+		// reference symbol (as a comment in earlier versions of the source
+		// code suggested might be an option), then Calc1CarPSKSymbols() would
+		// need to be adjusted to indicate what values were used.
+		Symbols[car][0] = 0;
+	}
+	PlayPSKSymbols(Symbols, intNumCar, 1, dblCarScalingFactor);
 
-	// We have to do each carrier for each sample, as we write
-	// the sample immediately
-
-	for (n = 0; n < intSampPerSym; n++)  // Sum for all the samples of a symbols
-	{
-		intSample = 0;
-		intCarIndex = intCarStartIndex;  // initialize to correct starting carrier
-
-		for (i = 0; i < intNumCar; i++)  // across all carriers
-		{
-			bytSymToSend = 0;  // using non 0 causes error on first data byte 12/8/2014   ...Values 0-3  not important (carries no data).   (Possible chance for Crest Factor reduction?)
-
-			bytLastSym[intCarIndex] = bytSymToSend;
-
-			// obsolete versions of this code accommodated intBaud == 200 as well as 100.
-			intSample += intPSK100bdCarTemplate[intCarIndex][0][n];  // double the symbol value during template lookup for 4PSK. (skips over odd PSK 8 symbols)
-
-			intCarIndex += 1;
-			if (intCarIndex == 4)
-				intCarIndex += 1;  // skip over 1500 Hz for multi carrier modes (multi carrier modes all use even hundred Hz tones)
-		}
-		intSample = intSample * dblCarScalingFactor;  // on the last carrier rescale value based on # of carriers to bound output
-		SampleSink(intSample);
+	// Calculate the sequence of phase and magnitude values for all carriers.
+	// Each value in Symbols represents a phase and magnitude.  The low 3-bits
+	// are an index from 0 to 7 representing 0, 45, 90, 135, 180, 225, 270,
+	// and 315 degrees respectively.  If (Symbol & 0x08) is set to 1, then the
+	// magnitude is half of full scale, else it is full scale.  The high 4 bits
+	// of Symbols are not used and shall be 0.
+	// Carrier is incremented from 0.  This is not the same as intCarIndex used
+	// elsewhere to correspond to specific carrier audio frequencies.
+	for (int Carrier = 0; Carrier < intNumCar; ++Carrier) {
+		SymbolCount = Calc1CarPSKSymbols(Symbols[Carrier], strMod, &bytEncodedBytes[intDataPtr], bytesPerCarrier);
+		intDataPtr += bytesPerCarrier;
 	}
 
-	// End of reference phase generation
-
-	if (strcmp(strMod, "4PSK") == 0)
-	{
-		for (m = 0; m < intDataBytesPerCar; m++)  // For each byte of input data (all carriers)
-		{
-			bytMask = 0xC0;  // Initialize mask each new data byte
-
-			for (k = 0; k < 4; k++)  // for 4 symbol values per byte of data
-			{
-				for (n = 0; n < intSampPerSym; n++)  // Sum for all the samples of a symbols
-				{
-					intSample = 0;
-					intCarIndex = intCarStartIndex;  // initialize the carrrier index
-
-					for (i = 0; i < intNumCar ; i++)  // across all carriers
-					{
-						bytSym = (bytMask & bytEncodedBytes[intDataPtr + i * intDataBytesPerCar]) >> (2 * (3 - k));
-						bytSymToSend = ((bytLastSym[intCarIndex] + bytSym) & 3);  // Values 0-3
-
-						// obsolete versions of this code accommodated intBaud == 200 as well as 100.
-						if (bytSymToSend < 2)
-							intSample += intPSK100bdCarTemplate[intCarIndex][bytSymToSend * 2][n];  // double the symbol value during template lookup for 4PSK. (skips over odd PSK 8 symbols)
-						else
-							intSample -= intPSK100bdCarTemplate[intCarIndex][2 * (bytSymToSend - 2)][n];  // subtract 2 from the symbol value before doubling and subtract value of table
-						if (n == intSampPerSym - 1)  // Last sample?
-							bytLastSym[intCarIndex] = bytSymToSend;
-
-						intCarIndex += 1;
-						if (intCarIndex == 4)
-							intCarIndex += 1;  // skip over 1500 Hz for multi carrier modes (multi carrier modes all use even hundred Hz tones)
-					}
-					intSample = intSample * dblCarScalingFactor;  // on the last carrier rescale value based on # of carriers to bound output
-
-//					if (intSample > 32700)
-//						intSample = 32700;
-
-//					if (intSample < -32700)
-//						intSample = -32700;
-
-					intSample = SoftClip(intSample);
-
-					SampleSink(intSample);
-				}
-				bytMask = bytMask >> 2;
-			}
-			intDataPtr += 1;
-		}
-	}
-	else if (strcmp(strMod, "8PSK") == 0)
-	{
-		// More complex ...must go through data in 3 byte chunks creating 8 Three bit symbols for each 3 bytes of data.
-
-		for (m = 0; m < intDataBytesPerCar / 3; m++)
-		{
-			for (k = 0; k < 8; k++)  // for 8 symbols in 24 bits of int3Bytes
-			{
-				for (n = 0; n < intSampPerSym; n++)  // Sum for all the samples of a symbols
-				{
-					intSample = 0;
-
-					// We have to sum all samples for all carriers
-
-					intCarIndex = intCarStartIndex;
-
-					for (i = 0; i < intNumCar; i++)
-					{
-						bytSym = GetSym8PSK(intDataPtr, k, i, bytEncodedBytes, intDataBytesPerCar);
-						bytSymToSend = ((bytLastSym[intCarIndex] + bytSym) & 7);  // mod 8
-
-						// obsolete versions of this code accommodated intBaud == 200 as well as 100.
-						if (bytSymToSend < 4)  // This uses the symmetry of the symbols to reduce the table size by a factor of 2
-							intSample += intPSK100bdCarTemplate[intCarIndex][bytSymToSend][n];  // positive phase values template lookup for 8PSK.
-						else
-							intSample -= intPSK100bdCarTemplate[intCarIndex][bytSymToSend - 4][n];  // negative phase values,  subtract value of table
-						if (n == intSampPerSym - 1)  // Last sample?
-							bytLastSym[intCarIndex] = bytSymToSend;
-
-						intCarIndex += 1;
-						if (intCarIndex == 4)
-							intCarIndex += 1;  // skip over 1500 Hz for multi carrier modes (multi carrier modes all use even hundred Hz tones)
-					}
-					intSample = intSample * dblCarScalingFactor;  // on the last carrier rescale value based on # of carriers to bound output
-
-//					if (intSample > 32700)
-//						intSample = 32700;
-
-//					if (intSample < -32700)
-//						intSample = -32700;
-
-					intSample = SoftClip(intSample);
-
-					SampleSink(intSample);
-				}
-			}
-			intDataPtr += 3;
-		}
-	}
-	else if (strcmp(strMod, "16QAM") == 0)
-	{
-		for (m = 0; m < intDataBytesPerCar; m++)  // For each byte of input data (all carriers)
-		{
-			bytMask = 0xF0;  // Initialize mask each new data byte
-
-			for (k = 0; k < 2; k++)  // for 2 symbol values per byte of data
-			{
-				for (n = 0; n < intSampPerSym; n++)  // Sum for all the samples of a symbols
-				{
-					intSample = 0;
-					intCarIndex = intCarStartIndex;  // initialize the carrrier index
-
-					for (i = 0; i < intNumCar ; i++)  // across all carriers
-					{
-						bytSym = (bytMask & bytEncodedBytes[intDataPtr + i * intDataBytesPerCar]) >> (4 * (1 - k));
-						bytSymToSend = (bytLastSym[intCarIndex] + (bytSym & 7)) & 7;  // Values 0-7
-
-						if (bytSym < 8)
-						{
-							if (bytSymToSend < 4)  // This uses the symmetry of the symbols to reduce the table size by a factor of 2
-								intSample += intPSK100bdCarTemplate[intCarIndex][bytSymToSend][n];  // positive phase values template lookup for 8PSK.
-							else
-								intSample -= intPSK100bdCarTemplate[intCarIndex][bytSymToSend - 4][n];  // negative phase values,  subtract value of table
-						}
-						else
-						{
-							if (bytSymToSend < 4)  // This uses the symmetry of the symbols to reduce the table size by a factor of 2
-								intSample += 0.5f * intPSK100bdCarTemplate[intCarIndex][bytSymToSend][n];  // positive phase values template lookup for 8PSK.
-							else
-								intSample -= 0.5f * intPSK100bdCarTemplate[intCarIndex][bytSymToSend - 4][n];  // negative phase values,  subtract value of table
-						}
-						if (n == intSampPerSym - 1)  // Last sample?
-							bytLastSym[intCarIndex] = bytSymToSend;
-
-						intCarIndex += 1;
-						if (intCarIndex == 4)
-							intCarIndex += 1;  // skip over 1500 Hz for multi carrier modes (multi carrier modes all use even hundred Hz tones)
-					}
-
-					intSample = intSample * dblCarScalingFactor;  // on the last carrier rescale value based on # of carriers to bound output
-
-//					if (intSample > 32700)
-//						intSample = 32700;
-
-//					if (intSample < -32700)
-//						intSample = -32700;
-
-					intSample = SoftClip(intSample);
-
-					SampleSink(intSample);
-				}
-				bytMask = bytMask >> 4;
-			}
-			intDataPtr += 1;
-		}
-	}
-
+	PlayPSKSymbols(Symbols, intNumCar, SymbolCount, dblCarScalingFactor);
 	Flush();
+
 	if (intSoftClipCnt > 0)
+		// SoftClips() was called in each of PlayPSKSymbols(), which set
+		// intSoftClipsCnt to the number of samples that were modified.
 		WriteDebugLog(LOGDEBUG, "Soft Clips %d ", intSoftClipCnt);
 }
 
