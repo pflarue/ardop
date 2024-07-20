@@ -453,6 +453,31 @@ void PlatformSleep(int mS)
 	}
 }
 
+/*
+ * Lists common signal abbreviations
+ *
+ * This method is a portable version of glibc's sigabbrev_np().
+ * It only supports a handful of signal names that ARDOP
+ * currently catches and/or ignores. Unlike the glibc function,
+ * the return value is always guaranteed to be non-NULL.
+ */
+const char* PlatformSignalAbbreviation(int signal) {
+	switch (signal) {
+		case SIGABRT:
+			return "SIGABRT";
+		case SIGINT:
+			return "SIGINT";
+		case SIGHUP:
+			return "SIGHUP";
+		case SIGPIPE:
+			return "SIGPIPE";
+		case SIGTERM:
+			return "SIGTERM";
+		default:
+			return "Unknown";
+	}
+}
+
 // PTT via GPIO code
 
 #ifdef __ARM_ARCH
@@ -498,16 +523,10 @@ void SetupGPIOPTT()
 #endif
 
 
-static void sigterm_handler(int sig)
+static void signal_handler_trigger_shutdown(int sig)
 {
-	printf("terminating on SIGTERM\n");
 	blnClosing = TRUE;
-}
-
-static void sigint_handler(int sig)
-{
-	printf("terminating on SIGINT\n");
-	blnClosing = TRUE;
+	closedByPosixSignal = sig;
 }
 
 char * PortString = NULL;
@@ -712,11 +731,11 @@ int platform_main(int argc, char * argv[])
 
 	memset (&act, '\0', sizeof(act));
 
-	act.sa_handler = &sigint_handler;
+	act.sa_handler = &signal_handler_trigger_shutdown;
 	if (sigaction(SIGINT, &act, NULL) < 0)
 		perror ("SIGINT");
 
-	act.sa_handler = &sigterm_handler;
+	act.sa_handler = &signal_handler_trigger_shutdown;
 	if (sigaction(SIGTERM, &act, NULL) < 0)
 		perror ("SIGTERM");
 
