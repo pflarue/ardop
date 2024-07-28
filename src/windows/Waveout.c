@@ -1159,6 +1159,11 @@ void PlatformSleep(int mS)
 	}
 }
 
+const char* PlatformSignalAbbreviation(int signal) {
+	(void)signal;
+	return "Unused";
+}
+
 void DrawTXMode(const char * Mode)
 {
 	char Msg[80];

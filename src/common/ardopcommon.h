@@ -405,6 +405,7 @@ extern BOOL SoundIsPlaying;
 extern int blnLastPTT;
 extern BOOL blnAbort;
 extern BOOL blnClosing;
+extern int closedByPosixSignal;
 extern BOOL blnCodecStarted;
 extern BOOL blnInitializing;
 extern BOOL blnARQDisconnect;

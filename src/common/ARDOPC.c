@@ -49,6 +49,7 @@ void SerialHostPoll();
 void TCPHostPoll();
 BOOL MainPoll();
 void PlatformSleep();
+const char* PlatformSignalAbbreviation(int signal);
 BOOL BusyDetect2(float * dblMag, int intStart, int intStop);
 BOOL IsPingToMe(char * strCallsign);
 
@@ -208,6 +209,7 @@ int intRepeatCnt;
 extern SOCKET TCPControlSock, TCPDataSock;
 
 BOOL blnClosing = FALSE;
+int closedByPosixSignal = 0;
 BOOL blnCodecStarted = FALSE;
 
 unsigned int dttNextPlay = 0;
@@ -791,6 +793,14 @@ void ardopmain()
 			MainPoll();
 		}
 		PlatformSleep(10);
+	}
+
+	if (closedByPosixSignal) {
+		WriteDebugLog(
+			LOGINFO,
+			"Terminating on signal: %s",
+			PlatformSignalAbbreviation(closedByPosixSignal)
+		);
 	}
 
 	closesocket(TCPControlSock);
