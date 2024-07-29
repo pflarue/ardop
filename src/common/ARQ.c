@@ -1525,9 +1525,9 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				ClearDataToSend();
 
 				SetARDOPProtocolState(DISC);
-				InitializeConnection();
-				blnEnbARQRpt = FALSE;
 
+				// Send IDFrame must be done before InitializeConnection(),
+				// because it resets strLocalCallsign to an empty string.
 				if (CheckValidCallsignSyntax(strLocalCallsign))
 				{
 					dttLastFECIDSent = Now;
@@ -1537,6 +1537,9 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 					}
 					Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
 				}
+
+				InitializeConnection();
+				blnEnbARQRpt = FALSE;
 				return;
 			}
 
