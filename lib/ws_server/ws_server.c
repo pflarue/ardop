@@ -454,12 +454,17 @@ void stop_retry_send() {
 // Return remaining_sendlen (which will be 0 if all remaining data
 // has been sent) unless retry_limit has been reached and
 // remaining_sendlen is still not zero.  In that case, close the
-// connection, retset remaining_sendlen and remaining_senddata, and
+// connection, reset remaining_sendlen and remaining_senddata, and
 // return -1.
 int retry_send_to_socket() {
 	if (remaining_sendlen == 0)
 		return (remaining_sendlen);
-	send_retries++;
+	if (++send_retries > retry_limit) {
+		ws_error("WS: Closing connection to client %d.", send_cnum);
+		ws_close_socket(send_cnum);
+		stop_retry_send();
+		return (-1);
+	}
 	int sent;
 	if ((sent = send(
 		pfds[send_cnum].fd,
@@ -467,37 +472,33 @@ int retry_send_to_socket() {
 		remaining_sendlen,
 		0
 	)) != remaining_sendlen) {
-		if (errno == EAGAIN || errno == EWOULDBLOCK) {
-			if (sent > 0) {
-				remaining_sendlen -= sent;
-				char *old_data = remaining_senddata;
-				remaining_senddata = (char *) malloc(remaining_sendlen);
-				if (remaining_senddata == NULL) {
-					ws_error("WS Error:  Memory allocation error for retry send.");
-					remaining_senddata = old_data;
-					stop_retry_send();
-					return (-1);
-				}
-				memcpy(remaining_senddata, old_data + sent, remaining_sendlen);
-				free(old_data);
+		if (sent > 0 || errno == EAGAIN || errno == EWOULDBLOCK) {
+			if (sent < 0)
+				sent = 0;
+			remaining_sendlen -= sent;
+			char *old_data = remaining_senddata;
+			remaining_senddata = (char *) malloc(remaining_sendlen);
+			if (remaining_senddata == NULL) {
+				ws_error("WS Error:  Memory allocation error for retry send.");
+				remaining_senddata = old_data;
+				stop_retry_send();
+				return (-1);
 			}
+			memcpy(remaining_senddata, old_data + sent, remaining_sendlen);
+			free(old_data);
 			ws_debug(
 				"WS: retry_send_to_socket() unable to send all of data."
 				" %d bytes remain unsent after %d retries.",
 				remaining_sendlen, send_retries
-				);
+			);
 			return (remaining_sendlen);
 		} else {
 			ws_error("WS: send failed in retry_send_to_socket().");
-			send_retries = retry_limit;
-		}
-		if (send_retries >= retry_limit) {
 			ws_error("WS: Closing connection to client %d.", send_cnum);
 			ws_close_socket(send_cnum);
 			stop_retry_send();
 			return (-1);
 		}
-		return (remaining_sendlen);
 	}
 	// Success
 	stop_retry_send();
@@ -515,7 +516,9 @@ int send_to_socket(int s_cnum, const char *data, int data_len)
 		return (-1);
 	int sent;
 	if((sent = send(pfds[s_cnum].fd, data, data_len, 0)) != data_len) {
-		if (errno == EAGAIN || errno == EWOULDBLOCK) {
+		if (sent > 0 || errno == EAGAIN || errno == EWOULDBLOCK) {
+			if (sent < 0)
+				sent = 0;
 			remaining_sendlen = data_len - sent;
 			send_cnum = s_cnum;
 			remaining_senddata = (char *) malloc(remaining_sendlen);
@@ -534,10 +537,9 @@ int send_to_socket(int s_cnum, const char *data, int data_len)
 			return (sent);
 		}
 		ws_error(
-			"WS: send failed (%d of %d bytes sent)."
+			"WS: send failed."
 			" errno=%d (%s)."
 			" Closing connection to client %d.",
-			sent, data_len,
 			errno, strerror(errno),
 			s_cnum);
 		ws_close_socket(s_cnum);
