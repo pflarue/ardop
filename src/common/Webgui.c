@@ -472,6 +472,8 @@ int wg_send_mycall(int cnum, char *call) {
 	return wg_send_msg(cnum, msg, strlen(msg));
 }
 
+// For some frame types (ACK, NAK, PingAck)), the `frame` string
+// may include a small amount of data that was encoded in that frame.
 int wg_send_txframet(int cnum, const char *frame) {
 	char msg[64];
 	if (strlen(frame) > sizeof(msg) - 3) {
@@ -482,6 +484,11 @@ int wg_send_txframet(int cnum, const char *frame) {
 	return wg_send_msg(cnum, msg, strlen(msg));
 }
 
+// `state` argument indicates whether frame is still being received (0),
+// has been successfully received (1) or failure to successfully receive
+// has occured (2).
+// For some frame types (ACK, NAK, PingAck, IDFrame, etc.)), the `frame` string
+// may include a small amount of data that was encoded in that frame.
 int wg_send_rxframet(int cnum, unsigned char state, const char *frame) {
 	char msg[64];
 	unsigned char st[3] = {'P', 'O', 'F'};

@@ -153,7 +153,25 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 
 	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
-	wg_send_txframet(0, strType);
+	// In addition to strType, include quality value being sent for ACK/NAK frames
+	char fr_info[32] = "";
+	if (Type <= DataNAKmax || Type >= DataACKmin) {
+		// Quality decoding per DecodeACKNAK().  Note that any value
+		// less than or equal to 38 is always encoded as 38.
+		int q = 38 + (2 * (Type & 0x1F));
+		snprintf(fr_info, sizeof(fr_info), "%s (Q%s=%d/100)",
+			strType, q <= 38 ? "<" : "", q);
+		wg_send_txframet(0,  fr_info);
+	} else if (Type == PINGACK) {
+		// see Decode4FSKPingAck()
+		int intSNdB = ((bytEncodedBytes[2] & 0xF8) >> 3) - 10;  // Range -10 to + 21 dB steps of 1 dB
+		int intQuality = (bytEncodedBytes[2] & 7) * 10 + 30;  // Range 30 to 100 steps of 10
+		snprintf(fr_info, sizeof(fr_info), "PingAck (SN%s=%ddB Q%s=%d/100)",
+			intSNdB > 20 ? ">" : "", intSNdB,
+			intQuality == 30 ? "<" : "", intQuality);
+		wg_send_txframet(0, fr_info);
+	} else
+		wg_send_txframet(0, strType);
 
 	// obsolete versions of this code accommodated inNumCar > 1
 	if (intBaud == 50)

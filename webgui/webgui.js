@@ -351,6 +351,7 @@ window.addEventListener("load", function(evt) {
 	let clearrxtimer = null;
 	let rcvoverflowtimer = null;
 	let rcvunderflowtimer = null;
+	let lastRXtype = "";
 	WebSocketClient.onOpen = function() {
 		// Connection to ardopcf established.
 		console.log("WS connection to ardopcf opened.  Notify ardopcf.");
@@ -559,6 +560,14 @@ window.addEventListener("load", function(evt) {
 					// RX Frame type
 					let rxstatus = decodestr(rdata, 1);
 					let rxfrtype = decodestr(rdata, -1);
+					if (
+						document.getElementById("protocolmode").innerHTML == "ARQ"
+						&& (rxfrtype.endsWith(".E")
+							|| rxfrtype.endsWith(".O")
+						) && rxfrtype == lastRXtype
+					) {
+						rxfrtype += " (REPEAT)"
+					}
 					let rxe = document.getElementById("rxtype");
 					rxe.classList.remove("rxstate_pending");
 					rxe.classList.remove("rxstate_ok");
@@ -578,6 +587,7 @@ window.addEventListener("load", function(evt) {
 						// by a rxstate_ok or rxstate_fail, so don't
 						// set a timer to clear it.
 						// Don't write pending rx to txtlog
+						// Don't update lastRXtype for pending
 						break;
 					case "O":
 						rxe.classList.add("rxstate_ok");
@@ -588,6 +598,8 @@ window.addEventListener("load", function(evt) {
 						}, 5000);  // clear after 5 seconds
 						txtlog.value += "RX: " + rxfrtype + " PASS\n";
 						txtlog.scrollTo(0, txtlog.scrollHeight);
+						if (!rxfrtype.endsWith(" (REPEAT)"))
+							lastRXtype = rxfrtype;
 						break;
 					case "F":
 						rxe.classList.add("rxstate_fail");
@@ -598,6 +610,8 @@ window.addEventListener("load", function(evt) {
 						}, 5000);  // clear after 5 seconds
 						txtlog.value += "RX: " + rxfrtype + " FAIL\n";
 						txtlog.scrollTo(0, txtlog.scrollHeight);
+						if (!rxfrtype.endsWith(" (REPEAT)"))
+							lastRXtype = rxfrtype;
 						break;
 					}
 					rxe.innerHTML = rxfrtype;
@@ -656,6 +670,10 @@ window.addEventListener("load", function(evt) {
 					// txtlog.value += "PTT = true\n";
 					// txtlog.scrollTo(0, txtlog.scrollHeight);
 					document.getElementById("ptt").classList.remove("hidden");
+					// Reset spectrum and add a white line to the waterfall
+					// to mark a period of transmit.
+					drawSpectrum(null);
+					addWaterfallLine(2);
 					break;
 				case "p": {
 					// PTT false
@@ -965,6 +983,8 @@ window.addEventListener("load", function(evt) {
 	const drawSpectrum = (values) => {
 		spCtx.fillStyle = "#000";
 		spCtx.fillRect(0, 0, plotscale * spWidth, plotscale * spHeight);
+		if (!(values instanceof Uint8Array))
+			return;
 		spCtx.beginPath();
 		spCtx.moveTo(0, plotscale * spHeight);
 		for(var i=0; i<values.length; i++) {  // 2 frequency values per i
@@ -1013,6 +1033,22 @@ window.addEventListener("load", function(evt) {
 			plotscale,
 			plotscale * wfWidth,
 			plotscale * wfHeight);
+		if (!(values instanceof Uint8Array)) {
+			// Add blank white lines
+			let colorValues = new Uint8ClampedArray(
+				plotscale * wfWidth * 4);  // filled with 0
+			for (var i=0; i<plotscale * wfWidth; i++) {
+				for (var j=0; j<4; j++) {  // r, g, b
+					colorValues[4*i + j] = colormap[17][j];  // white
+				}
+			}
+			let imageData = new ImageData(
+				colorValues, plotscale * wfWidth, 1);
+			for (k=0; k<values * plotscale; k++) {
+				wfCtx.putImageData(imageData, 0, k);
+			}
+			return;
+		}
 		// expand values (4-bit uint per pixel) to colormap values (RGBA per pixel)
 		let colorValues = new Uint8ClampedArray(
 			plotscale * (2 * values.length) * 4);  // filled with 0

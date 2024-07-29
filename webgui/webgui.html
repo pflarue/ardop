@@ -226,6 +226,18 @@
 			background is used when sending a DataNAK frame telling the other station that you
 			were unable to decode some received data.
 			</p><p>
+			Received DataACK and DataNAK frames include a value indicating the quality of your
+			sent frame as recieved by the other station.  This quality is shown in the <b>RX
+			Frame Type</b> field along with the Frame Type.
+			</p><p>
+			In ARQ Protocol Mode, if a station does not receive a DataACK in response to
+			sending a data frame, it will re-send that frame.  When a repeated data frame
+			is received, the <b>RX Frame Type</b> field will show '(REPEAT)' after the frame
+			type.  If this occurs after you send a DataACK frame, it probably means that
+			the other station did not receive that DataACK.  This is only shown in ARQ
+			Protocol Mode, and only for data frames (not for control frames like IDLE or
+			BREAK).
+			</p><p>
 			The <b>'TX DriveLevel'</b> slider linearly scales the amplitude of the audio sent to
 			your radio by ardopcf.  This, along with your radio's settings and the 'speaker'
 			settings for your computer's soundcard, influences the strength and quality of

@@ -965,7 +965,18 @@ void ProcessNewSamples(short * Samples, int nSamples)
 				// See if IRStoISS shortcut can be invoked
 
 				DrawRXFrame(1, Name(intFrameType));
-				wg_send_rxframet(0, 1, Name(intFrameType));
+				// In addition to Name() of frame type, include quality value
+				// encoded in received ACK/NAK frames
+				if (intFrameType <= DataNAKmax || intFrameType >= DataACKmin) {
+					char fr_info[32] = "";
+					// Quality decoding per DecodeACKNAK().  Note that any value
+					// less than or equal to 38 is always encoded as 38.
+					int q = 38 + (2 * (intFrameType & 0x1F));
+					snprintf(fr_info, sizeof(fr_info), "%s (Q%s=%d/100)",
+						Name(intFrameType), q <= 38 ? "<" : "", q);
+					wg_send_rxframet(0, 1, fr_info);
+				} else
+					wg_send_rxframet(0, 1, Name(intFrameType));
 
 
 				if (ProtocolState == IRStoISS && intFrameType >= DataACKmin)
@@ -1005,6 +1016,8 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			}
 
 			DrawRXFrame(0, Name(intFrameType));
+			// Frame type has been decoded, but data not yet received.  So,
+			// show as Pending (state=0)
 			wg_send_rxframet(0, 0, Name(intFrameType));
 
 			// obsolete versions of this code also accommodated intBaud of 25 and 167.
@@ -1194,6 +1207,8 @@ void ProcessNewSamples(short * Samples, int nSamples)
 ProcessFrame:
 		if (!blnFrameDecodedOK) {
 			DrawRXFrame(2, Name(intFrameType));
+			// DecodeFrame() only does wg_send_rxframet() if OK.  So do here for
+			// failed decodes (state=2)
 			wg_send_rxframet(0, 2, Name(intFrameType));
 		}
 
@@ -2938,7 +2953,9 @@ BOOL Decode4FSKPing()
 	}
 
 	DrawRXFrame(1, bytData);
-	wg_send_rxframet(0, 1, (char *)bytData);
+	char fr_info[32] = "";
+	snprintf(fr_info, sizeof(fr_info), "Ping %s>%s", strCaller, strTarget);
+	wg_send_rxframet(0, 1, fr_info);
 
 	intSNdB = Compute4FSKSN();
 
@@ -3009,7 +3026,10 @@ BOOL Decode4FSKPingACK(UCHAR bytFrameType, int * intSNdB, int * intQuality)
 {
 	int Ack = -1;
 
-	if ((bytFrameData1[0] == bytFrameData1[1])|| (bytFrameData1[0] == bytFrameData1[2]))
+	// PingAck contains three copies of a byte that carries SN and Quality data.
+	// If any two of these match, assume that they are valid.  If all three are
+	// different, then report that the PingAck could not be decoded.
+	if ((bytFrameData1[0] == bytFrameData1[1]) || (bytFrameData1[0] == bytFrameData1[2]))
 		Ack = bytFrameData1[0];
 	else
 		if (bytFrameData1[1] == bytFrameData1[2])
@@ -3287,6 +3307,8 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 	if (CarrierOk[0] != 0 && CarrierOk[0] != 1)
 		CarrierOk[0] = 0;
 
+	// TODO: Confirm that this is not used because DecodeFrame() is not called
+	// for short control frames including ACK and NAK.
 	if ((intFrameType >= DataNAKmin && intFrameType <= DataNAKmax) || intFrameType >= DataACKmin)  // DataACK/NAK
 	{
 		blnDecodeOK = DecodeACKNAK(intFrameType, &intRcvdQuality);
@@ -3341,12 +3363,25 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 
 			blnDecodeOK = Decode4FSKPingACK(intFrameType, &intSNdB, &intQuality);
 
+			// PingAck includes nothing to indicate who it is being sent to or
+			// the identity of the Ping frame it is in response to.  So, the
+			// value of dttLastPINGSent is used to determine whether a Ping frame
+			// was recently sent that this might be in response to, and ignore it
+			// if it no Ping was sent.
 			if (blnDecodeOK && ProtocolState == DISC && Now  - dttLastPINGSent < 5000)
 			{
 				sprintf(Reply, "PINGACK %d %d", intSNdB, intQuality);
 				SendCommandToHost(Reply);
 
 				DrawRXFrame(1, Reply);
+			}
+			// Show in WebGui whether it was to me or not.
+			// intSNdB is in the range -10 to 21
+			// intQuality is in the range of 30-100
+			if (blnDecodeOK) {
+				sprintf(Reply, "PingAck (SN%s=%ddB Q%s=%d/100)",
+					intSNdB > 20 ? ">" : "", intSNdB,
+					intQuality == 30 ? "<" : "", intQuality);
 				wg_send_rxframet(0, 1, Reply);
 			}
 			break;
@@ -3377,7 +3412,10 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			blnDecodeOK = Decode4FSKConReq();
 			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
-				wg_send_rxframet(0, 1, Name(intFrameType));
+				char fr_info[32] = "";
+				snprintf(fr_info, sizeof(fr_info), "%s (%s)",
+					Name(intFrameType), bytData);
+				wg_send_rxframet(0, 1, fr_info);
 			}
 
 			break;
