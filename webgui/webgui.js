@@ -351,6 +351,7 @@ window.addEventListener("load", function(evt) {
 	let clearrxtimer = null;
 	let rcvoverflowtimer = null;
 	let rcvunderflowtimer = null;
+	let lastRXtype = "";
 	WebSocketClient.onOpen = function() {
 		// Connection to ardopcf established.
 		console.log("WS connection to ardopcf opened.  Notify ardopcf.");
@@ -559,6 +560,14 @@ window.addEventListener("load", function(evt) {
 					// RX Frame type
 					let rxstatus = decodestr(rdata, 1);
 					let rxfrtype = decodestr(rdata, -1);
+					if (
+						document.getElementById("protocolmode").innerHTML == "ARQ"
+						&& (rxfrtype.endsWith(".E")
+							|| rxfrtype.endsWith(".O")
+						) && rxfrtype == lastRXtype
+					) {
+						rxfrtype += " (REPEAT)"
+					}
 					let rxe = document.getElementById("rxtype");
 					rxe.classList.remove("rxstate_pending");
 					rxe.classList.remove("rxstate_ok");
@@ -578,6 +587,7 @@ window.addEventListener("load", function(evt) {
 						// by a rxstate_ok or rxstate_fail, so don't
 						// set a timer to clear it.
 						// Don't write pending rx to txtlog
+						// Don't update lastRXtype for pending
 						break;
 					case "O":
 						rxe.classList.add("rxstate_ok");
@@ -588,6 +598,8 @@ window.addEventListener("load", function(evt) {
 						}, 5000);  // clear after 5 seconds
 						txtlog.value += "RX: " + rxfrtype + " PASS\n";
 						txtlog.scrollTo(0, txtlog.scrollHeight);
+						if (!rxfrtype.endsWith(" (REPEAT)"))
+							lastRXtype = rxfrtype;
 						break;
 					case "F":
 						rxe.classList.add("rxstate_fail");
@@ -598,6 +610,8 @@ window.addEventListener("load", function(evt) {
 						}, 5000);  // clear after 5 seconds
 						txtlog.value += "RX: " + rxfrtype + " FAIL\n";
 						txtlog.scrollTo(0, txtlog.scrollHeight);
+						if (!rxfrtype.endsWith(" (REPEAT)"))
+							lastRXtype = rxfrtype;
 						break;
 					}
 					rxe.innerHTML = rxfrtype;
