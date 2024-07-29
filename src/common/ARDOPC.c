@@ -2142,7 +2142,7 @@ void CheckTimers()
 			WriteDebugLog(LOGERROR, "ERROR: In CheckTimers() sending IDFrame before DIC Invalid EncLen (%d).", EncLen);
 			return;
 		}
-		Mod4FSKDataAndPlay(DISCFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
+		Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
 		dttLastFECIDSent = Now;
 
 		if (AccumulateStats)
@@ -2537,7 +2537,7 @@ void SendPING(char * strMycall, char * strTargetCall, int intRpt)
 	intFrameRepeatInterval = 2000;  // ms Finn reported 7/4/2015 that 1600 was too short ...need further evaluation but temporarily moved to 2000 ms
 	blnEnbARQRpt = TRUE;
 
-	Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
+	Mod4FSKDataAndPlay(PING, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 
 	blnAbort = False;
 	dttTimeoutTrip = Now;

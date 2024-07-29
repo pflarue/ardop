@@ -472,6 +472,8 @@ int wg_send_mycall(int cnum, char *call) {
 	return wg_send_msg(cnum, msg, strlen(msg));
 }
 
+// For some frame types (ACK, NAK, PingAck)), the `frame` string
+// may include a small amount of data that was encoded in that frame.
 int wg_send_txframet(int cnum, const char *frame) {
 	char msg[64];
 	if (strlen(frame) > sizeof(msg) - 3) {
