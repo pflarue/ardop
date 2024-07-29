@@ -670,6 +670,10 @@ window.addEventListener("load", function(evt) {
 					// txtlog.value += "PTT = true\n";
 					// txtlog.scrollTo(0, txtlog.scrollHeight);
 					document.getElementById("ptt").classList.remove("hidden");
+					// Reset spectrum and add a white line to the waterfall
+					// to mark a period of transmit.
+					drawSpectrum(null);
+					addWaterfallLine(2);
 					break;
 				case "p": {
 					// PTT false
@@ -979,6 +983,8 @@ window.addEventListener("load", function(evt) {
 	const drawSpectrum = (values) => {
 		spCtx.fillStyle = "#000";
 		spCtx.fillRect(0, 0, plotscale * spWidth, plotscale * spHeight);
+		if (!(values instanceof Uint8Array))
+			return;
 		spCtx.beginPath();
 		spCtx.moveTo(0, plotscale * spHeight);
 		for(var i=0; i<values.length; i++) {  // 2 frequency values per i
@@ -1027,6 +1033,22 @@ window.addEventListener("load", function(evt) {
 			plotscale,
 			plotscale * wfWidth,
 			plotscale * wfHeight);
+		if (!(values instanceof Uint8Array)) {
+			// Add blank white lines
+			let colorValues = new Uint8ClampedArray(
+				plotscale * wfWidth * 4);  // filled with 0
+			for (var i=0; i<plotscale * wfWidth; i++) {
+				for (var j=0; j<4; j++) {  // r, g, b
+					colorValues[4*i + j] = colormap[17][j];  // white
+				}
+			}
+			let imageData = new ImageData(
+				colorValues, plotscale * wfWidth, 1);
+			for (k=0; k<values * plotscale; k++) {
+				wfCtx.putImageData(imageData, 0, k);
+			}
+			return;
+		}
 		// expand values (4-bit uint per pixel) to colormap values (RGBA per pixel)
 		let colorValues = new Uint8ClampedArray(
 			plotscale * (2 * values.length) * 4);  // filled with 0
