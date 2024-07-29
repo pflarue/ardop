@@ -540,11 +540,86 @@ void MixNCOFilter(short * intNewSamples, int Length, float dblOffsetHz)
 
 }
 
+// Calculate the number of 1 bits in a byte
+// Inplementation from:
+// https://stackoverflow.com/questions/9949935/calculate-number-of-bits-set-in-byte
+UCHAR CountOnes(UCHAR Byte) {
+	static const UCHAR NIBBLE_LOOKUP[16] = {
+		0, 1, 1, 2, 1, 2, 2, 3,
+		1, 2, 2, 3, 2, 3, 3, 4
+	};
+	return NIBBLE_LOOKUP[Byte & 0x0F] + NIBBLE_LOOKUP[Byte >> 4];
+}
+
+// Calculate and write to the log the transmission bit error rate for this
+// carrier.  Optionally, also write a "map" of the error locations.
+//
+// For data that was successfully corrected by rs_correct(), comparison of the
+// corrected data to the uncorrected data can be used to calculate the number of
+// bit errors.  If the distribution of the errors is non-uniform, that pattern
+// may provide useful insight.
+//
+// This is a transmission bit error rate since it considers all transmitted data
+// (intended payload + overhead) and is calculated for uncorrected data.  This
+// can only be done when the rs_correct() successfully returned the error free
+// intended payload (as confirmed by the matching CRC value).  Thus, it is a
+// measure of the effectiveness of the demodulator, and it provides diagnostic
+// data that may be of interest when demodulation is less than perfect, but
+// still within the limits of what RS correction can fix.
+void CountErrors(const UCHAR * Uncorrected, const UCHAR * Corrected, int Len, int Carrier, bool LogMap) {
+	int BitErrorCount = 0;
+	int CharErrorCount = 0;
+	UCHAR BitErrors;
+	char ErrMap[300] = " [";
+
+	for (int i = 0; i < Len; ++i) {
+		BitErrors = CountOnes(Uncorrected[i] ^ Corrected[i]);
+		snprintf(ErrMap + strlen(ErrMap), sizeof(ErrMap) - strlen(ErrMap), "%d", BitErrors);
+		BitErrorCount += BitErrors;
+		if (BitErrors)
+			++CharErrorCount;
+	}
+	if (LogMap)
+		snprintf(ErrMap + strlen(ErrMap), sizeof(ErrMap) - strlen(ErrMap), "]");
+	else
+		// Make ErrMap an empty string so that it won't be written to the log
+		ErrMap[0] = 0x00;
+
+	WriteDebugLog(LOGDEBUGPLUS,
+		"Carrier[%d] %d raw bytes. CER=%.1f%% BER=%.1f%%%s",
+		Carrier,
+		Len,
+		100.0 * CharErrorCount / Len,
+		100.0 * BitErrorCount / (8 * Len),
+		ErrMap);
+
+	// log hex string of Uncorrected and Corrected
+	char HexData[1024];
+	snprintf(HexData, sizeof(HexData), "Uncorrected: ");
+	for (int i = 0; i < Len; ++i)
+		snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", Uncorrected[i]);
+	WriteDebugLog(LOGDEBUGPLUS, "%s", HexData);
+	snprintf(HexData, sizeof(HexData), "Corrected:   ");
+	for (int i = 0; i < Len; ++i)
+		snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", Corrected[i]);
+	WriteDebugLog(LOGDEBUGPLUS, "%s", HexData);
+}
+
 // Function to Correct Raw demodulated data with Reed Solomon FEC
 
 int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDataLen, int intRSLen, int bytFrameType, int Carrier)
 {
 	int NErrors;
+	// rs_correct() attempts to correct bytRawData in place.  So, preserve a
+	// copy of the uncorrected data so that it can be used for CountBitErrors().
+	// This includes a single byte that indicates the length of the data
+	// intended to be transmitted, that data intended to be transmitted, the
+	// RS bytes, and a 2-byte checksum.
+	int CombinedLength = intDataLen + intRSLen + 3;
+	UCHAR RawDataCopy[256];
+	if (FileLogLevel >= LOGDEBUGPLUS || ConsoleLogLevel >= LOGDEBUGPLUS)
+		memcpy(RawDataCopy, bytRawData, CombinedLength);
+
 	// Dim bytNoRS(1 + intDataLen + 2 - 1) As Byte  // 1 byte byte Count, Data, 2 byte CRC
 	// Array.Copy(bytRawData, 0, bytNoRS, 0, bytNoRS.Length)
 
@@ -558,6 +633,10 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 
 		memcpy(bytCorrectedData, &bytRawData[1], bytRawData[0]);
 
+		WriteDebugLog(LOGDEBUGPLUS,
+			"Carrier[%d] %d raw bytes. CER and BER not calculated (previously decoded)",
+			Carrier,
+			CombinedLength);
 		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] Carrier %d (%d bytes) already decoded", Carrier, intDataLen);
 		return bytRawData[0];  // don't do it again
 	}
@@ -581,7 +660,7 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 	*/
 
 	// Try correcting with RS Parity
-	NErrors = rs_correct(bytRawData, intDataLen + 3 + intRSLen, intRSLen, true, false);
+	NErrors = rs_correct(bytRawData, CombinedLength, intRSLen, true, false);
 
 	if (NErrors == 0)
 	{
@@ -603,13 +682,18 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 	}
 	else  // NErrors < 0
 	{
+		WriteDebugLog(LOGDEBUGPLUS,
+			"Carrier[%d] %d raw bytes. CER and BER too high. (rs_correct() failed)",
+			Carrier,
+			CombinedLength);
 		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] RS Says Can't Correct (%d bytes) (>%d max corrections)", intDataLen, intRSLen/2);
 		goto returnBad;
 	}
 
 	if (NErrors >= 0 && CheckCRC16FrameType(bytRawData, intDataLen + 1, bytFrameType))  // RS correction successful
 	{
-		int intFailedByteCnt = 0;
+		if (FileLogLevel >= LOGDEBUGPLUS || ConsoleLogLevel >= LOGDEBUGPLUS)
+			CountErrors(RawDataCopy, bytRawData, CombinedLength, Carrier, true);
 		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] OK (%d bytes) with RS %d (of max %d) corrections", intDataLen, NErrors, intRSLen/2);
 		totalRSErrors += NErrors;
 
@@ -3459,6 +3543,19 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 	{
 		WriteDebugLog(LOGINFO, "[DecodeFrame] Frame: %s Decode PASS,  Quality= %d,  RS fixed %d (of %d max).", Name(intFrameType),  intLastRcvdFrameQuality, totalRSErrors, (intRSLen / 2) * intNumCar);
 		wg_send_quality(0, intLastRcvdFrameQuality, totalRSErrors, (intRSLen / 2) * intNumCar);
+
+		if (frameLen > 0) {
+			char Msg[3000] = "";
+
+			snprintf(Msg, sizeof(Msg), "[Decoded bytData] %d bytes as hex values: ", frameLen);
+			for (int i = 0; i < frameLen; i++)
+				snprintf(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg) - 1, "%02X ", bytData[i]);
+			WriteDebugLog(LOGDEBUGPLUS, "%s", Msg);
+
+			if (utf8_check(bytData, frameLen) == NULL)
+				WriteDebugLog(LOGDEBUGPLUS, "[Decoded bytData] %d bytes as utf8 text: '%.*s'", frameLen, frameLen, bytData);
+		}
+
 #ifdef PLOTCONSTELLATION
 		if (intFrameType == IDFRAME || (intFrameType >= ConReqmin && intFrameType <= ConReqmax))
 			DrawDecode(lastGoodID);  // ID or CONREQ
@@ -3711,9 +3808,13 @@ int UpdatePhaseConstellation(short * intPhases, short * intMag, char * strMod, B
 		intY = yCenter + dblRad * sinf(dblPlotRotation + intPhases[i] / 1000.0f);
 
 
-		if (intX > 0 && intY > 0)
-			if (intX != xCenter && intY != yCenter)
-				mySetPixel(intX, intY, Yellow);  // don't plot on top of axis
+		// 20240718 LaRue, It may be less attractive on Wiseman's GUI, but it is
+		// more useful for diagnostic purposes to include all points (and WebGUI
+		// plots the axis lines after all points are plotted).
+		mySetPixel(intX, intY, Yellow);
+//		if (intX > 0 && intY > 0)
+//			if (intX != xCenter && intY != yCenter)
+//				mySetPixel(intX, intY, Yellow);  // don't plot on top of axis
 #endif
 	}
 
@@ -3974,7 +4075,6 @@ int Track1CarPSK(int intCarFreq, char * strPSKMod, float dblUnfilteredPhase, BOO
 		return 1;
 	}
 	// Debug.WriteLine("Filtered Phase = " & Format(dblFilteredPhaseOffset, "00.000") & "  Offset = " & Format(dblPhaseOffset, "00.000") & "  Unfiltered = " & Format(dblUnfilteredPhase, "00.000"))
-
 	return 0;
 }
 
@@ -4469,7 +4569,7 @@ int Demod1CarPSKChar(int Start, int Carrier)
 	int intMiliRadPerSample = intCarFreq * M_PI / 6;
 	int i;
 	int intNumOfSymbols = intPSKMode;
-	int origStart = Start;;
+	int origStart = Start;
 
 	if (CarrierOk[Carrier])  // Already decoded this carrier?
 	{
@@ -4728,23 +4828,23 @@ BOOL DemodQAM()
 
 			DecodeCompleteTime = Now;
 
-		CorrectPhaseForTuningOffset(&intPhases[0][0], intPhasesLen, strMod);
+			CorrectPhaseForTuningOffset(&intPhases[0][0], intPhasesLen, strMod);
 
-//		if (intNumCar > 1)
-//			CorrectPhaseForTuningOffset(&intPhases[1][0], intPhasesLen, strMod);
+//			if (intNumCar > 1)
+//				CorrectPhaseForTuningOffset(&intPhases[1][0], intPhasesLen, strMod);
 
-		if (intNumCar > 2)
-		{
-//			CorrectPhaseForTuningOffset(&intPhases[2][0], intPhasesLen, strMod);
-//			CorrectPhaseForTuningOffset(&intPhases[3][0], intPhasesLen, strMod);
-		}
-		if (intNumCar > 4)
-		{
-//			CorrectPhaseForTuningOffset(&intPhases[4][0], intPhasesLen, strMod);
-//			CorrectPhaseForTuningOffset(&intPhases[5][0], intPhasesLen, strMod);
-//			CorrectPhaseForTuningOffset(&intPhases[6][0], intPhasesLen, strMod);
-//			CorrectPhaseForTuningOffset(&intPhases[7][0], intPhasesLen, strMod);
-		}
+			if (intNumCar > 2)
+			{
+//				CorrectPhaseForTuningOffset(&intPhases[2][0], intPhasesLen, strMod);
+//				CorrectPhaseForTuningOffset(&intPhases[3][0], intPhasesLen, strMod);
+			}
+			if (intNumCar > 4)
+			{
+//				CorrectPhaseForTuningOffset(&intPhases[4][0], intPhasesLen, strMod);
+//				CorrectPhaseForTuningOffset(&intPhases[5][0], intPhasesLen, strMod);
+//				CorrectPhaseForTuningOffset(&intPhases[6][0], intPhasesLen, strMod);
+//				CorrectPhaseForTuningOffset(&intPhases[7][0], intPhasesLen, strMod);
+			}
 
 			intLastRcvdFrameQuality = UpdatePhaseConstellation(&intPhases[intNumCar - 1][0], &intMags[intNumCar - 1][0], strMod, TRUE);
 
@@ -4758,26 +4858,26 @@ BOOL DemodQAM()
 
 			}
 
-		if (intNumCar > 2)
-		{
-			Decode1CarQAM(bytFrameData3, 2);
-			Decode1CarQAM(bytFrameData4, 3);
-			frameLen +=  CorrectRawDataWithRS(bytFrameData3, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 2);
-			frameLen +=  CorrectRawDataWithRS(bytFrameData4, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 3);
+			if (intNumCar > 2)
+			{
+				Decode1CarQAM(bytFrameData3, 2);
+				Decode1CarQAM(bytFrameData4, 3);
+				frameLen +=  CorrectRawDataWithRS(bytFrameData3, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 2);
+				frameLen +=  CorrectRawDataWithRS(bytFrameData4, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 3);
 
-		}
-		if (intNumCar > 4)
-		{
-			Decode1CarQAM(bytFrameData5, 4);
-			Decode1CarQAM(bytFrameData6, 5);
-			Decode1CarQAM(bytFrameData7, 6);
-			Decode1CarQAM(bytFrameData8, 7);
-			frameLen +=  CorrectRawDataWithRS(bytFrameData5, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 4);
-			frameLen +=  CorrectRawDataWithRS(bytFrameData6, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 5);
-			frameLen +=  CorrectRawDataWithRS(bytFrameData7, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 6);
-			frameLen +=  CorrectRawDataWithRS(bytFrameData8, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 7);
+			}
+			if (intNumCar > 4)
+			{
+				Decode1CarQAM(bytFrameData5, 4);
+				Decode1CarQAM(bytFrameData6, 5);
+				Decode1CarQAM(bytFrameData7, 6);
+				Decode1CarQAM(bytFrameData8, 7);
+				frameLen +=  CorrectRawDataWithRS(bytFrameData5, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 4);
+				frameLen +=  CorrectRawDataWithRS(bytFrameData6, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 5);
+				frameLen +=  CorrectRawDataWithRS(bytFrameData7, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 6);
+				frameLen +=  CorrectRawDataWithRS(bytFrameData8, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 7);
 
-		}
+			}
 
 
 
@@ -4848,7 +4948,7 @@ int Demod1CarQAMChar(int Start, int Carrier)
 	int intMiliRadPerSample = intCarFreq * M_PI / 6;
 	int i;
 	int intNumOfSymbols = 2;
-	int origStart = Start;;
+	int origStart = Start;
 
 	if (CarrierOk[Carrier])  // Already decoded this carrier?
 	{

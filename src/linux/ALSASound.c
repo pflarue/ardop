@@ -2492,6 +2492,17 @@ UCHAR Pixels[4096];
 UCHAR * pixelPointer = Pixels;
 
 
+// This data may be copied and pasted from the debug log file into the
+// "Host Command" input box in the WebGui in developer mode to reproduce
+// the constellation plot.
+void LogConstellation() {
+	char Msg[10000] = "CPLOT ";
+	for (int i = 0; i < pixelPointer - Pixels; i++)
+		snprintf(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg), "%02X", Pixels[i]);
+	WriteDebugLog(LOGDEBUGPLUS, "%s", Msg);
+}
+
+
 void mySetPixel(unsigned char x, unsigned char y, unsigned int Colour)
 {
 	// Used on Windows for constellation. Save points and send to GUI at end
@@ -2516,6 +2527,7 @@ void DrawAxes(int Qual, char * Mode)
 	UCHAR Msg[80];
 	SendtoGUI('C', Pixels, pixelPointer - Pixels);
 	wg_send_pixels(0, Pixels, pixelPointer - Pixels);
+	LogConstellation();
 	pixelPointer = Pixels;
 
 	sprintf(Msg, "%s Quality: %d", Mode, Qual);
