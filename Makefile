@@ -102,6 +102,9 @@ LDFLAGS = -Xlinker -Map=output.map
 CC = gcc
 CC_NATIVE ?= $(CC)
 
+# How to wrap a symbol with ld
+LDWRAP := -Wl,--wrap=
+
 # Path to txt2c executable; will be built if it does not already exist
 TXT2C ?=
 
@@ -152,7 +155,25 @@ test: buildtest
 
 # rule to make test-case executables from their sources
 test/ardop/test_%: test/ardop/test_%.c $(OBJS) $(TEST_OBJS_COMMON)
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) $^ -o $@ $(LOADLIBES) $(LDLIBS) -lcmocka
+	$(CC) \
+		$(CPPFLAGS) \
+		$(CFLAGS) \
+		$(LDFLAGS) \
+		$(patsubst %,$(LDWRAP)%,$(WRAP)) \
+		$< \
+		$(OBJS) \
+		$(TEST_OBJS_COMMON) \
+		-o $@ \
+		$(LOADLIBES) \
+		$(LDLIBS) \
+		-lcmocka
+
+# linkage overrides for unit tests
+#   for tests that need only a subset of production code,
+#   set OBJS to the .o files you want
+#
+#   for tests that need mock functions injected,
+#   set WRAP to a space-separated list of functions to mock
 
 -include *.d
 
