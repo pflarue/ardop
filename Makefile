@@ -34,6 +34,10 @@
 #		cmake -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="C:\winlibs" ..
 #		mingw32-make
 #		mingw32-make install
+#
+#	To cross-compile for Windows on Linux,
+#		sudo apt install mingw-w64
+#		make CC_NATIVE=gcc CC=i686-w64-mingw32-gcc-posix WIN32=1
 
 .PHONY: all buildtest test
 
@@ -62,6 +66,16 @@ OBJS = \
 	src/common/gen-webgui.js.o \
 	src/common/Webgui.o \
 
+# Linux-only object files
+OBJS_LIN = \
+	src/linux/ALSASound.o \
+	src/linux/LinSerial.o \
+
+# Windows-only object files
+OBJS_WIN = \
+	src/windows/Waveout.o \
+	lib/hid/hid.o \
+
 # user-facing executables, like ardopcf
 OBJS_EXE = \
 	src/common/ardopcf.o \
@@ -86,19 +100,20 @@ CFLAGS = -g -MMD
 LDLIBS = -lm -lpthread
 LDFLAGS = -Xlinker -Map=output.map
 CC = gcc
+CC_NATIVE ?= $(CC)
 
 # Path to txt2c executable; will be built if it does not already exist
 TXT2C ?=
 
-ifeq ($(OS),Windows_NT)
-OBJS += \
-	src/windows/Waveout.o \
-	lib/hid/hid.o
+# Set WIN32 to non-empty to cross-compile on Linux.
+# Leave empty for OS auto-detection
+WIN32 ?= $(filter $(OS),Windows_NT)
+
+ifneq ($(WIN32),)
+OBJS += $(OBJS_WIN)
 LDLIBS += -lwsock32 -lwinmm -lsetupapi -lws2_32
 else
-OBJS += \
-	src/linux/ALSASound.o \
-	src/linux/LinSerial.o
+OBJS += $(OBJS_LIN)
 LDLIBS += -lrt -lasound
 endif
 
@@ -113,7 +128,7 @@ TXT2C := lib/txt2c/txt2c
 
 # build txt2c directly and without our link libraries (none are required)
 $(TXT2C): $(TXT2C).c
-	$(CC) $^ -o $@
+	$(CC_NATIVE) $^ -o $@
 
 # mark build products for cleaning
 CLEAN += $(TXT2C) $(TXT2C).exe
@@ -151,6 +166,10 @@ CLEAN += \
 	ardopcf.exe \
 	$(OBJS) \
 	$(OBJS:.o=.d) \
+	$(OBJS_LIN) \
+	$(OBJS_LIN:.o=.d) \
+	$(OBJS_WIN) \
+	$(OBJS_WIN:.o=.d) \
 	$(OBJS_EXE) \
 	$(OBJS_EXE:.o=.d) \
 	$(TESTS) \
