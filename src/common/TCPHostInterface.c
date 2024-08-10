@@ -578,7 +578,7 @@ BOOL TCPHostInit()
 	WSAStartup(MAKEWORD(2, 0), &WsaData);
 #endif
 
-	ZF_LOGF("%s listening on port %d", ProductName, port);
+	ZF_LOGI("%s listening on port %d", ProductName, port);
 //	InitQueue();
 
 	// Here is where our listening ports for commands and data are opened.

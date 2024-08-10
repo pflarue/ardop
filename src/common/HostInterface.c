@@ -442,7 +442,7 @@ void ProcessCommandFromHost(char * strCMD)
 				ConsoleLogLevel = i;
 				sprintf(cmdReply, "%s now %d", strCMD, ConsoleLogLevel);
 				SendReplyToHost(cmdReply);
-				ZF_LOGF("ConsoleLogLevel = %d (%s)", ConsoleLogLevel, strLogLevels[ConsoleLogLevel]);
+				ZF_LOGI("ConsoleLogLevel = %d (%s)", ConsoleLogLevel, strLogLevels[ConsoleLogLevel]);
 			}
 			else
 				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
@@ -790,7 +790,7 @@ void ProcessCommandFromHost(char * strCMD)
 				FileLogLevel = i;
 				sprintf(cmdReply, "%s now %d", strCMD, FileLogLevel);
 				SendReplyToHost(cmdReply);
-				ZF_LOGF("FileLogLevel = %d (%s)", FileLogLevel, strLogLevels[FileLogLevel]);
+				ZF_LOGI("FileLogLevel = %d (%s)", FileLogLevel, strLogLevels[FileLogLevel]);
 			}
 			else
 				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);

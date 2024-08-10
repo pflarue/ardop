@@ -1171,7 +1171,7 @@ BOOL FrameInfo(UCHAR bytFrameType, int * blnOdd, int * intNumCar, char * strMod,
 			break;
 
 		default:
-			ZF_LOGF("No data for frame type = 0x%02hhx", bytFrameType);
+			ZF_LOGE("No data for frame type = 0x%02hhx", bytFrameType);
 			return FALSE;
 		}
 	}

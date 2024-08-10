@@ -502,7 +502,7 @@ void SetupGPIOPTT()
 {
 	if (pttGPIOPin == -1)
 	{
-		ZF_LOGF("GPIO PTT disabled");
+		ZF_LOGI("GPIO PTT disabled");
 		RadioControl = FALSE;
 		useGPIO = FALSE;
 	}
@@ -515,7 +515,7 @@ void SetupGPIOPTT()
 
 		gpioSetMode(pttGPIOPin, PI_OUTPUT);
 		gpioWrite(pttGPIOPin, pttGPIOInvert ? 1 : 0);
-		ZF_LOGF("Using GPIO pin %d for PTT", pttGPIOPin);
+		ZF_LOGI("Using GPIO pin %d for PTT", pttGPIOPin);
 		RadioControl = TRUE;
 		useGPIO = TRUE;
 	}
@@ -676,7 +676,7 @@ int platform_main(int argc, char * argv[])
 						if (destaddr->sin_addr.s_addr != INADDR_NONE)
 						{
 							useHamLib = 1;
-							ZF_LOGF("Using Hamlib at %s:%s for PTT", PTTPort, Baud);
+							ZF_LOGI("Using Hamlib at %s:%s for PTT", PTTPort, Baud);
 							RadioControl = TRUE;
 							PTTMode = PTTHAMLIB;
 						}
@@ -692,12 +692,12 @@ int platform_main(int argc, char * argv[])
 
 	if (hCATDevice)
 	{
-		ZF_LOGF("CAT Control on port %s", CATPort);
+		ZF_LOGI("CAT Control on port %s", CATPort);
 		COMSetRTS(hPTTDevice);
 		COMSetDTR(hPTTDevice);
 		if (PTTOffCmdLen)
 		{
-			ZF_LOGF("PTT using CAT Port: %s", CATPort);
+			ZF_LOGI("PTT using CAT Port: %s", CATPort);
 			RadioControl = TRUE;
 		}
 	}
@@ -707,13 +707,13 @@ int platform_main(int argc, char * argv[])
 
 		if (PTTOffCmdLen)
 		{
-			ZF_LOGF("Warning PTT Off string defined but no CAT port");
+			ZF_LOGW("Warning PTT Off string defined but no CAT port");
 		}
 	}
 
 	if (hPTTDevice)
 	{
-		ZF_LOGF("Using RTS on port %s for PTT", PTTPort);
+		ZF_LOGI("Using RTS on port %s for PTT", PTTPort);
 		COMClearRTS(hPTTDevice);
 		COMClearDTR(hPTTDevice);
 		RadioControl = TRUE;

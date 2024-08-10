@@ -389,9 +389,9 @@ int platform_main(int argc, char * argv[])
 		sprintf(&LogName[2][0], "%s/%s", LogDir, "ARDOPSession");
 	}
 
-	ZF_LOGF("\n\n%s Version %s (https://www.github.com/pflarue/ardop)", ProductName, ProductVersion);
-	ZF_LOGF("Copyright (c) 2014-2024 Rick Muething, John Wiseman, Peter LaRue");
-	ZF_LOGF(
+	ZF_LOGI("\n\n%s Version %s (https://www.github.com/pflarue/ardop)", ProductName, ProductVersion);
+	ZF_LOGI("Copyright (c) 2014-2024 Rick Muething, John Wiseman, Peter LaRue");
+	ZF_LOGI(
 		"See https://github.com/pflarue/ardop/blob/master/LICENSE for licence details including\n"
 		"  information about authors of external libraries used and their licenses."
 	);
@@ -436,7 +436,7 @@ int platform_main(int argc, char * argv[])
 				if (destaddr->sin_addr.s_addr != INADDR_NONE)
 				{
 					useHamLib = 1;
-					ZF_LOGF("Using Hamlib at %s:%s for PTT", PTTPort, Baud);
+					ZF_LOGI("Using Hamlib at %s:%s for PTT", PTTPort, Baud);
 					RadioControl = TRUE;
 					PTTMode = PTTHAMLIB;
 				}
@@ -466,12 +466,12 @@ int platform_main(int argc, char * argv[])
 
 	if (hCATDevice)
 	{
-		ZF_LOGF("CAT Control on port %s", CATPort);
+		ZF_LOGI("CAT Control on port %s", CATPort);
 		COMSetRTS(hPTTDevice);
 		COMSetDTR(hPTTDevice);
 		if (PTTOffCmdLen)
 		{
-			ZF_LOGF("PTT using CAT Port", CATPort);
+			ZF_LOGI("PTT using CAT Port", CATPort);
 			RadioControl = TRUE;
 		}
 	}
@@ -480,12 +480,12 @@ int platform_main(int argc, char * argv[])
 		// Warn of -u and -k defined but no CAT Port
 
 		if (PTTOffCmdLen)
-			ZF_LOGF("Warning PTT Off string defined but no CAT port", CATPort);
+			ZF_LOGW("Warning PTT Off string defined but no CAT port", CATPort);
 	}
 
 	if (hPTTDevice)
 	{
-		ZF_LOGF("Using RTS on port %s for PTT", PTTPort);
+		ZF_LOGI("Using RTS on port %s for PTT", PTTPort);
 		COMClearRTS(hPTTDevice);
 		COMClearDTR(hPTTDevice);
 		RadioControl = TRUE;
@@ -530,7 +530,7 @@ unsigned int getTicks()
 void printtick(char * msg)
 {
 	QueryPerformanceCounter(&NewTicks);
-	ZF_LOGF("%s %i\r", msg, Now - LastNow);
+	ZF_LOGD("%s %i\r", msg, Now - LastNow);
 	LastNow = Now;
 }
 
@@ -598,7 +598,7 @@ void GetSoundDevices()
 {
 	int i;
 
-	ZF_LOGF("Capture Devices");
+	ZF_LOGI("Capture Devices");
 
 	CaptureCount = waveInGetNumDevs();
 
@@ -613,12 +613,12 @@ void GetSoundDevices()
 		if (CaptureDevices)
 			strcat(CaptureDevices, ",");
 		strcat(CaptureDevices, pwic.szPname);
-		ZF_LOGF("%d %s", i, pwic.szPname);
+		ZF_LOGI("%d %s", i, pwic.szPname);
 		memcpy(&CaptureNames[i][0], pwic.szPname, MAXPNAMELEN);
 		_strupr(&CaptureNames[i][0]);
 	}
 
-	ZF_LOGF("Playback Devices");
+	ZF_LOGI("Playback Devices");
 
 	PlaybackCount = waveOutGetNumDevs();
 
@@ -633,7 +633,7 @@ void GetSoundDevices()
 		if (PlaybackDevices[0])
 			strcat(PlaybackDevices, ",");
 		strcat(PlaybackDevices, pwoc.szPname);
-		ZF_LOGF("%i %s", i, pwoc.szPname);
+		ZF_LOGI("%i %s", i, pwoc.szPname);
 		memcpy(&PlaybackNames[i][0], pwoc.szPname, MAXPNAMELEN);
 		_strupr(&PlaybackNames[i][0]);
 		waveOutClose(hWaveOut);
@@ -683,7 +683,7 @@ int InitSound(BOOL Report)
 	{
 		ret = waveOutGetDevCaps((UINT_PTR)hWaveOut, &pwoc, sizeof(WAVEOUTCAPS));
 		if (Report)
-			ZF_LOGF("Opened WaveOut Device %s", pwoc.szPname);
+			ZF_LOGI("Opened WaveOut Device %s", pwoc.szPname);
 	}
 
 	if (strlen(CaptureDevice) <= 2)
@@ -718,7 +718,7 @@ int InitSound(BOOL Report)
 	{
 		ret = waveInGetDevCaps((UINT_PTR)hWaveIn, &pwic, sizeof(WAVEINCAPS));
 		if (Report)
-			ZF_LOGF("Opened WaveIn Device %s", pwic.szPname);
+			ZF_LOGI("Opened WaveIn Device %s", pwic.szPname);
 	}
 
 //	wavfp1 = fopen("s:\\textxxx.wav", "wb");
