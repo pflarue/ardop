@@ -302,8 +302,8 @@ int wg_send_msg(int cnum, const char *data, unsigned int data_len) {
 	char header[2];
 	if (data[1] != '|') {
 		ZF_LOGE(
-			"ERROR: Invalid message to send of length %d.  Msg begins with %02X %02X",
-			data[0], data[1]);
+			"ERROR: Invalid message to send of length %u.  Msg begins with %02hhx %02hhx",
+			data_len, data[0], data[1]);
 		return (0);
 	}
 	if ((headlen = encodeUvint(header, 2, (unsigned int)(data_len))) == -1)
@@ -379,7 +379,7 @@ int wg_send_alert(int cnum, const char * format, ...) {
 int wg_send_protocolmode(int cnum) {
 	const char ProtocolMode_msgs[3][5] = {"m|FEC", "m|ARQ", "m|RXO"};
 	if (ProtocolMode < 1 || ProtocolMode > 3) {
-		ZF_LOGW("Unexpected ProtocolMode=%d.  Unable to send to Webgui Client.");
+		ZF_LOGW("Unexpected ProtocolMode=%d.  Unable to send to Webgui Client.", ProtocolMode);
 		return (0);
 	}
 	return wg_send_msg(cnum, ProtocolMode_msgs[ProtocolMode - 1], 5);
@@ -539,7 +539,7 @@ int wg_send_pixels(int cnum, unsigned char *data, size_t datalen) {
 	char msg[10000];  // Large enough for 4FSK.2000.600
 	if (datalen > sizeof(msg)) {
 		ZF_LOGW(
-			"WARNING: Too much pixel data (%d bytes) provided to wg_send_pixels()",
+			"WARNING: Too much pixel data (%lu bytes) provided to wg_send_pixels()",
 			datalen);
 		datalen = sizeof(msg) - 2;
 	}
@@ -751,7 +751,8 @@ void WebguiPoll() {
 			if (msglen != 2) {
 				ZF_LOGW(
 					"WARNING: Invalid msglen=%d received from cnum=%d with type='0'"
-					" (Client connected/reconnected).  Expected msglen=2.  Ignoring.");
+					" (Client connected/reconnected).  Expected msglen=2.  Ignoring.",
+					msglen, cnum);
 				break;
 			}
 			// Probably could just increment WebGuiNumConnected by 1,

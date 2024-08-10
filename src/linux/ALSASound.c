@@ -550,7 +550,7 @@ int platform_main(int argc, char * argv[])
 				"%s ",
 				argv[i])
 		) {
-			printf("ERROR: cmdstr[%d] insufficient to hold fill command string for logging.\n", sizeof(cmdstr));
+			printf("ERROR: cmdstr[%ld] insufficient to hold fill command string for logging.\n", sizeof(cmdstr));
 			break;
 		}
 	}
@@ -697,7 +697,7 @@ int platform_main(int argc, char * argv[])
 		COMSetDTR(hPTTDevice);
 		if (PTTOffCmdLen)
 		{
-			ZF_LOGF("PTT using CAT Port", CATPort);
+			ZF_LOGF("PTT using CAT Port: %s", CATPort);
 			RadioControl = TRUE;
 		}
 	}
@@ -707,7 +707,7 @@ int platform_main(int argc, char * argv[])
 
 		if (PTTOffCmdLen)
 		{
-			ZF_LOGF("Warning PTT Off string defined but no CAT port", CATPort);
+			ZF_LOGF("Warning PTT Off string defined but no CAT port");
 		}
 	}
 
@@ -1310,7 +1310,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 	// ZF_LOGI("snd_pcm_hw_params_get_period_time(hw_params, &intPeriodTime, &intDir) intPeriodTime=%d intDir=%d", intPeriodTime, intDir);
 
 	if (!FixTiming && (intPeriodTime * intRate != periodSize * 1000000) && blnFirstOpenSoundPlayback) {
-		ZF_LOGW("WARNING: Inconsistent ALSA playback configuration: %d * %d != %d * 1000000.",
+		ZF_LOGW("WARNING: Inconsistent ALSA playback configuration: %u * %u != %ld * 1000000.",
 			intPeriodTime, intRate, periodSize);
 		ZF_LOGW("This will result in a playblack sample rate of %f instead of %d.",
 			periodSize * 1000000.0 / intPeriodTime, intRate);

@@ -1828,7 +1828,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 		else
 			ZF_LOGD(
 				"Received (FAILED decode) frame of unexpected FrameType=%s"
-				" while ProtocolState == IDLE %sand bytDataToSendLength=%d."
+				" while ProtocolState == IDLE and bytDataToSendLength=%d."
 				" Ignoring.",
 				Name(intFrameType),
 				bytDataToSendLength);

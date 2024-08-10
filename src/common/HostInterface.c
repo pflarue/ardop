@@ -159,7 +159,7 @@ void ProcessCommandFromHost(char * strCMD)
 
 	if (strlen(strCMD) >= sizeof(cmdCopy)) {
 		ZF_LOGE(
-			"Host command too long to process (%d).  Ignoring. '%.40s...'",
+			"Host command too long to process (%lu).  Ignoring. '%.40s...'",
 			strlen(strCMD), strCMD);
 		return;
 	}
@@ -248,7 +248,7 @@ void ProcessCommandFromHost(char * strCMD)
 				}
 			}
 		}
-		snprintf(strFault, sizeof(strFault), "Syntax Err: %s", cmdCopy);
+		snprintf(strFault, sizeof(strFault), "Syntax Err: %.80s", cmdCopy);
 		goto cmddone;
 	}
 
@@ -901,7 +901,7 @@ void ProcessCommandFromHost(char * strCMD)
 			}
 		}
 
-		snprintf(strFault, sizeof(strFault), "Syntax Err: %s", cmdCopy);
+		snprintf(strFault, sizeof(strFault), "Syntax Err: %.80s", cmdCopy);
 
 		goto cmddone;
 	}

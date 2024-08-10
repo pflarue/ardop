@@ -509,7 +509,7 @@ int txframe(char * frameParams) {
 						datalen = strlen(params[2]) - 2;
 					else {
 						ZF_LOGW(
-							"TXFRAME %s is discarding %d bytes since only %d can be sent.",
+							"TXFRAME %s is discarding %lu bytes since only %u can be sent.",
 							params[1], strlen(params[2]) - 2 - maxlen, maxlen);
 						datalen = maxlen;
 					}
@@ -520,7 +520,7 @@ int txframe(char * frameParams) {
 						datalen = strlen(params[2]) / 2;
 					else {
 						ZF_LOGW(
-							"TXFRAME %s is discarding %d bytes since only %d can be sent.",
+							"TXFRAME %s is discarding %lu bytes since only %u can be sent.",
 							params[1], strlen(params[2]) / 2 - maxlen, maxlen);
 						datalen = maxlen;
 					}

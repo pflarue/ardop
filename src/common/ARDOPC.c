@@ -1171,7 +1171,7 @@ BOOL FrameInfo(UCHAR bytFrameType, int * blnOdd, int * intNumCar, char * strMod,
 			break;
 
 		default:
-			ZF_LOGF("No data for frame type = 0x" ,bytFrameType);
+			ZF_LOGF("No data for frame type = 0x%02hhx", bytFrameType);
 			return FALSE;
 		}
 	}
@@ -1829,7 +1829,7 @@ void CompressCallsign(const char * inCallsign, UCHAR * Compressed)
 		ZF_LOGW(
 			"WARNING: In CompressCallsign: Callsign string excluding the"
 			" optional SSID is too long.  '%.*s' is being truncated to '%.7s'",
-			callsign_len, inp, inp);
+			(int)callsign_len, inp, inp);
 		callsign_len = 7;
 	}
 
@@ -1915,7 +1915,7 @@ void DeCompressCallsign(const char * bytCallsign, char * returned, size_t return
 
 	if (lencheck >= returnlen)
 		ZF_LOGW(
-			"LOGIC-ERROR: returnlen (%d) passed to DeCompressCallsign was too"
+			"LOGIC-ERROR: returnlen (%lu) passed to DeCompressCallsign was too"
 			" small, so callsign was truncated.",
 			returnlen);
 }
