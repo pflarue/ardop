@@ -134,7 +134,7 @@ void TCPSendCommandToHost(char * strText)
 		ret = WSAGetLastError();
 
 		if (CommandTrace)
-			WriteDebugLog(LOGDEBUG, " Command Trace TO Host %s", strText);
+			ZF_LOGD(" Command Trace TO Host %s", strText);
 		return;
 	}
 	return;
@@ -243,7 +243,7 @@ void TCPAddTagToDataAndSendToHost(UCHAR * bytData, char * strTag, int Len)
 		return;
 
 	if (CommandTrace)
-		WriteDebugLog(LOGDEBUG, "[AddTagToDataAndSendToHost] bytes=%d Tag %s", Len, strTag);
+		ZF_LOGD("[AddTagToDataAndSendToHost] bytes=%d Tag %s", Len, strTag);
 
 	// Have to save copy for possible retry (and possibly until previous
 	// command is acked
@@ -386,7 +386,7 @@ loop:
 
 	// Getting bad data ?? Should we just reset ??
 
-	WriteDebugLog(LOGDEBUG, "ARDOP BadHost Message ?? %s", ARDOPBuffer);
+	ZF_LOGD("ARDOP BadHost Message ?? %s", ARDOPBuffer);
 	InputLen = 0;
 	return;
 }
@@ -502,7 +502,7 @@ SOCKET OpenSocket4(int port)
 
 		if (sock == INVALID_SOCKET)
 		{
-			WriteDebugLog(LOGDEBUG, "socket() failed error %d", WSAGetLastError());
+			ZF_LOGD("socket() failed error %d", WSAGetLastError());
 			return 0;
 		}
 
@@ -512,7 +512,7 @@ SOCKET OpenSocket4(int port)
 
 		if (bind( sock, (struct sockaddr *) &local_sin, sizeof(local_sin)) == SOCKET_ERROR)
 		{
-			WriteDebugLog(LOGINFO, "bind(sock) failed port %d Error %d", port, WSAGetLastError());
+			ZF_LOGI("bind(sock) failed port %d Error %d", port, WSAGetLastError());
 
 			closesocket(sock);
 			return FALSE;
@@ -520,7 +520,7 @@ SOCKET OpenSocket4(int port)
 
 		if (listen( sock, MAX_PENDING_CONNECTS ) < 0)
 		{
-			WriteDebugLog(LOGINFO, "listen(sock) failed port %d Error %d", port, WSAGetLastError());
+			ZF_LOGI("listen(sock) failed port %d Error %d", port, WSAGetLastError());
 			return FALSE;
 		}
 		ioctl(sock, FIONBIO, &param);
@@ -548,7 +548,7 @@ SOCKET OpenUDPSocket(int port)
 
 		if (sock == INVALID_SOCKET)
 		{
-			WriteDebugLog(LOGDEBUG, "socket() failed error %d", WSAGetLastError());
+			ZF_LOGD("socket() failed error %d", WSAGetLastError());
 			return 0;
 		}
 
@@ -558,7 +558,7 @@ SOCKET OpenUDPSocket(int port)
 
 		if (bind( sock, (struct sockaddr *) &local_sin, sizeof(local_sin)) == SOCKET_ERROR)
 		{
-			WriteDebugLog(LOGINFO, "bind(sock) failed port %d Error %d", port, WSAGetLastError());
+			ZF_LOGI("bind(sock) failed port %d Error %d", port, WSAGetLastError());
 			closesocket(sock);
 			return FALSE;
 		}
@@ -578,7 +578,7 @@ BOOL TCPHostInit()
 	WSAStartup(MAKEWORD(2, 0), &WsaData);
 #endif
 
-	WriteDebugLog(LOGALERT, "%s listening on port %d", ProductName, port);
+	ZF_LOGF("%s listening on port %d", ProductName, port);
 //	InitQueue();
 
 	// Here is where our listening ports for commands and data are opened.
@@ -654,7 +654,7 @@ void TCPHostPoll()
 	if (ret == -1)
 	{
 		ret = WSAGetLastError();
-		WriteDebugLog(LOGDEBUG, "%d ", ret);
+		ZF_LOGD("%d ", ret);
 		perror("listen select");
 	}
 	else
@@ -667,10 +667,10 @@ void TCPHostPoll()
 
 				if (TCPControlSock == INVALID_SOCKET)
 				{
-					WriteDebugLog(LOGDEBUG, "accept() failed error %d", WSAGetLastError());
+					ZF_LOGD("accept() failed error %d", WSAGetLastError());
 					return;
 				}
-				WriteDebugLog(LOGINFO, "Host Control Session Connected");
+				ZF_LOGI("Host Control Session Connected");
 
 				ioctl(TCPControlSock, FIONBIO, &param);
 				CONNECTED = TRUE;
@@ -694,7 +694,7 @@ void TCPHostPoll()
 	if (ret == -1)
 	{
 		ret = WSAGetLastError();
-		WriteDebugLog(LOGDEBUG, "%d ", ret);
+		ZF_LOGD("%d ", ret);
 		perror("data listen select");
 	}
 	else
@@ -707,10 +707,10 @@ void TCPHostPoll()
 
 				if (TCPDataSock == INVALID_SOCKET)
 				{
-					WriteDebugLog(LOGDEBUG, "accept() failed error %d", WSAGetLastError());
+					ZF_LOGD("accept() failed error %d", WSAGetLastError());
 					return;
 				}
-				WriteDebugLog(LOGINFO, "Host Data Session Connected");
+				ZF_LOGI("Host Data Session Connected");
 
 				ioctl(TCPDataSock, FIONBIO, &param);
 				DATACONNECTED = TRUE;
@@ -735,7 +735,7 @@ NoARDOPTCP:
 
 		if (ret == SOCKET_ERROR)
 		{
-			WriteDebugLog(LOGDEBUG, "Data Select failed %d ", WSAGetLastError());
+			ZF_LOGD("Data Select failed %d ", WSAGetLastError());
 			goto Lost;
 		}
 		if (ret > 0)
@@ -752,7 +752,7 @@ NoARDOPTCP:
 			if (FD_ISSET(TCPControlSock, &errorfs))
 			{
 Lost:
-				WriteDebugLog(LOGDEBUG, "TCP Control Connection lost");
+				ZF_LOGD("TCP Control Connection lost");
 
 				CONNECTED = FALSE;
 
@@ -777,7 +777,7 @@ Lost:
 
 		if (ret == SOCKET_ERROR)
 		{
-			WriteDebugLog(LOGDEBUG, "Data Select failed %d ", WSAGetLastError());
+			ZF_LOGD("Data Select failed %d ", WSAGetLastError());
 			goto DCLost;
 		}
 		if (ret > 0)
@@ -794,7 +794,7 @@ Lost:
 			if (FD_ISSET(TCPDataSock, &errorfs))
 			{
 	DCLost:
-				WriteDebugLog(LOGDEBUG, "TCP Data Connection lost");
+				ZF_LOGD("TCP Data Connection lost");
 
 				DATACONNECTED = FALSE;
 
@@ -828,7 +828,7 @@ Lost:
 			{
 				char Addr[32];
 				Format_Addr(&GUIHost, Addr);
-				WriteDebugLog(LOGDEBUG, "GUI Connected from Address %s", Addr);
+				ZF_LOGD("GUI Connected from Address %s", Addr);
 				GUIActive = TRUE;
 			}
 
@@ -868,7 +868,7 @@ Lost:
 			if ((Now - LastGUITime) > 15000)
 			{
 				if (GUIActive)
-					WriteDebugLog(LOGDEBUG, "GUI Connection lost");
+					ZF_LOGD("GUI Connection lost");
 
 				GUIActive = FALSE;
 			}
@@ -916,7 +916,7 @@ VOID * _Q_REM(VOID *PQ, char * File, int Line)
 	Q = (UINT *) PQ;
 
 //	if (Semaphore.Flag == 0)
-//		WriteDebugLog(LOGDEBUG, ("Q_REM called without semaphore from %s Line %d", File, Line);
+//		ZF_LOGD(("Q_REM called without semaphore from %s Line %d", File, Line);
 
 	first = (UINT *)Q[0];
 
@@ -937,7 +937,7 @@ UINT _ReleaseBuffer(VOID *pBUFF, char * File, int Line)
 	int n = 0;
 
 //	if (Semaphore.Flag == 0)
-//		WriteDebugLog(LOGDEBUG, ("ReleaseBuffer called without semaphore from %s Line %d", File, Line);
+//		ZF_LOGD(("ReleaseBuffer called without semaphore from %s Line %d", File, Line);
 
 	pointer = (UINT *)FREE_Q;
 
@@ -962,7 +962,7 @@ int _C_Q_ADD(VOID *PQ, VOID *PBUFF, char * File, int Line)
 	Q = (UINT *) PQ;
 
 //	if (Semaphore.Flag == 0)
-//		WriteDebugLog(LOGDEBUG, ("C_Q_ADD called without semaphore from %s Line %d", File, Line);
+//		ZF_LOGD(("C_Q_ADD called without semaphore from %s Line %d", File, Line);
 
 
 	BUFF[0]=0;  // Clear chain in new buffer
@@ -1000,7 +1000,7 @@ int C_Q_COUNT(VOID *PQ)
 		count++;
 		if ((count + QCOUNT) > MAXBUFFS)
 		{
-			WriteDebugLog(LOGDEBUG, ("C_Q_COUNT Detected corrupt Q %p len %d", PQ, count);
+			ZF_LOGD(("C_Q_COUNT Detected corrupt Q %p len %d", PQ, count);
 			return count;
 		}
 		Q = (UINT *)*Q;
@@ -1016,7 +1016,7 @@ VOID * _GetBuff(char * File, int Line)
 //	FindLostBuffers();
 
 //	if (Semaphore.Flag == 0)
-//		WriteDebugLog(LOGDEBUG, ("GetBuff called without semaphore from %s Line %d", File, Line);
+//		ZF_LOGD(("GetBuff called without semaphore from %s Line %d", File, Line);
 
 	if (Temp)
 	{
@@ -1027,7 +1027,7 @@ VOID * _GetBuff(char * File, int Line)
 
 	}
 	else
-		WriteDebugLog(LOGDEBUG, ("Warning - Getbuff returned NULL");
+		ZF_LOGD(("Warning - Getbuff returned NULL");
 
 	return Temp;
 }

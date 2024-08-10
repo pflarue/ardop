@@ -108,7 +108,7 @@ void SendLeaderAndSYNC(UCHAR * bytEncodedBytes, int intLeaderLen)
 		}
 	}
 	// Include these tone values in debug log only if FileLogLevel is LOGDEBUGPLUS
-	WriteDebugLog(LOGDEBUGPLUS, "%s", DebugMess);
+	ZF_LOGV("%s", DebugMess);
 }
 
 
@@ -134,7 +134,7 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 	int k, m, n;
 
 	if (Len < 0) {
-		WriteDebugLog(LOGERROR, "ERROR: In Mod4FSKDataAndPlay() Invalid Len (%d).", Len);
+		ZF_LOGE("ERROR: In Mod4FSKDataAndPlay() Invalid Len (%d).", Len);
 		return;
 	}
 
@@ -145,13 +145,13 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 		return;
 
 	if (intBaud == 600) {
-		WriteDebugLog(LOGERROR,
+		ZF_LOGE(
 			"ERROR: Mod4FSKDataAndPlay() cannot be used for 600 baud 4FSK Frames."
 			"Use Mod4FSK600BdDataAndPlay() instead.");
 		return;
 	}
 
-	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
+	ZF_LOGI("Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
 	// In addition to strType, include quality value being sent for ACK/NAK frames
 	char fr_info[32] = "";
@@ -197,7 +197,7 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 		intSampPerSym = 120;
 		break;
 	default:
-		WriteDebugLog(LOGERROR, "ERROR: Invalid baud rate (%d) in Mod4FSKDataAndPlay().", intBaud);
+		ZF_LOGE("ERROR: Invalid baud rate (%d) in Mod4FSKDataAndPlay().", intBaud);
 		return;
 	}
 
@@ -248,7 +248,7 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 	// Include these tone values in debug log only if FileLogLevel is LOGDEBUGPLUS
 	if (intDataBytesPerCar == 0)
 		sprintf(DebugMess + strlen(DebugMess), "(None)");
-	WriteDebugLog(LOGDEBUGPLUS, "%s", DebugMess);
+	ZF_LOGV("%s", DebugMess);
 
 	Flush();
 }
@@ -275,7 +275,7 @@ void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len,
 	int k, m, n;
 
 	if (Len < 0) {
-		WriteDebugLog(LOGERROR, "ERROR: In Mod4FSK600BdDataAndPlay() Invalid Len (%d).", Len);
+		ZF_LOGE("ERROR: In Mod4FSK600BdDataAndPlay() Invalid Len (%d).", Len);
 		return;
 	}
 
@@ -286,13 +286,13 @@ void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len,
 		return;
 
 	if (intBaud != 600) {
-		WriteDebugLog(LOGERROR,
+		ZF_LOGE(
 			"ERROR: Mod4FSK600BdDataAndPlay() is only for 600 baud 4FSK Frames."
 			"Use Mod4FSKDataAndPlay() instead.");
 		return;
 	}
 
-	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
+	ZF_LOGI("Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
 	wg_send_txframet(0, strType);
 
@@ -479,7 +479,7 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 	intSoftClipCnt = 0;
 
 	if (Len < 0) {
-		WriteDebugLog(LOGERROR, "ERROR: In ModPSKDataAndPlay() Invalid Len (%d).", Len);
+		ZF_LOGE("ERROR: In ModPSKDataAndPlay() Invalid Len (%d).", Len);
 		return;
 	}
 
@@ -521,7 +521,7 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 			dblCarScalingFactor = 0.25f;  // Starting at 800 Hz  Selected to give < 2% clipped values yielding a PAPR = 2.5, Constellation Quality >95
 	}
 
-	WriteDebugLog(LOGINFO, "Sending Frame Type %s", strType);
+	ZF_LOGI("Sending Frame Type %s", strType);
 	DrawTXFrame(strType);
 	wg_send_txframet(0, strType);
 
@@ -582,7 +582,7 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 	if (intSoftClipCnt > 0)
 		// SoftClips() was called in each of PlayPSKSymbols(), which set
 		// intSoftClipsCnt to the number of samples that were modified.
-		WriteDebugLog(LOGDEBUG, "Soft Clips %d ", intSoftClipCnt);
+		ZF_LOGD("Soft Clips %d ", intSoftClipCnt);
 }
 
 

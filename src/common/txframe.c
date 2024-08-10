@@ -105,10 +105,10 @@ int txframe(char * frameParams) {
 			sessionid = strtol(params[3], NULL, 0);
 		else
 			sessionid = bytSessionID;
-		WriteDebugLog(LOGDEBUG, "TXFRAME DataNAK %d 0x%02X", quality, sessionid);
+		ZF_LOGD("TXFRAME DataNAK %d 0x%02X", quality, sessionid);
 		// from ARQ.c/ProcessRcvdARQFrame()
 		if ((EncLen = EncodeDATANAK(quality, sessionid, bytEncodedBytes)) <= 0) {
-			WriteDebugLog(LOGERROR, "ERROR: In txframe() DataNAK Invalid EncLen (%d).", EncLen);
+			ZF_LOGE("ERROR: In txframe() DataNAK Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
@@ -121,9 +121,9 @@ int txframe(char * frameParams) {
 			sessionid = strtol(params[2], NULL, 0);
 		else
 			sessionid = bytSessionID;
-		WriteDebugLog(LOGDEBUG, "TXFRAME BREAK 0x%02X", sessionid);
+		ZF_LOGD("TXFRAME BREAK 0x%02X", sessionid);
 		if ((EncLen = Encode4FSKControl(BREAK, sessionid, bytEncodedBytes)) <= 0) {
-			WriteDebugLog(LOGERROR, "ERROR: In txframe() BREAK Invalid EncLen (%d).", EncLen);
+			ZF_LOGE("ERROR: In txframe() BREAK Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
@@ -136,9 +136,9 @@ int txframe(char * frameParams) {
 			sessionid = strtol(params[2], NULL, 0);
 		else
 			sessionid = bytSessionID;
-		WriteDebugLog(LOGDEBUG, "TXFRAME IDLE 0x%02X", sessionid);
+		ZF_LOGD("TXFRAME IDLE 0x%02X", sessionid);
 		if ((EncLen = Encode4FSKControl(IDLEFRAME, sessionid, bytEncodedBytes)) <= 0) {
-			WriteDebugLog(LOGERROR, "ERROR: In txframe() IDLE Invalid EncLen (%d).", EncLen);
+			ZF_LOGE("ERROR: In txframe() IDLE Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
@@ -152,9 +152,9 @@ int txframe(char * frameParams) {
 			sessionid = strtol(params[2], NULL, 0);
 		else
 			sessionid = bytSessionID;
-		WriteDebugLog(LOGDEBUG, "TXFRAME DISC 0x%02X", sessionid);
+		ZF_LOGD("TXFRAME DISC 0x%02X", sessionid);
 		if ((EncLen = Encode4FSKControl(DISCFRAME, sessionid, bytEncodedBytes)) <= 0) {
-			WriteDebugLog(LOGERROR, "ERROR: In txframe() DISC Invalid EncLen (%d).", EncLen);
+			ZF_LOGE("ERROR: In txframe() DISC Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
@@ -168,9 +168,9 @@ int txframe(char * frameParams) {
 			sessionid = strtol(params[2], NULL, 0);
 		else
 			sessionid = bytSessionID;
-		WriteDebugLog(LOGDEBUG, "TXFRAME END 0x%02X", sessionid);
+		ZF_LOGD("TXFRAME END 0x%02X", sessionid);
 		if ((EncLen = Encode4FSKControl(END, sessionid, bytEncodedBytes)) <= 0) {
-			WriteDebugLog(LOGERROR, "ERROR: In txframe() END Invalid EncLen (%d).", EncLen);
+			ZF_LOGE("ERROR: In txframe() END Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
@@ -183,9 +183,9 @@ int txframe(char * frameParams) {
 			sessionid = strtol(params[2], NULL, 0);
 		else
 			sessionid = bytSessionID;
-		WriteDebugLog(LOGDEBUG, "TXFRAME ConRejBusy 0x%02X", sessionid);
+		ZF_LOGD("TXFRAME ConRejBusy 0x%02X", sessionid);
 		if ((EncLen = Encode4FSKControl(ConRejBusy, sessionid, bytEncodedBytes)) <= 0) {
-			WriteDebugLog(LOGERROR, "ERROR: In txframe() ConRejBusy Invalid EncLen (%d).", EncLen);
+			ZF_LOGE("ERROR: In txframe() ConRejBusy Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
@@ -198,9 +198,9 @@ int txframe(char * frameParams) {
 			sessionid = strtol(params[2], NULL, 0);
 		else
 			sessionid = bytSessionID;
-		WriteDebugLog(LOGDEBUG, "TXFRAME ConRejBW 0x%02X", sessionid);
+		ZF_LOGD("TXFRAME ConRejBW 0x%02X", sessionid);
 		if ((EncLen = Encode4FSKControl(ConRejBW, sessionid, bytEncodedBytes)) <= 0) {
-			WriteDebugLog(LOGERROR, "ERROR: In txframe() ConRejBW Invalid EncLen (%d).", EncLen);
+			ZF_LOGE("ERROR: In txframe() ConRejBW Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
@@ -213,7 +213,7 @@ int txframe(char * frameParams) {
 		char gridsquare[9];
 		if (paramcount > 2 && strcmp(params[2], "_") != 0) {
 			if (!CheckValidCallsignSyntax(params[2])) {
-				WriteDebugLog(LOGWARNING,
+				ZF_LOGW(
 					"Invalid callsign, '%s', for TXFRAME IDFrame.",
 					params[2]);
 				return(1);
@@ -222,7 +222,7 @@ int txframe(char * frameParams) {
 		} else if (Callsign[0] != 0x00)
 			strncpy(callsign, Callsign, CALL_BUF_SIZE);
 		else {
-			WriteDebugLog(LOGWARNING,
+			ZF_LOGW(
 				"TXFRAME IDFrame requires an implicit or explicit callsign.");
 			return (1);
 		}
@@ -232,14 +232,14 @@ int txframe(char * frameParams) {
 		else if (GridSquare[0] != 0x00)
 			strncpy(gridsquare, GridSquare, 8);
 		else {
-			WriteDebugLog(LOGWARNING,
+			ZF_LOGW(
 				"TXFRAME IDFrame requires an implicit or explicit gridsquare.");
 			return (1);
 		}
 		gridsquare[8] = 0x00;  // ensure NULL terminated
-		WriteDebugLog(LOGDEBUG, "TXFRAME IDFrame %s %s", callsign, gridsquare);
+		ZF_LOGD("TXFRAME IDFrame %s %s", callsign, gridsquare);
 		if ((EncLen = Encode4FSKIDFrame(callsign, gridsquare, bytEncodedBytes)) <= 0) {
-			WriteDebugLog(LOGERROR, "ERROR: In txframe() IDFrame Invalid EncLen (%d).", EncLen);
+			ZF_LOGE("ERROR: In txframe() IDFrame Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
@@ -256,20 +256,20 @@ int txframe(char * frameParams) {
 		int bandwidth_num = -1;  // This is an enum value, not an actual bandwith value
 		if (paramcount > 2 && strcmp(params[2], "_") != 0) {
 			if (!CheckValidCallsignSyntax(params[2])) {
-				WriteDebugLog(LOGWARNING,
+				ZF_LOGW(
 					"Invalid targetcallsign, '%s', for TXFRAME ConReq.",
 					params[2]);
 				return(1);
 			}
 			strncpy(targetcallsign, params[2], CALL_BUF_SIZE);
 		} else {
-			WriteDebugLog(LOGWARNING,
+			ZF_LOGW(
 				"TXFRAME ConReq requires an explicit targetcallsign.");
 			return (1);
 		}
 		if (paramcount > 3 && strcmp(params[3], "_") != 0) {
 			if (!CheckValidCallsignSyntax(params[3])) {
-				WriteDebugLog(LOGWARNING,
+				ZF_LOGW(
 					"Invalid callsign, '%s', for TXFRAME ConReq.",
 					params[3]);
 				return(1);
@@ -278,7 +278,7 @@ int txframe(char * frameParams) {
 		} else if (Callsign[0] != 0x00)
 			strncpy(callsign, Callsign, CALL_BUF_SIZE);
 		else {
-			WriteDebugLog(LOGWARNING,
+			ZF_LOGW(
 				"TXFRAME ConReq requires an implicit or explicit callsign.");
 			return (1);
 		}
@@ -293,7 +293,7 @@ int txframe(char * frameParams) {
 				}
 			}
 			if (bandwidth_num == -1) {
-				WriteDebugLog(LOGWARNING,
+				ZF_LOGW(
 					"TXFRAME ConReq: invalid bandwidth indicator. '%s'.", params[1]);
 				return (1);
 			}
@@ -305,7 +305,7 @@ int txframe(char * frameParams) {
 					break;
 			}
 			if (i == 8) {
-				WriteDebugLog(LOGWARNING,
+				ZF_LOGW(
 					"TXFRAME ConReq: invalid bandwidth='%s'.", params[4]);
 				return (1);
 			} else
@@ -317,13 +317,13 @@ int txframe(char * frameParams) {
 			bandwidth_num = ARQBandwidth;
 		else {
 			// ARQBandwidth shouldn't ever be UNDEFINED, but handle this just in case
-			WriteDebugLog(LOGWARNING,
+			ZF_LOGW(
 				"TXFRAME ConReq requires an implicit or explicit bandwidth.");
 			return (1);
 		}
-		WriteDebugLog(LOGDEBUG, "TXFRAME ConReq%s %s %s", ARQBandwidths[bandwidth_num], targetcallsign, callsign);
+		ZF_LOGD("TXFRAME ConReq%s %s %s", ARQBandwidths[bandwidth_num], targetcallsign, callsign);
 		if ((EncLen = EncodeARQConRequest(callsign, targetcallsign, bandwidth_num, bytEncodedBytes)) <= 0) {
-			WriteDebugLog(LOGERROR, "ERROR: In txframe() ConReq Invalid EncLen (%d).", EncLen);
+			ZF_LOGE("ERROR: In txframe() ConReq Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
@@ -369,13 +369,13 @@ int txframe(char * frameParams) {
 		else if (bandwidth == 2000)
 			frametype = 0x3C;
 		else {
-			WriteDebugLog(LOGWARNING,
+			ZF_LOGW(
 				"TXFRAME ConAck requires an implicit or explicit bandwidth of 200, 500, 1000, or 2000");
 			return (1);
 		}
-		WriteDebugLog(LOGDEBUG, "TXFRAME ConAck %d %d %02X (frame type = %02X)", bandwidth, rcvdleaderlen, sessionid, frametype);
+		ZF_LOGD("TXFRAME ConAck %d %d %02X (frame type = %02X)", bandwidth, rcvdleaderlen, sessionid, frametype);
 		if ((EncLen = EncodeConACKwTiming(frametype, rcvdleaderlen, sessionid, bytEncodedBytes)) <= 0) {
-			WriteDebugLog(LOGERROR, "ERROR: In txframe() ConAck Invalid EncLen (%d).", EncLen);
+			ZF_LOGE("ERROR: In txframe() ConAck Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
@@ -398,14 +398,14 @@ int txframe(char * frameParams) {
 		if (paramcount > 3 && strcmp(params[3], "_") != 0) {
 			quality = strtol(params[3], NULL, 0);
 			if (quality < 30 || quality > 1000) {
-				WriteDebugLog(LOGWARNING, "TXFRAME PingAck requires 30 <= quality <= 100, but %d was provided.", quality);
+				ZF_LOGW("TXFRAME PingAck requires 30 <= quality <= 100, but %d was provided.", quality);
 				return (1);
 			}
 		} else
 			quality = stcLastPingintQuality;
-		WriteDebugLog(LOGDEBUG, "TXFRAME PingAck %d %d.", snr, quality);
+		ZF_LOGD("TXFRAME PingAck %d %d.", snr, quality);
 		if ((EncLen = EncodePingAck(PINGACK, snr, quality, bytEncodedBytes)) <= 0) {
-			WriteDebugLog(LOGERROR, "ERROR: In txframe() PingAck Invalid EncLen (%d).", EncLen);
+			ZF_LOGE("ERROR: In txframe() PingAck Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
@@ -417,20 +417,20 @@ int txframe(char * frameParams) {
 		char callsign[CALL_BUF_SIZE];
 		if (paramcount > 2 && strcmp(params[2], "_") != 0) {
 			if (!CheckValidCallsignSyntax(params[2])) {
-				WriteDebugLog(LOGWARNING,
+				ZF_LOGW(
 					"Invalid targetcallsign, '%s', for TXFRAME Ping.",
 					params[2]);
 				return(1);
 			}
 			strncpy(targetcallsign, params[2], CALL_BUF_SIZE);
 		} else {
-			WriteDebugLog(LOGWARNING,
+			ZF_LOGW(
 				"TXFRAME Ping requires an explicit targetcallsign.");
 			return (1);
 		}
 		if (paramcount > 3 && strcmp(params[3], "_") != 0) {
 			if (!CheckValidCallsignSyntax(params[3])) {
-				WriteDebugLog(LOGWARNING,
+				ZF_LOGW(
 					"Invalid callsign, '%s', for TXFRAME IDFrame.",
 					params[3]);
 				return(1);
@@ -439,13 +439,13 @@ int txframe(char * frameParams) {
 		} else if (Callsign[0] != 0x00)
 			strncpy(callsign, Callsign, CALL_BUF_SIZE);
 		else {
-			WriteDebugLog(LOGWARNING,
+			ZF_LOGW(
 				"TXFRAME Ping requires an implicit or explicit callsign.");
 			return (1);
 		}
-		WriteDebugLog(LOGDEBUG, "TXFRAME Ping %s %s", targetcallsign, callsign);
+		ZF_LOGD("TXFRAME Ping %s %s", targetcallsign, callsign);
 		if ((EncLen = EncodePing(callsign, targetcallsign, bytEncodedBytes)) <= 0) {
-			WriteDebugLog(LOGERROR, "ERROR: In txframe() Ping Invalid EncLen (%d).", EncLen);
+			ZF_LOGE("ERROR: In txframe() Ping Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
@@ -464,9 +464,9 @@ int txframe(char * frameParams) {
 			sessionid = strtol(params[3], NULL, 0);
 		else
 			sessionid = bytSessionID;
-		WriteDebugLog(LOGDEBUG, "TXFRAME DataACK %d 0x%02X", quality, sessionid);
+		ZF_LOGD("TXFRAME DataACK %d 0x%02X", quality, sessionid);
 		if ((EncLen = EncodeDATAACK(quality, sessionid, bytEncodedBytes)) <= 0) {
-			WriteDebugLog(LOGERROR, "ERROR: In txframe() DataACK Invalid EncLen (%d).", EncLen);
+			ZF_LOGE("ERROR: In txframe() DataACK Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
@@ -493,12 +493,12 @@ int txframe(char * frameParams) {
 			unsigned char data[1024];
 			char debugmsg[2100];
 			if (!FrameInfo(frametype, &dummyint, &numcar, modulation, &dummyint, &datalen, &dummyint, &dummyuchar, frname)) {
-				WriteDebugLog(LOGWARNING, "TXFRAME %s (FrameInfo) Unknown frame type.", params[1]);
+				ZF_LOGW("TXFRAME %s (FrameInfo) Unknown frame type.", params[1]);
 				return (1);
 			}
 			maxlen = datalen * numcar;
 			if (maxlen > 1024) {
-				WriteDebugLog(LOGWARNING, "TXFRAME Error.  Unexpectedly high maxlen = %d.", maxlen);
+				ZF_LOGW("TXFRAME Error.  Unexpectedly high maxlen = %d.", maxlen);
 				return (1);
 			}
 			if (paramcount > 2 && params[2][0] != '_') {
@@ -508,7 +508,7 @@ int txframe(char * frameParams) {
 					if (strlen(params[2]) - 2 <= maxlen)
 						datalen = strlen(params[2]) - 2;
 					else {
-						WriteDebugLog(LOGWARNING,
+						ZF_LOGW(
 							"TXFRAME %s is discarding %d bytes since only %d can be sent.",
 							params[1], strlen(params[2]) - 2 - maxlen, maxlen);
 						datalen = maxlen;
@@ -519,13 +519,13 @@ int txframe(char * frameParams) {
 					if (strlen(params[2]) / 2 <= maxlen)
 						datalen = strlen(params[2]) / 2;
 					else {
-						WriteDebugLog(LOGWARNING,
+						ZF_LOGW(
 							"TXFRAME %s is discarding %d bytes since only %d can be sent.",
 							params[1], strlen(params[2]) / 2 - maxlen, maxlen);
 						datalen = maxlen;
 					}
 					if (hex2int(params[2], datalen, data) == 1) {
-						WriteDebugLog(LOGWARNING, "TXFRAME %s error parsing hex data.", params[1]);
+						ZF_LOGW("TXFRAME %s error parsing hex data.", params[1]);
 						return (1);
 					}
 				}
@@ -534,7 +534,7 @@ int txframe(char * frameParams) {
 				// Use of strtol() allows hex if prefixed with 0x of 0X
 				datalen = strtol(params[2] + 1, NULL, 0);
 				if (datalen > (int)maxlen) {
-					WriteDebugLog(LOGDEBUG, "TXFRAME requested %d random bytes, but only %d are allowed for %s.", datalen, maxlen, params[1]);
+					ZF_LOGD("TXFRAME requested %d random bytes, but only %d are allowed for %s.", datalen, maxlen, params[1]);
 					datalen = maxlen;
 				}
 				for (int i = 0; i < datalen; i++)
@@ -552,7 +552,7 @@ int txframe(char * frameParams) {
 			snprintf(debugmsg, sizeof(debugmsg), "TXFRAME %s with %d bytes of data using sessionid=%02X: ", params[1], datalen, sessionid);
 			for (int i = 0; i < datalen; i++)
 				snprintf(debugmsg + strlen(debugmsg), sizeof(debugmsg) - strlen(debugmsg), " %02X", data[i]);
-			WriteDebugLog(LOGDEBUG, "%s", debugmsg);
+			ZF_LOGD("%s", debugmsg);
 			// EncodeFSKData() and EncodePSKData() use the global variable bytSessionID.
 			// So, to use a different value, the bytSessionID will be changed, and then
 			// after it is used by one of these functions, it will be restored.
@@ -561,7 +561,7 @@ int txframe(char * frameParams) {
 				bytSessionID = sessionid;
 			if (strcmp(modulation, "4FSK") == 0) {
 				if ((EncLen = EncodeFSKData(frametype, data, datalen, bytEncodedBytes)) <= 0) {
-					WriteDebugLog(LOGERROR, "ERROR: In txframe() 4FSK Invalid EncLen (%d).", EncLen);
+					ZF_LOGE("ERROR: In txframe() 4FSK Invalid EncLen (%d).", EncLen);
 					return 1;
 				}
 				if (frametype >= 0x7A && frametype <= 0x7D)
@@ -570,26 +570,26 @@ int txframe(char * frameParams) {
 					Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 			} else if (strcmp(modulation, "4PSK") == 0 || strcmp(modulation, "8PSK") == 0) {
 				if ((EncLen = EncodePSKData(frametype, data, datalen, bytEncodedBytes)) <= 0) {
-					WriteDebugLog(LOGERROR, "ERROR: In txframe() 4PSK Invalid EncLen (%d).", EncLen);
+					ZF_LOGE("ERROR: In txframe() 4PSK Invalid EncLen (%d).", EncLen);
 					return 1;
 				}
 				ModPSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 			} else if (strcmp(modulation, "16QAM") == 0) {
 				if ((EncLen = EncodePSKData(frametype, data, datalen, bytEncodedBytes)) <= 0) {
-					WriteDebugLog(LOGERROR, "ERROR: In txframe() 16QAM Invalid EncLen (%d).", EncLen);
+					ZF_LOGE("ERROR: In txframe() 16QAM Invalid EncLen (%d).", EncLen);
 					return 1;
 				}
 				ModPSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 			} else {
 				bytSessionID = sessionid_bak;
-				WriteDebugLog(LOGWARNING, "TXFRAME: Unexpected modulation='%s' for frame type=%s", modulation, params[1]);
+				ZF_LOGW("TXFRAME: Unexpected modulation='%s' for frame type=%s", modulation, params[1]);
 				return (1);
 			}
 			bytSessionID = sessionid_bak;
 			return (0);
 		}
 		if (frametype == 0x7E) {
-			WriteDebugLog(LOGWARNING, "TXFRAME: Unknown frame type=%s", params[1]);
+			ZF_LOGW("TXFRAME: Unknown frame type=%s", params[1]);
 			return (1);
 		}
 	}

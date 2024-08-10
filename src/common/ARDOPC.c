@@ -577,7 +577,7 @@ BOOL CheckValidCallsignSyntax(char * strCallsign)
 	// TODO: Re-evaluate whether these checks are all appropriate, and/or
 	// whether additional tests should be added.
 	if (strlen(strCallsign) >= CALL_BUF_SIZE) {
-		WriteDebugLog(LOGWARNING,
+		ZF_LOGW(
 			"WARNING: In CheckValidCallsign(): Callsign string, '%s', too long.",
 			strCallsign);
 		return FALSE;
@@ -594,7 +594,7 @@ BOOL CheckValidCallsignSyntax(char * strCallsign)
 
 		SSID = atoi(Dash + 1);
 		if (SSID > 15) {
-			WriteDebugLog(LOGWARNING,
+			ZF_LOGW(
 				"WARNING: in CheckValidCallsign(), '%s' is invalid because"
 				" the optional numerical SSID is greater than 15.",
 				strCallsign);
@@ -602,7 +602,7 @@ BOOL CheckValidCallsignSyntax(char * strCallsign)
 		}
 
 		if (strlen(Dash + 1) > 2) {
-			WriteDebugLog(LOGWARNING,
+			ZF_LOGW(
 				"WARNING: in CheckValidCallsign(), '%s' is invalid because"
 				" the optional SSID is has a length greater than 2.",
 				strCallsign);
@@ -610,7 +610,7 @@ BOOL CheckValidCallsignSyntax(char * strCallsign)
 		}
 
 		if (!isalnum(*(Dash + 1))) {
-			WriteDebugLog(LOGWARNING,
+			ZF_LOGW(
 				"WARNING: in CheckValidCallsign(), '%s' is invalid because"
 				" the optional SSID begins with a non-alphanumeric character.",
 				strCallsign);
@@ -619,7 +619,7 @@ BOOL CheckValidCallsignSyntax(char * strCallsign)
 	}
 
 	if (callLen > 7 || callLen < 3) {
-		WriteDebugLog(LOGWARNING,
+		ZF_LOGW(
 			"WARNING: in CheckValidCallsign(), '%s' is invalid because"
 			" the callsign (excluding the optional SSID) has a length greater"
 			" than 7 or less than 3.",
@@ -630,7 +630,7 @@ BOOL CheckValidCallsignSyntax(char * strCallsign)
 	while (callLen--)
 	{
 		if (!isalnum(*(ptr++))) {
-			WriteDebugLog(LOGWARNING,
+			ZF_LOGW(
 				"WARNING: in CheckValidCallsign(), '%s' is invalid because"
 				" the callsign contains a non-alphanumeric character.",
 				strCallsign);
@@ -706,24 +706,24 @@ void setProtocolMode(char* strMode)
 {
 	if (strcmp(strMode, "ARQ") == 0)
 	{
-		WriteDebugLog(LOGINFO, "Setting ProtocolMode to ARQ.");
+		ZF_LOGI("Setting ProtocolMode to ARQ.");
 		ProtocolMode = ARQ;
 	}
 	else
 	if (strcmp(strMode, "RXO") == 0)
 	{
-		WriteDebugLog(LOGINFO, "Setting ProtocolMode to RXO.");
+		ZF_LOGI("Setting ProtocolMode to RXO.");
 		ProtocolMode = RXO;
 	}
 	else
 	if (strcmp(strMode, "FEC") == 0)
 	{
-		WriteDebugLog(LOGINFO, "Setting ProtocolMode to FEC.");
+		ZF_LOGI("Setting ProtocolMode to FEC.");
 		ProtocolMode = FEC;
 	}
 	else
 	{
-		WriteDebugLog(LOGWARNING, "WARNING: Invalid argument to setProtocolMode.  %s given, but expected one of ARQ, RXO, or FEC.  Setting ProtocolMode to ARQ as a default.", strMode);
+		ZF_LOGW("WARNING: Invalid argument to setProtocolMode.  %s given, but expected one of ARQ, RXO, or FEC.  Setting ProtocolMode to ARQ as a default.", strMode);
 		ProtocolMode = ARQ;
 		return;
 	}
@@ -751,7 +751,7 @@ void ardopmain()
 
 	if (!InitSound())
 	{
-		WriteDebugLog(LOGCRIT, "Error in InitSound().  Stopping ardop.");
+		ZF_LOGF("Error in InitSound().  Stopping ardop.");
 		return;
 	}
 
@@ -766,7 +766,7 @@ void ardopmain()
 		setProtocolMode("ARQ");
 
 	if (DeprecationWarningsIssued) {
-		WriteDebugLog(LOGERROR,
+		ZF_LOGE(
 			"*********************************************************************\n"
 			"* WARNING: DEPRECATED command line parameters used.  Details shown  *\n"
 			"* above.  You may need to scroll up or review the Debug Log file to *\n"
@@ -796,8 +796,7 @@ void ardopmain()
 	}
 
 	if (closedByPosixSignal) {
-		WriteDebugLog(
-			LOGINFO,
+		ZF_LOGI(
 			"Terminating on signal: %s",
 			PlatformSignalAbbreviation(closedByPosixSignal)
 		);
@@ -1172,7 +1171,7 @@ BOOL FrameInfo(UCHAR bytFrameType, int * blnOdd, int * intNumCar, char * strMod,
 			break;
 
 		default:
-			WriteDebugLog(LOGCRIT, "No data for frame type = 0x" ,bytFrameType);
+			ZF_LOGF("No data for frame type = 0x" ,bytFrameType);
 			return FALSE;
 		}
 	}
@@ -1280,7 +1279,7 @@ int EncodePSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 
 		// Append Reed Solomon codes to end of frame data
 		if (rs_append(bytToRS, intDataLen + 3, intRSLen) != 0) {
-			WriteDebugLog(LOGERROR, "ERROR in EncodePSKData(): rs_append() failed.");
+			ZF_LOGE("ERROR in EncodePSKData(): rs_append() failed.");
 			return (-1);
 		}
 
@@ -1377,7 +1376,7 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 
 			// Append Reed Solomon codes to end of frame data
 			if (rs_append(bytToRS, intDataLen + 3, intRSLen) != 0) {
-				WriteDebugLog(LOGERROR, "ERROR in EncodeFSKData(): rs_append() failed.");
+				ZF_LOGE("ERROR in EncodeFSKData(): rs_append() failed.");
 				return (-1);
 			}
 
@@ -1422,7 +1421,7 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 
 		// Append Reed Solomon codes to end of frame data
 		if (rs_append(bytToRS, intDataLen / 3 + 3, intRSLen / 3) != 0) {
-			WriteDebugLog(LOGERROR, "ERROR in EncodePSKData() for 600 baud frame: rs_append() failed.");
+			ZF_LOGE("ERROR in EncodePSKData() for 600 baud frame: rs_append() failed.");
 			return (-1);
 		}
 
@@ -1487,7 +1486,7 @@ int EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, enum _AR
 
 	// Append Reed Solomon codes to end of frame data
 	if (rs_append(bytToRS, 12, 4) != 0) {
-		WriteDebugLog(LOGERROR, "ERROR in EncodeARQConRequest(): rs_append() failed.");
+		ZF_LOGE("ERROR in EncodeARQConRequest(): rs_append() failed.");
 		return (-1);
 	}
 
@@ -1513,7 +1512,7 @@ int EncodePing(char * strMyCallsign, char * strTargetCallsign, UCHAR * bytReturn
 
 	// Append Reed Solomon codes to end of frame data
 	if (rs_append(bytToRS, 12, 4) != 0) {
-		WriteDebugLog(LOGERROR, "ERROR in EncodePing(): rs_append() failed.");
+		ZF_LOGE("ERROR in EncodePing(): rs_append() failed.");
 		return (-1);
 	}
 
@@ -1548,7 +1547,7 @@ int Encode4FSKIDFrame(char * Callsign, char * Square, unsigned char * bytreturn)
 
 	// Append Reed Solomon codes to end of frame data
 	if (rs_append(bytToRS, 12, 4) != 0) {
-		WriteDebugLog(LOGERROR, "ERROR in Encode4FSKIDFrame(): rs_append() failed.");
+		ZF_LOGE("ERROR in Encode4FSKIDFrame(): rs_append() failed.");
 		return (-1);
 	}
 
@@ -1672,7 +1671,7 @@ void SendID(BOOL blnEnableCWID)
 	if (GridSquare[0] == 0)
 	{
 		if ((EncLen = Encode4FSKIDFrame(Callsign, "No GS", bytEncodedBytes)) <= 0) {
-			WriteDebugLog(LOGERROR, "ERROR: In SendID() Invalid EncLen (%d).", EncLen);
+			ZF_LOGE("ERROR: In SendID() Invalid EncLen (%d).", EncLen);
 			return;
 		}
 		Len = sprintf(bytIDSent," %s:[No GS] ", Callsign);
@@ -1680,7 +1679,7 @@ void SendID(BOOL blnEnableCWID)
 	else
 	{
 		if ((EncLen = Encode4FSKIDFrame(Callsign, GridSquare, bytEncodedBytes)) <= 0) {
-			WriteDebugLog(LOGERROR, "ERROR: In SendID() Invalid EncLen (%d).", EncLen);
+			ZF_LOGE("ERROR: In SendID() Invalid EncLen (%d).", EncLen);
 			return;
 		}
 		Len = sprintf(bytIDSent," %s:[%s] ", Callsign, GridSquare);
@@ -1694,7 +1693,7 @@ void SendID(BOOL blnEnableCWID)
 
 	p = bytEncodedBytes;
 
-	WriteDebugLog(LOGDEBUG, "%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x ",
+	ZF_LOGD("%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x ",
 		p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17]);
 
 
@@ -1735,7 +1734,7 @@ void ASCIIto6Bit(const char * Padded, UCHAR * Compressed)
 		}
 		else {
 			// filter
-			WriteDebugLog(LOGWARNING,
+			ZF_LOGW(
 				"WARNING: Invalid character '%C' in string to be compressed"
 				" for transmission of a callsign or grid square.  Replacing"
 				" with a space.",
@@ -1814,11 +1813,11 @@ void CompressCallsign(const char * inCallsign, UCHAR * Compressed)
 	char work[9];
 
 	if (inCallsign == NULL) {
-		WriteDebugLog(LOGWARNING,
+		ZF_LOGW(
 			"WARNING: Null pointer passed to CompressCallsign() as inCallsign.");
 		inp[0] = 0x00;
 	} else if (snprintf(inp, CALL_BUF_SIZE, "%s", inCallsign) >= CALL_BUF_SIZE) {
-		WriteDebugLog(LOGWARNING,
+		ZF_LOGW(
 			"WARNING: In CompressCallsign(): Callsign string, '%s', too long."
 			" It is being truncated to '%s'.",
 			inCallsign, inp);
@@ -1827,7 +1826,7 @@ void CompressCallsign(const char * inCallsign, UCHAR * Compressed)
 	// split string at SSID separator
 	size_t callsign_len = strcspn(inp, "-");
 	if (callsign_len > 7) {
-		WriteDebugLog(LOGWARNING,
+		ZF_LOGW(
 			"WARNING: In CompressCallsign: Callsign string excluding the"
 			" optional SSID is too long.  '%.*s' is being truncated to '%.7s'",
 			callsign_len, inp, inp);
@@ -1846,7 +1845,7 @@ void CompressCallsign(const char * inCallsign, UCHAR * Compressed)
 			// map SSID -10 to -15 to : ; < = > ?
 			ssid = ':' + ssid_numeric - 10;
 		} else if (ssid_numeric > 15) {
-			WriteDebugLog(LOGWARNING,
+			ZF_LOGW(
 				"WARNING: A numerical SSID greater than 15 cannot be compressed"
 				"/encoded.  So, while %d was given, only %c will be"
 				" transmitted.",
@@ -1883,7 +1882,7 @@ void DeCompressCallsign(const char * bytCallsign, char * returned, size_t return
 	Bit6ToASCII(bytCallsign, work);
 
 	if (returnlen < CALL_BUF_SIZE) {
-		WriteDebugLog(LOGWARNING,
+		ZF_LOGW(
 			"WARNING: DeCompressCallsing() should not be called with returnlen<"
 			"CALL_BUF_SIZE (%d)",
 			CALL_BUF_SIZE);
@@ -1915,7 +1914,7 @@ void DeCompressCallsign(const char * bytCallsign, char * returned, size_t return
 	}
 
 	if (lencheck >= returnlen)
-		WriteDebugLog(LOGWARNING,
+		ZF_LOGW(
 			"LOGIC-ERROR: returnlen (%d) passed to DeCompressCallsign was too"
 			" small, so callsign was truncated.",
 			returnlen);
@@ -2088,7 +2087,7 @@ void RemoveDataFromQueue(int Len)
 	if (bytDataToSendLength == 0)
 		SetLED(TRAFFICLED, FALSE);
 
-	sprintf(HostCmd, "BUFFER %d", bytDataToSendLength);
+	snprintf(HostCmd, sizeof(HostCmd), "BUFFER %d", bytDataToSendLength);
 	QueueCommandToHost(HostCmd);
 }
 
@@ -2108,7 +2107,7 @@ void CheckTimers()
 
 			//	Repeat mechanism for normal repeated FEC or ARQ frames
 
-			WriteDebugLog(LOGINFO, "[Repeating Last Frame]");
+			ZF_LOGI("[Repeating Last Frame]");
 			RemodulateLastFrame();
 		}
 		else
@@ -2133,13 +2132,13 @@ void CheckTimers()
 		//  Thread.Sleep(50)
 		// End While
 
-		WriteDebugLog(LOGDEBUG, "ARDOPprotocol.tmrSendTimeout]  ARQ Timeout from ProtocolState: %s Going to DISC state", ARDOPStates[ProtocolState]);
+		ZF_LOGD("ARDOPprotocol.tmrSendTimeout]  ARQ Timeout from ProtocolState: %s Going to DISC state", ARDOPStates[ProtocolState]);
 
 		// Confirmed proper operation of this timeout and rule 4.0 May 18, 2015
 		// Send an ID frame (Handles protocol rule 4.0)
 
 		if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes)) <= 0) {
-			WriteDebugLog(LOGERROR, "ERROR: In CheckTimers() sending IDFrame before DIC Invalid EncLen (%d).", EncLen);
+			ZF_LOGE("ERROR: In CheckTimers() sending IDFrame before DIC Invalid EncLen (%d).", EncLen);
 			return;
 		}
 		Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
@@ -2150,14 +2149,14 @@ void CheckTimers()
 
 		QueueCommandToHost("DISCONNECTED");
 
-		sprintf(HostCmd, "STATUS ARQ Timeout from Protocol State:  %s", ARDOPStates[ProtocolState]);
+		snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ Timeout from Protocol State:  %s", ARDOPStates[ProtocolState]);
 		QueueCommandToHost(HostCmd);
 		blnEnbARQRpt = FALSE;
 		// Thread.Sleep(2000)
 		ClearDataToSend();
 
 		if ((EncLen = Encode4FSKControl(DISCFRAME, bytSessionID, bytEncodedBytes)) <= 0) {
-			WriteDebugLog(LOGERROR, "ERROR: In CheckTimers() sending DISC Invalid EncLen (%d).", EncLen);
+			ZF_LOGE("ERROR: In CheckTimers() sending DISC Invalid EncLen (%d).", EncLen);
 			return;
 		}
 		Mod4FSKDataAndPlay(DISCFRAME, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
@@ -2184,10 +2183,10 @@ void CheckTimers()
 
 		tmrIRSPendingTimeout = 0;
 
-		WriteDebugLog(LOGDEBUG, "ARDOPprotocol.tmrIRSPendingTimeout]  ARQ Timeout from ProtocolState: %s Going to DISC state",  ARDOPStates[ProtocolState]);
+		ZF_LOGD("ARDOPprotocol.tmrIRSPendingTimeout]  ARQ Timeout from ProtocolState: %s Going to DISC state",  ARDOPStates[ProtocolState]);
 
 		QueueCommandToHost("DISCONNECTED");
-		sprintf(HostCmd, "STATUS ARQ CONNECT REQUEST TIMEOUT FROM PROTOCOL STATE: %s",ARDOPStates[ProtocolState]);
+		snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECT REQUEST TIMEOUT FROM PROTOCOL STATE: %s",ARDOPStates[ProtocolState]);
 
 		QueueCommandToHost(HostCmd);
 
@@ -2209,12 +2208,12 @@ void CheckTimers()
 	{
 		tmrFinalID = 0;
 
-		WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.tmrFinalID_Elapsed]  Send Final ID (%s, [%s])", strFinalIDCallsign, GridSquare);
+		ZF_LOGD("[ARDOPprotocol.tmrFinalID_Elapsed]  Send Final ID (%s, [%s])", strFinalIDCallsign, GridSquare);
 
 		if (CheckValidCallsignSyntax(strFinalIDCallsign))
 		{
 			if ((EncLen = Encode4FSKIDFrame(strFinalIDCallsign, GridSquare, bytEncodedBytes)) <= 0) {
-				WriteDebugLog(LOGERROR, "ERROR: In CheckTimers() sending IDFrame  Invalid EncLen (%d).", EncLen);
+				ZF_LOGE("ERROR: In CheckTimers() sending IDFrame  Invalid EncLen (%d).", EncLen);
 				return;
 			}
 			Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
@@ -2258,10 +2257,6 @@ void CheckTimers()
 
 	if (Now > tmrPollOBQueue)
 	{
-//		char HostCmd[32];
-//		sprintf(HostCmd, "BUFFER %d", bytDataToSendLength);
-//		QueueCommandToHost(HostCmd);
-
 		tmrPollOBQueue = Now + 10000;  // 10 Secs
 	}
 }
@@ -2525,7 +2520,7 @@ void UpdateBusyDetector(short * bytNewSamples)
 void SendPING(char * strMycall, char * strTargetCall, int intRpt)
 {
 	if ((EncLen = EncodePing(strMycall, strTargetCall, bytEncodedBytes)) <= 0) {
-		WriteDebugLog(LOGERROR, "ERROR: In SendPING() Invalid EncLen (%d).", EncLen);
+		ZF_LOGE("ERROR: In SendPING() Invalid EncLen (%d).", EncLen);
 		return;
 	}
 
@@ -2546,7 +2541,7 @@ void SendPING(char * strMycall, char * strTargetCall, int intRpt)
 	blnPINGrepeating = True;
 	dttLastPINGSent = Now;
 
-	WriteDebugLog(LOGDEBUG, "[SendPING] strMycall= %s strTargetCall=%s  Repeat=%d", strMycall, strTargetCall, intRpt);
+	ZF_LOGD("[SendPING] strMycall= %s strTargetCall=%s  Repeat=%d", strMycall, strTargetCall, intRpt);
 
 	return;
 }
@@ -2555,7 +2550,7 @@ void SendPING(char * strMycall, char * strTargetCall, int intRpt)
 
 void ProcessPingFrame(char * bytData)
 {
-	WriteDebugLog(LOGDEBUG, "ProcessPingFrame Protocol State = %s", ARDOPStates[ProtocolState]);
+	ZF_LOGD("ProcessPingFrame Protocol State = %s", ARDOPStates[ProtocolState]);
 
 	if (ProtocolState == DISC)
 	{
@@ -2566,12 +2561,12 @@ void ProcessPingFrame(char * bytData)
 			// Ack Ping
 
 			if ((EncLen = EncodePingAck(PINGACK, stcLastPingintRcvdSN, stcLastPingintQuality, bytEncodedBytes)) <= 0) {
-				WriteDebugLog(LOGERROR, "ERROR: In ProcessPingFrame() Invalid EncLen (%d).", EncLen);
+				ZF_LOGE("ERROR: In ProcessPingFrame() Invalid EncLen (%d).", EncLen);
 				return;
 			}
 			Mod4FSKDataAndPlay(PINGACK, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 
-			WriteDebugLog(LOGDEBUG, "[ProcessPingFrame] PING from %s S:N=%d Qual=%d", bytData, stcLastPingintRcvdSN, stcLastPingintQuality);
+			ZF_LOGD("[ProcessPingFrame] PING from %s S:N=%d Qual=%d", bytData, stcLastPingintRcvdSN, stcLastPingintQuality);
 			SendCommandToHost("PINGREPLY");
 			return;
 		}

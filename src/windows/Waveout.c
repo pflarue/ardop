@@ -231,7 +231,7 @@ void StartTxWav()
 
 	if (txwff != NULL)  // || txwfu != NULL)
 	{
-		WriteDebugLog(LOGWARNING, "WARNING: Trying to open Tx WAV file, but already open.");
+		ZF_LOGW("WARNING: Trying to open Tx WAV file, but already open.");
 		return;
 	}
 
@@ -291,7 +291,7 @@ VOID __cdecl Debugprintf(const char * format, ...)
 
 	va_start(arglist, format);
 	vsprintf(Mess, format, arglist);
-	WriteDebugLog(LOGDEBUG, Mess);
+	ZF_LOGD(Mess);
 
 	return;
 }
@@ -389,13 +389,13 @@ int platform_main(int argc, char * argv[])
 		sprintf(&LogName[2][0], "%s/%s", LogDir, "ARDOPSession");
 	}
 
-	WriteDebugLog(LOGALERT, "\n\n%s Version %s (https://www.github.com/pflarue/ardop)", ProductName, ProductVersion);
-	WriteDebugLog(LOGALERT, "Copyright (c) 2014-2024 Rick Muething, John Wiseman, Peter LaRue");
-	WriteDebugLog(LOGALERT,
+	ZF_LOGF("\n\n%s Version %s (https://www.github.com/pflarue/ardop)", ProductName, ProductVersion);
+	ZF_LOGF("Copyright (c) 2014-2024 Rick Muething, John Wiseman, Peter LaRue");
+	ZF_LOGF(
 		"See https://github.com/pflarue/ardop/blob/master/LICENSE for licence details including\n"
 		"  information about authors of external libraries used and their licenses."
 	);
-	WriteDebugLog(LOGDEBUG, "Command line: %s", cmdstr);
+	ZF_LOGD("Command line: %s", cmdstr);
 
 	if (DecodeWav[0])
 	{
@@ -436,7 +436,7 @@ int platform_main(int argc, char * argv[])
 				if (destaddr->sin_addr.s_addr != INADDR_NONE)
 				{
 					useHamLib = 1;
-					WriteDebugLog(LOGALERT, "Using Hamlib at %s:%s for PTT", PTTPort, Baud);
+					ZF_LOGF("Using Hamlib at %s:%s for PTT", PTTPort, Baud);
 					RadioControl = TRUE;
 					PTTMode = PTTHAMLIB;
 				}
@@ -466,12 +466,12 @@ int platform_main(int argc, char * argv[])
 
 	if (hCATDevice)
 	{
-		WriteDebugLog(LOGALERT, "CAT Control on port %s", CATPort);
+		ZF_LOGF("CAT Control on port %s", CATPort);
 		COMSetRTS(hPTTDevice);
 		COMSetDTR(hPTTDevice);
 		if (PTTOffCmdLen)
 		{
-			WriteDebugLog(LOGALERT, "PTT using CAT Port", CATPort);
+			ZF_LOGF("PTT using CAT Port", CATPort);
 			RadioControl = TRUE;
 		}
 	}
@@ -480,12 +480,12 @@ int platform_main(int argc, char * argv[])
 		// Warn of -u and -k defined but no CAT Port
 
 		if (PTTOffCmdLen)
-			WriteDebugLog(LOGALERT, "Warning PTT Off string defined but no CAT port", CATPort);
+			ZF_LOGF("Warning PTT Off string defined but no CAT port", CATPort);
 	}
 
 	if (hPTTDevice)
 	{
-		WriteDebugLog(LOGALERT, "Using RTS on port %s for PTT", PTTPort);
+		ZF_LOGF("Using RTS on port %s for PTT", PTTPort);
 		COMClearRTS(hPTTDevice);
 		COMClearDTR(hPTTDevice);
 		RadioControl = TRUE;
@@ -504,10 +504,10 @@ int platform_main(int argc, char * argv[])
 	{
 		if (!InitSound(TRUE))
 		{
-			WriteDebugLog(LOGCRIT, "Error in InitSound().  Stopping ardop.");
+			ZF_LOGF("Error in InitSound().  Stopping ardop.");
 			return (0);
 		}
-		WriteDebugLog(LOGINFO, "Sending a 5 second 2-tone signal. Then exiting ardop.");
+		ZF_LOGI("Sending a 5 second 2-tone signal. Then exiting ardop.");
 		Send5SecTwoTone();
 		return (0);
 	}
@@ -530,7 +530,7 @@ unsigned int getTicks()
 void printtick(char * msg)
 {
 	QueryPerformanceCounter(&NewTicks);
-	WriteDebugLog(LOGCRIT, "%s %i\r", msg, Now - LastNow);
+	ZF_LOGF("%s %i\r", msg, Now - LastNow);
 	LastNow = Now;
 }
 
@@ -598,7 +598,7 @@ void GetSoundDevices()
 {
 	int i;
 
-	WriteDebugLog(LOGALERT, "Capture Devices");
+	ZF_LOGF("Capture Devices");
 
 	CaptureCount = waveInGetNumDevs();
 
@@ -613,12 +613,12 @@ void GetSoundDevices()
 		if (CaptureDevices)
 			strcat(CaptureDevices, ",");
 		strcat(CaptureDevices, pwic.szPname);
-		WriteDebugLog(LOGALERT, "%d %s", i, pwic.szPname);
+		ZF_LOGF("%d %s", i, pwic.szPname);
 		memcpy(&CaptureNames[i][0], pwic.szPname, MAXPNAMELEN);
 		_strupr(&CaptureNames[i][0]);
 	}
 
-	WriteDebugLog(LOGALERT, "Playback Devices");
+	ZF_LOGF("Playback Devices");
 
 	PlaybackCount = waveOutGetNumDevs();
 
@@ -633,7 +633,7 @@ void GetSoundDevices()
 		if (PlaybackDevices[0])
 			strcat(PlaybackDevices, ",");
 		strcat(PlaybackDevices, pwoc.szPname);
-		WriteDebugLog(LOGALERT, "%i %s", i, pwoc.szPname);
+		ZF_LOGF("%i %s", i, pwoc.szPname);
 		memcpy(&PlaybackNames[i][0], pwoc.szPname, MAXPNAMELEN);
 		_strupr(&PlaybackNames[i][0]);
 		waveOutClose(hWaveOut);
@@ -666,7 +666,7 @@ int InitSound(BOOL Report)
 		}
 	}
 	if (PlayBackIndex == -1) {
-		WriteDebugLog(LOGERROR,
+		ZF_LOGE(
 			"ERROR: playbackdevice = '%s' not found.  Try using one of the names or"
 			" numbers (0-%d) listed above.",
 			PlaybackDevice,
@@ -678,12 +678,12 @@ int InitSound(BOOL Report)
 	ret = waveOutOpen(&hWaveOut, PlayBackIndex, &wfx, 0, 0, CALLBACK_NULL);  // WAVE_MAPPER
 
 	if (ret)
-		WriteDebugLog(LOGALERT, "Failed to open WaveOut Device %s Error %d", PlaybackDevice, ret);
+		ZF_LOGF("Failed to open WaveOut Device %s Error %d", PlaybackDevice, ret);
 	else
 	{
 		ret = waveOutGetDevCaps((UINT_PTR)hWaveOut, &pwoc, sizeof(WAVEOUTCAPS));
 		if (Report)
-			WriteDebugLog(LOGALERT, "Opened WaveOut Device %s", pwoc.szPname);
+			ZF_LOGF("Opened WaveOut Device %s", pwoc.szPname);
 	}
 
 	if (strlen(CaptureDevice) <= 2)
@@ -702,7 +702,7 @@ int InitSound(BOOL Report)
 		}
 	}
 	if (CaptureIndex == -1) {
-		WriteDebugLog(LOGERROR,
+		ZF_LOGE(
 			"ERROR: capturedevice = '%s' not found.  Try using one of the names or"
 			" numbers (0-%d) listed above.",
 			CaptureDevice,
@@ -713,12 +713,12 @@ int InitSound(BOOL Report)
 
 	ret = waveInOpen(&hWaveIn, CaptureIndex, &wfx, 0, 0, CALLBACK_NULL);  // WAVE_MAPPER
 	if (ret)
-		WriteDebugLog(LOGALERT, "Failed to open WaveIn Device %s Error %d", CaptureDevice, ret);
+		ZF_LOGF("Failed to open WaveIn Device %s Error %d", CaptureDevice, ret);
 	else
 	{
 		ret = waveInGetDevCaps((UINT_PTR)hWaveIn, &pwic, sizeof(WAVEINCAPS));
 		if (Report)
-			WriteDebugLog(LOGALERT, "Opened WaveIn Device %s", pwic.szPname);
+			ZF_LOGF("Opened WaveIn Device %s", pwic.szPname);
 	}
 
 //	wavfp1 = fopen("s:\\textxxx.wav", "wb");
@@ -777,17 +777,16 @@ void PollReceivedSamples()
 			{
 				lastlevelreport = Now;
 				// Report input peaks to host if in debug mode or if close to clipping
-				if (max >= 32000 || ConsoleLogLevel >= LOGDEBUG)
+				if (max >= 32000 || ZF_LOG_ON_DEBUG)
 				{
-					char HostCmd[64];
-
-					sprintf(HostCmd, "INPUTPEAKS %d %d", min, max);
+					char HostCmd[64] = "";
+					snprintf(HostCmd, sizeof(HostCmd), "INPUTPEAKS %d %d", min, max);
 					SendCommandToHostQuiet(HostCmd);
-					WriteDebugLog(LOGINFO, "Input peaks = %d, %d", min, max);
+					ZF_LOGD("Input peaks = %d, %d", min, max);
 					// A user NOT in debug mode will see this message if they are clipping
-					if (ConsoleLogLevel <= LOGINFO)
+					if (! ZF_LOG_ON_DEBUG)
 					{
-						WriteDebugLog(LOGINFO,
+						ZF_LOGI(
 							"Your input signal is probably clipping.  If you"
 							" see this message repeated in the next 20-30"
 							" seconds, Turn down your RX input until this"
@@ -812,7 +811,7 @@ void PollReceivedSamples()
 				WriteWav(&inbuffer[inIndex][0], inheader[inIndex].dwBytesRecorded/2, rxwf);
 		}
 
-//		WriteDebugLog(LOGDEBUG, "Process %d %d", inIndex, inheader[inIndex].dwBytesRecorded/2);
+//		ZF_LOGD("Process %d %d", inIndex, inheader[inIndex].dwBytesRecorded/2);
 		if (Capturing && Loopback == FALSE)
 			ProcessNewSamples(&inbuffer[inIndex][0], inheader[inIndex].dwBytesRecorded/2);
 
@@ -832,9 +831,6 @@ void PollReceivedSamples()
 void StopCapture()
 {
 	Capturing = FALSE;
-
-//	waveInStop(hWaveIn);
-//	WriteDebugLog(LOGDEBUG, "Stop Capture");
 }
 
 void StartCapture()
@@ -843,8 +839,6 @@ void StartCapture()
 	DiscardOldSamples();
 	ClearAllMixedSamples();
 	State = SearchingForLeader;
-
-//	WriteDebugLog(LOGDEBUG, "Start Capture");
 }
 void CloseSound()
 {
@@ -1035,14 +1029,8 @@ void SoundFlush()
 
 	SoundIsPlaying = FALSE;
 
-	// Debug.WriteLine("[tmrPoll.Tick] Play stop. Length = " & Format(Now.Subtract(dttTestStart).TotalMilliseconds, "#") & " ms")
-
-//	WriteDebugLog(LOGDEBUG, "Play complete blnEnbARQRpt = %d", blnEnbARQRpt);
-
 	if (blnEnbARQRpt > 0 || blnDISCRepeating)  // Start Repeat Timer if frame should be repeated
 		dttNextPlay = Now + intFrameRepeatInterval;
-
-//	WriteDebugLog(LOGDEBUG, "Now %d Now - dttNextPlay 1  = %d", Now, Now - dttNextPlay);
 
 	KeyPTT(FALSE);  // Unkey the Transmitter
 	if (txwff != NULL)
@@ -1137,7 +1125,7 @@ BOOL KeyPTT(BOOL blnPTT)
 	else
 		RadioPTT(blnPTT);
 
-	WriteDebugLog(LOGDEBUG, "[Main.KeyPTT]  PTT-%s", BoolString[blnPTT]);
+	ZF_LOGD("[Main.KeyPTT]  PTT-%s", BoolString[blnPTT]);
 
 	blnLastPTT = blnPTT;
 	SetLED(0, blnPTT);
@@ -1427,7 +1415,7 @@ void LogConstellation() {
 	char Msg[10000] = "CPLOT ";
 	for (int i = 0; i < pixelPointer - Pixels; i++)
 		snprintf(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg), "%02X", Pixels[i]);
-	WriteDebugLog(LOGDEBUGPLUS, "%s", Msg);
+	ZF_LOGV("%s", Msg);
 }
 
 

@@ -572,7 +572,7 @@ int decode_wav()
 	WavNow = 0;
 
 	if (DeprecationWarningsIssued) {
-		WriteDebugLog(LOGERROR,
+		ZF_LOGE(
 			"*********************************************************************\n"
 			"* WARNING: DEPRECATED command line parameters used.  Details shown  *\n"
 			"* above.  You may need to scroll up or review the Debug Log file to *\n"
@@ -594,45 +594,45 @@ int decode_wav()
 	// in ardopmain(), which is not used when decoding a WAV file.
 	setProtocolMode("RXO");
 
-	WriteDebugLog(LOGINFO, "Decoding WAV file %s.", DecodeWav);
+	ZF_LOGI("Decoding WAV file %s.", DecodeWav);
 	wavf = fopen(DecodeWav, "rb");
 	if (wavf == NULL)
 	{
-		WriteDebugLog(LOGERROR, "Unable to open WAV file %s.", DecodeWav);
+		ZF_LOGE("Unable to open WAV file %s.", DecodeWav);
 		return 1;
 	}
 	readCount = fread(wavHead, 1, 44, wavf);
 	if (readCount != 44)
 	{
-		WriteDebugLog(LOGERROR, "Error reading WAV file header.");
+		ZF_LOGE("Error reading WAV file header.");
 		return 2;
 	}
 	if (memcmp(wavHead, headStr, 4) != 0)
 	{
-		WriteDebugLog(LOGERROR, "%s is not a valid WAV file. 0x%x %x %x %x != 0x%x %x %x %x",
+		ZF_LOGE("%s is not a valid WAV file. 0x%x %x %x %x != 0x%x %x %x %x",
 					DecodeWav, wavHead[0], wavHead[1], wavHead[2], wavHead[3],
 					headStr[0], headStr[1], headStr[2], headStr[3]);
 		return 3;
 	}
 	if (wavHead[20] != 0x01)
 	{
-		WriteDebugLog(LOGERROR, "Unexpected WAVE type.");
+		ZF_LOGE("Unexpected WAVE type.");
 		return 4;
 	}
 	if (wavHead[22] != 0x01)
 	{
-		WriteDebugLog(LOGERROR, "Expected single channel WAV.  Consider converting it with SoX.");
+		ZF_LOGE("Expected single channel WAV.  Consider converting it with SoX.");
 		return 7;
 	}
 	sampleRate = wavHead[24] + (wavHead[25] << 8) + (wavHead[26] << 16) + (wavHead[27] << 24);
 	if (sampleRate != 12000)
 	{
-		WriteDebugLog(LOGERROR, "Expected 12kHz sample rate but found %d Hz.  Consider converting it with SoX.", sampleRate);
+		ZF_LOGE("Expected 12kHz sample rate but found %d Hz.  Consider converting it with SoX.", sampleRate);
 		return 8;
 	}
 
 	nSamples = (wavHead[40] + (wavHead[41] << 8) + (wavHead[42] << 16) + (wavHead[43] << 24)) / 2;
-	WriteDebugLog(LOGDEBUG, "Reading %d 16-bit samples.", nSamples);
+	ZF_LOGD("Reading %d 16-bit samples.", nSamples);
 	// Send blocksize silent samples to ProcessNewSamples() before start of WAV file data.
 	memset(samples, 0, sizeof(samples));
 	ProcessNewSamples(samples, blocksize);
@@ -641,7 +641,7 @@ int decode_wav()
 		readCount = fread(samples, 2, blocksize, wavf);
 		if (readCount != blocksize)
 		{
-			WriteDebugLog(LOGERROR, "Premature end of data while reading WAV file.");
+			ZF_LOGE("Premature end of data while reading WAV file.");
 			return 5;
 		}
 		WavNow += blocksize * 1000 / 12000;
@@ -651,7 +651,7 @@ int decode_wav()
 	readCount = fread(samples, 2, nSamples, wavf);
 	if (readCount != nSamples)
 	{
-		WriteDebugLog(LOGERROR, "Premature end of data while reading WAV file.");
+		ZF_LOGE("Premature end of data while reading WAV file.");
 		return 6;
 	}
 	WavNow += nSamples * 1000 / 12000;
@@ -666,7 +666,7 @@ int decode_wav()
 	}
 
 	fclose(wavf);
-	WriteDebugLog(LOGDEBUG, "Done decoding %s.", DecodeWav);
+	ZF_LOGD("Done decoding %s.", DecodeWav);
 	return 0;
 }
 

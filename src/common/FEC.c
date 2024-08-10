@@ -56,7 +56,7 @@ BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL
 	{
 		AddDataToDataToSend(bytData, Len);  // add new data to queue
 
-		WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.StartFEC] %d bytes received while in FECSend state...append to data to send.", Len);
+		ZF_LOGD("[ARDOPprotocol.StartFEC] %d bytes received while in FECSend state...append to data to send.", Len);
 		return TRUE;
 	}
 	else
@@ -66,7 +66,7 @@ BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL
 
 	if (Len == 0 && bytDataToSendLength == 0)
 	{
-		WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.StartFEC] No data to send!");
+		ZF_LOGD("[ARDOPprotocol.StartFEC] No data to send!");
 		return FALSE;
 	}
 
@@ -167,7 +167,7 @@ BOOL GetNextFECFrame()
 	{
 		ClearDataToSend();
 
-		WriteDebugLog(LOGDEBUG, "[GetNextFECFrame] FECAbort. Going to DISC state");
+		ZF_LOGD("[GetNextFECFrame] FECAbort. Going to DISC state");
 		KeyPTT(FALSE);  // insurance for PTT off
 		SetARDOPProtocolState(DISC);
 		blnAbort = FALSE;
@@ -176,7 +176,7 @@ BOOL GetNextFECFrame()
 
 	if (intFECFramesSent == -1)
 	{
-		WriteDebugLog(LOGDEBUG, "[GetNextFECFrame] intFECFramesSent = -1.  Going to DISC state");
+		ZF_LOGD("[GetNextFECFrame] intFECFramesSent = -1.  Going to DISC state");
 
 		SetARDOPProtocolState(DISC);
 		KeyPTT(FALSE);  // insurance for PTT off
@@ -185,7 +185,7 @@ BOOL GetNextFECFrame()
 
 	if (bytDataToSendLength == 0 && FECRepeatsSent >= FECRepeats && ProtocolState == FECSend)
 	{
-		WriteDebugLog(LOGDEBUG, "[GetNextFECFrame] All data and repeats sent.  Going to DISC state");
+		ZF_LOGD("[GetNextFECFrame] All data and repeats sent.  Going to DISC state");
 
 		SetARDOPProtocolState(DISC);
 		blnEnbARQRpt = FALSE;
@@ -254,7 +254,7 @@ sendit:
 		if (strcmp(strMod, "4FSK") == 0)
 		{
 			if ((EncLen = EncodeFSKData(bytFrameType, bytDataToSend, Len, bytEncodedBytes)) <= 0) {
-				WriteDebugLog(LOGERROR, "ERROR: In GetNextFECFrame() 4FSK Invalid EncLen (%d).", EncLen);
+				ZF_LOGE("ERROR: In GetNextFECFrame() 4FSK Invalid EncLen (%d).", EncLen);
 				return FALSE;
 			}
 			RemoveDataFromQueue(Len);  // No ACKS in FEC
@@ -267,7 +267,7 @@ sendit:
 		else  // This handles PSK and QAM
 		{
 			if ((EncLen = EncodePSKData(bytFrameType, bytDataToSend, Len, bytEncodedBytes)) <= 0) {
-				WriteDebugLog(LOGERROR, "ERROR: In GetNextFECFrame() PSK and QAM Invalid EncLen (%d).", EncLen);
+				ZF_LOGE("ERROR: In GetNextFECFrame() PSK and QAM Invalid EncLen (%d).", EncLen);
 				return FALSE;
 			}
 			RemoveDataFromQueue(Len);  // No ACKS in FEC
@@ -293,7 +293,7 @@ sendit:
 			unsigned char bytEncodedBytes[16];
 
 			if ((EncLen = Encode4FSKIDFrame(Callsign, GridSquare, bytEncodedBytes)) <= 0) {
-				WriteDebugLog(LOGERROR, "ERROR: In GetNextFECFrame() IDFrame Invalid EncLen (%d).", EncLen);
+				ZF_LOGE("ERROR: In GetNextFECFrame() IDFrame Invalid EncLen (%d).", EncLen);
 				return FALSE;
 			}
 			Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
@@ -336,7 +336,7 @@ void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDec
 		if (intFrameType == intLastFrameIDToHost && CRC == crcLastFECDataPassedToHost)
 		{
 			if (CommandTrace)
-				WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdFECDataFrame] Same Frame ID: %s and matching data, not passed to Host", Name(intFrameType));
+				ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Same Frame ID: %s and matching data, not passed to Host", Name(intFrameType));
 			return;
 		}
 
@@ -344,7 +344,7 @@ void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDec
 		{
 			AddTagToDataAndSendToHost(bytFailedData, "ERR", bytFailedDataLength);
 			if (CommandTrace)
-				WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass failed frame ID %s to Host (%d bytes)", Name(intFrameType), bytFailedDataLength);
+				ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass failed frame ID %s to Host (%d bytes)", Name(intFrameType), bytFailedDataLength);
 			bytFailedDataLength = 0;
 			intLastFailedFrameID = -1;
 		}
@@ -361,7 +361,7 @@ void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDec
 		}
 
 		if (CommandTrace)
-			WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass good data frame  ID %s to Host (%d bytes)", Name(intFrameType), frameLen);
+			ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass good data frame  ID %s to Host (%d bytes)", Name(intFrameType), frameLen);
 	}
 	else
 	{
@@ -371,11 +371,11 @@ void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDec
 		{
 			AddTagToDataAndSendToHost(bytFailedData, "ERR", bytFailedDataLength);
 			if (CommandTrace)
-				WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass failed frame ID %s to Host (%d bytes)", Name(intFrameType), bytFailedDataLength);
+				ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass failed frame ID %s to Host (%d bytes)", Name(intFrameType), bytFailedDataLength);
 			bytFailedDataLength = 0;
 			intLastFrameIDToHost = intLastFailedFrameID;
 			if (CommandTrace)
-				WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass failed frame ID %s to Host (%d bytes)", Name(intFrameType), bytFailedDataLength);
+				ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass failed frame ID %s to Host (%d bytes)", Name(intFrameType), bytFailedDataLength);
 		}
 		memcpy(bytFailedData, bytData, frameLen);  // capture the current data and frame type
 		bytFailedDataLength = frameLen;

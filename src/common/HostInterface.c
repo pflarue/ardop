@@ -84,10 +84,10 @@ void AddDataToDataToSend(UCHAR * bytNewData, int Len)
 	snprintf(Msg, sizeof(Msg), "[bytNewData: Add to TX queue] %d bytes as hex values: ", Len);
 	for (int i = 0; i < Len; i++)
 		snprintf(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg) - 1, "%02X ", bytNewData[i]);
-	WriteDebugLog(LOGDEBUGPLUS, "%s", Msg);
+	ZF_LOGV("%s", Msg);
 
 	if (utf8_check(bytNewData, Len) == NULL)
-		WriteDebugLog(LOGDEBUGPLUS, "[bytNewData: Add to TX queue] %d bytes as utf8 text: '%.*s'", Len, Len, bytNewData);
+		ZF_LOGV("[bytNewData: Add to TX queue] %d bytes as utf8 text: '%.*s'", Len, Len, bytNewData);
 
 	char HostCmd[32];
 
@@ -109,7 +109,7 @@ void AddDataToDataToSend(UCHAR * bytNewData, int Len)
 
 	SetLED(TRAFFICLED, TRUE);
 
-	sprintf(HostCmd, "BUFFER %d", bytDataToSendLength);
+	snprintf(HostCmd, sizeof(HostCmd), "BUFFER %d", bytDataToSendLength);
 	QueueCommandToHost(HostCmd);
 }
 
@@ -158,7 +158,7 @@ void ProcessCommandFromHost(char * strCMD)
 	strFault[0] = 0;
 
 	if (strlen(strCMD) >= sizeof(cmdCopy)) {
-		WriteDebugLog(LOGERROR,
+		ZF_LOGE(
 			"Host command too long to process (%d).  Ignoring. '%.40s...'",
 			strlen(strCMD), strCMD);
 		return;
@@ -169,7 +169,7 @@ void ProcessCommandFromHost(char * strCMD)
 	_strupr(strCMD);
 
 	if (CommandTrace)
-		WriteDebugLog(LOGDEBUG, "[Command Trace FROM host: %s", strCMD);
+		ZF_LOGD("[Command Trace FROM host: %s]", strCMD);
 
 	ptrParams = strlop(strCMD, ' ');
 
@@ -199,7 +199,7 @@ void ProcessCommandFromHost(char * strCMD)
 			}
 
 			if (i == 8)
-				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
+				snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 			else
 			{
 				ARQBandwidth = i;
@@ -227,7 +227,7 @@ void ProcessCommandFromHost(char * strCMD)
 				{
 					if (Callsign[0] == 0)
 					{
-						sprintf(strFault, "MYCALL not Set");
+						snprintf(strFault, sizeof(strFault), "MYCALL not Set");
 						goto cmddone;
 					}
 
@@ -241,14 +241,14 @@ void ProcessCommandFromHost(char * strCMD)
 						goto cmddone;
 					}
 					if (ProtocolMode == RXO)
-						sprintf(strFault, "Not from mode RXO");
+						snprintf(strFault, sizeof(strFault), "Not from mode RXO");
 					else
-						sprintf(strFault, "Not from mode FEC");
+						snprintf(strFault, sizeof(strFault), "Not from mode FEC");
 					goto cmddone;
 				}
 			}
 		}
-		sprintf(strFault, "Syntax Err: %s", cmdCopy);
+		snprintf(strFault, sizeof(strFault), "Syntax Err: %s", cmdCopy);
 		goto cmddone;
 	}
 
@@ -273,7 +273,7 @@ void ProcessCommandFromHost(char * strCMD)
 				SendReplyToHost(cmdReply);
 			}
 			else
-				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
+				snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 		}
 		goto cmddone;
 	}
@@ -298,7 +298,7 @@ void ProcessCommandFromHost(char * strCMD)
 			SendReplyToHost(cmdReply);
 		}
 		else
-			sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
+			snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 
 		goto cmddone;
 	}
@@ -330,7 +330,7 @@ void ProcessCommandFromHost(char * strCMD)
 
 			}
 			else
-				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
+				snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 		}
 		goto cmddone;
 	}
@@ -354,7 +354,7 @@ void ProcessCommandFromHost(char * strCMD)
 			}
 
 			if (i == 9)
-				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
+				snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 			else
 			{
 				CallBandwidth = i;
@@ -442,7 +442,7 @@ void ProcessCommandFromHost(char * strCMD)
 				ConsoleLogLevel = i;
 				sprintf(cmdReply, "%s now %d", strCMD, ConsoleLogLevel);
 				SendReplyToHost(cmdReply);
-				WriteDebugLog(LOGALERT, "ConsoleLogLevel = %d (%s)", ConsoleLogLevel, strLogLevels[ConsoleLogLevel]);
+				ZF_LOGF("ConsoleLogLevel = %d (%s)", ConsoleLogLevel, strLogLevels[ConsoleLogLevel]);
 			}
 			else
 				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
@@ -482,7 +482,7 @@ void ProcessCommandFromHost(char * strCMD)
 		}
 		else
 		{
-			sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
+			snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 			goto cmddone;
 		}
 
@@ -519,7 +519,7 @@ void ProcessCommandFromHost(char * strCMD)
 				SendReplyToHost(cmdReply);
 			}
 			else
-				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
+				snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 		}
 		goto cmddone;
 	}
@@ -568,7 +568,7 @@ void ProcessCommandFromHost(char * strCMD)
 				goto cmddone;
 			}
 			else
-				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
+				snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 		}
 		goto cmddone;
 	}
@@ -602,7 +602,7 @@ void ProcessCommandFromHost(char * strCMD)
 				SendReplyToHost(cmdReply);
 			}
 			else
-				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
+				snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 		}
 		goto cmddone;
 	}
@@ -641,7 +641,7 @@ void ProcessCommandFromHost(char * strCMD)
 					goto cmddone;
 				}
 			}
-			sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
+			snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 		}
 		goto cmddone;
 	}
@@ -666,7 +666,7 @@ void ProcessCommandFromHost(char * strCMD)
 				SendReplyToHost(cmdReply);
 			}
 			else
-				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
+				snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 		}
 		goto cmddone;
 	}
@@ -675,12 +675,12 @@ void ProcessCommandFromHost(char * strCMD)
 	{
 		if (ptrParams == 0)
 		{
-			sprintf(strFault, "Syntax Err: %s", strCMD);
+			snprintf(strFault, sizeof(strFault), "Syntax Err: %s", strCMD);
 			goto cmddone;
 		}
 		if (strcmp(ptrParams, "TRUE") == 0)
 		{
-			WriteDebugLog(LOGDEBUG, "FECRepeats %d", FECRepeats);
+			ZF_LOGD("FECRepeats %d", FECRepeats);
 
 			StartFEC(NULL, 0, strFECMode, FECRepeats, FECId);
 			SendReplyToHost("FECSEND now TRUE");
@@ -691,7 +691,7 @@ void ProcessCommandFromHost(char * strCMD)
 			SendReplyToHost("FECSEND now FALSE");
 		}
 		else
-			sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
+			snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 
 		goto cmddone;
 	}
@@ -717,7 +717,7 @@ void ProcessCommandFromHost(char * strCMD)
 				SendReplyToHost(cmdReply);
 			}
 			else
-				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
+				snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 
 		goto cmddone;
 	}
@@ -757,7 +757,7 @@ void ProcessCommandFromHost(char * strCMD)
 				SendReplyToHost(cmdReply);
 			}
 			else
-				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
+				snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 		}
 		goto cmddone;
 	}
@@ -790,7 +790,7 @@ void ProcessCommandFromHost(char * strCMD)
 				FileLogLevel = i;
 				sprintf(cmdReply, "%s now %d", strCMD, FileLogLevel);
 				SendReplyToHost(cmdReply);
-				WriteDebugLog(LOGALERT, "FileLogLevel = %d (%s)", FileLogLevel, strLogLevels[FileLogLevel]);
+				ZF_LOGF("FileLogLevel = %d (%s)", FileLogLevel, strLogLevels[FileLogLevel]);
 			}
 			else
 				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
@@ -862,7 +862,7 @@ void ProcessCommandFromHost(char * strCMD)
 				SendReplyToHost(cmdReply);
 			}
 			else
-				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
+				snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 		}
 		goto cmddone;
 	}
@@ -887,7 +887,7 @@ void ProcessCommandFromHost(char * strCMD)
 			{
 				if (ProtocolState != DISC)
 				{
-					sprintf(strFault, "No PING from state %s",  ARDOPStates[ProtocolState]);
+					snprintf(strFault, sizeof(strFault), "No PING from state %s",  ARDOPStates[ProtocolState]);
 					goto cmddone;
 				}
 				else
@@ -901,7 +901,7 @@ void ProcessCommandFromHost(char * strCMD)
 			}
 		}
 
-		sprintf(strFault, "Syntax Err: %s", cmdCopy);
+		snprintf(strFault, sizeof(strFault), "Syntax Err: %s", cmdCopy);
 
 		goto cmddone;
 	}
@@ -948,7 +948,7 @@ void ProcessCommandFromHost(char * strCMD)
 		if (strcmp(ptrParams, "ARQ") != 0 && strcmp(ptrParams, "RXO") == 0
 			&& strcmp(ptrParams, "FEC") == 0
 		) {
-			sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
+			snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 			goto cmddone;
 		}
 
@@ -1001,7 +1001,7 @@ void ProcessCommandFromHost(char * strCMD)
 
 		if (ptrParams == NULL)
 		{
-			sprintf(strFault, "RADIOFREQ command string missing");
+			snprintf(strFault, sizeof(strFault), "RADIOFREQ command string missing");
 			goto cmddone;
 		}
 
@@ -1020,7 +1020,7 @@ void ProcessCommandFromHost(char * strCMD)
 
 		if (ptrParams == NULL)
 		{
-			sprintf(strFault, "RADIOHEX command string missing");
+			snprintf(strFault, sizeof(strFault), "RADIOHEX command string missing");
 			goto cmddone;
 		}
 		if (hCATDevice)
@@ -1140,13 +1140,13 @@ void ProcessCommandFromHost(char * strCMD)
 
 		if (ptrParams == NULL)
 		{
-			sprintf(strFault, "RADIOPTTOFF command string missing");
+			snprintf(strFault, sizeof(strFault), "RADIOPTTOFF command string missing");
 			goto cmddone;
 		}
 
 		if (hCATDevice == 0)
 		{
-			sprintf(strFault, "RADIOPTTOFF command CAT Port not defined");
+			snprintf(strFault, sizeof(strFault), "RADIOPTTOFF command CAT Port not defined");
 			goto cmddone;
 		}
 
@@ -1182,13 +1182,13 @@ void ProcessCommandFromHost(char * strCMD)
 
 		if (ptrParams == NULL)
 		{
-			sprintf(strFault, "RADIOPTTON command string missing");
+			snprintf(strFault, sizeof(strFault), "RADIOPTTON command string missing");
 			goto cmddone;
 		}
 
 		if (hCATDevice == 0)
 		{
-			sprintf(strFault, "RADIOPTTON command CAT Port not defined");
+			snprintf(strFault, sizeof(strFault), "RADIOPTTON command CAT Port not defined");
 			goto cmddone;
 		}
 
@@ -1222,7 +1222,7 @@ void ProcessCommandFromHost(char * strCMD)
 			SendReplyToHost(strCMD);
 		}
 		else
-			sprintf(strFault, "Not from State %s", ARDOPStates[ProtocolState]);
+			snprintf(strFault, sizeof(strFault), "Not from State %s", ARDOPStates[ProtocolState]);
 
 		goto cmddone;
 	}
@@ -1259,7 +1259,7 @@ void ProcessCommandFromHost(char * strCMD)
 				SendReplyToHost(cmdReply);
 			}
 			else
-				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
+				snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 		}
 		goto cmddone;
 	}
@@ -1273,7 +1273,7 @@ void ProcessCommandFromHost(char * strCMD)
 			SendReplyToHost(cmdReply);
 		}
 		else
-			sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
+			snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 
 		goto cmddone;
 	}
@@ -1300,7 +1300,7 @@ void ProcessCommandFromHost(char * strCMD)
 				SendReplyToHost(cmdReply);
 			}
 			else
-				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
+				snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 		}
 		goto cmddone;
 	}
@@ -1313,7 +1313,7 @@ void ProcessCommandFromHost(char * strCMD)
 			SendReplyToHost(strCMD);
 		}
 		else
-			sprintf(strFault, "Not from state %s", ARDOPStates[ProtocolState]);
+			snprintf(strFault, sizeof(strFault), "Not from state %s", ARDOPStates[ProtocolState]);
 
 		goto cmddone;
 
@@ -1342,7 +1342,7 @@ void ProcessCommandFromHost(char * strCMD)
 				SendReplyToHost(cmdReply);
 			}
 			else
-				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
+				snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 		}
 		goto cmddone;
 	}
@@ -1373,19 +1373,19 @@ void ProcessCommandFromHost(char * strCMD)
 	{
 		if (ptrParams == 0)
 		{
-			sprintf(strFault, "Syntax Err: TXFRAME sendParams");
+			snprintf(strFault, sizeof(strFault), "Syntax Err: TXFRAME sendParams");
 			goto cmddone;
 		} else {
 			// cmdCopy starts with arbitrary cased "txframe "
 			// and has a max length of 2100.
 			if(txframe(cmdCopy) != 0)
-				sprintf(strFault, "FAILED TXFRAME");
+				snprintf(strFault, sizeof(strFault), "FAILED TXFRAME");
 		}
 		goto cmddone;
 	}
 
 
-	sprintf(strFault, "CMD %s not recoginized", strCMD);
+	snprintf(strFault, sizeof(strFault), "CMD %s not recoginized", strCMD);
 
 cmddone:
 
@@ -1394,7 +1394,7 @@ cmddone:
 		// Logs.Exception("[ProcessCommandFromHost] Cmd Rcvd=" & strCommand & "   Fault=" & strFault)
 		sprintf(cmdReply, "FAULT %s", strFault);
 		SendReplyToHost(cmdReply);
-		WriteDebugLog(LOGWARNING, "Host Command Fault: %s", strFault);
+		ZF_LOGW("Host Command Fault: %s", strFault);
 	}
 //	SendCommandToHost("RDY");  // signals host a new command may be sent
 }
@@ -1437,10 +1437,10 @@ void AddTagToDataAndSendToHost(UCHAR * bytData, char * strTag, int Len)
 	snprintf(Msg, sizeof(Msg), "[RX Data: Send To Host with TAG=%s] %d bytes as hex values: ", strTag, Len);
 	for (int i = 0; i < Len; i++)
 		snprintf(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg) - 1, "%02X ", bytData[i]);
-	WriteDebugLog(LOGDEBUGPLUS, "%s", Msg);
+	ZF_LOGV("%s", Msg);
 
 	if (utf8_check(bytData, Len) == NULL)
-		WriteDebugLog(LOGDEBUGPLUS, "[RX Data: Send To Host with TAG=%s] %d bytes as utf8 text: '%.*s'", strTag, Len, Len, bytData);
+		ZF_LOGV("[RX Data: Send To Host with TAG=%s] %d bytes as utf8 text: '%.*s'", strTag, Len, Len, bytData);
 
 	TCPAddTagToDataAndSendToHost(bytData, strTag, Len);
 	if (WG_DevMode) {

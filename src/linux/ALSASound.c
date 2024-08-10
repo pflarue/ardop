@@ -220,7 +220,7 @@ void StartTxWav()
 
 	if (txwff != NULL)  // || txwfu != NULL)
 	{
-		WriteDebugLog(LOGWARNING, "WARNING: Trying to open Tx WAV file, but already open.");
+		ZF_LOGW("WARNING: Trying to open Tx WAV file, but already open.");
 		return;
 	}
 	struct tm * tm;
@@ -502,7 +502,7 @@ void SetupGPIOPTT()
 {
 	if (pttGPIOPin == -1)
 	{
-		WriteDebugLog(LOGALERT, "GPIO PTT disabled");
+		ZF_LOGF("GPIO PTT disabled");
 		RadioControl = FALSE;
 		useGPIO = FALSE;
 	}
@@ -515,7 +515,7 @@ void SetupGPIOPTT()
 
 		gpioSetMode(pttGPIOPin, PI_OUTPUT);
 		gpioWrite(pttGPIOPin, pttGPIOInvert ? 1 : 0);
-		WriteDebugLog(LOGALERT, "Using GPIO pin %d for PTT", pttGPIOPin);
+		ZF_LOGF("Using GPIO pin %d for PTT", pttGPIOPin);
 		RadioControl = TRUE;
 		useGPIO = TRUE;
 	}
@@ -578,7 +578,7 @@ int platform_main(int argc, char * argv[])
 		"See https://github.com/pflarue/ardop/blob/master/LICENSE for licence details including\n"
 		"  information about authors of external libraries used and their licenses."
 	);
-	WriteDebugLog(LOGDEBUG, "Command line: %s", cmdstr);
+	ZF_LOGD("Command line: %s", cmdstr);
 
 	if (DecodeWav[0])
 	{
@@ -676,7 +676,7 @@ int platform_main(int argc, char * argv[])
 						if (destaddr->sin_addr.s_addr != INADDR_NONE)
 						{
 							useHamLib = 1;
-							WriteDebugLog(LOGALERT, "Using Hamlib at %s:%s for PTT", PTTPort, Baud);
+							ZF_LOGF("Using Hamlib at %s:%s for PTT", PTTPort, Baud);
 							RadioControl = TRUE;
 							PTTMode = PTTHAMLIB;
 						}
@@ -692,12 +692,12 @@ int platform_main(int argc, char * argv[])
 
 	if (hCATDevice)
 	{
-		WriteDebugLog(LOGALERT, "CAT Control on port %s", CATPort);
+		ZF_LOGF("CAT Control on port %s", CATPort);
 		COMSetRTS(hPTTDevice);
 		COMSetDTR(hPTTDevice);
 		if (PTTOffCmdLen)
 		{
-			WriteDebugLog(LOGALERT, "PTT using CAT Port", CATPort);
+			ZF_LOGF("PTT using CAT Port", CATPort);
 			RadioControl = TRUE;
 		}
 	}
@@ -707,13 +707,13 @@ int platform_main(int argc, char * argv[])
 
 		if (PTTOffCmdLen)
 		{
-			WriteDebugLog(LOGALERT, "Warning PTT Off string defined but no CAT port", CATPort);
+			ZF_LOGF("Warning PTT Off string defined but no CAT port", CATPort);
 		}
 	}
 
 	if (hPTTDevice)
 	{
-		WriteDebugLog(LOGALERT, "Using RTS on port %s for PTT", PTTPort);
+		ZF_LOGF("Using RTS on port %s for PTT", PTTPort);
 		COMClearRTS(hPTTDevice);
 		COMClearDTR(hPTTDevice);
 		RadioControl = TRUE;
@@ -751,10 +751,10 @@ int platform_main(int argc, char * argv[])
 	{
 		if (!InitSound())
 		{
-			WriteDebugLog(LOGCRIT, "Error in InitSound().  Stopping ardop.");
+			ZF_LOGF("Error in InitSound().  Stopping ardop.");
 			return (0);
 		}
-		WriteDebugLog(LOGINFO, "Sending a 5 second 2-tone signal. Then exiting ardop.");
+		ZF_LOGI("Sending a 5 second 2-tone signal. Then exiting ardop.");
 		Send5SecTwoTone();
 		return (0);
 	}
@@ -1262,7 +1262,6 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 				intRate, m_sampleRate);
 		return false;
 	}
-	// WriteDebugLog(LOGINFO, "snd_pcm_hw_params_get_rate(hw_params, &intRate, &intDir) intRate=%d intDir=%d", intRate, intDir);
 
 	if ((err = snd_pcm_hw_params_get_period_size(hw_params, &periodSize, &intDir)) < 0) {
 		if (ErrorMsg)
@@ -1280,7 +1279,6 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 				periodSize, setPeriodSize);
 		return false;
 	}
-	// WriteDebugLog(LOGINFO, "snd_pcm_hw_params_get_period_size(hw_params, &periodSize, &intDir) periodSize=%d intDir=%d", periodSize, intDir
 
 	if ((err = snd_pcm_hw_params_get_period_time(hw_params, &intPeriodTime, &intDir)) < 0) {
 		if (ErrorMsg)
@@ -1309,26 +1307,24 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 				intPeriodTime, intRate, periodSize);
 		return false;
 	}
-	// WriteDebugLog(LOGINFO, "snd_pcm_hw_params_get_period_time(hw_params, &intPeriodTime, &intDir) intPeriodTime=%d intDir=%d", intPeriodTime, intDir);
+	// ZF_LOGI("snd_pcm_hw_params_get_period_time(hw_params, &intPeriodTime, &intDir) intPeriodTime=%d intDir=%d", intPeriodTime, intDir);
 
 	if (!FixTiming && (intPeriodTime * intRate != periodSize * 1000000) && blnFirstOpenSoundPlayback) {
-		WriteDebugLog(LOGWARNING, "WARNING: Inconsistent ALSA playback configuration: %d * %d != %d * 1000000.",
+		ZF_LOGW("WARNING: Inconsistent ALSA playback configuration: %d * %d != %d * 1000000.",
 			intPeriodTime, intRate, periodSize);
-		WriteDebugLog(LOGWARNING, "This will result in a playblack sample rate of %f instead of %d.",
+		ZF_LOGW("This will result in a playblack sample rate of %f instead of %d.",
 			periodSize * 1000000.0 / intPeriodTime, intRate);
-		WriteDebugLog(LOGWARNING,
+		ZF_LOGW(
 			"This is an error of about %fppm.  Per the Ardop spec +/-100ppm should work well and +/-1000 ppm"
 			" should work with some performance degredation.",
 			(intRate - (periodSize * 1000000.0 / intPeriodTime))/intRate * 1000000);
-		WriteDebugLog(LOGWARNING,
+		ZF_LOGW(
 			"\n\nWARNING: The -A option was specified.  So, ALSA misconfiguration will be accepted and ignored."
 			"  This option is primarily intended for testing/debuging.  However, it may also be useful if"
 			" ardopcf will not run without it.  In this case, please report this problem to the ardop users"
 			" group at ardop.groups.io or by creating an issue at www.github.com/pflarue/ardop.\n\n");
 	}
 	blnFirstOpenSoundPlayback = False;
-	// WriteDebugLog(LOGINFO, "Period time=%d (microsecond). Sample Rate=%d (Hz).  Period Size=%d (samples).",
-	//  intPeriodTime, intRate, periodSize);
 
 	snd_pcm_hw_params_free(hw_params);
 
@@ -1855,17 +1851,16 @@ void PollReceivedSamples()
 			{
 				lastlevelreport = Now;
 				// Report input peaks to host if in debug mode or if close to clipping
-				if (max >= 32000 || ConsoleLogLevel >= LOGDEBUG)
+				if (max >= 32000 || ZF_LOG_ON_DEBUG)
 				{
-					char HostCmd[64];
-
-					sprintf(HostCmd, "INPUTPEAKS %d %d", min, max);
+					char HostCmd[64] = "";
+					snprintf(HostCmd, sizeof(HostCmd), "INPUTPEAKS %d %d", min, max);
 					SendCommandToHostQuiet(HostCmd);
-					WriteDebugLog(LOGINFO, "Input peaks = %d, %d", min, max);
+					ZF_LOGD("Input peaks = %d, %d", min, max);
 					// A user NOT in debug mode will see this message if they are clipping
-					if (ConsoleLogLevel <= LOGINFO)
+					if (! ZF_LOG_ON_DEBUG)
 					{
-						WriteDebugLog(LOGINFO,
+						ZF_LOGI(
 							"Your input signal is probably clipping. If you see"
 							" this message repeated in the next 20-30 seconds,"
 							" Turn down your RX input until this message stops"
@@ -2038,7 +2033,7 @@ void SoundFlush()
 
 	txlenMs = SampleNo / 12 + 20;  // 12000 samples per sec. 20 mS TXTAIL
 
-	WriteDebugLog(LOGDEBUG, "Tx Time %d Time till end = %d", txlenMs, (pttOnTime + txlenMs) - Now);
+	ZF_LOGD("Tx Time %d Time till end = %d", txlenMs, (pttOnTime + txlenMs) - Now);
 
 	if (strcmp(PlaybackDevice, "NOSOUND") != 0)
 		while (Now < (pttOnTime + txlenMs))
@@ -2170,7 +2165,7 @@ BOOL KeyPTT(BOOL blnPTT)
 	else
 		RadioPTT(blnPTT);
 
-	WriteDebugLog(LOGDEBUG, "[Main.KeyPTT]  PTT-%s", BoolString[blnPTT]);
+	ZF_LOGD("[Main.KeyPTT]  PTT-%s", BoolString[blnPTT]);
 
 	blnLastPTT = blnPTT;
 	SetLED(0, blnPTT);
@@ -2499,7 +2494,7 @@ void LogConstellation() {
 	char Msg[10000] = "CPLOT ";
 	for (int i = 0; i < pixelPointer - Pixels; i++)
 		snprintf(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg), "%02X", Pixels[i]);
-	WriteDebugLog(LOGDEBUGPLUS, "%s", Msg);
+	ZF_LOGV("%s", Msg);
 }
 
 
