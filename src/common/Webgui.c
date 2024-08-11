@@ -96,6 +96,7 @@ int debug_for_ws(const char * format, ...) {
 	if (LOGDEBUG > FileLogLevel)
 		return (0);
 	WriteLog(Mess, 0);  // 0 for Debug log
+	va_end(arglist);
 	return strlen(Mess);
 }
 
@@ -110,6 +111,7 @@ int error_for_ws(const char * format, ...) {
 	if (LOGERROR > FileLogLevel)
 		return (0);
 	WriteLog(Mess, 0);  // 0 for Debug log
+	va_end(arglist);
 	return strlen(Mess);
 }
 
@@ -370,6 +372,7 @@ int wg_send_alert(int cnum, const char * format, ...) {
 	va_start(arglist, format);
 	// alert will be truncated to fit in Mess
 	vsnprintf(Mess + 2, sizeof(Mess) - 2, format, arglist);
+	va_end(arglist);
 	return wg_send_msg(cnum, Mess, strlen(Mess));
 }
 
