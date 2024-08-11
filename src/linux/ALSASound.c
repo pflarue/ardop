@@ -178,10 +178,10 @@ void StartRxWav()
 	mm = (ss - (hh * 3600)) / 60;
 	ss = ss % 60;
 
-	if (LogDir[0])
+	if (ardop_log_get_directory()[0])
 		pnlen = snprintf(rxwf_pathname, sizeof(rxwf_pathname),
 			"%s/ARDOP_rxaudio_%d_%04d%02d%02d_%02d%02d%02d.wav",
-			LogDir, port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
+			ardop_log_get_directory(), port, tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
 			hh, mm, ss);
 	else
 		pnlen = snprintf(rxwf_pathname, sizeof(rxwf_pathname),
@@ -237,16 +237,12 @@ void StartTxWav()
 	mm = (ss - (hh * 3600)) / 60;
 	ss = ss % 60;
 
-	if (LogDir[0])
+	if (ardop_log_get_directory()[0])
 	{
 		pnflen = snprintf(txwff_pathname, sizeof(txwff_pathname),
 			"%s/ARDOP_txfaudio_%d_%04d%02d%02d_%02d%02d%02d.wav",
-			LogDir, port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
+			ardop_log_get_directory(), port, tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
 			hh, mm, ss);
-		// pnulen = snprintf(txwfu_pathname, sizeof(txwfu_pathname),
-			// "%s/ARDOP_txuaudio_%d_%04d%02d%02d_%02d%02d%02d.wav",
-			// LogDir, port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
-			// hh, mm, ss);
 	}
 	else
 	{
@@ -254,10 +250,6 @@ void StartTxWav()
 			"ARDOP_txfaudio_%d_%04d%02d%02d_%02d:%02d:%02d.wav",
 			port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
 			hh, mm, ss);
-		// pnulen = snprintf(txwfu_pathname, sizeof(txwfu_pathname),
-			// "ARDOP_txuaudio_%d_%04d%02d%02d_%02d:%02d:%02d.wav",
-			// port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
-			// hh, mm, ss);
 	}
 	if (pnflen == -1 || pnflen > sizeof(txwff_pathname)) {
 		// Logpath too long likely to also prevent writing to log files.
@@ -558,17 +550,6 @@ int platform_main(int argc, char * argv[])
 //	Sleep(1000);  // Give LinBPQ time to complete init if exec'ed by linbpq
 
 	processargs(argc, argv);
-
-	if (LogDir[0])
-	{
-		snprintf(&LogName[0][0], sizeof(LogName[0]), "%s/%s", LogDir, "ARDOPDebug");
-		lnlen = snprintf(&LogName[1][0], sizeof(LogName[1]), "%s/%s", LogDir, "ARDOPException");
-		snprintf(&LogName[2][0], sizeof(LogName[2]), "%s/%s", LogDir, "ARDOPSession");
-		if (lnlen == -1 || lnlen > sizeof(LogName[1])) {
-			printf("ERROR: Unable to write Log files. Logpath may be too long.\n");
-			FileLogLevel = 0;  // This will prevent most attempts to write to log files.
-		}
-	}
 
 	setlinebuf(stdout);  // So we can redirect output to file and tail
 

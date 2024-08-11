@@ -2,6 +2,7 @@
 //
 
 #include "common/ARDOPC.h"
+#include "common/ardopcommon.h"
 
 BOOL blnHostRDY = FALSE;
 extern int intFECFramesSent;
@@ -115,15 +116,35 @@ void AddDataToDataToSend(UCHAR * bytNewData, int Len)
 
 char strFault[100] = "";
 
-VOID DoTrueFalseCmd(char * strCMD, char * ptrParams, BOOL * Value)
+/*
+ * Evaluates command with TRUE/FALSE argument
+ *
+ * At the input, Value must be set to the current setting for
+ * the option named in strCMD.
+ *
+ * - If ptrParams is null, reports the current option value
+ *   to the host. Returns false.
+ *
+ * - If the input ptrParams is a valid TRUE or FALSE value, sets
+ *   Value to the input option, reports success to the client,
+ *   and returns true.
+ *
+ * - If the input ptrParams is not valid as a boolean, reports
+ *   failure and returns false.
+ *
+ * This method returns true if the client has successfully provided
+ * a new Value to set. If there is no update to the Value, returns
+ * false.
+ */
+bool DoTrueFalseCmd(char * strCMD, char * ptrParams, BOOL * Value)
 {
 	char cmdReply[128];
 
 	if (ptrParams == NULL)
 	{
-		sprintf(cmdReply, "%s %s", strCMD, (*Value) ? "TRUE": "FALSE");
+		snprintf(cmdReply, sizeof(cmdReply), "%s %s", strCMD, (*Value) ? "TRUE" : "FALSE");
 		SendReplyToHost(cmdReply);
-		return;
+		return false;
 	}
 
 	if (strcmp(ptrParams, "TRUE") == 0)
@@ -132,12 +153,12 @@ VOID DoTrueFalseCmd(char * strCMD, char * ptrParams, BOOL * Value)
 		*Value = FALSE;
 	else
 	{
-		sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
-		return;
+		snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
+		return false;
 	}
-	sprintf(cmdReply, "%s now %s", strCMD, (*Value) ? "TRUE": "FALSE");
+	snprintf(cmdReply, sizeof(cmdReply), "%s now %s", strCMD, (*Value) ? "TRUE" : "FALSE");
 	SendReplyToHost(cmdReply);
-	return;
+	return true;
 }
 
 
@@ -426,26 +447,23 @@ void ProcessCommandFromHost(char * strCMD)
 
 	if (strcmp(strCMD, "CONSOLELOG") == 0)
 	{
-		int i;
+		long i = 0;
 
 		if (ptrParams == 0)
 		{
-			sprintf(cmdReply, "%s %d", strCMD, ConsoleLogLevel);
+			snprintf(cmdReply, sizeof(cmdReply), "%s %d", strCMD, ardop_log_get_level_console());
+			SendReplyToHost(cmdReply);
+		}
+		else if (try_parse_long(ptrParams, &i))
+		{
+			ardop_log_set_level_console((int)i);
+			ZF_LOGI("ConsoleLogLevel = %d", ardop_log_get_level_console());
+			snprintf(cmdReply, sizeof(cmdReply), "%s now %d", strCMD, ardop_log_get_level_console());
 			SendReplyToHost(cmdReply);
 		}
 		else
 		{
-			i = atoi(ptrParams);
-
-			if (i >= LOGEMERGENCY  && i <= LOGDEBUGPLUS)
-			{
-				ConsoleLogLevel = i;
-				sprintf(cmdReply, "%s now %d", strCMD, ConsoleLogLevel);
-				SendReplyToHost(cmdReply);
-				ZF_LOGI("ConsoleLogLevel = %d (%s)", ConsoleLogLevel, strLogLevels[ConsoleLogLevel]);
-			}
-			else
-				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
+			snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 		}
 		goto cmddone;
 	}
@@ -528,7 +546,10 @@ void ProcessCommandFromHost(char * strCMD)
 
 	if (strcmp(strCMD, "DEBUGLOG") == 0)
 	{
-		DoTrueFalseCmd(strCMD, ptrParams, &DebugLog);
+		BOOL enable_files = ardop_log_is_enabled_files();
+		if (DoTrueFalseCmd(strCMD, ptrParams, &enable_files)) {
+			ardop_log_enable_files((bool)enable_files);
+		}
 		goto cmddone;
 	}
 
@@ -774,26 +795,23 @@ void ProcessCommandFromHost(char * strCMD)
 
 	if (strcmp(strCMD, "LOGLEVEL") == 0)
 	{
-		int i;
+		long i = 0;
 
 		if (ptrParams == 0)
 		{
-			sprintf(cmdReply, "%s %d", strCMD, FileLogLevel);
+			snprintf(cmdReply, sizeof(cmdReply), "%s %d", strCMD, ardop_log_get_level_file());
+			SendReplyToHost(cmdReply);
+		}
+		else if (try_parse_long(ptrParams, &i))
+		{
+			ardop_log_set_level_file((int)i);
+			ZF_LOGI("FileLogLevel = %d", ardop_log_get_level_file());
+			snprintf(cmdReply, sizeof(cmdReply), "%s now %d", strCMD, ardop_log_get_level_file());
 			SendReplyToHost(cmdReply);
 		}
 		else
 		{
-			i = atoi(ptrParams);
-
-			if (i >= LOGEMERGENCY  && i <= LOGDEBUGPLUS)
-			{
-				FileLogLevel = i;
-				sprintf(cmdReply, "%s now %d", strCMD, FileLogLevel);
-				SendReplyToHost(cmdReply);
-				ZF_LOGI("FileLogLevel = %d (%s)", FileLogLevel, strLogLevels[FileLogLevel]);
-			}
-			else
-				sprintf(strFault, "Syntax Err: %s %s", strCMD, ptrParams);
+			snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 		}
 		goto cmddone;
 	}

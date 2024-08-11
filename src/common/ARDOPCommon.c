@@ -24,6 +24,7 @@
 #endif
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -236,27 +237,25 @@ void processargs(int argc, char * argv[])
 			break;
 
 		case 'l':
-			strcpy(LogDir, optarg);
+			if (!ardop_log_set_directory(optarg)) {
+				printf("ERROR: Unable to set log directory. Log files will not be written. The --logdir may be too long.");
+				exit(1);
+			}
 			break;
 
 		case 'v':
 			printf(
 				"*********************************************************************\n"
-				"* WARNING: The -v and --verboselog parameters are DEPRECATED.  They *\n"
-				"* will be eliminated in a future release of ardopcf.  So, their use *\n"
-				"* should be immediately discontinued.  Use -H \"LOGLEVEL #\" where    *\n"
-				"* # must be an integer between 0 (to write only the most severe     *\n"
-				"* messages to the log file) and %d (to write all possible messages   *\n"
-				"* to the log file).  The default value is %d when this command is    *\n"
-				"* not used.                                                         *\n"
+				"* WARNING: The -v and --verboselog parameters are DEPRECATED.       *\n"
+				"* They will be eliminated in a future release of ardopcf.  So,      *\n"
+				"* their use should be immediately discontinued.  Use                *\n"
+				"* -H \"LOGLEVEL #\" where # must be an integer between %d (to          *\n"
+				"* print all possible messages to the log file) and %d (to print      *\n"
+				"* only the most severe messages to the log file).  The default is   *\n"
+				"* %d when when this command is not used.                             *\n"
 				"*********************************************************************\n",
-				LOGDEBUGPLUS, FileLogLevel);
-			DeprecationWarningsIssued = true;
-			FileLogLevel += atoi(optarg);
-			if (FileLogLevel > LOGDEBUGPLUS)
-				FileLogLevel = LOGDEBUGPLUS;
-			else if (FileLogLevel < LOGEMERGENCY)
-				FileLogLevel = LOGEMERGENCY;
+				ZF_LOG_VERBOSE, ZF_LOG_FATAL, ZF_LOG_INFO);
+			ardop_log_set_level_file(atoi(optarg));
 			break;
 
 		case 'V':
@@ -265,18 +264,13 @@ void processargs(int argc, char * argv[])
 				"* WARNING: The -V and --verboseconsole parameters are DEPRECATED.   *\n"
 				"* They will be eliminated in a future release of ardopcf.  So,      *\n"
 				"* their use should be immediately discontinued.  Use                *\n"
-				"* -H \"CONSOLELOG #\" where # must be an integer between 0 (to        *\n"
-				"* print only the most severe messages to the console) and %d (to     *\n"
-				"* print all possible messages to the console).  The default value   *\n"
-				"* is %d when this command is not used.                               *\n"
+				"* -H \"CONSOLELOG #\" where # must be an integer between %d (to        *\n"
+				"* print all possible messages to the console) and %d (to print       *\n"
+				"* only the most severe messages to the console).  The default is    *\n"
+				"* %d when when this command is not used.                             *\n"
 				"*********************************************************************\n",
-				LOGDEBUGPLUS, ConsoleLogLevel);
-			DeprecationWarningsIssued = true;
-			ConsoleLogLevel += atoi(optarg);
-			if (ConsoleLogLevel > LOGDEBUGPLUS)
-				ConsoleLogLevel = LOGDEBUGPLUS;
-			else if (ConsoleLogLevel < LOGEMERGENCY)
-				ConsoleLogLevel = LOGEMERGENCY;
+				ZF_LOG_VERBOSE, ZF_LOG_FATAL, ZF_LOG_INFO);
+			ardop_log_set_level_console(atoi(optarg));
 			break;
 
 		case 'g':
@@ -518,6 +512,17 @@ void processargs(int argc, char * argv[])
 			wg_port);
 		exit(0);
 	}
+
+	// log files use the host port number to permit multiple
+	// concurrent instances
+	uint16_t host_port = atoi(HostPort);
+	if (! host_port) {
+		host_port = 8515;
+	}
+	ardop_log_set_port(host_port);
+
+	// begin logging
+	ardop_log_start(true);
 }
 
 extern enum _ARDOPState ProtocolState;

@@ -198,11 +198,11 @@ void WriteFECLog(UCHAR * Msg, int Len)
 
 	if (FEClogfile == NULL)
 	{
-		if (LogDir[0])
-			sprintf(Value, "%s/%s_%04d%02d%02d.log",
-					LogDir, "ARDOPFECLog", st.wYear, st.wMonth, st.wDay);
+		if (ardop_log_get_directory()[0])
+			snprintf(Value, sizeof(Value), "%s/%s_%04d%02d%02d.log",
+				ardop_log_get_directory(), "ARDOPFECLog", st.wYear, st.wMonth, st.wDay);
 		else
-			sprintf(Value, "%s_%04d%02d%02d.log",
+			snprintf(Value, sizeof(Value), "%s_%04d%02d%02d.log",
 					"ARDOPFECLog", st.wYear, st.wMonth, st.wDay);
 
 		if ((FEClogfile = fopen(Value, "ab")) == NULL)

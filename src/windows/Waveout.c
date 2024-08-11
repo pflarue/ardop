@@ -185,25 +185,29 @@ void StartRxWav()
 
 	GetSystemTime(&st);
 
-	if (LogDir[0])
+	if (ardop_log_get_directory()[0])
 	{
 		if (HostPort[0])
-			sprintf(rxwf_pathname, "%s/ARDOP_rxaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
-				LogDir, HostPort, st.wYear, st.wMonth, st.wDay,
+			snprintf(rxwf_pathname, sizeof(rxwf_pathname),
+				"%s/ARDOP_rxaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
+				ardop_log_get_directory(), HostPort, st.wYear, st.wMonth, st.wDay,
 				st.wHour, st.wMinute, st.wSecond);
 		else
-			sprintf(rxwf_pathname, "%s/ARDOP_rxaudio_%04d%02d%02d_%02d%02d%02d.wav",
-				LogDir, st.wYear, st.wMonth, st.wDay,
+			snprintf(rxwf_pathname, sizeof(rxwf_pathname),
+				"%s/ARDOP_rxaudio_%04d%02d%02d_%02d%02d%02d.wav",
+				ardop_log_get_directory(), st.wYear, st.wMonth, st.wDay,
 				st.wHour, st.wMinute, st.wSecond);
 	}
 	else
 	{
 		if (HostPort[0])
-			sprintf(rxwf_pathname, "ARDOP_rxaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
+			snprintf(rxwf_pathname, sizeof(rxwf_pathname),
+				"ARDOP_rxaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
 				HostPort, st.wYear, st.wMonth, st.wDay,
 				st.wHour, st.wMinute, st.wSecond);
 		else
-			sprintf(rxwf_pathname, "ARDOP_rxaudio_%04d%02d%02d_%02d%02d%02d.wav",
+			snprintf(rxwf_pathname, sizeof(rxwf_pathname),
+				"ARDOP_rxaudio_%04d%02d%02d_%02d%02d%02d.wav",
 				st.wYear, st.wMonth, st.wDay,
 				st.wHour, st.wMinute, st.wSecond);
 	}
@@ -237,46 +241,38 @@ void StartTxWav()
 
 	GetSystemTime(&st);
 
-	if (LogDir[0])
+	if (ardop_log_get_directory()[0])
 	{
 		if (HostPort[0])
 		{
-			sprintf(txwff_pathname, "%s/ARDOP_txfaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
-				LogDir, HostPort, st.wYear, st.wMonth, st.wDay,
+			snprintf(txwff_pathname, sizeof(txwff_pathname),
+				"%s/ARDOP_txfaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
+				ardop_log_get_directory(), HostPort, st.wYear, st.wMonth, st.wDay,
 				st.wHour, st.wMinute, st.wSecond);
-			// sprintf(txwfu_pathname, "%s/ARDOP_txuaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
-				// LogDir, HostPort, st.wYear, st.wMonth, st.wDay,
-				// st.wHour, st.wMinute, st.wSecond);
 		}
 		else
 		{
-			sprintf(txwff_pathname, "%s/ARDOP_txfaudio_%04d%02d%02d_%02d%02d%02d.wav",
-				LogDir, st.wYear, st.wMonth, st.wDay,
+			snprintf(txwff_pathname, sizeof(txwff_pathname),
+				"%s/ARDOP_txfaudio_%04d%02d%02d_%02d%02d%02d.wav",
+				ardop_log_get_directory(), st.wYear, st.wMonth, st.wDay,
 				st.wHour, st.wMinute, st.wSecond);
-			// sprintf(txwfu_pathname, "%s/ARDOP_txuaudio_%04d%02d%02d_%02d%02d%02d.wav",
-				// LogDir, st.wYear, st.wMonth, st.wDay,
-				// st.wHour, st.wMinute, st.wSecond);
 		}
 	}
 	else
 	{
 		if (HostPort[0])
 		{
-			sprintf(txwff_pathname, "ARDOP_txfaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
+			snprintf(txwff_pathname, sizeof(txwff_pathname),
+				"ARDOP_txfaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
 				HostPort, st.wYear, st.wMonth, st.wDay,
 				st.wHour, st.wMinute, st.wSecond);
-			// sprintf(txwfu_pathname, "ARDOP_txuaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
-				// HostPort, st.wYear, st.wMonth, st.wDay,
-				// st.wHour, st.wMinute, st.wSecond);
 		}
 		else
 		{
-			sprintf(txwff_pathname, "ARDOP_txfaudio_%04d%02d%02d_%02d%02d%02d.wav",
+			snprintf(txwff_pathname, sizeof(txwff_pathname),
+				"ARDOP_txfaudio_%04d%02d%02d_%02d%02d%02d.wav",
 				st.wYear, st.wMonth, st.wDay,
 				st.wHour, st.wMinute, st.wSecond);
-			// sprintf(txwfu_pathname, "ARDOP_txuaudio_%04d%02d%02d_%02d%02d%02d.wav",
-				// st.wYear, st.wMonth, st.wDay,
-				// st.wHour, st.wMinute, st.wSecond);
 		}
 	}
 	txwff = OpenWavW(txwff_pathname);
@@ -381,13 +377,6 @@ int platform_main(int argc, char * argv[])
 	t = timeGetTime();
 
 	processargs(argc, argv);
-
-	if (LogDir[0])
-	{
-		sprintf(&LogName[0][0], "%s/%s", LogDir, "ARDOPDebug");
-		sprintf(&LogName[1][0], "%s/%s", LogDir, "ARDOPException");
-		sprintf(&LogName[2][0], "%s/%s", LogDir, "ARDOPSession");
-	}
 
 	ZF_LOGI("\n\n%s Version %s (https://www.github.com/pflarue/ardop)", ProductName, ProductVersion);
 	ZF_LOGI("Copyright (c) 2014-2024 Rick Muething, John Wiseman, Peter LaRue");
