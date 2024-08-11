@@ -86,33 +86,29 @@ void condense(struct wg_receive_data *rdata) {
 // debug_for_ws() and error_for_ws() are designed to be
 // passed as callbacks to ws_set_debug() and ws_set_error()
 int debug_for_ws(const char * format, ...) {
-	char Mess[1024];
+	if (! ZF_LOG_ON_DEBUG)
+		return 0;
+
+	char Mess[1024] = "";
 	va_list(arglist);
 	va_start(arglist, format);
-	vsnprintf(Mess, sizeof(Mess), format, arglist);
-	strcat(Mess, "\n");
-	if (LOGDEBUG <= ConsoleLogLevel)
-		printf("%s", Mess);
-	if (LOGDEBUG > FileLogLevel)
-		return (0);
-	WriteLog(Mess, 0);  // 0 for Debug log
+	int rv = vsnprintf(Mess, sizeof(Mess), format, arglist);
+	ZF_LOGD_STR(Mess);
 	va_end(arglist);
-	return strlen(Mess);
+	return rv;
 }
 
 int error_for_ws(const char * format, ...) {
-	char Mess[1024];
+	if (!ZF_LOG_ON_ERROR)
+		return 0;
+
+	char Mess[1024] = "";
 	va_list(arglist);
 	va_start(arglist, format);
-	vsnprintf(Mess, sizeof(Mess), format, arglist);
-	strcat(Mess, "\n");
-	if (LOGERROR <= ConsoleLogLevel)
-		printf("%s", Mess);
-	if (LOGERROR > FileLogLevel)
-		return (0);
-	WriteLog(Mess, 0);  // 0 for Debug log
+	int rv = vsnprintf(Mess, sizeof(Mess), format, arglist);
+	ZF_LOGE_STR(Mess);
 	va_end(arglist);
-	return strlen(Mess);
+	return rv;
 }
 
 

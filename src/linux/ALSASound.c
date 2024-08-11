@@ -418,7 +418,7 @@ VOID Statsprintf(const char * format, ...)
 
 void printtick(char * msg)
 {
-	Debugprintf("%s %i", msg, Now - LastNow);
+	ZF_LOGI("%s %i", msg, Now - LastNow);
 	LastNow = Now;
 }
 
@@ -572,9 +572,9 @@ int platform_main(int argc, char * argv[])
 
 	setlinebuf(stdout);  // So we can redirect output to file and tail
 
-	Debugprintf("\n\n%s Version %s (https://www.github.com/pflarue/ardop)", ProductName, ProductVersion);
-	Debugprintf("Copyright (c) 2014-2024 Rick Muething, John Wiseman, Peter LaRue");
-	Debugprintf(
+	ZF_LOGI("%s Version %s (https://www.github.com/pflarue/ardop)", ProductName, ProductVersion);
+	ZF_LOGI("Copyright (c) 2014-2024 Rick Muething, John Wiseman, Peter LaRue");
+	ZF_LOGI(
 		"See https://github.com/pflarue/ardop/blob/master/LICENSE for licence details including\n"
 		"  information about authors of external libraries used and their licenses."
 	);
@@ -612,14 +612,14 @@ int platform_main(int argc, char * argv[])
 
 			if (fd == -1)
 			{
-				Debugprintf ("Could not open %s for write, errno=%d", CM108Device, errno);
+				ZF_LOGE("Could not open %s for write, errno=%d", CM108Device, errno);
 			}
 			else
 			{
 				close (fd);
 				PTTMode = PTTCM108;
 				RadioControl = TRUE;
-				Debugprintf ("Using %s for PTT", CM108Device);
+				ZF_LOGI("Using %s for PTT", CM108Device);
 			}
 		}
 		else
@@ -720,7 +720,7 @@ int platform_main(int argc, char * argv[])
 	}
 
 
-	Debugprintf("ARDOPC listening on port %d", port);
+	ZF_LOGI("ARDOPC listening on port %d", port);
 
 	// Get Time Reference
 
@@ -836,7 +836,7 @@ int GetOutputDeviceCollection()
 	snd_pcm_format_mask_t *fmask;
 	char NameString[256];
 
-	Debugprintf("Playback Devices\n");
+	ZF_LOGI("Playback Devices\n");
 
 	CloseSoundCard();
 
@@ -875,7 +875,7 @@ int GetOutputDeviceCollection()
 
 	if (snd_card_next(&card) < 0)
 	{
-		Debugprintf("No Devices");
+		ZF_LOGI("No Devices");
 		return 0;
 	}
 
@@ -890,7 +890,7 @@ int GetOutputDeviceCollection()
 		err = snd_ctl_open(&handle, hwdev, 0);
 		err = snd_ctl_card_info(handle, info);
 
-		Debugprintf("Card %d, ID `%s', name `%s'", card, snd_ctl_card_info_get_id(info),
+		ZF_LOGI("Card %d, ID `%s', name `%s'", card, snd_ctl_card_info_get_id(info),
 			snd_ctl_card_info_get_name(info));
 
 
@@ -918,7 +918,7 @@ int GetOutputDeviceCollection()
 
 			nsubd = snd_pcm_info_get_subdevices_count(pcminfo);
 
-			Debugprintf("  Device hw:%d,%d ID `%s', name `%s', %d subdevices (%d available)",
+			ZF_LOGI("  Device hw:%d,%d ID `%s', name `%s', %d subdevices (%d available)",
 				card, dev, snd_pcm_info_get_id(pcminfo), snd_pcm_info_get_name(pcminfo),
 				nsubd, snd_pcm_info_get_subdevices_avail(pcminfo));
 
@@ -928,7 +928,7 @@ int GetOutputDeviceCollection()
 
 			if (err)
 			{
-				Debugprintf("Error %d opening output device", err);
+				ZF_LOGW("Error %d opening output device", err);
 				goto nextdevice;
 			}
 
@@ -944,11 +944,11 @@ int GetOutputDeviceCollection()
 
 			if( min == max )
 				if( min == 1 )
-					Debugprintf("    1 channel,  sampling rate %u..%u Hz", ratemin, ratemax);
+					ZF_LOGI("    1 channel,  sampling rate %u..%u Hz", ratemin, ratemax);
 				else
-					Debugprintf("    %d channels,  sampling rate %u..%u Hz", min, ratemin, ratemax);
+					ZF_LOGI("    %d channels,  sampling rate %u..%u Hz", min, ratemin, ratemax);
 			else
-				Debugprintf("    %u..%u channels, sampling rate %u..%u Hz", min, max, ratemin, ratemax);
+				ZF_LOGI("    %u..%u channels, sampling rate %u..%u Hz", min, max, ratemin, ratemax);
 
 			// Add device to list
 
@@ -969,7 +969,7 @@ nextdevice:
 
 nextcard:
 
-		Debugprintf("");
+		ZF_LOGI("%s", "");
 
 		if (snd_card_next(&card) < 0)  // No more cards
 			break;
@@ -1000,7 +1000,7 @@ int GetInputDeviceCollection()
 	snd_pcm_format_mask_t *fmask;
 	char NameString[256];
 
-	Debugprintf("Capture Devices\n");
+	ZF_LOGI("Capture Devices\n");
 
 	ReadDevices = NULL;
 	ReadDeviceCount = 0;
@@ -1026,7 +1026,7 @@ int GetInputDeviceCollection()
 
 	if(snd_card_next(&card) < 0)
 	{
-		Debugprintf("No Devices");
+		ZF_LOGI("No Devices");
 		return 0;
 	}
 
@@ -1041,7 +1041,7 @@ int GetInputDeviceCollection()
 		err = snd_ctl_open(&handle, hwdev, 0);
 		err = snd_ctl_card_info(handle, info);
 
-		Debugprintf("Card %d, ID `%s', name `%s'", card, snd_ctl_card_info_get_id(info),
+		ZF_LOGI("Card %d, ID `%s', name `%s'", card, snd_ctl_card_info_get_id(info),
 			snd_ctl_card_info_get_name(info));
 
 		dev = -1;
@@ -1063,7 +1063,7 @@ int GetInputDeviceCollection()
 				goto nextdevice;
 
 			nsubd= snd_pcm_info_get_subdevices_count(pcminfo);
-			Debugprintf("  Device hw:%d,%d ID `%s', name `%s', %d subdevices (%d available)",
+			ZF_LOGI("  Device hw:%d,%d ID `%s', name `%s', %d subdevices (%d available)",
 				card, dev, snd_pcm_info_get_id(pcminfo), snd_pcm_info_get_name(pcminfo),
 				nsubd, snd_pcm_info_get_subdevices_avail(pcminfo));
 
@@ -1073,7 +1073,7 @@ int GetInputDeviceCollection()
 
 			if (err)
 			{
-				Debugprintf("Error %d opening input device", err);
+				ZF_LOGW("Error %d opening input device", err);
 				goto nextdevice;
 			}
 
@@ -1086,11 +1086,11 @@ int GetInputDeviceCollection()
 
 			if( min == max )
 				if( min == 1 )
-					Debugprintf("    1 channel,  sampling rate %u..%u Hz", ratemin, ratemax);
+					ZF_LOGI("    1 channel,  sampling rate %u..%u Hz", ratemin, ratemax);
 				else
-					Debugprintf("    %d channels,  sampling rate %u..%u Hz", min, ratemin, ratemax);
+					ZF_LOGI("    %d channels,  sampling rate %u..%u Hz", min, ratemin, ratemax);
 			else
-				Debugprintf("    %u..%u channels, sampling rate %u..%u Hz", min, max, ratemin, ratemax);
+				ZF_LOGI("    %u..%u channels, sampling rate %u..%u Hz", min, max, ratemin, ratemax);
 
 			sprintf(NameString, "hw:%d,%d %s(%s)", card, dev,
 				snd_pcm_info_get_name(pcminfo), snd_ctl_card_info_get_name(info));
@@ -1110,7 +1110,7 @@ nextdevice:
 		snd_ctl_close(handle);
 nextcard:
 
-		Debugprintf("");
+		ZF_LOGI("%s", "");
 		if (snd_card_next(&card) < 0 )
 			break;
 	}
@@ -1165,7 +1165,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 		if (ErrorMsg)
 			sprintf (ErrorMsg, "cannot open playback audio device %s (%s)",  buf1, snd_strerror(err));
 		else
-			Debugprintf("cannot open playback audio device %s (%s)",  buf1, snd_strerror(err));
+			ZF_LOGE("cannot open playback audio device %s (%s)",  buf1, snd_strerror(err));
 		return false;
 	}
 
@@ -1173,7 +1173,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 		if (ErrorMsg)
 			sprintf (ErrorMsg, "cannot allocate hardware parameter structure (%s)", snd_strerror(err));
 		else
-			Debugprintf("cannot allocate hardware parameter structure (%s)", snd_strerror(err));
+			ZF_LOGE("cannot allocate hardware parameter structure (%s)", snd_strerror(err));
 		return false;
 	}
 
@@ -1181,7 +1181,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 		if (ErrorMsg)
 			sprintf (ErrorMsg, "cannot initialize hardware parameter structure (%s)", snd_strerror(err));
 		else
-			Debugprintf("cannot initialize hardware parameter structure (%s)", snd_strerror(err));
+			ZF_LOGE("cannot initialize hardware parameter structure (%s)", snd_strerror(err));
 		return false;
 	}
 
@@ -1189,7 +1189,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 		if (ErrorMsg)
 			sprintf (ErrorMsg, "cannot set playback access type (%s)", snd_strerror (err));
 		else
-			Debugprintf("cannot set playback access type (%s)", snd_strerror (err));
+			ZF_LOGE("cannot set playback access type (%s)", snd_strerror(err));
 		return false;
 	}
 
@@ -1197,7 +1197,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 		if (ErrorMsg)
 			sprintf (ErrorMsg, "cannot setplayback  sample format (%s)", snd_strerror(err));
 		else
-			Debugprintf("cannot setplayback  sample format (%s)", snd_strerror(err));
+			ZF_LOGE("cannot setplayback  sample format (%s)", snd_strerror(err));
 		return false;
 	}
 
@@ -1205,7 +1205,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 		if (ErrorMsg)
 			sprintf (ErrorMsg, "cannot set playback sample rate (%s)", snd_strerror(err));
 		else
-			Debugprintf("cannot set playback sample rate (%s)", snd_strerror(err));
+			ZF_LOGE("cannot set playback sample rate (%s)", snd_strerror(err));
 		return false;
 	}
 
@@ -1213,7 +1213,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 
 	if ((err = snd_pcm_hw_params_set_channels (playhandle, hw_params, channels)) < 0)
 	{
-		Debugprintf("cannot set play channel count to %d (%s)", channels, snd_strerror(err));
+		ZF_LOGE("cannot set play channel count to %d (%s)", channels, snd_strerror(err));
 
 		if (channels == 2)
 			return false;  // Shouldn't happen as should have worked before
@@ -1222,7 +1222,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 
 		if ((err = snd_pcm_hw_params_set_channels (playhandle, hw_params, 2)) < 0)
 		{
-			Debugprintf("cannot play set channel count to 2 (%s)", snd_strerror(err));
+			ZF_LOGE("cannot play set channel count to 2 (%s)", snd_strerror(err));
 			return false;
 		}
 	}
@@ -1232,7 +1232,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 			if (ErrorMsg)
 				sprintf (ErrorMsg, "cannot set playback period size (%s)", snd_strerror(err));
 			else
-				Debugprintf("cannot set playback period size (%s)", snd_strerror(err));
+				ZF_LOGE("cannot set playback period size (%s)", snd_strerror(err));
 			return false;
 		}
 	}
@@ -1241,7 +1241,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 		if (ErrorMsg)
 			sprintf (ErrorMsg, "cannot set parameters (%s)", snd_strerror(err));
 		else
-			Debugprintf("cannot set parameters (%s)", snd_strerror(err));
+			ZF_LOGE("cannot set parameters (%s)", snd_strerror(err));
 		return false;
 	}
 
@@ -1250,7 +1250,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 		if (ErrorMsg)
 			sprintf (ErrorMsg, "cannot verify playback rate (%s)", snd_strerror(err));
 		else
-			Debugprintf("cannot verify playback rate (%s)", snd_strerror(err));
+			ZF_LOGE("cannot verify playback rate (%s)", snd_strerror(err));
 		return false;
 	}
 	if (m_sampleRate != intRate) {
@@ -1258,7 +1258,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 			sprintf (ErrorMsg, "Unable to correctly set playback rate.  Got %d instead of %d.",
 				intRate, m_sampleRate);
 		else
-			Debugprintf("Unable to correctly set playback rate.  Got %d instead of %d.",
+			ZF_LOGE("Unable to correctly set playback rate.  Got %d instead of %d.",
 				intRate, m_sampleRate);
 		return false;
 	}
@@ -1267,7 +1267,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 		if (ErrorMsg)
 			sprintf (ErrorMsg, "cannot verify playback period size (%s)", snd_strerror(err));
 		else
-			Debugprintf("cannot verify playback period size (%s)", snd_strerror(err));
+			ZF_LOGE("cannot verify playback period size (%s)", snd_strerror(err));
 		return false;
 	}
 	if (FixTiming && (setPeriodSize != periodSize)) {
@@ -1275,7 +1275,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 			sprintf (ErrorMsg, "Unable to correctly set playback period size.  Got %lu instead of %lu.",
 				periodSize, setPeriodSize);
 		else
-			Debugprintf("Unable to correctly set playback period size.  Got %d instead of %d.",
+			ZF_LOGE("Unable to correctly set playback period size.  Got %ld instead of %ld.",
 				periodSize, setPeriodSize);
 		return false;
 	}
@@ -1284,7 +1284,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 		if (ErrorMsg)
 			sprintf (ErrorMsg, "cannot verify playback period time (%s)", snd_strerror(err));
 		else
-			Debugprintf("cannot verify playback period time (%s)", snd_strerror(err));
+			ZF_LOGE("cannot verify playback period time (%s)", snd_strerror(err));
 		return false;
 	}
 
@@ -1298,7 +1298,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 				" system by using the -A command line option.\n\n",
 				intPeriodTime, intRate, periodSize);
 		else
-			Debugprintf(
+			ZF_LOGE(
 				"\n\nERROR: Inconsistent playback settings: %d * %d != %lu * 1000000."
 				"  Please report this error with a message to the ardop users group"
 				" at ardop.groups.io or by creating an issue at github.com/pflarue/ardop."
@@ -1329,7 +1329,7 @@ int OpenSoundPlayback(char * PlaybackDevice, int m_sampleRate, int channels, cha
 	snd_pcm_hw_params_free(hw_params);
 
 	if ((err = snd_pcm_prepare (playhandle)) < 0) {
-		Debugprintf("cannot prepare audio interface for use (%s)", snd_strerror(err));
+		ZF_LOGE("cannot prepare audio interface for use (%s)", snd_strerror(err));
 		return false;
 	}
 
@@ -1365,17 +1365,17 @@ int OpenSoundCapture(char * CaptureDevice, int m_sampleRate, char * ErrorMsg)
 		if (ErrorMsg)
 			sprintf (ErrorMsg, "cannot open capture audio device %s (%s)",  buf1, snd_strerror(err));
 		else
-			Debugprintf("cannot open capture audio device %s (%s)",  buf1, snd_strerror(err));
+			ZF_LOGE("cannot open capture audio device %s (%s)", buf1, snd_strerror(err));
 		return false;
 	}
 
 	if ((err = snd_pcm_hw_params_malloc (&hw_params)) < 0) {
-		Debugprintf("cannot allocate capture hardware parameter structure (%s)", snd_strerror(err));
+		ZF_LOGE("cannot allocate capture hardware parameter structure (%s)", snd_strerror(err));
 		return false;
 	}
 
 	if ((err = snd_pcm_hw_params_any (rechandle, hw_params)) < 0) {
-		Debugprintf("cannot initialize capture hardware parameter structure (%s)", snd_strerror(err));
+		ZF_LOGE("cannot initialize capture hardware parameter structure (%s)", snd_strerror(err));
 		return false;
 	}
 
@@ -1386,18 +1386,18 @@ int OpenSoundCapture(char * CaptureDevice, int m_sampleRate, char * ErrorMsg)
 
 	if ((err = snd_pcm_hw_params_set_period_size_near (rechandle, hw_params, &fpp, &dir)) < 0)
 	{
-		Debugprintf("snd_pcm_hw_params_set_period_size_near failed (%s)", snd_strerror (err));
+		ZF_LOGE("snd_pcm_hw_params_set_period_size_near failed (%s)", snd_strerror(err));
 		return false;
 	}
 
 	if ((err = snd_pcm_hw_params_set_access (rechandle, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED)) < 0)
 	{
-		Debugprintf("cannot set capture access type (%s)", snd_strerror (err));
+		ZF_LOGE("cannot set capture access type (%s)", snd_strerror(err));
 		return false;
 	}
 	if ((err = snd_pcm_hw_params_set_format (rechandle, hw_params, SND_PCM_FORMAT_S16_LE)) < 0)
 	{
-		Debugprintf("cannot set capture sample format (%s)", snd_strerror(err));
+		ZF_LOGE("cannot set capture sample format (%s)", snd_strerror(err));
 		return false;
 	}
 
@@ -1406,7 +1406,7 @@ int OpenSoundCapture(char * CaptureDevice, int m_sampleRate, char * ErrorMsg)
 		if (ErrorMsg)
 			sprintf (ErrorMsg, "cannot set capture sample rate (%s)", snd_strerror(err));
 		else
-			Debugprintf("cannot set capture sample rate (%s)", snd_strerror(err));
+			ZF_LOGE("cannot set capture sample rate (%s)", snd_strerror(err));
 		return false;
 	}
 
@@ -1420,7 +1420,7 @@ int OpenSoundCapture(char * CaptureDevice, int m_sampleRate, char * ErrorMsg)
 		if (ErrorMsg)
 			sprintf (ErrorMsg, "cannot set rec channel count to %d (%s)" ,m_recchannels, snd_strerror(err));
 		else
-			Debugprintf("cannot set rec channel count to %d (%s)", m_recchannels, snd_strerror(err));
+			ZF_LOGE("cannot set rec channel count to %d (%s)", m_recchannels, snd_strerror(err));
 
 		if (m_recchannels  == 1)
 		{
@@ -1428,13 +1428,13 @@ int OpenSoundCapture(char * CaptureDevice, int m_sampleRate, char * ErrorMsg)
 
 			if ((err = snd_pcm_hw_params_set_channels (rechandle, hw_params, 2)) < 0)
 			{
-				Debugprintf("cannot set rec channel count to 2 (%s)", snd_strerror(err));
+				ZF_LOGE("cannot set rec channel count to 2 (%s)", snd_strerror(err));
 				return false;
 			}
 			if (ErrorMsg)
 				sprintf (ErrorMsg, "Record channel count set to 2 (%s)", snd_strerror(err));
 			else
-				Debugprintf("Record channel count set to 2 (%s)", snd_strerror(err));
+				ZF_LOGI("Record channel count set to 2 (%s)", snd_strerror(err));
 		}
 	}
 
@@ -1446,7 +1446,7 @@ int OpenSoundCapture(char * CaptureDevice, int m_sampleRate, char * ErrorMsg)
 	snd_pcm_hw_params_free(hw_params);
 
 	if ((err = snd_pcm_prepare (rechandle)) < 0) {
-		Debugprintf("cannot prepare audio interface for use (%s)", snd_strerror(err));
+		ZF_LOGE("cannot prepare audio interface for use (%s)", snd_strerror(err));
 		return FALSE;
 	}
 
@@ -1461,29 +1461,29 @@ int OpenSoundCard(char * CaptureDevice, char * PlaybackDevice, int c_sampleRate,
 
 	if (UseLeftRX == 1 && UseRightRX == 1)
 	{
-		printf("Using Both Channels of soundcard for RX\n");
+		ZF_LOGI("Using Both Channels of soundcard for RX");
 	}
 	else
 	{
 		if (UseLeftRX == 0)
-			printf("Using Right Channel of soundcard for RX\n");
+			ZF_LOGI("Using Right Channel of soundcard for RX");
 		if (UseRightRX == 0)
-			printf("Using Left Channel of soundcard for RX\n");
+			ZF_LOGI("Using Left Channel of soundcard for RX");
 	}
 
 	if (UseLeftTX == 1 && UseRightTX == 1)
 	{
-		printf("Using Both Channels of soundcard for TX\n");
+		ZF_LOGI("Using Both Channels of soundcard for TX");
 	}
 	else
 	{
 		if (UseLeftTX == 0)
-			printf("Using Right Channel of soundcard for TX\n");
+			ZF_LOGI("Using Right Channel of soundcard for TX");
 		if (UseRightTX == 0)
-			printf("Using Left Channel of soundcard for TX\n");
+			ZF_LOGI("Using Left Channel of soundcard for TX");
 	}
 
-	Debugprintf("Opening Playback Device %s Rate %d", PlaybackDevice, p_sampleRate);
+	ZF_LOGI("Opening Playback Device %s Rate %d", PlaybackDevice, p_sampleRate);
 
 	if (UseLeftTX == 0 || UseRightTX == 0)
 		Channels = 2;  // L or R implies stereo
@@ -1502,7 +1502,7 @@ int OpenSoundCard(char * CaptureDevice, char * PlaybackDevice, int c_sampleRate,
 			playhandle = NULL;
 		}
 #endif
-		Debugprintf("Opening Capture Device %s Rate %d", CaptureDevice, c_sampleRate);
+		ZF_LOGI("Opening Capture Device %s Rate %d", CaptureDevice, c_sampleRate);
 
 		strcpy(SavedCaptureDevice, CaptureDevice);  // Saved so we can reopen in error recovery
 		SavedCaptureRate = c_sampleRate;
@@ -1555,13 +1555,13 @@ int SoundCardWrite(short * input, unsigned int nSamples)
 	if (avail < 0)
 	{
 		if (avail != -32)
-			Debugprintf("Playback Avail Recovering from %s ..", snd_strerror((int)avail));
+			ZF_LOGD("Playback Avail Recovering from %s ..", snd_strerror((int)avail));
 		snd_pcm_recover(playhandle, avail, 1);
 
 		avail = snd_pcm_avail_update(playhandle);
 
 		if (avail < 0)
-			Debugprintf("avail play after recovery returned %d", (int)avail);
+			ZF_LOGD("avail play after recovery returned %d", (int)avail);
 	}
 
 	maxavail = avail;
@@ -1688,7 +1688,7 @@ int SoundCardRead(short * input, unsigned int nSamples)
 
 	if (avail < 0)
 	{
-		Debugprintf("avail Recovering from %s ..", snd_strerror((int)avail));
+		ZF_LOGD("avail Recovering from %s ..", snd_strerror((int)avail));
 		if (rechandle)
 		{
 			snd_pcm_close(rechandle);
@@ -1698,7 +1698,7 @@ int SoundCardRead(short * input, unsigned int nSamples)
 		OpenSoundCapture(SavedCaptureDevice, SavedCaptureRate, NULL);
 //		snd_pcm_recover(rechandle, avail, 0);
 		avail = snd_pcm_avail_update(rechandle);
-		Debugprintf("After avail recovery %d ..", avail);
+		ZF_LOGD("After avail recovery %d ..", avail);
 	}
 
 	if (avail < nSamples)
@@ -1710,7 +1710,7 @@ int SoundCardRead(short * input, unsigned int nSamples)
 
 	if (ret < 0)
 	{
-		Debugprintf("RX Error %d", ret);
+		ZF_LOGE("RX Error %d", ret);
 //		snd_pcm_recover(rechandle, avail, 0);
 		if (rechandle)
 		{
@@ -1721,7 +1721,7 @@ int SoundCardRead(short * input, unsigned int nSamples)
 		OpenSoundCapture(SavedCaptureDevice, SavedCaptureRate, NULL);
 //		snd_pcm_recover(rechandle, avail, 0);
 		avail = snd_pcm_avail_update(rechandle);
-		Debugprintf("After Read recovery Avail %d ..", avail);
+		ZF_LOGD("After Read recovery Avail %d ..", avail);
 
 		return 0;
 	}
@@ -2431,9 +2431,9 @@ int stricmp(const unsigned char * pStr1, const unsigned char *pStr2)
 	if (pStr1 == NULL)
 	{
 		if (pStr2)
-			Debugprintf("stricmp called with NULL 1st param - 2nd %s ", pStr2);
+			ZF_LOGW("stricmp called with NULL 1st param - 2nd %s ", pStr2);
 		else
-			Debugprintf("stricmp called with two NULL params");
+			ZF_LOGW("stricmp called with two NULL params");
 
 		return 1;
 	}
