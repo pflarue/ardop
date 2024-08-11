@@ -89,7 +89,6 @@ int LeaderLength = 240;
 unsigned int ARQTimeout = 120;
 int TuningRange = 100;
 int ARQConReqRepeats = 5;
-BOOL DebugLog = TRUE;
 BOOL CommandTrace = TRUE;
 int DriveLevel = 100;
 char strFECMode[16] = "4FSK.500.100";
@@ -106,8 +105,6 @@ BOOL AccumulateStats = TRUE;
 BOOL Use600Modes = FALSE;
 BOOL FSKOnly = FALSE;
 BOOL fastStart = TRUE;
-int ConsoleLogLevel = LOGINFO;
-int FileLogLevel = LOGDEBUG;
 BOOL EnablePingAck = TRUE;
 
 BOOL gotGPIO = FALSE;

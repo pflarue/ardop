@@ -6,7 +6,6 @@
 
 BOOL blnHostRDY = FALSE;
 extern int intFECFramesSent;
-extern const char strLogLevels[9][13];
 
 void SendData();
 BOOL CheckForDisconnect();

@@ -87,8 +87,6 @@ int InputLen = 0;
 UCHAR ARDOPDataBuffer[8192];
 int DataInputLen = 0;
 
-extern char LogDir[256];
-
 /*UINT FREE_Q = 0;
 
 int MAXBUFFS = 0;

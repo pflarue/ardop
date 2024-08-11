@@ -36,19 +36,6 @@
 
 void ProcessCommandFromHost(char * strCMD);
 
-const char strLogLevels[9][13] =
-{
-	"LOGEMERGENCY",
-	"LOGALERT",
-	"LOGCRIT",
-	"LOGERROR",
-	"LOGWARNING",
-	"LOGNOTICE",
-	"LOGINFO",
-	"LOGDEBUG",
-	"LOGDEBUGPLUS"
-};
-
 extern int gotGPIO;
 extern int useGPIO;
 
@@ -106,8 +93,6 @@ extern BOOL UseRightRX;
 
 extern BOOL UseLeftTX;
 extern BOOL UseRightTX;
-
-extern char LogDir[256];
 
 static struct option long_options[] =
 {

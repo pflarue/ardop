@@ -52,8 +52,6 @@ int wg_send_pttled(int cnum, bool isOn);
 int wg_send_pixels(int cnum, unsigned char *data, size_t datalen);
 void WebguiPoll();
 
-VOID WriteDebugLog(int Level, const char * format, ...);
-
 extern BOOL blnDISCRepeating;
 
 extern char * CM108Device;
@@ -77,8 +75,6 @@ extern BOOL TwoToneAndExit;
 extern BOOL FixTiming;
 extern char DecodeWav[256];
 extern int WavNow;  // Time since start of WAV file being decoded
-
-char LogDir[256] = "";
 
 extern struct sockaddr HamlibAddr;  // Dest for above
 extern int useHamLib;
@@ -117,14 +113,6 @@ snd_pcm_sframes_t MaxAvail;
 
 #include <stdarg.h>
 
-FILE *logfile[3] = {NULL, NULL, NULL};
-char LogName[3][256] = {"ARDOPDebug", "ARDOPException", "ARDOPSession"};
-
-#define DEBUGLOG 0
-#define EXCEPTLOG 1
-#define SESSIONLOG 2
-
-FILE *statslogfile = NULL;
 struct WavFile *rxwf = NULL;
 struct WavFile *txwff = NULL;
 // writing unfiltered tx audio to WAV disabled
@@ -269,143 +257,6 @@ void StartTxWav()
 	// }
 	txwff = OpenWavW(txwff_pathname);
 	// txwfu = OpenWavW(txwfu_pathname);
-}
-
-
-VOID CloseDebugLog()
-{
-	if (logfile[DEBUGLOG])
-		fclose(logfile[DEBUGLOG]);
-	logfile[DEBUGLOG] = NULL;
-}
-
-VOID CloseStatsLog()
-{
-	if (statslogfile)
-		fclose(statslogfile);
-	statslogfile = NULL;
-}
-
-
-VOID Debugprintf(const char * format, ...)
-{
-	char Mess[10000];
-	va_list(arglist);
-
-	va_start(arglist, format);
-	vsnprintf(Mess, sizeof(Mess), format, arglist);
-	strcat(Mess, "\r\n");
-
-	printf("%s", Mess);
-	WriteLog(Mess, DEBUGLOG);
-	return;
-}
-
-VOID WriteDebugLog(int Level, const char * format, ...)
-{
-	char Mess[10000];
-	va_list(arglist);
-
-	va_start(arglist, format);
-	vsnprintf(Mess, sizeof(Mess), format, arglist);
-	strcat(Mess, "\n");
-
-	if (Level <= ConsoleLogLevel)
-		printf("%s", Mess);
-
-	if (!DebugLog)
-		return;
-
-	if (Level <= FileLogLevel)
-		WriteLog(Mess, DEBUGLOG);
-	return;
-}
-
-VOID WriteExceptionLog(const char * format, ...)
-{
-	char Mess[10000];
-	va_list(arglist);
-
-	va_start(arglist, format);
-	vsnprintf(Mess, sizeof(Mess), format, arglist);
-	strcat(Mess, "\n");
-
-	printf("%s", Mess);
-	WriteLog(Mess, EXCEPTLOG);
-
-	fclose(logfile[EXCEPTLOG]);
-	logfile[EXCEPTLOG] = NULL;
-	return;
-}
-
-VOID Statsprintf(const char * format, ...)
-{
-	char Mess[10000];
-	va_list(arglist);
-	UCHAR Value[256];
-	int vlen;
-
-	va_start(arglist, format);
-	vsnprintf(Mess, sizeof(Mess) - 1, format, arglist);
-	strcat(Mess, "\n");
-
-	if (statslogfile == NULL)
-	{
-		char timebuf[32];
-		struct timespec tp;
-
-		int hh;
-		int mm;
-		int ss;
-		struct tm * tm;
-		time_t T;
-
-		clock_gettime(CLOCK_REALTIME, &tp);
-
-		ss = tp.tv_sec % 86400;  // Secs int day
-		hh = ss / 3600;
-		mm = (ss - (hh * 3600)) / 60;
-		ss = ss % 60;
-
-		T = time(NULL);
-		tm = gmtime(&T);
-
-		// Including the date is redundant with the filename for the session log
-		// file, but is useful for also writing it to the console.
-		sprintf(timebuf, "%04d/%02d/%02d %02d:%02d:%02d.%03dz ",
-			tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday,
-			hh, mm, ss, (int)tp.tv_nsec/1000000);
-
-		vlen = snprintf(Value, sizeof(Value), "%s%d_%04d%02d%02d.log",
-			LogName[2], port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday);
-		if (vlen == -1 || vlen > sizeof(Value)) {
-			// Logpath too long likely to also prevent writing to log files.
-			// So, print this error directly to console instead of using
-			// WriteDebugLog.
-			printf("ERROR: Unable to write Stats Log. Logpath may be too long.\n");
-			printf("%s", Mess);
-			return;
-		}
-
-		if ((statslogfile = fopen(Value, "ab")) == NULL)
-		{
-			perror(Value);
-			return;
-		}
-		else
-		{
-			fputs(timebuf, statslogfile);
-			fputs("\n", statslogfile);
-			// Printing the UTC date and time to the console with the session stats
-			// may be useful if sessions are logged manually.
-			printf("%s\n", timebuf);
-		}
-	}
-
-	fputs(Mess, statslogfile);
-	printf("%s", Mess);
-
-	return;
 }
 
 void printtick(char * msg)
@@ -1899,78 +1750,6 @@ void CloseSound()
 {
 	CloseSoundCard();
 }
-
-int WriteLog(char * msg, int Log)
-{
-	FILE *file;
-	char timebuf[128];
-	struct timespec tp;
-
-	UCHAR Value[256];
-	int vlen;
-
-	int hh;
-	int mm;
-	int ss;
-	int wavhh;
-	int wavmm;
-	float wavss;
-
-	clock_gettime(CLOCK_REALTIME, &tp);
-
-	if (logfile[Log] == NULL)
-	{
-		struct tm * tm;
-		time_t T;
-
-		T = time(NULL);
-		tm = gmtime(&T);
-
-		if (HostPort[0])
-			vlen = snprintf(Value, sizeof(Value), "%s%s_%04d%02d%02d.log",
-				LogName[Log], HostPort, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday);
-		else
-			vlen = snprintf(Value, sizeof(Value), "%s%d_%04d%02d%02d.log",
-				LogName[Log], port, tm->tm_year +1900, tm->tm_mon+1, tm->tm_mday);
-		if (vlen == -1 || vlen > sizeof(Value)) {
-			printf("ERROR: Unable to open log file.  Log path probably too long.\n");
-			FileLogLevel = 0;
-			return -1;
-		}
-		if ((logfile[Log] = fopen(Value, "a")) == NULL)
-			return -1;
-	}
-	ss = tp.tv_sec % 86400;  // Secs int day
-	hh = ss / 3600;
-	mm = (ss - (hh * 3600)) / 60;
-	ss = ss % 60;
-
-	if (DecodeWav[0])
-	{
-		// When decoding a WAV file, include an approximate reference to the time offset
-		// since the start of the WAV file.
-		wavhh = Now/3600000;
-		wavmm = ((Now/1000) - wavhh * 3600) / 60;
-		wavss = (Now % 60000) / 1000.0;
-		sprintf(timebuf, "%02d:%02d:%02d.%03d (WAV %02d:%02d:%05.2f) ",
-			hh, mm, ss, (int)tp.tv_nsec/1000000, wavhh, wavmm, wavss);
-	}
-	else
-	{
-		sprintf(timebuf, "%02d:%02d:%02d.%03d ",
-			hh, mm, ss, (int)tp.tv_nsec/1000000);
-	}
-
-	fputs(timebuf, logfile[Log]);
-	fputs(msg, logfile[Log]);
-	fflush(logfile[Log]);
-	return 0;
-}
-
-
-
-
-
 
 VOID WriteSamples(short * buffer, int len)
 {

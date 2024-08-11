@@ -14,10 +14,6 @@
 #include "common/log.h"
 #include "common/log_file.h"
 
-// These are unused, but ardop_test_setup() needs them
-int FileLogLevel;
-int ConsoleLogLevel;
-
 int ardop_log_level_filter(const int level);
 
 /* Mocks */
