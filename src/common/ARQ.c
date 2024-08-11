@@ -11,6 +11,8 @@
 #pragma comment(lib, "winmm.lib")
 #endif
 
+#include <time.h>
+
 #include "common/ARDOPC.h"
 
 extern unsigned int PKTLEDTimer;
@@ -2556,68 +2558,61 @@ void LogStats()
 	int intTotPSKDecodes = intGoodPSKFrameDataDecodes + intFailedPSKFrameDataDecodes;
 	int i;
 
-	Statsprintf("************************* ARQ session stats with %s  %d minutes ****************************", strRemoteCallsign, (Now - dttStartSession) / 60000);
-	Statsprintf("     LeaderDetects= %d   AvgLeader S+N:N(3KHz noise BW)= %f dB  LeaderSyncs= %d", intLeaderDetects, dblLeaderSNAvg - 23.8, intLeaderSyncs);
-	Statsprintf("     AvgCorrelationMax:MaxProd= %f over %d  correlations", dblAvgCorMaxToMaxProduct, intEnvelopeCors);
-	Statsprintf("     FrameSyncs=%d  Good Frame Type Decodes=%d  Failed Frame Type Decodes =%d", intFrameSyncs, intGoodFSKFrameTypes, intFailedFSKFrameTypes);
-	Statsprintf("     Avg Frame Type decode distance= %f over %d decodes", dblAvgDecodeDistance, intDecodeDistanceCount);
+	struct timespec tp = { 0, 0 };
+	clock_gettime(CLOCK_REALTIME, &tp);
+
+	ardop_log_session_header(strRemoteCallsign, &tp, (Now - dttStartSession) / 60000);
+
+	ardop_log_session_info("     LeaderDetects= %d   AvgLeader S+N:N(3KHz noise BW)= %f dB  LeaderSyncs= %d", intLeaderDetects, dblLeaderSNAvg - 23.8, intLeaderSyncs);
+	ardop_log_session_info("     AvgCorrelationMax:MaxProd= %f over %d  correlations", dblAvgCorMaxToMaxProduct, intEnvelopeCors);
+	ardop_log_session_info("     FrameSyncs=%d  Good Frame Type Decodes=%d  Failed Frame Type Decodes =%d", intFrameSyncs, intGoodFSKFrameTypes, intFailedFSKFrameTypes);
+	ardop_log_session_info("     Avg Frame Type decode distance= %f over %d decodes", dblAvgDecodeDistance, intDecodeDistanceCount);
 
 	if (intGoodFSKFrameDataDecodes + intFailedFSKFrameDataDecodes + intGoodFSKSummationDecodes > 0)
 	{
-		Statsprintf(" ");
-		Statsprintf("  FSK:");
-		Statsprintf("     Good FSK Data Frame Decodes= %d  RecoveredFSKCarriers with Summation=%d  Failed FSK Data Frame Decodes=%d", intGoodFSKFrameDataDecodes, intGoodFSKSummationDecodes, intFailedFSKFrameDataDecodes);
-		Statsprintf("     AccumFSKTracking= %d   over %d symbols   Good Data Frame Decodes= %d   Failed Data Frame Decodes=%d", intAccumFSKTracking, intFSKSymbolCnt, intGoodFSKFrameDataDecodes, intFailedFSKFrameDataDecodes);
+		ardop_log_session_info("%s","");
+		ardop_log_session_info("  FSK:");
+		ardop_log_session_info("     Good FSK Data Frame Decodes= %d  RecoveredFSKCarriers with Summation=%d  Failed FSK Data Frame Decodes=%d", intGoodFSKFrameDataDecodes, intGoodFSKSummationDecodes, intFailedFSKFrameDataDecodes);
+		ardop_log_session_info("     AccumFSKTracking= %d   over %d symbols   Good Data Frame Decodes= %d   Failed Data Frame Decodes=%d\n", intAccumFSKTracking, intFSKSymbolCnt, intGoodFSKFrameDataDecodes, intFailedFSKFrameDataDecodes);
 	}
 	if (intGoodPSKFrameDataDecodes + intFailedPSKFrameDataDecodes + intGoodPSKSummationDecodes > 0)
 	{
-		Statsprintf(" ");
-		Statsprintf("  PSK:");
-		Statsprintf("     Good PSK Data Frame Decodes=%d  RecoveredPSKCarriers with Summation=%d  Failed PSK Data Frame Decodes=%d", intGoodPSKFrameDataDecodes, intGoodPSKSummationDecodes, intFailedPSKFrameDataDecodes);
-		Statsprintf("     AccumPSKTracking=%d  %d attempts over %d total PSK Symbols",	intAccumPSKTracking, intPSKTrackAttempts, intPSKSymbolCnt);
-
-		Statsprintf(" ");
+		ardop_log_session_info("%s", "");
+		ardop_log_session_info("  PSK:");
+		ardop_log_session_info("     Good PSK Data Frame Decodes=%d  RecoveredPSKCarriers with Summation=%d  Failed PSK Data Frame Decodes=%d", intGoodPSKFrameDataDecodes, intGoodPSKSummationDecodes, intFailedPSKFrameDataDecodes);
+		ardop_log_session_info("     AccumPSKTracking=%d  %d attempts over %d total PSK Symbols\n", intAccumPSKTracking, intPSKTrackAttempts, intPSKSymbolCnt);
 	}
 	if (intGoodQAMFrameDataDecodes + intFailedQAMFrameDataDecodes + intGoodQAMSummationDecodes > 0)
 	{
-		Statsprintf(" ");
-		Statsprintf("  QAM:");
-		Statsprintf("     Good QAM Data Frame Decodes=%d  RecoveredQAMCarriers with Summation=%d  Failed QAM Data Frame Decodes=%d", intGoodQAMFrameDataDecodes, intGoodQAMSummationDecodes, intFailedQAMFrameDataDecodes);
-		Statsprintf("     AccumQAMTracking=%d  %d attempts over %d total QAM Symbols",	intAccumQAMTracking, intQAMTrackAttempts, intQAMSymbolCnt);
-
-		Statsprintf(" ");
+		ardop_log_session_info("%s", "");
+		ardop_log_session_info("  QAM:");
+		ardop_log_session_info("     Good QAM Data Frame Decodes=%d  RecoveredQAMCarriers with Summation=%d  Failed QAM Data Frame Decodes=%d", intGoodQAMFrameDataDecodes, intGoodQAMSummationDecodes, intFailedQAMFrameDataDecodes);
+		ardop_log_session_info("     AccumQAMTracking=%d  %d attempts over %d total QAM Symbols\n", intAccumQAMTracking, intQAMTrackAttempts, intQAMSymbolCnt);
 	}
 
-	Statsprintf("  Squelch= %d BusyDet= %d Mode Shift UPs= %d   Mode Shift DOWNs= %d  Link Turnovers= %d",
+	ardop_log_session_info("  Squelch= %d BusyDet= %d Mode Shift UPs= %d   Mode Shift DOWNs= %d  Link Turnovers= %d\n",
 		Squelch, BusyDet, intShiftUPs, intShiftDNs, intLinkTurnovers);
-	Statsprintf(" ");
-	Statsprintf("  Received Frame Quality:");
+	ardop_log_session_info("  Received Frame Quality:");
 
 	if (int4FSKQualityCnts > 0)
-		Statsprintf("     Avg 4FSK Quality=%d on %d frame(s)",  int4FSKQuality / int4FSKQualityCnts, int4FSKQualityCnts);
+		ardop_log_session_info("     Avg 4FSK Quality=%d on %d frame(s)", int4FSKQuality / int4FSKQualityCnts, int4FSKQualityCnts);
 
 	if (intPSKQualityCnts[0] > 0)
-		Statsprintf("     Avg 4PSK Quality=%d on %d frame(s)",  intPSKQuality[0] / intPSKQualityCnts[0], intPSKQualityCnts[0]);
+		ardop_log_session_info("     Avg 4PSK Quality=%d on %d frame(s)", intPSKQuality[0] / intPSKQualityCnts[0], intPSKQualityCnts[0]);
 
 	if (intPSKQualityCnts[1] > 0)
-		Statsprintf("     Avg 8PSK Quality=%d on %d frame(s)",  intPSKQuality[1] / intPSKQualityCnts[1], intPSKQualityCnts[1]);
+		ardop_log_session_info("     Avg 8PSK Quality=%d on %d frame(s)", intPSKQuality[1] / intPSKQualityCnts[1], intPSKQualityCnts[1]);
 
 	if (intQAMQualityCnts > 0)
-		Statsprintf("     Avg QAM Quality=%d on %d frame(s)",  intQAMQuality / intQAMQualityCnts, intQAMQualityCnts);
+		ardop_log_session_info("     Avg QAM Quality=%d on %d frame(s)", intQAMQuality / intQAMQualityCnts, intQAMQualityCnts);
 
 	// Experimental logging of Frame Type ACK and NAK counts
-
-	Statsprintf("");
-	Statsprintf("Type              ACKS  NAKS");
+	ardop_log_session_info("\nType              ACKS  NAKS");
 
 	for (i = 0; i < bytFrameTypesForBWLength; i++)
 	{
-		Statsprintf("%-16s %5d %5d", Name(bytFrameTypesForBW[i]), ModeHasWorked[i], ModeNAKS[i]);
+		ardop_log_session_info("%-16s %5d %5d", Name(bytFrameTypesForBW[i]), ModeHasWorked[i], ModeNAKS[i]);
 	}
 
-
-	Statsprintf("************************************************************************************************");
-
-	CloseStatsLog();
-	CloseDebugLog();  // Flush debug log
+	ardop_log_session_footer();
 }
