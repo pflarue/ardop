@@ -1,5 +1,12 @@
+#pragma once
+
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+
+// function handle required for output handlers
+// ws_set_debug and ws_set_error
+typedef void (*ws_vprintf_fcn)(const char*, va_list);
 
 // ws_set_max_clients(), ws_set_port(), and ws_set_uri() are
 // optional, but will be ignored after ws_init()
@@ -10,8 +17,8 @@ int ws_set_uri(char *uri);  // override default uri="/ws"
 // ws_set_error() and ws_set_debug() may be used to provide
 // callback functions to redirect error and debug messages.
 // These may be called at any time.
-void ws_set_error(int (*err)(const char*, ...));
-void ws_set_debug(int (*err)(const char*, ...));
+void ws_set_error(ws_vprintf_fcn handler);
+void ws_set_debug(ws_vprintf_fcn handler);
 
 // ws_set_close_notify() may be used to provide a callback function
 // to be called whenever an active WebSocket connection closes.

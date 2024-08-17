@@ -85,30 +85,22 @@ void condense(struct wg_receive_data *rdata) {
 
 // debug_for_ws() and error_for_ws() are designed to be
 // passed as callbacks to ws_set_debug() and ws_set_error()
-int debug_for_ws(const char * format, ...) {
+void debug_for_ws(const char* format, va_list arglist) {
 	if (! ZF_LOG_ON_DEBUG)
-		return 0;
+		return;
 
 	char Mess[1024] = "";
-	va_list(arglist);
-	va_start(arglist, format);
 	int rv = vsnprintf(Mess, sizeof(Mess), format, arglist);
 	ZF_LOGD_STR(Mess);
-	va_end(arglist);
-	return rv;
 }
 
-int error_for_ws(const char * format, ...) {
+void error_for_ws(const char* format, va_list arglist) {
 	if (!ZF_LOG_ON_ERROR)
-		return 0;
+		return;
 
 	char Mess[1024] = "";
-	va_list(arglist);
-	va_start(arglist, format);
 	int rv = vsnprintf(Mess, sizeof(Mess), format, arglist);
 	ZF_LOGE_STR(Mess);
-	va_end(arglist);
-	return rv;
 }
 
 
