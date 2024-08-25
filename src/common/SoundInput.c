@@ -40,8 +40,6 @@ void DrawAxes(int Qual, char * Mode);
 
 extern int lastmax, lastmin;  // Sample Levels
 
-char strRcvFrameTag[32];
-
 BOOL blnLeaderFound = FALSE;
 
 int intLeaderRcvdMs = 1000;  // Leader length??
@@ -2831,7 +2829,6 @@ BOOL Decode4FSKConReq()
 //	printtick(strCaller);
 //	printtick(strTarget);
 
-	sprintf(strRcvFrameTag, "_%s > %s", strCaller, strTarget);
 	sprintf(bytData, "%s %s", strCaller, strTarget);
 
 	// Recheck the returned data by reencoding
@@ -2943,7 +2940,6 @@ BOOL Decode4FSKPing()
 //	printtick(strCaller);
 //	printtick(strTarget);
 
-	sprintf(strRcvFrameTag, "_%s > %s", strCaller, strTarget);
 	sprintf(bytData, "%s %s", strCaller, strTarget);
 
 	if (FrameOK == FALSE)
@@ -3130,8 +3126,6 @@ void DemodulateFrame(int intFrameType)
 
 	// ReDim bytData(-1)
 
-	strRcvFrameTag[0] = 0;
-
 	// stcStatus.ControlName = "lblRcvFrame"
 
 	// DataACK/NAK and short control frames
@@ -3298,9 +3292,6 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 	int intRcvdQuality;
 	char Reply[80];
 	char Good[8] = {1, 1, 1, 1, 1, 1, 1, 1};
-
-
-	strRcvFrameTag[0] = 0;
 
 	// DataACK/NAK and short control frames
 
