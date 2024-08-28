@@ -46,7 +46,6 @@ BOOL blnLeaderFound = FALSE;
 int intLeaderRcvdMs = 1000;  // Leader length??
 
 extern int intLastRcvdFrameQuality;
-extern int intReceivedLeaderLen;
 extern UCHAR bytLastReceivedDataFrameType;
 extern BOOL blnBREAKCmd;
 extern UCHAR bytLastACKedDataFrameType;
@@ -2996,7 +2995,6 @@ BOOL Decode4FSKConACK(UCHAR bytFrameType, int * intTiming)
 			intGoodFSKFrameDataDecodes++;
 
 		// intTestFrameCorrectCnt++;
-		intReceivedLeaderLen = intLeaderRcvdMs;
 		bytLastReceivedDataFrameType = 0;  // initialize the LastFrameType to an illegal Data frame
 		return TRUE;
 	}
