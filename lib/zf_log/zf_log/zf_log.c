@@ -118,6 +118,15 @@
 #else
 	#define ZF_LOG_OPTIMIZE_SIZE 0
 #endif
+/* If defined, timestamps will use UTC rather than local timezone. Disabled by
+ * default.
+ */
+#ifdef ZF_LOG_USE_UTC_TIME
+	#undef ZF_LOG_USE_UTC_TIME
+	#define ZF_LOG_USE_UTC_TIME 1
+#else
+	#define ZF_LOG_USE_UTC_TIME 0
+#endif
 /* Size of the log line buffer. The buffer is allocated on stack. It limits
  * maximum length of a log line.
  */
@@ -150,7 +159,8 @@
  * time, process id, thread id and message's log level. Custom information can
  * be added as well. Supported fields: YEAR, MONTH, DAY, HOUR, MINUTE, SECOND,
  * MILLISECOND, PID, TID, LEVEL, S(str), F_INIT(statements),
- * F_UINT(width, value).
+ * F_UINT(width, value).  Date and time values use local timezone settings
+ * unless ZF_LOG_USE_UTC_TIME is defined.
  *
  * Must be defined as a tuple, for example:
  *
@@ -796,7 +806,11 @@ static void time_callback(struct tm *const tm, unsigned *const msec)
 #else
 	#if defined(_WIN32) || defined(_WIN64)
 	SYSTEMTIME st;
+	#if ZF_LOG_USE_UTC_TIME
+	GetSystemTime(&st);
+	#else
 	GetLocalTime(&st);
+	#endif
 	tm->tm_year = st.wYear;
 	tm->tm_mon = st.wMonth - 1;
 	tm->tm_mday = st.wDay;
@@ -809,11 +823,19 @@ static void time_callback(struct tm *const tm, unsigned *const msec)
 	struct timeval tv;
 	gettimeofday(&tv, 0);
 		#ifndef TCACHE
+		#if ZF_LOG_USE_UTC_TIME
+		gmtime_r(&tv.tv_sec, tm);
+		#else
 		localtime_r(&tv.tv_sec, tm);
+		#endif
 		#else
 		if (!tcache_get(&tv, tm))
 		{
+			#if ZF_LOG_USE_UTC_TIME
+			gmtime_r(&tv.tv_sec, tm);
+			#else
 			localtime_r(&tv.tv_sec, tm);
+			#endif
 			tcache_set(&tv, tm);
 		}
 		#endif
