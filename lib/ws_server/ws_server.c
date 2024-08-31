@@ -169,6 +169,7 @@ int ws_default_print(const char* format, ...) {
 	va_start(arglist, format);
 	vprintf(format, arglist);
 	printf("\n");
+	va_end(arglist);
 }
 int (*ws_error)(const char*, ...) = &ws_default_print;
 int (*ws_debug)(const char*, ...) = &ws_default_print;
