@@ -55,6 +55,8 @@ OBJS = \
 	src/common/FEC.o \
 	src/common/FFT.o \
 	src/common/HostInterface.o \
+	src/common/log.o \
+	src/common/log_file.o \
 	src/common/Modulate.o \
 	src/common/RXO.o \
 	src/common/sdft.o \
@@ -84,6 +86,7 @@ OBJS_EXE = \
 TESTS = \
 	test/ardop/test_ARDOPC \
 	test/ardop/test_ARDOPCommon \
+	test/ardop/test_log \
 
 # unit test common code
 TEST_OBJS_COMMON = \
@@ -175,6 +178,10 @@ test/ardop/test_%: test/ardop/test_%.c $(OBJS) $(TEST_OBJS_COMMON)
 #
 #   for tests that need mock functions injected,
 #   set WRAP to a space-separated list of functions to mock
+test/ardop/test_log: OBJS := \
+	src/common/log_file.o \
+	src/common/log.o
+test/ardop/test_log: WRAP := fopen fclose fwrite fflush freopen
 
 -include *.d
 
