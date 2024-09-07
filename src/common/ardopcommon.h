@@ -50,6 +50,7 @@ extern const char strLogLevels[9][13];
 #include <time.h>
 
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -246,6 +247,29 @@ void DrawTXFrame(const char * Frame);
 void DrawRXFrame(int State, const char * Frame);
 void mySetPixel(unsigned char x, unsigned char y, unsigned int Colour);
 void clearDisplay();
+
+/**
+ * @brief Try to read a base-ten number
+ *
+ * Attempt to parse `str` as a base-ten number. If the entire
+ * `str` is valid as a number, sets `num` and returns true.
+ *
+ * @param[in] str   String to parse. Must be a NUL-terminated
+ *                  character array. May be NULL.
+ *
+ * @param[out] num  Number parsed from `str`. If `str` is not
+ *                  valid as a number, the error behavior is
+ *                  per your platform's `strtol()`.
+ *
+ * @return true if `str` is non-empty and is entirely valid as
+ *         a number. Otherwise, false.
+ *
+ * @warning Even if this method returns true, `num` may still
+ *          underflow or overflow and be clipped to its min/max
+ *          value. If this matters, you must also check
+ *          `errno`.
+ */
+bool try_parse_long(const char* str, long* num);
 
 extern int WaterfallActive;
 extern int SpectrumActive;

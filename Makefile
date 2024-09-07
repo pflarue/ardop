@@ -83,6 +83,7 @@ OBJS_EXE = \
 # unit test executables
 TESTS = \
 	test/ardop/test_ARDOPC \
+	test/ardop/test_ARDOPCommon \
 
 # unit test common code
 TEST_OBJS_COMMON = \

@@ -669,3 +669,15 @@ int decode_wav()
 	WriteDebugLog(LOGDEBUG, "Done decoding %s.", DecodeWav);
 	return 0;
 }
+
+/*
+ * Attempt to parse `str` as a base ten number. Returns
+ * true and sets `num` if the entire string is valid as
+ * a number.
+ */
+bool try_parse_long(const char* str, long* num) {
+	const char* s = str ? str : "";
+	char* end = 0;
+	*num = strtol(s, &end, 10);
+	return (end > s && *end == '\0');
+}
