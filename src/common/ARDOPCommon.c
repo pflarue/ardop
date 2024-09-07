@@ -98,8 +98,7 @@ static struct option long_options[] =
 {
 	{"logdir",  required_argument, 0 , 'l'},
 	{"hostcommands",  required_argument, 0 , 'H'},
-	{"verboselog",  required_argument, 0 , 'v'},
-	{"verboseconsole",  required_argument, 0 , 'V'},
+	{"nologfile",  no_argument, 0 , 'm'},
 	{"ptt",  required_argument, 0 , 'p'},
 	{"cat",  required_argument, 0 , 'c'},
 	{"keystring",  required_argument, 0 , 'k'},
@@ -138,10 +137,7 @@ char HelpScreen[] =
 	"                                       release of ardopcf, and that their use should immediately\n"
 	"                                       be discontinued.  Information about replacement host\n"
 	"                                       commands is given for all deprecated parameters.\n"
-	"(D) -v path or --verboselog val      Increase (decr for val<0) file log level from default.\n"
-	"-----> Use -H \"LOGLEVEL #\" instead, where # is an integer from 0 to 8.\n"
-	"(D) -V path or --verboseconsole val  Increase (decr for val<0) console log level from default.\n"
-	"-----> Use -H \"CONSOLELOG #\" instead, where # is an integer from 0 to 8.\n"
+	"-m or --nologfile                    Don't write log files. Use console output only.\n"
 	"-c device or --cat device            Device to use for CAT Control\n"
 	"-p device or --ptt device            Device to use for PTT control using RTS\n"
 #ifdef LINBPQ
@@ -187,12 +183,13 @@ void processargs(int argc, char * argv[])
 	UCHAR * ptr1;
 	UCHAR * ptr2;
 	int c;
+	bool enable_log_files = true;
 
 	while (1)
 	{
 		int option_index = 0;
 
-		c = getopt_long(argc, argv, "l:H:v:V:c:p:g::k:u:e:G:x:hLRyt:rzwTd:nsA", long_options, &option_index);
+		c = getopt_long(argc, argv, "l:H:mc:p:g::k:u:e:G:x:hLRyt:rzwTd:nsA", long_options, &option_index);
 
 
 		// Check for end of operation or error
@@ -228,34 +225,8 @@ void processargs(int argc, char * argv[])
 			}
 			break;
 
-		case 'v':
-			printf(
-				"*********************************************************************\n"
-				"* WARNING: The -v and --verboselog parameters are DEPRECATED.       *\n"
-				"* They will be eliminated in a future release of ardopcf.  So,      *\n"
-				"* their use should be immediately discontinued.  Use                *\n"
-				"* -H \"LOGLEVEL #\" where # must be an integer between %d (to          *\n"
-				"* print all possible messages to the log file) and %d (to print      *\n"
-				"* only the most severe messages to the log file).  The default is   *\n"
-				"* %d when when this command is not used.                             *\n"
-				"*********************************************************************\n",
-				ZF_LOG_VERBOSE, ZF_LOG_FATAL, ZF_LOG_INFO);
-			ardop_log_set_level_file(atoi(optarg));
-			break;
-
-		case 'V':
-			printf(
-				"*********************************************************************\n"
-				"* WARNING: The -V and --verboseconsole parameters are DEPRECATED.   *\n"
-				"* They will be eliminated in a future release of ardopcf.  So,      *\n"
-				"* their use should be immediately discontinued.  Use                *\n"
-				"* -H \"CONSOLELOG #\" where # must be an integer between %d (to        *\n"
-				"* print all possible messages to the console) and %d (to print       *\n"
-				"* only the most severe messages to the console).  The default is    *\n"
-				"* %d when when this command is not used.                             *\n"
-				"*********************************************************************\n",
-				ZF_LOG_VERBOSE, ZF_LOG_FATAL, ZF_LOG_INFO);
-			ardop_log_set_level_console(atoi(optarg));
+		case 'm':
+			enable_log_files = false;
 			break;
 
 		case 'g':
@@ -507,7 +478,7 @@ void processargs(int argc, char * argv[])
 	ardop_log_set_port(host_port);
 
 	// begin logging
-	ardop_log_start(true);
+	ardop_log_start(enable_log_files);
 }
 
 extern enum _ARDOPState ProtocolState;
