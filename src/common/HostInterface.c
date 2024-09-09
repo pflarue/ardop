@@ -170,7 +170,6 @@ void ProcessCommandFromHost(char * strCMD)
 	// TXFRAME with data up to 1024 bytes written as hex
 	// requiring 2 string chars per data byte
 	char cmdCopy[3000] = "";
-	char strFault[100] = "";
 	char cmdReply[1024];
 	if (WG_DevMode)
 		wg_send_hostmsg(0, 'F', strCMD);
