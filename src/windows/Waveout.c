@@ -64,16 +64,6 @@ BOOL UseRightRX = TRUE;
 BOOL UseLeftTX = TRUE;
 BOOL UseRightTX = TRUE;
 
-char LogDir[256] = "";
-
-FILE *logfile[3] = {NULL, NULL, NULL};
-char LogName[3][256] = {"ARDOPDebug", "ARDOPException", "ARDOPSession"};
-
-#define DEBUGLOG 0
-#define EXCEPTLOG 1
-#define SESSIONLOG 2
-
-
 char * CaptureDevices = NULL;
 char * PlaybackDevices = NULL;
 
@@ -185,25 +175,29 @@ void StartRxWav()
 
 	GetSystemTime(&st);
 
-	if (LogDir[0])
+	if (ardop_log_get_directory()[0])
 	{
 		if (HostPort[0])
-			sprintf(rxwf_pathname, "%s/ARDOP_rxaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
-				LogDir, HostPort, st.wYear, st.wMonth, st.wDay,
+			snprintf(rxwf_pathname, sizeof(rxwf_pathname),
+				"%s/ARDOP_rxaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
+				ardop_log_get_directory(), HostPort, st.wYear, st.wMonth, st.wDay,
 				st.wHour, st.wMinute, st.wSecond);
 		else
-			sprintf(rxwf_pathname, "%s/ARDOP_rxaudio_%04d%02d%02d_%02d%02d%02d.wav",
-				LogDir, st.wYear, st.wMonth, st.wDay,
+			snprintf(rxwf_pathname, sizeof(rxwf_pathname),
+				"%s/ARDOP_rxaudio_%04d%02d%02d_%02d%02d%02d.wav",
+				ardop_log_get_directory(), st.wYear, st.wMonth, st.wDay,
 				st.wHour, st.wMinute, st.wSecond);
 	}
 	else
 	{
 		if (HostPort[0])
-			sprintf(rxwf_pathname, "ARDOP_rxaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
+			snprintf(rxwf_pathname, sizeof(rxwf_pathname),
+				"ARDOP_rxaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
 				HostPort, st.wYear, st.wMonth, st.wDay,
 				st.wHour, st.wMinute, st.wSecond);
 		else
-			sprintf(rxwf_pathname, "ARDOP_rxaudio_%04d%02d%02d_%02d%02d%02d.wav",
+			snprintf(rxwf_pathname, sizeof(rxwf_pathname),
+				"ARDOP_rxaudio_%04d%02d%02d_%02d%02d%02d.wav",
 				st.wYear, st.wMonth, st.wDay,
 				st.wHour, st.wMinute, st.wSecond);
 	}
@@ -231,52 +225,44 @@ void StartTxWav()
 
 	if (txwff != NULL)  // || txwfu != NULL)
 	{
-		WriteDebugLog(LOGWARNING, "WARNING: Trying to open Tx WAV file, but already open.");
+		ZF_LOGW("WARNING: Trying to open Tx WAV file, but already open.");
 		return;
 	}
 
 	GetSystemTime(&st);
 
-	if (LogDir[0])
+	if (ardop_log_get_directory()[0])
 	{
 		if (HostPort[0])
 		{
-			sprintf(txwff_pathname, "%s/ARDOP_txfaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
-				LogDir, HostPort, st.wYear, st.wMonth, st.wDay,
+			snprintf(txwff_pathname, sizeof(txwff_pathname),
+				"%s/ARDOP_txfaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
+				ardop_log_get_directory(), HostPort, st.wYear, st.wMonth, st.wDay,
 				st.wHour, st.wMinute, st.wSecond);
-			// sprintf(txwfu_pathname, "%s/ARDOP_txuaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
-				// LogDir, HostPort, st.wYear, st.wMonth, st.wDay,
-				// st.wHour, st.wMinute, st.wSecond);
 		}
 		else
 		{
-			sprintf(txwff_pathname, "%s/ARDOP_txfaudio_%04d%02d%02d_%02d%02d%02d.wav",
-				LogDir, st.wYear, st.wMonth, st.wDay,
+			snprintf(txwff_pathname, sizeof(txwff_pathname),
+				"%s/ARDOP_txfaudio_%04d%02d%02d_%02d%02d%02d.wav",
+				ardop_log_get_directory(), st.wYear, st.wMonth, st.wDay,
 				st.wHour, st.wMinute, st.wSecond);
-			// sprintf(txwfu_pathname, "%s/ARDOP_txuaudio_%04d%02d%02d_%02d%02d%02d.wav",
-				// LogDir, st.wYear, st.wMonth, st.wDay,
-				// st.wHour, st.wMinute, st.wSecond);
 		}
 	}
 	else
 	{
 		if (HostPort[0])
 		{
-			sprintf(txwff_pathname, "ARDOP_txfaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
+			snprintf(txwff_pathname, sizeof(txwff_pathname),
+				"ARDOP_txfaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
 				HostPort, st.wYear, st.wMonth, st.wDay,
 				st.wHour, st.wMinute, st.wSecond);
-			// sprintf(txwfu_pathname, "ARDOP_txuaudio_%s_%04d%02d%02d_%02d%02d%02d.wav",
-				// HostPort, st.wYear, st.wMonth, st.wDay,
-				// st.wHour, st.wMinute, st.wSecond);
 		}
 		else
 		{
-			sprintf(txwff_pathname, "ARDOP_txfaudio_%04d%02d%02d_%02d%02d%02d.wav",
+			snprintf(txwff_pathname, sizeof(txwff_pathname),
+				"ARDOP_txfaudio_%04d%02d%02d_%02d%02d%02d.wav",
 				st.wYear, st.wMonth, st.wDay,
 				st.wHour, st.wMinute, st.wSecond);
-			// sprintf(txwfu_pathname, "ARDOP_txuaudio_%04d%02d%02d_%02d%02d%02d.wav",
-				// st.wYear, st.wMonth, st.wDay,
-				// st.wHour, st.wMinute, st.wSecond);
 		}
 	}
 	txwff = OpenWavW(txwff_pathname);
@@ -291,7 +277,7 @@ VOID __cdecl Debugprintf(const char * format, ...)
 
 	va_start(arglist, format);
 	vsprintf(Mess, format, arglist);
-	WriteDebugLog(LOGDEBUG, Mess);
+	ZF_LOGD(Mess);
 
 	return;
 }
@@ -382,20 +368,13 @@ int platform_main(int argc, char * argv[])
 
 	processargs(argc, argv);
 
-	if (LogDir[0])
-	{
-		sprintf(&LogName[0][0], "%s/%s", LogDir, "ARDOPDebug");
-		sprintf(&LogName[1][0], "%s/%s", LogDir, "ARDOPException");
-		sprintf(&LogName[2][0], "%s/%s", LogDir, "ARDOPSession");
-	}
-
-	WriteDebugLog(LOGALERT, "\n\n%s Version %s (https://www.github.com/pflarue/ardop)", ProductName, ProductVersion);
-	WriteDebugLog(LOGALERT, "Copyright (c) 2014-2024 Rick Muething, John Wiseman, Peter LaRue");
-	WriteDebugLog(LOGALERT,
+	ZF_LOGI("\n\n%s Version %s (https://www.github.com/pflarue/ardop)", ProductName, ProductVersion);
+	ZF_LOGI("Copyright (c) 2014-2024 Rick Muething, John Wiseman, Peter LaRue");
+	ZF_LOGI(
 		"See https://github.com/pflarue/ardop/blob/master/LICENSE for licence details including\n"
 		"  information about authors of external libraries used and their licenses."
 	);
-	WriteDebugLog(LOGDEBUG, "Command line: %s", cmdstr);
+	ZF_LOGD("Command line: %s", cmdstr);
 
 	if (DecodeWav[0])
 	{
@@ -436,7 +415,7 @@ int platform_main(int argc, char * argv[])
 				if (destaddr->sin_addr.s_addr != INADDR_NONE)
 				{
 					useHamLib = 1;
-					WriteDebugLog(LOGALERT, "Using Hamlib at %s:%s for PTT", PTTPort, Baud);
+					ZF_LOGI("Using Hamlib at %s:%s for PTT", PTTPort, Baud);
 					RadioControl = TRUE;
 					PTTMode = PTTHAMLIB;
 				}
@@ -466,12 +445,12 @@ int platform_main(int argc, char * argv[])
 
 	if (hCATDevice)
 	{
-		WriteDebugLog(LOGALERT, "CAT Control on port %s", CATPort);
+		ZF_LOGI("CAT Control on port %s", CATPort);
 		COMSetRTS(hPTTDevice);
 		COMSetDTR(hPTTDevice);
 		if (PTTOffCmdLen)
 		{
-			WriteDebugLog(LOGALERT, "PTT using CAT Port", CATPort);
+			ZF_LOGI("PTT using CAT Port", CATPort);
 			RadioControl = TRUE;
 		}
 	}
@@ -480,12 +459,12 @@ int platform_main(int argc, char * argv[])
 		// Warn of -u and -k defined but no CAT Port
 
 		if (PTTOffCmdLen)
-			WriteDebugLog(LOGALERT, "Warning PTT Off string defined but no CAT port", CATPort);
+			ZF_LOGW("Warning PTT Off string defined but no CAT port", CATPort);
 	}
 
 	if (hPTTDevice)
 	{
-		WriteDebugLog(LOGALERT, "Using RTS on port %s for PTT", PTTPort);
+		ZF_LOGI("Using RTS on port %s for PTT", PTTPort);
 		COMClearRTS(hPTTDevice);
 		COMClearDTR(hPTTDevice);
 		RadioControl = TRUE;
@@ -504,10 +483,10 @@ int platform_main(int argc, char * argv[])
 	{
 		if (!InitSound(TRUE))
 		{
-			WriteDebugLog(LOGCRIT, "Error in InitSound().  Stopping ardop.");
+			ZF_LOGF("Error in InitSound().  Stopping ardop.");
 			return (0);
 		}
-		WriteDebugLog(LOGINFO, "Sending a 5 second 2-tone signal. Then exiting ardop.");
+		ZF_LOGI("Sending a 5 second 2-tone signal. Then exiting ardop.");
 		Send5SecTwoTone();
 		return (0);
 	}
@@ -530,7 +509,7 @@ unsigned int getTicks()
 void printtick(char * msg)
 {
 	QueryPerformanceCounter(&NewTicks);
-	WriteDebugLog(LOGCRIT, "%s %i\r", msg, Now - LastNow);
+	ZF_LOGD("%s %i\r", msg, Now - LastNow);
 	LastNow = Now;
 }
 
@@ -598,7 +577,7 @@ void GetSoundDevices()
 {
 	int i;
 
-	WriteDebugLog(LOGALERT, "Capture Devices");
+	ZF_LOGI("Capture Devices");
 
 	CaptureCount = waveInGetNumDevs();
 
@@ -613,12 +592,12 @@ void GetSoundDevices()
 		if (CaptureDevices)
 			strcat(CaptureDevices, ",");
 		strcat(CaptureDevices, pwic.szPname);
-		WriteDebugLog(LOGALERT, "%d %s", i, pwic.szPname);
+		ZF_LOGI("%d %s", i, pwic.szPname);
 		memcpy(&CaptureNames[i][0], pwic.szPname, MAXPNAMELEN);
 		_strupr(&CaptureNames[i][0]);
 	}
 
-	WriteDebugLog(LOGALERT, "Playback Devices");
+	ZF_LOGI("Playback Devices");
 
 	PlaybackCount = waveOutGetNumDevs();
 
@@ -633,7 +612,7 @@ void GetSoundDevices()
 		if (PlaybackDevices[0])
 			strcat(PlaybackDevices, ",");
 		strcat(PlaybackDevices, pwoc.szPname);
-		WriteDebugLog(LOGALERT, "%i %s", i, pwoc.szPname);
+		ZF_LOGI("%i %s", i, pwoc.szPname);
 		memcpy(&PlaybackNames[i][0], pwoc.szPname, MAXPNAMELEN);
 		_strupr(&PlaybackNames[i][0]);
 		waveOutClose(hWaveOut);
@@ -666,7 +645,7 @@ int InitSound(BOOL Report)
 		}
 	}
 	if (PlayBackIndex == -1) {
-		WriteDebugLog(LOGERROR,
+		ZF_LOGE(
 			"ERROR: playbackdevice = '%s' not found.  Try using one of the names or"
 			" numbers (0-%d) listed above.",
 			PlaybackDevice,
@@ -678,12 +657,12 @@ int InitSound(BOOL Report)
 	ret = waveOutOpen(&hWaveOut, PlayBackIndex, &wfx, 0, 0, CALLBACK_NULL);  // WAVE_MAPPER
 
 	if (ret)
-		WriteDebugLog(LOGALERT, "Failed to open WaveOut Device %s Error %d", PlaybackDevice, ret);
+		ZF_LOGF("Failed to open WaveOut Device %s Error %d", PlaybackDevice, ret);
 	else
 	{
 		ret = waveOutGetDevCaps((UINT_PTR)hWaveOut, &pwoc, sizeof(WAVEOUTCAPS));
 		if (Report)
-			WriteDebugLog(LOGALERT, "Opened WaveOut Device %s", pwoc.szPname);
+			ZF_LOGI("Opened WaveOut Device %s", pwoc.szPname);
 	}
 
 	if (strlen(CaptureDevice) <= 2)
@@ -702,7 +681,7 @@ int InitSound(BOOL Report)
 		}
 	}
 	if (CaptureIndex == -1) {
-		WriteDebugLog(LOGERROR,
+		ZF_LOGE(
 			"ERROR: capturedevice = '%s' not found.  Try using one of the names or"
 			" numbers (0-%d) listed above.",
 			CaptureDevice,
@@ -713,12 +692,12 @@ int InitSound(BOOL Report)
 
 	ret = waveInOpen(&hWaveIn, CaptureIndex, &wfx, 0, 0, CALLBACK_NULL);  // WAVE_MAPPER
 	if (ret)
-		WriteDebugLog(LOGALERT, "Failed to open WaveIn Device %s Error %d", CaptureDevice, ret);
+		ZF_LOGF("Failed to open WaveIn Device %s Error %d", CaptureDevice, ret);
 	else
 	{
 		ret = waveInGetDevCaps((UINT_PTR)hWaveIn, &pwic, sizeof(WAVEINCAPS));
 		if (Report)
-			WriteDebugLog(LOGALERT, "Opened WaveIn Device %s", pwic.szPname);
+			ZF_LOGI("Opened WaveIn Device %s", pwic.szPname);
 	}
 
 //	wavfp1 = fopen("s:\\textxxx.wav", "wb");
@@ -777,17 +756,16 @@ void PollReceivedSamples()
 			{
 				lastlevelreport = Now;
 				// Report input peaks to host if in debug mode or if close to clipping
-				if (max >= 32000 || ConsoleLogLevel >= LOGDEBUG)
+				if (max >= 32000 || ZF_LOG_ON_DEBUG)
 				{
-					char HostCmd[64];
-
-					sprintf(HostCmd, "INPUTPEAKS %d %d", min, max);
+					char HostCmd[64] = "";
+					snprintf(HostCmd, sizeof(HostCmd), "INPUTPEAKS %d %d", min, max);
 					SendCommandToHostQuiet(HostCmd);
-					WriteDebugLog(LOGINFO, "Input peaks = %d, %d", min, max);
+					ZF_LOGD("Input peaks = %d, %d", min, max);
 					// A user NOT in debug mode will see this message if they are clipping
-					if (ConsoleLogLevel <= LOGINFO)
+					if (! ZF_LOG_ON_DEBUG)
 					{
-						WriteDebugLog(LOGINFO,
+						ZF_LOGI(
 							"Your input signal is probably clipping.  If you"
 							" see this message repeated in the next 20-30"
 							" seconds, Turn down your RX input until this"
@@ -812,7 +790,7 @@ void PollReceivedSamples()
 				WriteWav(&inbuffer[inIndex][0], inheader[inIndex].dwBytesRecorded/2, rxwf);
 		}
 
-//		WriteDebugLog(LOGDEBUG, "Process %d %d", inIndex, inheader[inIndex].dwBytesRecorded/2);
+//		ZF_LOGD("Process %d %d", inIndex, inheader[inIndex].dwBytesRecorded/2);
 		if (Capturing && Loopback == FALSE)
 			ProcessNewSamples(&inbuffer[inIndex][0], inheader[inIndex].dwBytesRecorded/2);
 
@@ -832,9 +810,6 @@ void PollReceivedSamples()
 void StopCapture()
 {
 	Capturing = FALSE;
-
-//	waveInStop(hWaveIn);
-//	WriteDebugLog(LOGDEBUG, "Stop Capture");
 }
 
 void StartCapture()
@@ -843,8 +818,6 @@ void StartCapture()
 	DiscardOldSamples();
 	ClearAllMixedSamples();
 	State = SearchingForLeader;
-
-//	WriteDebugLog(LOGDEBUG, "Start Capture");
 }
 void CloseSound()
 {
@@ -853,148 +826,6 @@ void CloseSound()
 }
 
 #include <stdarg.h>
-
-VOID CloseDebugLog()
-{
-	if(logfile[0])
-		fclose(logfile[0]);
-	logfile[0] = NULL;
-}
-
-int WriteLog(char * msg, int log) {
-	SYSTEMTIME st;
-	UCHAR Value[100];
-	char timebuf[128];
-	int wavhh;
-	int wavmm;
-	float wavss;
-
-	GetSystemTime(&st);
-	if (logfile[log] == NULL)
-	{
-		if (HostPort[0])
-			sprintf(Value, "%s%s_%04d%02d%02d.log",
-				&LogName[log], HostPort, st.wYear, st.wMonth, st.wDay);
-		else
-			sprintf(Value, "%s%d_%04d%02d%02d.log",
-				&LogName[log], port, st.wYear, st.wMonth, st.wDay);
-
-		if ((logfile[log] = fopen(Value, "ab")) == NULL)
-			return -1;
-	}
-	if (DecodeWav[0])
-	{
-		// When decoding a WAV file, include an approximate reference to the time offset
-		// since the start of the WAV file.
-		wavhh = Now/3600000;
-		wavmm = ((Now/1000) - wavhh * 3600) / 60;
-		wavss = (Now % 60000) / 1000.0;
-		sprintf(timebuf, "%02d:%02d:%02d.%03d (WAV %02d:%02d:%05.2f) ",
-			st.wHour, st.wMinute, st.wSecond, st.wMilliseconds,
-			wavhh, wavmm, wavss);
-	}
-	else
-	{
-		sprintf(timebuf, "%02d:%02d:%02d.%03d ",
-			st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
-	}
-	fputs(timebuf, logfile[log]);
-	fputs(msg, logfile[log]);
-	return 0;
-}
-
-VOID WriteDebugLog(int LogLevel, const char * format, ...)
-{
-	char Mess[10000];
-	va_list(arglist);
-
-	va_start(arglist, format);
-#ifdef LOGTOHOST
-	vsnprintf(&Mess[1], sizeof(Mess), format, arglist);
-	strcat(Mess, "\r\n");
-	Mess[0] = LogLevel + '0';
-	SendLogToHost(Mess, strlen(Mess));
-#else
-	vsnprintf(Mess, sizeof(Mess), format, arglist);
-	strcat(Mess, "\r\n");
-
-	if (LogLevel <= ConsoleLogLevel)
-		printf(Mess);
-
-	if (!DebugLog)
-		return;
-
-	if (LogLevel > FileLogLevel)
-		return;
-	WriteLog(Mess, DEBUGLOG);
-#endif
-}
-
-VOID WriteExceptionLog(const char * format, ...)
-{
-	char Mess[10000];
-	va_list(arglist);
-	FILE *logfile = NULL;
-
-	va_start(arglist, format);
-	vsnprintf(Mess, sizeof(Mess), format, arglist);
-	strcat(Mess, "\r\n");
-
-	printf(Mess);
-	WriteLog(Mess, EXCEPTLOG);
-}
-
-FILE *statslogfile = NULL;
-
-VOID CloseStatsLog()
-{
-	fclose(statslogfile);
-	statslogfile = NULL;
-}
-VOID Statsprintf(const char * format, ...)
-{
-	char Mess[10000];
-	va_list(arglist);
-	UCHAR Value[100];
-	char timebuf[32];
-
-	SYSTEMTIME st;
-
-	va_start(arglist, format);
-	vsnprintf(Mess, sizeof(Mess), format, arglist);
-	strcat(Mess, "\r\n");
-
-	if (statslogfile == NULL)
-	{
-		GetSystemTime(&st);
-		if (HostPort[0])
-			sprintf(Value, "%s%s_%04d%02d%02d.log",
-				&LogName[2], HostPort, st.wYear, st.wMonth, st.wDay);
-		else
-			sprintf(Value, "%s%d_%04d%02d%02d.log",
-				&LogName[2], port, st.wYear, st.wMonth, st.wDay);
-
-		if ((statslogfile = fopen(Value, "ab")) == NULL)
-			return;
-		else
-		{
-			// Including the date is redundant with the filename for the session log
-			// file, but is useful for also writing it to the console.
-			sprintf(timebuf, "%04d/%02d/%02d %02d:%02d:%02d.%03dz\r\n",
-				st.wYear, st.wMonth, st.wDay,
-				st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
-			fputs(timebuf, statslogfile);
-			// Printing the UTC date and time to the console with the session stats
-			// may be useful if sessions are logged manually.
-			printf("%s\n", timebuf);
-		}
-	}
-
-	fputs(Mess, statslogfile);
-	printf(Mess);
-
-	return;
-}
 
 VOID WriteSamples(short * buffer, int len)
 {
@@ -1035,14 +866,8 @@ void SoundFlush()
 
 	SoundIsPlaying = FALSE;
 
-	// Debug.WriteLine("[tmrPoll.Tick] Play stop. Length = " & Format(Now.Subtract(dttTestStart).TotalMilliseconds, "#") & " ms")
-
-//	WriteDebugLog(LOGDEBUG, "Play complete blnEnbARQRpt = %d", blnEnbARQRpt);
-
 	if (blnEnbARQRpt > 0 || blnDISCRepeating)  // Start Repeat Timer if frame should be repeated
 		dttNextPlay = Now + intFrameRepeatInterval;
-
-//	WriteDebugLog(LOGDEBUG, "Now %d Now - dttNextPlay 1  = %d", Now, Now - dttNextPlay);
 
 	KeyPTT(FALSE);  // Unkey the Transmitter
 	if (txwff != NULL)
@@ -1137,7 +962,7 @@ BOOL KeyPTT(BOOL blnPTT)
 	else
 		RadioPTT(blnPTT);
 
-	WriteDebugLog(LOGDEBUG, "[Main.KeyPTT]  PTT-%s", BoolString[blnPTT]);
+	ZF_LOGD("[Main.KeyPTT]  PTT-%s", BoolString[blnPTT]);
 
 	blnLastPTT = blnPTT;
 	SetLED(0, blnPTT);
@@ -1427,7 +1252,7 @@ void LogConstellation() {
 	char Msg[10000] = "CPLOT ";
 	for (int i = 0; i < pixelPointer - Pixels; i++)
 		snprintf(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg), "%02X", Pixels[i]);
-	WriteDebugLog(LOGDEBUGPLUS, "%s", Msg);
+	ZF_LOGV("%s", Msg);
 }
 
 

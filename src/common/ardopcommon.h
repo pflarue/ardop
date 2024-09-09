@@ -33,23 +33,10 @@ unsigned int getTicks();
 
 #define Now getTicks()
 
-// DebugLog Severity Levels
-
-#define LOGEMERGENCY 0
-#define LOGALERT 1
-#define LOGCRIT 2
-#define LOGERROR 3
-#define LOGWARNING 4
-#define LOGNOTICE 5
-#define LOGINFO 6
-#define LOGDEBUG 7
-#define LOGDEBUGPLUS 8
-
-extern const char strLogLevels[9][13];
-
 #include <time.h>
 
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -154,7 +141,6 @@ void TCPSendCommandToHostQuiet(char * Cmd);
 void UpdateBusyDetector(short * bytNewSamples);
 void SetARDOPProtocolState(int value);
 BOOL BusyDetect3(float * dblMag, int intStart, int intStop);
-void SendLogToHost(char * Msg, int len);
 
 void displayState(const char * State);
 void displayCall(int dirn, char * call);
@@ -185,11 +171,7 @@ void SendData();
 int ComputeInterFrameInterval(int intRequestedIntervalMS);
 int Encode4FSKControl(UCHAR bytFrameType, UCHAR bytSessionID, UCHAR * bytreturn);
 VOID WriteExceptionLog(const char * format, ...);
-int WriteLog(char * msg, int Log);
 void SaveQueueOnBreak();
-VOID Statsprintf(const char * format, ...);
-VOID CloseDebugLog();
-VOID CloseStatsLog();
 void Abort();
 void SetLED(int LED, int State);
 VOID ClearBusy();
@@ -200,8 +182,6 @@ void CM108_set_ptt(int PTTState);
 
 // #ifdef WIN32
 void ProcessNewSamples(short * Samples, int nSamples);
-VOID Debugprintf(const char * format, ...);
-VOID WriteDebugLog(int LogLevel, const char * format, ...);
 void ardopmain();
 BOOL GetNextFECFrame();
 void GenerateFSKTemplates();
@@ -246,6 +226,29 @@ void DrawTXFrame(const char * Frame);
 void DrawRXFrame(int State, const char * Frame);
 void mySetPixel(unsigned char x, unsigned char y, unsigned int Colour);
 void clearDisplay();
+
+/**
+ * @brief Try to read a base-ten number
+ *
+ * Attempt to parse `str` as a base-ten number. If the entire
+ * `str` is valid as a number, sets `num` and returns true.
+ *
+ * @param[in] str   String to parse. Must be a NUL-terminated
+ *                  character array. May be NULL.
+ *
+ * @param[out] num  Number parsed from `str`. If `str` is not
+ *                  valid as a number, the error behavior is
+ *                  per your platform's `strtol()`.
+ *
+ * @return true if `str` is non-empty and is entirely valid as
+ *         a number. Otherwise, false.
+ *
+ * @warning Even if this method returns true, `num` may still
+ *          underflow or overflow and be clipped to its min/max
+ *          value. If this matters, you must also check
+ *          `errno`.
+ */
+bool try_parse_long(const char* str, long* num);
 
 extern int WaterfallActive;
 extern int SpectrumActive;
@@ -336,7 +339,6 @@ extern int LeaderLength;
 extern int TrailerLength;
 extern unsigned int ARQTimeout;
 extern int TuningRange;
-extern BOOL DebugLog;
 extern int ARQConReqRepeats;
 extern BOOL CommandTrace;
 extern char strFECMode[];
@@ -350,8 +352,6 @@ extern BOOL AccumulateStats;
 extern BOOL Use600Modes;
 extern BOOL FSKOnly;
 extern BOOL fastStart;
-extern int ConsoleLogLevel;
-extern int FileLogLevel;
 extern BOOL EnablePingAck;
 
 extern int dttLastPINGSent;

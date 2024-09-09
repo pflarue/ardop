@@ -120,8 +120,6 @@ BOOL BusyDetect3(float * dblMag, int intStart, int intStop)  // this only called
 	if (BusyDet == 0)
 		blnBusy = FALSE;  // 0 Disables check ?? Is this the best place to do this?
 
-//	WriteDebugLog(LOGDEBUG, "Busy %d Wide %f Narrow %f", blnBusy, dblAvgStoNWide, dblAvgStoNNarrow);
-
 	if (blnBusy)
 	{
 		// This requires multiple adjacent busy conditions to skip over one nuisance Busy trips.

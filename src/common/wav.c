@@ -25,18 +25,18 @@ char WavHeader[] = {
 // Open a WAV for for writing.  Return NULL on failure.
 struct WavFile* OpenWavW(const char *pathname)
 {
-	WriteDebugLog(LOGDEBUG, "Opening WAV file for writing: %s", pathname);
+	ZF_LOGD("Opening WAV file for writing: %s", pathname);
 	struct WavFile *wf = (struct WavFile *) malloc(sizeof(struct WavFile));
 	if (wf == NULL)
 	{
-		WriteDebugLog(LOGDEBUG, "Unable to allocate WavFile struct.");
+		ZF_LOGD("Unable to allocate WavFile struct.");
 		return NULL;
 	}
 
 	wf->f = fopen(pathname, "wb");
 	if (wf->f == NULL)
 	{
-		WriteDebugLog(LOGDEBUG, "Unable to open WAV file.");
+		ZF_LOGD("Unable to open WAV file.");
 		return NULL;
 	}
 
@@ -56,7 +56,7 @@ int CloseWav(struct WavFile *wf)
 	int value;
 	int retval;
 
-	WriteDebugLog(LOGDEBUG, "Finalizing and closing WAV file.");
+	ZF_LOGD("Finalizing and closing WAV file.");
 	// file length should be 44 + 2*wf->NumSamples
 	fseek(wf->f, 4, SEEK_SET);
 	value = 2 * wf->NumSamples + 36;

@@ -85,34 +85,22 @@ void condense(struct wg_receive_data *rdata) {
 
 // debug_for_ws() and error_for_ws() are designed to be
 // passed as callbacks to ws_set_debug() and ws_set_error()
-int debug_for_ws(const char * format, ...) {
-	char Mess[1024];
-	va_list(arglist);
-	va_start(arglist, format);
-	vsnprintf(Mess, sizeof(Mess), format, arglist);
-	strcat(Mess, "\n");
-	if (LOGDEBUG <= ConsoleLogLevel)
-		printf("%s", Mess);
-	if (LOGDEBUG > FileLogLevel)
-		return (0);
-	WriteLog(Mess, 0);  // 0 for Debug log
-	va_end(arglist);
-	return strlen(Mess);
+void debug_for_ws(const char* format, va_list arglist) {
+	if (! ZF_LOG_ON_DEBUG)
+		return;
+
+	char Mess[1024] = "";
+	int rv = vsnprintf(Mess, sizeof(Mess), format, arglist);
+	ZF_LOGD_STR(Mess);
 }
 
-int error_for_ws(const char * format, ...) {
-	char Mess[1024];
-	va_list(arglist);
-	va_start(arglist, format);
-	vsnprintf(Mess, sizeof(Mess), format, arglist);
-	strcat(Mess, "\n");
-	if (LOGERROR <= ConsoleLogLevel)
-		printf("%s", Mess);
-	if (LOGERROR > FileLogLevel)
-		return (0);
-	WriteLog(Mess, 0);  // 0 for Debug log
-	va_end(arglist);
-	return strlen(Mess);
+void error_for_ws(const char* format, va_list arglist) {
+	if (!ZF_LOG_ON_ERROR)
+		return;
+
+	char Mess[1024] = "";
+	int rv = vsnprintf(Mess, sizeof(Mess), format, arglist);
+	ZF_LOGE_STR(Mess);
 }
 
 
@@ -144,11 +132,11 @@ void WebguiInit() {
 	//ws_add_httptarget_file("/", "webgui/webgui.html", "text/html");
 	//ws_add_httptarget_file("/webgui.js", "webgui/webgui.js", "text/javascript");
 	if (ws_init() < 0) {
-		WriteDebugLog(LOGERROR, "Webgui start failure.");
+		ZF_LOGE("Webgui start failure.");
 	} else {
 		WebguiActive = true;
 		WebGuiNumConnected = 0;
-		WriteDebugLog(LOGINFO, "Webgui available at port %d.", wg_port);
+		ZF_LOGI("Webgui available at port %d.", wg_port);
 	}
 }
 
@@ -301,15 +289,15 @@ int wg_send_msg(int cnum, const char *data, unsigned int data_len) {
 	int headlen;
 	char header[2];
 	if (data[1] != '|') {
-		WriteDebugLog(LOGERROR,
-			"ERROR: Invalid message to send of length %d.  Msg begins with %02X %02X",
-			data[0], data[1]);
+		ZF_LOGE(
+			"ERROR: Invalid message to send of length %u.  Msg begins with %02hhx %02hhx",
+			data_len, data[0], data[1]);
 		return (0);
 	}
 	if ((headlen = encodeUvint(header, 2, (unsigned int)(data_len))) == -1)
 		return (0);
 	if (data_len + headlen > WG_SSIZE) {
-		WriteDebugLog(LOGWARNING,
+		ZF_LOGW(
 			"Data to send to Webgui client is too big.  Discarding.");
 		return (0);
 	}
@@ -330,7 +318,7 @@ int wg_send_hostdatat(int cnum, char *prefix, unsigned char *data, int datalen) 
 		memcpy(Mess + 5, data, datalen);
 		return wg_send_msg(cnum, Mess, datalen + 5);
 	} else {
-		WriteDebugLog(LOGWARNING, "WARNING: datalen (%d) in wg_send_hostdatat()"
+		ZF_LOGW("WARNING: datalen (%d) in wg_send_hostdatat()"
 			" too big.  Truncated data sent.", datalen);
 		memcpy(Mess + 5, data, WG_SSIZE - 7);
 		return wg_send_msg(cnum, Mess, WG_SSIZE - 2);
@@ -350,7 +338,7 @@ int wg_send_hostdatab(int cnum, char *prefix, unsigned char *data, int datalen) 
 		memcpy(Mess + 5, data, datalen);
 		return wg_send_msg(cnum, Mess, datalen + 5);
 	} else {
-		WriteDebugLog(LOGWARNING, "WARNING: datalen (%d) in wg_send_hostdatab()"
+		ZF_LOGW("WARNING: datalen (%d) in wg_send_hostdatab()"
 			" too big.  Truncated data sent.", datalen);
 		memcpy(Mess + 5, data, WG_SSIZE - 7);
 		return wg_send_msg(cnum, Mess, WG_SSIZE - 2);
@@ -379,7 +367,7 @@ int wg_send_alert(int cnum, const char * format, ...) {
 int wg_send_protocolmode(int cnum) {
 	const char ProtocolMode_msgs[3][5] = {"m|FEC", "m|ARQ", "m|RXO"};
 	if (ProtocolMode < 1 || ProtocolMode > 3) {
-		WriteDebugLog(LOGWARNING, "Unexpected ProtocolMode=%d.  Unable to send to Webgui Client.");
+		ZF_LOGW("Unexpected ProtocolMode=%d.  Unable to send to Webgui Client.", ProtocolMode);
 		return (0);
 	}
 	return wg_send_msg(cnum, ProtocolMode_msgs[ProtocolMode - 1], 5);
@@ -423,13 +411,13 @@ int wg_send_quality(int cnum, unsigned char quality,
 	msg[1] = 0x7C;
 	msg[2] = quality;  // 0 to 100
 	if ((thislen = encodeUvint(msg + msglen, 2, totalRSErrors)) == -1) {
-		WriteDebugLog(LOGERROR,
+		ZF_LOGE(
 			"ERROR: Failure encoding totalRSErrors=%d for Webgui.",
 			totalRSErrors);
 	}
 	msglen += thislen;
 	if ((thislen = encodeUvint(msg + msglen, 2, maxRSErrors)) == -1) {
-		WriteDebugLog(LOGERROR,
+		ZF_LOGE(
 			"ERROR: Failure encoding maxRSErrors=%d for Webgui.",
 			maxRSErrors);
 	}
@@ -457,7 +445,7 @@ int wg_send_avglen(int cnum) {
 int wg_send_rcall(int cnum, char *call) {
 	char msg[CALL_BUF_SIZE + 2];
 	if (strlen(call) >= CALL_BUF_SIZE) {
-		WriteDebugLog(LOGWARNING, "Remote callsign (%s) too long for wg_send_rcall().", call);
+		ZF_LOGW("Remote callsign (%s) too long for wg_send_rcall().", call);
 		return (0);
 	}
 	snprintf(msg, sizeof(msg), "c|%s", call);
@@ -468,7 +456,7 @@ int wg_send_rcall(int cnum, char *call) {
 int wg_send_mycall(int cnum, char *call) {
 	char msg[CALL_BUF_SIZE + 2];
 	if (strlen(call) >= CALL_BUF_SIZE) {
-		WriteDebugLog(LOGWARNING, "My callsign (%s) too long for wg_send_mycall().", call);
+		ZF_LOGW("My callsign (%s) too long for wg_send_mycall().", call);
 		return (0);
 	}
 	snprintf(msg, sizeof(msg), "C|%s", call);
@@ -480,7 +468,7 @@ int wg_send_mycall(int cnum, char *call) {
 int wg_send_txframet(int cnum, const char *frame) {
 	char msg[64];
 	if (strlen(frame) > sizeof(msg) - 3) {
-		WriteDebugLog(LOGWARNING, "Frame type (%s) too long for wg_send_txframe().", frame);
+		ZF_LOGW("Frame type (%s) too long for wg_send_txframe().", frame);
 		return (0);
 	}
 	snprintf(msg, sizeof(msg), "F|%s", frame);
@@ -496,11 +484,11 @@ int wg_send_rxframet(int cnum, unsigned char state, const char *frame) {
 	char msg[64];
 	unsigned char st[3] = {'P', 'O', 'F'};
 	if (state > 2) {
-		WriteDebugLog(LOGWARNING, "Invalid state arument for wg_send_rxframe().");
+		ZF_LOGW("Invalid state arument for wg_send_rxframe().");
 		return(0);
 	}
 	if (strlen(frame) > sizeof(msg) - 3) {
-		WriteDebugLog(LOGWARNING, "Frame type (%s) too long for wg_send_rxframe().", frame);
+		ZF_LOGW("Frame type (%s) too long for wg_send_rxframe().", frame);
 		return (0);
 	}
 	snprintf(msg, sizeof(msg), "f|%c%s", st[state], frame);
@@ -538,8 +526,8 @@ int wg_send_busy(int cnum, bool isBusy) {
 int wg_send_pixels(int cnum, unsigned char *data, size_t datalen) {
 	char msg[10000];  // Large enough for 4FSK.2000.600
 	if (datalen > sizeof(msg)) {
-		WriteDebugLog(LOGWARNING,
-			"WARNING: Too much pixel data (%d bytes) provided to wg_send_pixels()",
+		ZF_LOGW(
+			"WARNING: Too much pixel data (%lu bytes) provided to wg_send_pixels()",
 			datalen);
 		datalen = sizeof(msg) - 2;
 	}
@@ -574,7 +562,7 @@ int wg_send_fftdata(float *mags, int magsLen) {
 	msgData[1] = 0x7C;
 
 	if (magsLen != 206) {
-		WriteDebugLog(LOGWARNING, "wg_send_fftdata() expects 206 values, but received %d,", magsLen);
+		ZF_LOGW("wg_send_fftdata() expects 206 values, but received %d,", magsLen);
 		return (0);
 	}
 
@@ -659,8 +647,6 @@ int wg_send_fftdata(float *mags, int magsLen) {
 	// upperLimitdBfs = upperLimitdBfs + 0.02 * (maxdBfs - upperLimitdBfs);
 	// if (upperLimitdBfs - lowerLimitdBfs < 40.0)
 	//   upperLimitdBfs = lowerLimitdBfs + 40.0;
-	// WriteDebugLog(LOGDEBUG, "Power dBfs: min=%.1f  max=%.1f  (scale to %.0f to %.0f)",
-	//   mindBfs, maxdBfs, lowerLimitdBfs, upperLimitdBfs);
 
 	return wg_send_msg(0, (char *)msgData, 105);
 }
@@ -735,7 +721,7 @@ void WebguiPoll() {
 		}
 		// higher level protocol
 		if (rdata->buf[rdata->offset + 1] != '~') {
-			WriteDebugLog(LOGERROR,
+			ZF_LOGE(
 				"Webgui protocol error.  All messages sent by Webgui clients"
 				" are expected to begin with a variable length unsigned integer,"
 				" followed by a one byte message type indicator, followed by a"
@@ -751,9 +737,10 @@ void WebguiPoll() {
 			// This is sent by a client upon connecting or reconnecting to
 			// the server.  Send current status values.
 			if (msglen != 2) {
-				WriteDebugLog(LOGWARNING,
+				ZF_LOGW(
 					"WARNING: Invalid msglen=%d received from cnum=%d with type='0'"
-					" (Client connected/reconnected).  Expected msglen=2.  Ignoring.");
+					" (Client connected/reconnected).  Expected msglen=2.  Ignoring.",
+					msglen, cnum);
 				break;
 			}
 			// Probably could just increment WebGuiNumConnected by 1,
@@ -791,7 +778,7 @@ void WebguiPoll() {
 		case 'H':
 			// Host command
 			if (!WG_DevMode) {
-				WriteDebugLog(LOGWARNING,
+				ZF_LOGW(
 					"Host commands from Webgui are not supported when ardopcf"
 					" and the Webgui are not in Dev Mode.");
 				break;
@@ -799,7 +786,7 @@ void WebguiPoll() {
 			memcpy(tmpdata, rdata->buf + rdata->offset + 2, msglen - 2);
 			// add NULL terminator
 			tmpdata[msglen - 2] = 0x00;
-			WriteDebugLog(LOGDEBUG, "Host command (from Webgui): '%s'", tmpdata);
+			ZF_LOGD("Host command (from Webgui): '%s'", tmpdata);
 			ProcessCommandFromHost(tmpdata);
 			break;
 		case 'I':
@@ -816,28 +803,28 @@ void WebguiPoll() {
 		case 0x8D:
 			// Client command to change DriveLevel
 			if (msglen != 3) {
-				WriteDebugLog(LOGWARNING,
+				ZF_LOGW(
 					"WARNING: Invalid msglen=%d received from cnum=%d with type=0x8D"
 					" (Change DriveLevel).  Expected msglen=3.  Ignoring.",
 					msglen, cnum);
 				break;
 			}
 			if (rdata->buf[rdata->offset + 2] > 100) {
-				WriteDebugLog(LOGWARNING,
+				ZF_LOGW(
 					"WARNING: Invalid value=%d received from cnum=%d with type=0x8D"
 					" (Change DriveLevel).  Expected 0 <= value <= 100.  Ignoring.",
 					rdata->buf[rdata->offset + 2], cnum);
 				break;
 			}
 			DriveLevel = (unsigned char)(rdata->buf[rdata->offset + 2]);
-			WriteDebugLog(LOGWARNING, "DriveLevel changed to %d by Webgui client cnum=%d",
+			ZF_LOGW("DriveLevel changed to %d by Webgui client cnum=%d",
 				DriveLevel, cnum);
 			wg_send_drivelevel(-cnum);  // notify all other Webgui clients
 			break;
 		case 0x9A:
 			// Client command to change AvgLen
 			if (msglen != 3) {
-				WriteDebugLog(LOGWARNING,
+				ZF_LOGW(
 					"WARNING: Invalid msglen=%d received from cnum=%d with type=0x8A"
 					" (Change AvgLen).  Expected msglen=3.  Ignoring.",
 					msglen, cnum);
@@ -845,7 +832,7 @@ void WebguiPoll() {
 			}
 			if ((rdata->buf[rdata->offset + 2] > MAX_AVGLEN) ||
 				(rdata->buf[rdata->offset + 2] < 1)) {
-				WriteDebugLog(LOGWARNING,
+				ZF_LOGW(
 					"WARNING: Invalid value=%d received from cnum=%d with type=0x8D"
 					" (Change AvgLen).  Expected 1 <= value <= %d.  Ignoring.",
 					rdata->buf[rdata->offset + 2], cnum, MAX_AVGLEN);
@@ -855,16 +842,16 @@ void WebguiPoll() {
 			wg_send_avglen(-cnum);  // notify all other Webgui clients
 			break;
 		default:
-			WriteDebugLog(LOGWARNING,
+			ZF_LOGW(
 				"WARNING: Received an unexpected message of type=%d and length=%d"
 				" from Webgui client number %d.",
 				rdata->buf[rdata->offset], msglen, cnum);
 			if (rdata->buf[rdata->offset] >= 0x20 && rdata->buf[rdata->offset] <= 0x7D)
 				// This message can be printed as text (though it doesn't have a terminating NULL)
-				WriteDebugLog(LOGDEBUG, "message (text): %.*s", msglen, rdata->buf + rdata->offset);
+				ZF_LOGD("message (text): %.*s", msglen, rdata->buf + rdata->offset);
 			else
 				// This message should be printed as a string of hex values.
-				WriteDebugLog(LOGDEBUG, "message (hex): %s...",
+				ZF_LOGD("message (hex): %s...",
 					toHex(errstr, sizeof(errstr),
 					(unsigned char*)(rdata->buf + rdata->offset), (size_t)(msglen)));
 			break;
