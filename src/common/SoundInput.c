@@ -40,8 +40,6 @@ void DrawAxes(int Qual, char * Mode);
 
 extern int lastmax, lastmin;  // Sample Levels
 
-char strRcvFrameTag[32];
-
 BOOL blnLeaderFound = FALSE;
 
 int intLeaderRcvdMs = 1000;  // Leader length??
@@ -2823,7 +2821,6 @@ BOOL Decode4FSKConReq()
 //	printtick(strCaller);
 //	printtick(strTarget);
 
-	sprintf(strRcvFrameTag, "_%s > %s", strCaller, strTarget);
 	sprintf(bytData, "%s %s", strCaller, strTarget);
 
 	// Recheck the returned data by reencoding
@@ -2935,7 +2932,6 @@ BOOL Decode4FSKPing()
 //	printtick(strCaller);
 //	printtick(strTarget);
 
-	sprintf(strRcvFrameTag, "_%s > %s", strCaller, strTarget);
 	sprintf(bytData, "%s %s", strCaller, strTarget);
 
 	if (FrameOK == FALSE)
@@ -2992,8 +2988,6 @@ BOOL Decode4FSKConACK(UCHAR bytFrameType, int * intTiming)
 	if (Timing >= 0)
 	{
 		*intTiming = Timing;
-
-		// strRcvFrameTag = "_" & intTiming.ToString & " ms"
 
 		ZF_LOGD("[DemodDecode4FSKConACK]  Remote leader timing reported: %d ms", *intTiming);
 
@@ -3122,21 +3116,12 @@ void DemodulateFrame(int intFrameType)
 
 	// ReDim bytData(-1)
 
-	strRcvFrameTag[0] = 0;
-
 	// stcStatus.ControlName = "lblRcvFrame"
 
 	// DataACK/NAK and short control frames
 
 	if ((intFrameType >= DataNAKmin && intFrameType <= DataNAKmax) ||  intFrameType >= DataACKmin)  // DataACK/NAK
 	{
-		// blnDecodeOK = DecodeACKNAK(intFrameType, intRcvdQuality)
-		//  stcStatus.Text = objFrameInfo.Name(intFrameType) & strRcvFrameTag
-		// ElseIf (objFrameInfo.IsShortControlFrame(intFrameType)) Then  // Short Control Frames
-		//  blnDecodeOK = TRUE
-		//  stcStatus.Text = objFrameInfo.Name(intFrameType)
-		// End If
-
 		Demod1Car4FSK();
 		return;
 	}
@@ -3274,7 +3259,6 @@ void DemodulateFrame(int intFrameType)
 BOOL DecodeACKNAK(int intFrameType, int *  intQuality)
 {
 	*intQuality = 38 + (2 * (intFrameType & 0x1F));  // mask off lower 5 bits  // Range of 38 to 100 in steps of 2
-	// strRcvFrameTag = "_Q" & intQuality.ToString
 	return TRUE;
 }
 
@@ -3290,9 +3274,6 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 	int intRcvdQuality;
 	char Reply[80];
 	char Good[8] = {1, 1, 1, 1, 1, 1, 1, 1};
-
-
-	strRcvFrameTag[0] = 0;
 
 	// DataACK/NAK and short control frames
 
