@@ -94,6 +94,17 @@ typedef struct pollfd WSAPOLLFD;
 // This is not intended to be used as a general purpose http server.
 #define WS_MAX_HTTP_TARGETS 20
 
+// Attribute decoration for functions which work like printf
+#if defined(__printflike)
+	#define _WS_PRINTFLIKE(str_index, first_to_check) \
+		__printflike(str_index, first_to_check)
+#elif defined(__GNUC__)
+	#define _WS_PRINTFLIKE(str_index, first_to_check) \
+		__attribute__((format(__printf__, str_index, first_to_check)))
+#else
+	#define _WS_PRINTFLIKE(str_index, first_to_check)
+#endif
+
 // ws_listening is changed to true by ws_init().
 bool ws_listening = false;
 
@@ -160,20 +171,34 @@ char ws_port_str[7] = "8088";  // Default.  Can be changed with ws_set_port()
 char ws_uri[WS_URILEN] = "/ws";
 
 // Define two functions for printing.  One for error messages and one for
-// information/debugging messages.  Both are intially set to
-// ws_default_print() which behaves similarly to printf(), except that it
+// information/debugging messages.  Both are initially set to
+// ws_default_print() which behaves similarly to vprintf(), except that it
 // automatically adds \n at the end.  Both can be overriden with alternative
 // functions using ws_set_error() and ws_set_debug().
-int ws_default_print(const char* format, ...) {
-	va_list arglist;
-	va_start(arglist, format);
+void ws_default_print(const char* format, va_list arglist) {
 	vprintf(format, arglist);
 	printf("\n");
 }
-int (*ws_error)(const char*, ...) = &ws_default_print;
-int (*ws_debug)(const char*, ...) = &ws_default_print;
-void ws_set_error(int (*err)(const char*, ...)) { ws_error = err; }
-void ws_set_debug(int (*dbg)(const char*, ...)) { ws_debug = dbg; }
+
+static ws_vprintf_fcn ws_error_handler = &ws_default_print;
+static ws_vprintf_fcn ws_debug_handler = &ws_default_print;
+
+void ws_set_error(ws_vprintf_fcn handler) { ws_error_handler = handler; }
+void ws_set_debug(ws_vprintf_fcn handler) { ws_debug_handler = handler; }
+
+static void _WS_PRINTFLIKE(1, 2) ws_debug(const char* fmt, ...) {
+	va_list(args);
+	va_start(args, fmt);
+	ws_debug_handler(fmt, args);
+	va_end(args);
+}
+
+static void _WS_PRINTFLIKE(1, 2) ws_error(const char* fmt, ...) {
+	va_list(args);
+	va_start(args, fmt);
+	ws_error_handler(fmt, args);
+	va_end(args);
+}
 
 // A program may optionally set a callback function to be called whenever
 // a client connection is closed.  This is NULL by default.
@@ -415,7 +440,7 @@ int ws_add_httptarget_data(char *uri, char *data, size_t data_len,
 		return (-1);
 	target->data_len = data_len;
 	target->data = data;
-	ws_debug("WS: Add HTTP uri='%s' with data_len=%d and contenttype='%s'.",
+	ws_debug("WS: Add HTTP uri='%s' with data_len=%ld and contenttype='%s'.",
 		uri, data_len, contenttype);
 	return (0);
 }
@@ -766,7 +791,7 @@ int serve_http(struct ws_http_target *target, int s_cnum) {
 	sprintf(headerbuf, "HTTP/1.1 200 OK\r\nContent-type: %s\r\n\r\n\r\n",
 		target->contenttype);
 	if (target->data_len > 0) {
-		ws_debug("WS: Serving data_len=%d with contenttype='%s'"
+		ws_debug("WS: Serving data_len=%ld with contenttype='%s'"
 			" for http uri='%s'.",
 			target->data_len, target->contenttype, target->uri);
 		if (send_to_socket(s_cnum, headerbuf, strlen(headerbuf)) != (int) strlen(headerbuf)) {
@@ -837,7 +862,7 @@ int sendHttpErr(const char *errstr, const char *uri, int s_cnum) {
 	// to cancel any retries
 	if (send_to_socket(s_cnum, errstr, strlen(errstr)) != (int) strlen(errstr))
 		stop_retry_send();
-	ws_error("WS: Sending '%.*s' error for URI='%s'.", strlen(errstr) - 4, errstr, uri);
+	ws_error("WS: Sending '%.*s' error for URI='%s'.", (int)strlen(errstr) - 4, errstr, uri);
 	ws_close_socket(s_cnum);
 	return (-1);
 }

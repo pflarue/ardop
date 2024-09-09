@@ -11,6 +11,8 @@
 #pragma comment(lib, "winmm.lib")
 #endif
 
+#include <time.h>
+
 #include "common/ARDOPC.h"
 
 extern unsigned int PKTLEDTimer;
@@ -326,7 +328,7 @@ void SetARDOPProtocolState(int value)
 	}
 	// queTNCStatus.Enqueue(stcStatus)
 
-	sprintf(HostCmd, "NEWSTATE %s ", ARDOPStates[ProtocolState]);
+	snprintf(HostCmd, sizeof(HostCmd), "NEWSTATE %s ", ARDOPStates[ProtocolState]);
 	QueueCommandToHost(HostCmd);
 	wg_send_state(0);
 }
@@ -365,8 +367,8 @@ BOOL GetNextARQFrame()
 		if (intRepeatCount > 5)  // do 5 tries then force disconnect
 		{
 			QueueCommandToHost("DISCONNECTED");
-			WriteDebugLog(LOGINFO, "[STATUS: END NOT RECEIVED CLOSING ARQ SESSION WITH %s]", strRemoteCallsign);
-			sprintf(HostCmd, "STATUS END NOT RECEIVED CLOSING ARQ SESSION WITH %s", strRemoteCallsign);
+			ZF_LOGI("[STATUS: END NOT RECEIVED CLOSING ARQ SESSION WITH %s]", strRemoteCallsign);
+			snprintf(HostCmd, sizeof(HostCmd), "STATUS END NOT RECEIVED CLOSING ARQ SESSION WITH %s", strRemoteCallsign);
 			QueueCommandToHost(HostCmd);
 			blnDISCRepeating = FALSE;
 			blnEnbARQRpt = FALSE;
@@ -376,9 +378,9 @@ BOOL GetNextARQFrame()
 			InitializeConnection();
 			return FALSE;  // indicates end repeat
 		}
-		WriteDebugLog(LOGINFO, "Repeating DISC %d", intRepeatCount);
+		ZF_LOGI("Repeating DISC %d", intRepeatCount);
 		if ((EncLen = Encode4FSKControl(DISCFRAME, bytSessionID, bytEncodedBytes)) <= 0) {
-			WriteDebugLog(LOGERROR, "ERROR: In GetNextARQFrame() Invalid EncLen (%d).", EncLen);
+			ZF_LOGE("ERROR: In GetNextARQFrame() Invalid EncLen (%d).", EncLen);
 			return FALSE;
 		}
 
@@ -403,15 +405,15 @@ BOOL GetNextARQFrame()
 
 			if (strRemoteCallsign[0])
 			{
-				WriteDebugLog(LOGINFO, "[STATUS: CONNECT TO %s FAILED]", strRemoteCallsign);
-				sprintf(HostCmd, "STATUS CONNECT TO %s FAILED!", strRemoteCallsign);
+				ZF_LOGI("[STATUS: CONNECT TO %s FAILED]", strRemoteCallsign);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS CONNECT TO %s FAILED!", strRemoteCallsign);
 				QueueCommandToHost(HostCmd);
 				InitializeConnection();
 				return FALSE;  // indicates end repeat
 			}
 			else
 			{
-				WriteDebugLog(LOGINFO, "[STATUS: END ARQ CALL]");
+				ZF_LOGI("[STATUS: END ARQ CALL]");
 				QueueCommandToHost("STATUS END ARQ CALL");
 				InitializeConnection();
 				return FALSE;  // indicates end repeat
@@ -438,8 +440,8 @@ BOOL GetNextARQFrame()
 		{
 			SetARDOPProtocolState(DISC);
 			ARQState = DISCArqEnd;
-			WriteDebugLog(LOGINFO, "[STATUS: CONNECT TO %s FAILED]", strRemoteCallsign);
-			sprintf(HostCmd, "STATUS CONNECT TO %s FAILED!", strRemoteCallsign);
+			ZF_LOGI("[STATUS: CONNECT TO %s FAILED]", strRemoteCallsign);
+			snprintf(HostCmd, sizeof(HostCmd), "STATUS CONNECT TO %s FAILED!", strRemoteCallsign);
 			QueueCommandToHost(HostCmd);
 			intRepeatCount = 0;
 			InitializeConnection();
@@ -454,7 +456,7 @@ BOOL GetNextARQFrame()
 		{
 			if (!blnTimeoutTriggered)
 			{
-				WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.GetNexARQFrame] Timeout setting SendTimeout timer to start.");
+				ZF_LOGD("[ARDOPprotocol.GetNexARQFrame] Timeout setting SendTimeout timer to start.");
 
 				blnEnbARQRpt = FALSE;
 				blnTimeoutTriggered = TRUE;  // prevents a retrigger
@@ -500,7 +502,7 @@ UCHAR GenerateSessionID(char * strCallingCallSign, char *strTargetCallsign)
 	char bytToCRC[CALL_BUF_SIZE*2];
 
 	if (snprintf(bytToCRC, sizeof(bytToCRC), "%s%s", strCallingCallSign, strTargetCallsign) >= (int)sizeof(bytToCRC))
-		WriteDebugLog(LOGWARNING,
+		ZF_LOGW(
 			"WARNING: Excessive length of callsigns ('%s', '%s') passed to"
 			" GenerateSessionID() has probably resulted in an invalid SessionID.",
 			strCallingCallSign, strTargetCallsign);
@@ -744,7 +746,7 @@ void Gearshift_9()
 		strcpy(strNewMode, Name(bytFrameTypesForBW[intFrameTypePtr - 1]));
 		strNewMode[strlen(strNewMode) - 2] = 0;
 
-		WriteDebugLog(LOGINFO, "[ARDOPprotocol.Gearshift_9] intNAKCtr= %d Shift down from Frame type %s New Mode: %s", intNAKctr, strOldMode, strNewMode);
+		ZF_LOGI("[ARDOPprotocol.Gearshift_9] intNAKCtr= %d Shift down from Frame type %s New Mode: %s", intNAKctr, strOldMode, strNewMode);
 		intShiftUpDn = -1;
 
 		intAvgQuality = 0;  // Clear intAvgQuality causing the first received Quality to become the new average
@@ -780,7 +782,7 @@ void Gearshift_9()
 		strcpy(strNewMode, Name(bytFrameTypesForBW[intFrameTypePtr + intShiftUpDn]));
 		strNewMode[strlen(strNewMode) - 2] = 0;
 
-		WriteDebugLog(LOGINFO, "[ARDOPprotocol.Gearshift_9] ShiftUpDn = %d, AvgQuality=%d New Mode: %s",
+		ZF_LOGI("[ARDOPprotocol.Gearshift_9] ShiftUpDn = %d, AvgQuality=%d New Mode: %s",
 			intShiftUpDn, intAvgQuality, strNewMode);
 
 		intAvgQuality = 0;  // Clear intAvgQuality causing the first received Quality to become the new average
@@ -800,12 +802,12 @@ void ComputeQualityAvg(int intReportedQuality)
 	if (intAvgQuality == 0)
 	{
 		intAvgQuality = intReportedQuality;
-		WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.ComputeQualityAvg] Initialize AvgQuality= %d", intAvgQuality);
+		ZF_LOGD("[ARDOPprotocol.ComputeQualityAvg] Initialize AvgQuality= %d", intAvgQuality);
 	}
 	else
 	{
 		intAvgQuality = intAvgQuality * (1 - dblAlpha) + (dblAlpha * intReportedQuality) + 0.5f;  // exponential averager
-		WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.ComputeQualityAvg] Reported Quality= %d  New Avg Quality= %d", intReportedQuality, intAvgQuality);
+		ZF_LOGD("[ARDOPprotocol.ComputeQualityAvg] Reported Quality= %d  New Avg Quality= %d", intReportedQuality, intAvgQuality);
 	}
 }
 
@@ -839,7 +841,7 @@ void SendData()
 	{
 	case IDLE:
 
-		WriteDebugLog(LOGINFO, "[ARDOPProtocol.SendData] Sending Data from IDLE state! Exit SendData");
+		ZF_LOGI("[ARDOPProtocol.SendData] Sending Data from IDLE state! Exit SendData");
 		return;
 
 	case ISS:
@@ -851,7 +853,7 @@ void SendData()
 
 		if (bytDataToSendLength > 0)
 		{
-			WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.SendData] DataToSend = %d bytes, In ProtocolState ISS", bytDataToSendLength);
+			ZF_LOGD("[ARDOPprotocol.SendData] DataToSend = %d bytes, In ProtocolState ISS", bytDataToSendLength);
 
 			// Get the data from the buffer here based on current data frame type
 			// (Handles protocol Rule 2.1)
@@ -896,16 +898,16 @@ void SendData()
 			snprintf(Msg, sizeof(Msg), "[Encoding Data to TX] %d bytes as hex values: ", Len);
 			for (int i = 0; i < Len; i++)
 				snprintf(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg) - 1, "%02X ", bytDataToSend[i]);
-			WriteDebugLog(LOGDEBUGPLUS, "%s", Msg);
+			ZF_LOGV("%s", Msg);
 
 			if (utf8_check(bytDataToSend, Len) == NULL)
-				WriteDebugLog(LOGDEBUGPLUS, "[Encoding Data to TX] %d bytes as utf8 text: '%.*s'", Len, Len, bytDataToSend);
+				ZF_LOGV("[Encoding Data to TX] %d bytes as utf8 text: '%.*s'", Len, Len, bytDataToSend);
 
 
 			if (strcmp(strMod, "4FSK") == 0)
 			{
 				if ((EncLen = EncodeFSKData(bytCurrentFrameType, bytDataToSend, Len, bytEncodedBytes)) <= 0) {
-					WriteDebugLog(LOGERROR, "ERROR: In SendData() for 4FSK Invalid EncLen (%d).", EncLen);
+					ZF_LOGE("ERROR: In SendData() for 4FSK Invalid EncLen (%d).", EncLen);
 					return;
 				}
 				if (bytCurrentFrameType >= 0x7A && bytCurrentFrameType <= 0x7D)
@@ -916,7 +918,7 @@ void SendData()
 			else  // This handles PSK and QAM
 			{
 				if ((EncLen = EncodePSKData(bytCurrentFrameType, bytDataToSend, Len, bytEncodedBytes)) <= 0) {
-					WriteDebugLog(LOGERROR, "ERROR: In SendData() for PSK and QAM Invalid EncLen (%d).", EncLen);
+					ZF_LOGE("ERROR: In SendData() for PSK and QAM Invalid EncLen (%d).", EncLen);
 					return;
 				}
 				ModPSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame
@@ -939,12 +941,12 @@ void SendData()
 			ClearDataToSend();  // 0.6.4.2 This insures new OUTOUND queue is updated (to value = 0)
 
 			if ((EncLen = Encode4FSKControl(IDLEFRAME, bytSessionID, bytEncodedBytes)) <= 0) {
-				WriteDebugLog(LOGERROR, "ERROR: In SendData() for IDLE Invalid EncLen (%d).", EncLen);
+				ZF_LOGE("ERROR: In SendData() for IDLE Invalid EncLen (%d).", EncLen);
 				return;
 			}
 			Mod4FSKDataAndPlay(IDLEFRAME, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 
-			WriteDebugLog(LOGINFO, "[ARDOPprotocol.SendData]  Send IDLE with Repeat, Set ProtocolState=IDLE ");
+			ZF_LOGI("[ARDOPprotocol.SendData]  Send IDLE with Repeat, Set ProtocolState=IDLE ");
 			return;
 		}
 	}
@@ -985,8 +987,7 @@ int GetNextFrameData(int * intUpDn, UCHAR * bytFrameTypeToSend, UCHAR * strMod, 
 		DrawTXMode(shortName(bytCurrentFrameType));
 		updateDisplay();
 
-		if(DebugLog)
-			WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.GetNextFrameData] Initial Frame Type: %s", Name(bytCurrentFrameType));
+		ZF_LOGD("[ARDOPprotocol.GetNextFrameData] Initial Frame Type: %s", Name(bytCurrentFrameType));
 		*intUpDn = 0;
 		return 0;
 	}
@@ -1033,13 +1034,10 @@ int GetNextFrameData(int * intUpDn, UCHAR * bytFrameTypeToSend, UCHAR * strMod, 
 		bytLastARQDataFrameSent = *bytFrameTypeToSend;
 	}
 
-	if (DebugLog)
-	{
-		if (strShift == 0)
-			WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.GetNextFrameData] No shift, Frame Type: %s", Name(bytCurrentFrameType));
-		else
-			WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.GetNextFrameData] %s, Frame Type: %s", strShift, Name(bytCurrentFrameType));
-	}
+	if (strShift == 0)
+		ZF_LOGD("[ARDOPprotocol.GetNextFrameData] No shift, Frame Type: %s", Name(bytCurrentFrameType));
+	else
+		ZF_LOGD("[ARDOPprotocol.GetNextFrameData] %s, Frame Type: %s", strShift, Name(bytCurrentFrameType));
 
 	FrameInfo(bytCurrentFrameType, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytQualThresh, strType);
 
@@ -1117,7 +1115,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 	// Allow for link turnround before responding
 
-	WriteDebugLog(LOGDEBUG, "Time since received = %d", timeSinceDecoded);
+	ZF_LOGD("Time since received = %d", timeSinceDecoded);
 
 	if (timeSinceDecoded < 250 + extraDelay)
 		txSleep((250 + extraDelay) - timeSinceDecoded);
@@ -1134,13 +1132,13 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 		{
 			// Special case to process DISC from previous connection (Ending station must have missed END reply to DISC) Handles protocol rule 1.5
 
-			WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame]  DISC frame received in ProtocolState DISC, Send END with SessionID= %XX Stay in DISC state", bytLastARQSessionID);
+			ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame]  DISC frame received in ProtocolState DISC, Send END with SessionID= %XX Stay in DISC state", bytLastARQSessionID);
 
 			tmrFinalID = Now + 3000;
 			blnEnbARQRpt = FALSE;
 
 			if ((EncLen = Encode4FSKControl(END, bytLastARQSessionID, bytEncodedBytes)) <= 0) {
-				WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for DISC->END Invalid EncLen (%d).", EncLen);
+				ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for DISC->END Invalid EncLen (%d).", EncLen);
 				return;
 			}
 			Mod4FSKDataAndPlay(END, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
@@ -1162,7 +1160,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 		strCallsign  = strlop(bytData, ' ');  // "fromcall tocall"
 		strcpy(strRemoteCallsign, bytData);
 
-		WriteDebugLog(LOGINFO, "CONREQ From %s to %s Listen = %d", strRemoteCallsign, strCallsign, blnListen);
+		ZF_LOGI("CONREQ From %s to %s Listen = %d", strRemoteCallsign, strCallsign, blnListen);
 
 		if (!blnListen)
 			return;  // ignore connect request if not blnListen
@@ -1187,7 +1185,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				if ((blnLeaderTrippedBusy && dttLastBusyClear - dttPriorLastBusyTrip < 600)
 					|| (!blnLeaderTrippedBusy && dttLastBusyClear - dttLastBusyTrip < 600))
 				{
-					WriteDebugLog(LOGINFO, "[ProcessRcvdARQFrame] Con Req Blocked by BUSY!  LeaderTrippedBusy=%d, Prior Last Busy Trip=%d, Last Busy Clear=%d,  Last Leader Detect=%d",
+					ZF_LOGI("[ProcessRcvdARQFrame] Con Req Blocked by BUSY!  LeaderTrippedBusy=%d, Prior Last Busy Trip=%d, Last Busy Clear=%d,  Last Leader Detect=%d",
 						blnLeaderTrippedBusy, Now - dttPriorLastBusyTrip, Now - dttLastBusyClear, Now - dttLastLeaderDetect);
 
 					ClearBusy();
@@ -1196,15 +1194,15 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 					// a continuous busy condition.
 
 					if ((EncLen = Encode4FSKControl(ConRejBusy, bytPendingSessionID, bytEncodedBytes)) <= 0) {
-						WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for ConRejBusy Invalid EncLen (%d).", EncLen);
+						ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for ConRejBusy Invalid EncLen (%d).", EncLen);
 						return;
 					}
 					Mod4FSKDataAndPlay(ConRejBusy, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 
-					sprintf(HostCmd, "REJECTEDBUSY %s", strRemoteCallsign);
+					snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBUSY %s", strRemoteCallsign);
 					QueueCommandToHost(HostCmd);
-					WriteDebugLog(LOGINFO, "[STATUS: ARQ CONNECTION REQUEST FROM %s REJECTED, CHANNEL BUSY.]", strRemoteCallsign);
-					sprintf(HostCmd, "STATUS ARQ CONNECTION REQUEST FROM %s REJECTED, CHANNEL BUSY.", strRemoteCallsign);
+					ZF_LOGI("[STATUS: ARQ CONNECTION REQUEST FROM %s REJECTED, CHANNEL BUSY.]", strRemoteCallsign);
+					snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION REQUEST FROM %s REJECTED, CHANNEL BUSY.", strRemoteCallsign);
 					QueueCommandToHost(HostCmd);
 
 					return;
@@ -1215,7 +1213,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 			if (intReply != ConRejBW)  // If not ConRejBW the bandwidth is compatible so answer with correct ConAck frame
 			{
-				sprintf(HostCmd, "TARGET %s", strCallsign);
+				snprintf(HostCmd, sizeof(HostCmd), "TARGET %s", strCallsign);
 				QueueCommandToHost(HostCmd);
 				InitializeConnection();
 				bytDataToSendLength = 0;
@@ -1245,7 +1243,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				intReceivedLeaderLen = intLeaderRcvdMs;  // capture the received leader from the remote ISS's ConReq (used for timing optimization)
 
 				if ((EncLen = EncodeConACKwTiming(intReply, intLeaderRcvdMs, bytPendingSessionID, bytEncodedBytes)) <= 0) {
-					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for ConAck Invalid EncLen (%d).", EncLen);
+					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for ConAck Invalid EncLen (%d).", EncLen);
 					return;
 				}
 				Mod4FSKDataAndPlay(intReply, &bytEncodedBytes[0], EncLen, intARQDefaultDlyMs);  // only returns when all sent
@@ -1256,14 +1254,14 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 				// (Handles protocol rule 1.3)
 
-				sprintf(HostCmd, "REJECTEDBW %s", strRemoteCallsign);
+				snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBW %s", strRemoteCallsign);
 				QueueCommandToHost(HostCmd);
-				WriteDebugLog(LOGINFO, "[STATUS: ARQ CONNECTION REJECTED BY %s]", strRemoteCallsign);
-				sprintf(HostCmd, "STATUS ARQ CONNECTION REJECTED BY %s", strRemoteCallsign);
+				ZF_LOGI("[STATUS: ARQ CONNECTION REJECTED BY %s]", strRemoteCallsign);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION REJECTED BY %s", strRemoteCallsign);
 				QueueCommandToHost(HostCmd);
 
 				if ((EncLen = Encode4FSKControl(intReply, bytPendingSessionID, bytEncodedBytes)) <= 0) {
-					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for ConRejBW Invalid EncLen (%d).", EncLen);
+					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for ConRejBW Invalid EncLen (%d).", EncLen);
 					return;
 				}
 				Mod4FSKDataAndPlay(intReply, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
@@ -1303,8 +1301,6 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 				if (IsCallToMe(strCallsign, &bytPendingSessionID))  // (Handles protocol rules 1.2, 1.3)
 				{
-					// WriteDebugLog(LOGDEBUG, "[ProcessRcvdARQFrame]1 strCallsigns(0)=" & strCallsigns(0) & "  strCallsigns(1)=" & strCallsigns(1) & "  bytPendingSessionID=" & Format(bytPendingSessionID, "X"))
-
 					intReply = IRSNegotiateBW(intFrameType);  // NegotiateBandwidth
 
 					if (intReply != ConRejBW)  // If not ConRejBW the bandwidth is compatible so answer with correct ConAck frame
@@ -1333,7 +1329,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 						strcpy(strFinalIDCallsign, strCallsign);
 
 						if ((EncLen = EncodeConACKwTiming(intReply, intLeaderRcvdMs, bytPendingSessionID, bytEncodedBytes)) <= 0) {
-							WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for ConAck Invalid EncLen (%d).", EncLen);
+							ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for ConAck Invalid EncLen (%d).", EncLen);
 							return;
 						}
 						Mod4FSKDataAndPlay(intReply, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
@@ -1345,16 +1341,14 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 					// (Handles protocol rule 1.3)
 
-					// WriteDebugLog(LOGDEBUG, ("[ProcessRcvdARQFrame] Incompatible bandwidth connect request. Frame type: " & objFrameInfo.Name(intFrameType) & "   MCB.ARQBandwidth:  " & MCB.ARQBandwidth)
-
-					sprintf(HostCmd, "REJECTEDBW %s", strRemoteCallsign);
+					snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBW %s", strRemoteCallsign);
 					QueueCommandToHost(HostCmd);
-					WriteDebugLog(LOGINFO, "[STATUS: ARQ CONNECTION FROM %s REJECTED, INCOMPATIBLE BANDWIDTHS.]", strRemoteCallsign);
-					sprintf(HostCmd, "STATUS ARQ CONNECTION FROM %s REJECTED, INCOMPATIBLE BANDWIDTHS.", strRemoteCallsign);
+					ZF_LOGI("[STATUS: ARQ CONNECTION FROM %s REJECTED, INCOMPATIBLE BANDWIDTHS.]", strRemoteCallsign);
+					snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION FROM %s REJECTED, INCOMPATIBLE BANDWIDTHS.", strRemoteCallsign);
 					QueueCommandToHost(HostCmd);
 
 					if ((EncLen = Encode4FSKControl(intReply, bytPendingSessionID, bytEncodedBytes)) <= 0) {
-						WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for ConRejBW Invalid EncLen (%d).", EncLen);
+						ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for ConRejBW Invalid EncLen (%d).", EncLen);
 						return;
 					}
 					Mod4FSKDataAndPlay(intReply, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
@@ -1374,8 +1368,6 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 			if (intFrameType >= ConAckmin && intFrameType <= ConAckmax)  // Process ConACK frames from ISS confirming Bandwidth and providing ISS's received leader info.
 			{
-				// WriteDebugLog(LOGDEBUG, ("[ARDOPprotocol.ProcessRcvdARQFrame] IRS Measured RoundTrip = " & intARQRTmeasuredMs.ToString & " ms")
-
 				switch (intFrameType)
 				{
 				case ConAck200:
@@ -1408,16 +1400,16 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				dttLastFECIDSent = Now;
 
 				blnEnbARQRpt = FALSE;
-				sprintf(HostCmd, "CONNECTED %s %d", strRemoteCallsign, intSessionBW);
+				snprintf(HostCmd, sizeof(HostCmd), "CONNECTED %s %d", strRemoteCallsign, intSessionBW);
 				QueueCommandToHost(HostCmd);
 
-				WriteDebugLog(LOGINFO, "[STATUS: ARQ CONNECTION FROM %s: SESSION BW = %d HZ]", strRemoteCallsign, intSessionBW);
-				sprintf(HostCmd, "STATUS ARQ CONNECTION FROM %s: SESSION BW = %d HZ", strRemoteCallsign, intSessionBW);
+				ZF_LOGI("[STATUS: ARQ CONNECTION FROM %s: SESSION BW = %d HZ]", strRemoteCallsign, intSessionBW);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION FROM %s: SESSION BW = %d HZ", strRemoteCallsign, intSessionBW);
 				QueueCommandToHost(HostCmd);
 
 				// Send ACK
 				if ((EncLen = EncodeDATAACK(intLastRcvdFrameQuality, bytSessionID, bytEncodedBytes)) <= 0) {
-					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for ConAck->DataACK Invalid EncLen (%d).", EncLen);
+					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for ConAck->DataACK Invalid EncLen (%d).", EncLen);
 					return;
 				}
 				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
@@ -1434,7 +1426,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 				return;
 			}
-			WriteDebugLog(LOGDEBUG,
+			ZF_LOGD(
 				"Received correctly decoded frame of unexpected FrameType=%s"
 				" while ARQState == IRSConAck.  Ignoring.",
 				Name(intFrameType));
@@ -1448,8 +1440,6 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 			if (intFrameType >= ConAckmin && intFrameType <= ConAckmax)  // Process ConACK frames from ISS confirming Bandwidth and providing ISS's received leader info.
 			{
 				// Process ConACK frames (ISS failed to receive prior ACK confirming session bandwidth so repeated ConACK)
-
-				// WriteDebugLog(LOGDEBUG, ("[ARDOPprotocol.ProcessRcvdARQFrame] IRS Measured RoundTrip = " & intARQRTmeasuredMs.ToString & " ms")
 
 				switch (intFrameType)
 				{
@@ -1471,7 +1461,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 				// Send ACK
 				if ((EncLen = EncodeDATAACK(intLastRcvdFrameQuality, bytSessionID, bytEncodedBytes)) <= 0) {
-					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for repeat ConAck->DataACK Invalid EncLen (%d).", EncLen);
+					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for repeat ConAck->DataACK Invalid EncLen (%d).", EncLen);
 					return;
 				}
 				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
@@ -1482,13 +1472,13 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 			if (blnFrameDecodedOK && intFrameType == DISCFRAME)  // IF DISC received from ISS Handles protocol rule 1.5
 			{
-				WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame]  DISC frame received in ProtocolState IRS, IRSData...going to DISC state");
+				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame]  DISC frame received in ProtocolState IRS, IRSData...going to DISC state");
 				if (AccumulateStats)
 					LogStats();
 
 				QueueCommandToHost("DISCONNECTED");  // Send END
-				WriteDebugLog(LOGINFO, "[STATUS: ARQ CONNECTION ENDED WITH %s]", strRemoteCallsign);
-				sprintf(HostCmd, "STATUS ARQ CONNECTION ENDED WITH %s", strRemoteCallsign);
+				ZF_LOGI("[STATUS: ARQ CONNECTION ENDED WITH %s]", strRemoteCallsign);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ENDED WITH %s", strRemoteCallsign);
 				QueueCommandToHost(HostCmd);
 
 				bytLastARQSessionID = bytSessionID;  // capture this session ID to allow answering DISC from DISC state if ISS missed Sent END
@@ -1502,7 +1492,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				blnEnbARQRpt = FALSE;
 
 				if ((EncLen = Encode4FSKControl(END, bytSessionID, bytEncodedBytes)) <= 0) {
-					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for END Invalid EncLen (%d).", EncLen);
+					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END Invalid EncLen (%d).", EncLen);
 					return;
 				}
 				Mod4FSKDataAndPlay(END, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
@@ -1513,13 +1503,13 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 			if (blnFrameDecodedOK && intFrameType == END)  // IF END received from ISS
 			{
-				WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame]  END frame received in ProtocolState IRS, IRSData...going to DISC state");
+				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame]  END frame received in ProtocolState IRS, IRSData...going to DISC state");
 				if (AccumulateStats)
 					LogStats();
 
 				QueueCommandToHost("DISCONNECTED");
-				WriteDebugLog(LOGINFO, "[STATUS: ARQ CONNECTION ENDED WITH %s]", strRemoteCallsign);
-				sprintf(HostCmd, "STATUS ARQ CONNECTION ENDED WITH %s", strRemoteCallsign);
+				ZF_LOGI("[STATUS: ARQ CONNECTION ENDED WITH %s]", strRemoteCallsign);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ENDED WITH %s", strRemoteCallsign);
 				QueueCommandToHost(HostCmd);
 				blnDISCRepeating = FALSE;
 				ClearDataToSend();
@@ -1532,7 +1522,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				{
 					dttLastFECIDSent = Now;
 					if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes)) <= 0) {
-						WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
+						ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
 						return;
 					}
 					Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
@@ -1547,13 +1537,13 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 			if (blnFrameDecodedOK && intFrameType == BREAK)
 			{
-				WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame]  BREAK received in ProtocolState %s , IRSData. Sending ACK", ARDOPStates[ProtocolState]);
+				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame]  BREAK received in ProtocolState %s , IRSData. Sending ACK", ARDOPStates[ProtocolState]);
 
 				blnEnbARQRpt = FALSE;  // setup for no repeats
 
 				// Send ACK
 				if ((EncLen = EncodeDATAACK(100, bytSessionID, bytEncodedBytes)) <= 0) {
-					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for repeat BREAK->DataACK Invalid EncLen (%d).", EncLen);
+					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for repeat BREAK->DataACK Invalid EncLen (%d).", EncLen);
 					return;
 				}
 				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
@@ -1563,7 +1553,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 			if (blnFrameDecodedOK && intFrameType == IDLEFRAME)  // IF IDLE received from ISS
 			{
-				WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame]  IDLE received in ProtocolState %s substate %s", ARDOPStates[ProtocolState], ARQSubStates[ARQState]);
+				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame]  IDLE received in ProtocolState %s substate %s", ARDOPStates[ProtocolState], ARQSubStates[ARQState]);
 
 				blnEnbARQRpt = FALSE;  // setup for no repeats
 
@@ -1576,11 +1566,11 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 					intFrameRepeatInterval = ComputeInterFrameInterval(1000 + rand() % 2000);
 
 					SetARDOPProtocolState(IRStoISS);  // (ONLY IRS State where repeats are used)
-					WriteDebugLog(LOGINFO, "[STATUS: QUEUE BREAK new Protocol State IRStoISS]");
+					ZF_LOGI("[STATUS: QUEUE BREAK new Protocol State IRStoISS]");
 					SendCommandToHost("STATUS QUEUE BREAK new Protocol State IRStoISS");
 					blnEnbARQRpt = TRUE;  // setup for repeats until changeover
 					if ((EncLen = Encode4FSKControl(BREAK, bytSessionID, bytEncodedBytes)) <= 0) {
-						WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for IDLE->BREAK Invalid EncLen (%d).", EncLen);
+						ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for IDLE->BREAK Invalid EncLen (%d).", EncLen);
 						return;
 					}
 					Mod4FSKDataAndPlay(BREAK, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
@@ -1590,7 +1580,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 					// Send ACK
 					dttTimeoutTrip = Now;
 					if ((EncLen = EncodeDATAACK(100, bytSessionID, bytEncodedBytes)) <= 0) {
-						WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for IDLE->DataACK Invalid EncLen (%d).", EncLen);
+						ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for IDLE->DataACK Invalid EncLen (%d).", EncLen);
 						return;
 					}
 					Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
@@ -1611,7 +1601,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				if (intRmtLeaderMeas == 0)
 				{
 					intRmtLeaderMeas = intRmtLeaderMeasure;  // capture the leader timing of the first ACK from IRS, use this value to help compute repeat interval.
-					WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.ProcessRcvdARQFrame] IRS (receiving data) RmtLeaderMeas=%d ms", intRmtLeaderMeas);
+					ZF_LOGD("[ARDOPprotocol.ProcessRcvdARQFrame] IRS (receiving data) RmtLeaderMeas=%d ms", intRmtLeaderMeas);
 				}
 
 				if (ARQState == IRSData && blnBREAKCmd && intFrameType != bytLastACKedDataFrameType)
@@ -1628,10 +1618,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 					blnEnbARQRpt = TRUE;  // setup for repeats until changeover
 					intFrameRepeatInterval = ComputeInterFrameInterval(1000 + rand() % 2000);
 					SetARDOPProtocolState(IRStoISS);  // (ONLY IRS State where repeats are used)
-					WriteDebugLog(LOGINFO, "[STATUS: QUEUE BREAK new Protocol State IRStoISS]");
+					ZF_LOGI("[STATUS: QUEUE BREAK new Protocol State IRStoISS]");
 					SendCommandToHost("STATUS QUEUE BREAK new Protocol State IRStoISS");
 					if ((EncLen = Encode4FSKControl(BREAK, bytSessionID, bytEncodedBytes)) <= 0) {
-						WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for Rule 3.4 BREAK Invalid EncLen (%d).", EncLen);
+						ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for Rule 3.4 BREAK Invalid EncLen (%d).", EncLen);
 						return;
 					}
 					Mod4FSKDataAndPlay(BREAK, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
@@ -1645,11 +1635,11 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 					dttTimeoutTrip = Now;
 				}
 				else
-					WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame] Frame with same Type - Discard");
+					ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] Frame with same Type - Discard");
 
 				if (ARQState == IRSfromISS)
 				{
-					WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame] Data Rcvd in ProtocolState=IRSData, Substate IRSfromISS Go to Substate IRSData");
+					ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] Data Rcvd in ProtocolState=IRSData, Substate IRSfromISS Go to Substate IRSData");
 					ARQState = IRSData;  // This substate change is the final completion of ISS to IRS changeover and allows the new IRS to now break if desired (Rule 3.5)
 				}
 
@@ -1658,7 +1648,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				// Send ACK
 				blnEnbARQRpt = FALSE;
 				if ((EncLen = EncodeDATAACK(intLastRcvdFrameQuality, bytSessionID, bytEncodedBytes)) <= 0) {
-					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for DataACK Invalid EncLen (%d).", EncLen);
+					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for DataACK Invalid EncLen (%d).", EncLen);
 					return;
 				}
 				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
@@ -1675,11 +1665,11 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				// Send ACK
 				blnEnbARQRpt = FALSE;
 				if ((EncLen = EncodeDATAACK(intLastRcvdFrameQuality, bytSessionID, bytEncodedBytes)) <= 0) {
-					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for repeat DataACK Invalid EncLen (%d).", EncLen);
+					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for repeat DataACK Invalid EncLen (%d).", EncLen);
 					return;
 				}
 				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
-				WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame] Data Decode Failed but Frame Type matched last ACKed. Send ACK, data already passed to host. ");
+				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] Data Decode Failed but Frame Type matched last ACKed. Send ACK, data already passed to host. ");
 
 				// handles Data frame which did not decode correctly (Failed CRC) and hasn't been acked before
 			}
@@ -1687,27 +1677,27 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 			{
 				if (ARQState == IRSfromISS)
 				{
-					WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame] Data Frame Type Rcvd in ProtocolState=IRSData, Substate IRSfromISS Go to Substate IRSData");
+					ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] Data Frame Type Rcvd in ProtocolState=IRSData, Substate IRSfromISS Go to Substate IRSData");
 
 					ARQState = IRSData;  // This substate change is the final completion of ISS to IRS changeover and allows the new IRS to now break if desired (Rule 3.5)
 				}
 				// Send NAK
 				blnEnbARQRpt = FALSE;
 				if ((EncLen = EncodeDATANAK(intLastRcvdFrameQuality, bytSessionID, bytEncodedBytes)) <= 0) {
-					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for DataNAK Invalid EncLen (%d).", EncLen);
+					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for DataNAK Invalid EncLen (%d).", EncLen);
 					return;
 				}
 				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 				return;
 			}
 			if (blnFrameDecodedOK)
-				WriteDebugLog(LOGDEBUG,
+				ZF_LOGD(
 					"Received correctly decoded frame of unexpected FrameType=%s"
 					" while ARQState == %s.  Ignoring.",
 					Name(intFrameType),
 					ARQSubStates[ARQState]);
 			else
-				WriteDebugLog(LOGDEBUG,
+				ZF_LOGD(
 					"Received (FAILED decode) frame of unexpected FrameType=%s"
 					" while ARQState == %s.  Ignoring.  It may also have been"
 					" ignored because of the failed decode.",
@@ -1715,7 +1705,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 					ARQSubStates[ARQState]);
 			return;
 		}
-		WriteDebugLog(LOGDEBUG,
+		ZF_LOGD(
 			"Received frame of FrameType=%s, but unable to process due to"
 			" unexpected ARQState == %s with ProtocolState == IRS."
 			" Ignoring received frame.",
@@ -1727,7 +1717,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 		// IRStoISS State **************************************************************************************************
 
 	case IRStoISS:  // In this state answer any data frame with a BREAK. If ACK received go to Protocol State ISS
-		WriteDebugLog(LOGDEBUG,
+		ZF_LOGD(
 			"In ProtocolState == IRStoISS, Nothing is done in"
 			" ProcessRcvdARQFrame() for a received FrameType=%s."
 			" If this is anything other than a DataACK, another"
@@ -1744,7 +1734,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 		if (intFrameType >= DataACKmin && bytDataToSendLength > 0)  // If ACK and Data to send
 		{
-			WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessedRcvdARQFrame] Protocol state IDLE, ACK Received with Data to send. Go to ISS Data state.");
+			ZF_LOGI("[ARDOPprotocol.ProcessedRcvdARQFrame] Protocol state IDLE, ACK Received with Data to send. Go to ISS Data state.");
 
 			SetARDOPProtocolState(ISS);
 			ARQState = ISSData;
@@ -1762,13 +1752,13 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 			blnEnbARQRpt = FALSE;
 			// Send ACK
 			if ((EncLen = EncodeDATAACK(100, bytSessionID, bytEncodedBytes)) <= 0) {
-				WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for BREAK->DataACK Invalid EncLen (%d).", EncLen);
+				ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for BREAK->DataACK Invalid EncLen (%d).", EncLen);
 				return;
 			}
 			Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 
-			WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame] BREAK Rcvd from IDLE, Go to IRS, Substate IRSfromISS");
-			WriteDebugLog(LOGINFO, "[STATUS: BREAK received from Protocol State IDLE, new state IRS]");
+			ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] BREAK Rcvd from IDLE, Go to IRS, Substate IRSfromISS");
+			ZF_LOGI("[STATUS: BREAK received from Protocol State IDLE, new state IRS]");
 			SendCommandToHost("STATUS BREAK received from Protocol State IDLE, new state IRS");
 			SetARDOPProtocolState(IRS);
 			// Substate IRSfromISS enables processing Rule 3.5 later
@@ -1782,19 +1772,19 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 		}
 		if (intFrameType == DISCFRAME)  // IF DISC received from IRS Handles protocol rule 1.5
 		{
-			WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame]  DISC frame received Send END...go to DISC state");
+			ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame]  DISC frame received Send END...go to DISC state");
 
 			if (AccumulateStats)
 				LogStats();
 
 			QueueCommandToHost("DISCONNECTED");
-			WriteDebugLog(LOGINFO, "[STATUS: ARQ CONNECTION ENDED WITH %s]", strRemoteCallsign);
-			sprintf(HostCmd, "STATUS ARQ CONNECTION ENDED WITH %s ", strRemoteCallsign);
+			ZF_LOGI("[STATUS: ARQ CONNECTION ENDED WITH %s]", strRemoteCallsign);
+			snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ENDED WITH %s ", strRemoteCallsign);
 			QueueCommandToHost(HostCmd);
 			tmrFinalID = Now + 3000;
 			blnDISCRepeating = FALSE;
 			if ((EncLen = Encode4FSKControl(END, bytSessionID, bytEncodedBytes)) <= 0) {
-				WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for DISC->END Invalid EncLen (%d).", EncLen);
+				ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for DISC->END Invalid EncLen (%d).", EncLen);
 				return;
 			}
 			Mod4FSKDataAndPlay(END, &bytEncodedBytes[0], EncLen, LeaderLength);
@@ -1806,12 +1796,12 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 		}
 		if (intFrameType == END)
 		{
-			WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame]  END received ... going to DISC state");
+			ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame]  END received ... going to DISC state");
 			if (AccumulateStats)
 				LogStats();
 			QueueCommandToHost("DISCONNECTED");
-			WriteDebugLog(LOGINFO, "[STATUS: ARQ CONNECTION ENDED WITH %s]", strRemoteCallsign);
-			sprintf(HostCmd, "STATUS ARQ CONNECTION ENDED WITH %s ", strRemoteCallsign);
+			ZF_LOGI("[STATUS: ARQ CONNECTION ENDED WITH %s]", strRemoteCallsign);
+			snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ENDED WITH %s ", strRemoteCallsign);
 			QueueCommandToHost(HostCmd);
 			ClearDataToSend();
 
@@ -1819,7 +1809,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 			{
 				dttLastFECIDSent = Now;
 				if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes)) <= 0) {
-					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
+					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
 					return;
 				}
 				Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
@@ -1831,16 +1821,16 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 		}
 		// Shouldn'r get here ??
 		if (blnFrameDecodedOK)
-			WriteDebugLog(LOGDEBUG,
+			ZF_LOGD(
 				"Received correctly decoded frame of unexpected FrameType=%s"
 				" while ProtocolState == IDLE and bytDataToSendLength=%d."
 				" Ignoring.",
 				Name(intFrameType),
 				bytDataToSendLength);
 		else
-			WriteDebugLog(LOGDEBUG,
+			ZF_LOGD(
 				"Received (FAILED decode) frame of unexpected FrameType=%s"
-				" while ProtocolState == IDLE %sand bytDataToSendLength=%d."
+				" while ProtocolState == IDLE and bytDataToSendLength=%d."
 				" Ignoring.",
 				Name(intFrameType),
 				bytDataToSendLength);
@@ -1862,8 +1852,6 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 			if (intFrameType >= ConAckmin && intFrameType <= ConAckmax)  // Process ConACK frames from IRS confirming BW is compatible and providing received leader info.
 			{
 				UCHAR bytDummy = 0;
-
-				// WriteDebugLog(LOGDEBUG, ("[ARDOPprotocol.ProcessRcvdARQFrame] ISS Measured RoundTrip = " & intARQRTmeasuredMs.ToString & " ms")
 
 				switch (intFrameType)
 				{
@@ -1893,12 +1881,12 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 				intFrameRepeatInterval = 2000;
 				blnEnbARQRpt = TRUE;  // Setup for repeats of the ConACK if no answer from IRS
-				WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame] Compatible bandwidth received from IRS ConAck: %d Hz", intSessionBW);
+				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] Compatible bandwidth received from IRS ConAck: %d Hz", intSessionBW);
 				ARQState = ISSConAck;
 				dttLastFECIDSent = Now;
 
 				if ((EncLen = EncodeConACKwTiming(intFrameType, intReceivedLeaderLen, bytSessionID, bytEncodedBytes)) <= 0) {
-					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for ConAck->ConAck Invalid EncLen (%d).", EncLen);
+					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for ConAck->ConAck Invalid EncLen (%d).", EncLen);
 					return;
 				}
 				Mod4FSKDataAndPlay(intFrameType, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
@@ -1907,33 +1895,33 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 			if (intFrameType == ConRejBusy)  // ConRejBusy Handles Protocol Rule 1.5
 			{
-				WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame] ConRejBusy received from %s ABORT Connect Request", strRemoteCallsign);
-				sprintf(HostCmd, "REJECTEDBUSY %s", strRemoteCallsign);
+				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] ConRejBusy received from %s ABORT Connect Request", strRemoteCallsign);
+				snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBUSY %s", strRemoteCallsign);
 				QueueCommandToHost(HostCmd);
-				WriteDebugLog(LOGINFO, "[STATUS: ARQ CONNECTION REJECTED BY %s, REMOTE STATION BUSY.]", strRemoteCallsign);
-				sprintf(HostCmd, "STATUS ARQ CONNECTION REJECTED BY %s, REMOTE STATION BUSY.", strRemoteCallsign);
+				ZF_LOGI("[STATUS: ARQ CONNECTION REJECTED BY %s, REMOTE STATION BUSY.]", strRemoteCallsign);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION REJECTED BY %s, REMOTE STATION BUSY.", strRemoteCallsign);
 				QueueCommandToHost(HostCmd);
 				Abort();
 				return;
 			}
 			if (intFrameType == ConRejBW)  // ConRejBW Handles Protocol Rule 1.3
 			{
-				WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame] ConRejBW received from %s ABORT Connect Request", strRemoteCallsign);
-				sprintf(HostCmd, "REJECTEDBW %s", strRemoteCallsign);
+				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] ConRejBW received from %s ABORT Connect Request", strRemoteCallsign);
+				snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBW %s", strRemoteCallsign);
 				QueueCommandToHost(HostCmd);
-				WriteDebugLog(LOGINFO, "[STATUS: ARQ CONNECTION REJECTED BY %s, INCOMPATIBLE BW.]", strRemoteCallsign);
-				sprintf(HostCmd, "STATUS ARQ CONNECTION REJECTED BY %s, INCOMPATIBLE BW.", strRemoteCallsign);
+				ZF_LOGI("[STATUS: ARQ CONNECTION REJECTED BY %s, INCOMPATIBLE BW.]", strRemoteCallsign);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION REJECTED BY %s, INCOMPATIBLE BW.", strRemoteCallsign);
 				QueueCommandToHost(HostCmd);
 				Abort();
 				return;
 			}
 			if (blnFrameDecodedOK)
-				WriteDebugLog(LOGDEBUG,
+				ZF_LOGD(
 					"Received correctly decoded frame of unexpected FrameType=%s"
 					" while ARQState == ISSConReq. Ignoring.",
 					Name(intFrameType));
 			else
-				WriteDebugLog(LOGDEBUG,
+				ZF_LOGD(
 					"Received (FAILED decode) frame of unexpected FrameType=%s"
 					" while ARQState == ISSConReq. Ignoring.",
 					Name(intFrameType));
@@ -1949,25 +1937,25 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				if (intRmtLeaderMeas == 0)
 				{
 					intRmtLeaderMeas = intRmtLeaderMeasure;  // capture the leader timing of the first ACK from IRS, use this value to help compute repeat interval.
-					WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.ProcessRcvdARQFrame] ISS RmtLeaderMeas=%d ms", intRmtLeaderMeas);
+					ZF_LOGD("[ARDOPprotocol.ProcessRcvdARQFrame] ISS RmtLeaderMeas=%d ms", intRmtLeaderMeas);
 				}
 				intAvgQuality = 0;  // initialize avg quality
 				blnEnbARQRpt = FALSE;  // stop the repeats of ConAck and enables SendDataOrIDLE to get next IDLE or Data frame
 
-				if (intFrameType >= DataACKmin && DebugLog)
-					WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame] ACK received in ARQState %s ", ARQSubStates[ARQState]);
+				if (intFrameType >= DataACKmin)
+					ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] ACK received in ARQState %s ", ARQSubStates[ARQState]);
 
-				if (intFrameType == BREAK && DebugLog)
-					WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame] BREAK received in ARQState %s Processed as implied ACK", ARQSubStates[ARQState]);
+				if (intFrameType == BREAK)
+					ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] BREAK received in ARQState %s Processed as implied ACK", ARQSubStates[ARQState]);
 
 				blnARQConnected = TRUE;
 				bytLastARQDataFrameAcked = 1;  // initialize to Odd value to start transmission frame on Even
 				blnPending = FALSE;
 
-				sprintf(HostCmd, "CONNECTED %s %d", strRemoteCallsign, intSessionBW);
+				snprintf(HostCmd, sizeof(HostCmd), "CONNECTED %s %d", strRemoteCallsign, intSessionBW);
 				QueueCommandToHost(HostCmd);
-				WriteDebugLog(LOGINFO, "[STATUS: ARQ CONNECTION ESTABLISHED WITH %s, SESSION BW = %d HZ]", strRemoteCallsign, intSessionBW);
-				sprintf(HostCmd, "STATUS ARQ CONNECTION ESTABLISHED WITH %s, SESSION BW = %d HZ", strRemoteCallsign, intSessionBW);
+				ZF_LOGI("[STATUS: ARQ CONNECTION ESTABLISHED WITH %s, SESSION BW = %d HZ]", strRemoteCallsign, intSessionBW);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ESTABLISHED WITH %s, SESSION BW = %d HZ", strRemoteCallsign, intSessionBW);
 				QueueCommandToHost(HostCmd);
 
 				ARQState = ISSData;
@@ -1979,14 +1967,14 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				{
 					// Initiate the transisiton to IRS
 
-					WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame] implied ACK, no data to send so action BREAK, send ACK");
+					ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] implied ACK, no data to send so action BREAK, send ACK");
 
 					ClearDataToSend();
 					blnEnbARQRpt = FALSE;  // setup for no repeats
 
 					// Send ACK
 					if ((EncLen = EncodeDATAACK(100, bytSessionID, bytEncodedBytes)) <= 0) {
-						WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for ConAck + BREAK->DataACK Invalid EncLen (%d).", EncLen);
+						ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for ConAck + BREAK->DataACK Invalid EncLen (%d).", EncLen);
 						return;
 					}
 					Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
@@ -2007,12 +1995,12 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 			if (blnFrameDecodedOK && intFrameType == ConRejBusy)  // ConRejBusy
 			{
-				WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame] ConRejBusy received in ARQState %s. Going to Protocol State DISC", ARQSubStates[ARQState]);
+				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] ConRejBusy received in ARQState %s. Going to Protocol State DISC", ARQSubStates[ARQState]);
 
-				sprintf(HostCmd, "REJECTEDBUSY %s", strRemoteCallsign);
+				snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBUSY %s", strRemoteCallsign);
 				QueueCommandToHost(HostCmd);
-				WriteDebugLog(LOGINFO, "[STATUS: ARQ CONNECTION REJECTED BY %s]", strRemoteCallsign);
-				sprintf(HostCmd, "STATUS ARQ CONNECTION REJECTED BY %s", strRemoteCallsign);
+				ZF_LOGI("[STATUS: ARQ CONNECTION REJECTED BY %s]", strRemoteCallsign);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION REJECTED BY %s", strRemoteCallsign);
 				QueueCommandToHost(HostCmd);
 
 				SetARDOPProtocolState(DISC);
@@ -2023,10 +2011,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 			{
 				// if (DebugLog) WriteDebug("[ARDOPprotocol.ProcessRcvdARQFrame] ConRejBW received in ARQState " & ARQState.ToString & " Going to Protocol State DISC")
 
-				sprintf(HostCmd, "REJECTEDBW %s", strRemoteCallsign);
+				snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBW %s", strRemoteCallsign);
 				QueueCommandToHost(HostCmd);
-				WriteDebugLog(LOGINFO, "[STATUS: ARQ CONNECTION REJECTED BY %s]", strRemoteCallsign);
-				sprintf(HostCmd, "STATUS ARQ CONNECTION REJECTED BY %s", strRemoteCallsign);
+				ZF_LOGI("[STATUS: ARQ CONNECTION REJECTED BY %s]", strRemoteCallsign);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION REJECTED BY %s", strRemoteCallsign);
 				QueueCommandToHost(HostCmd);
 
 				SetARDOPProtocolState(DISC);
@@ -2034,12 +2022,12 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				return;
 			}
 			if (blnFrameDecodedOK)
-				WriteDebugLog(LOGDEBUG,
+				ZF_LOGD(
 					"Received correctly decoded frame of unexpected FrameType=%s"
 					" while ARQState == ISSConAck. Ignoring.",
 					Name(intFrameType));
 			else
-				WriteDebugLog(LOGDEBUG,
+				ZF_LOGD(
 					"Received (FAILED decode) frame of unexpected FrameType=%s"
 					" while ARQState == ISSConAck. Ignoring.",
 					Name(intFrameType));
@@ -2096,16 +2084,16 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 					blnARQConnected = TRUE;
 					blnPending = FALSE;
 
-					sprintf(HostCmd, "CONNECTED %s %d", strRemoteCallsign, intSessionBW);
+					snprintf(HostCmd, sizeof(HostCmd), "CONNECTED %s %d", strRemoteCallsign, intSessionBW);
 					QueueCommandToHost(HostCmd);
-					WriteDebugLog(LOGINFO, "[STATUS: ARQ CONNECTION ESTABLISHED WITH %s, SESSION BW = %d HZ]", strRemoteCallsign, intSessionBW);
-					sprintf(HostCmd, "STATUS ARQ CONNECTION ESTABLISHED WITH %s, SESSION BW = %d HZ", strRemoteCallsign, intSessionBW);
+					ZF_LOGI("[STATUS: ARQ CONNECTION ESTABLISHED WITH %s, SESSION BW = %d HZ]", strRemoteCallsign, intSessionBW);
+					snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ESTABLISHED WITH %s, SESSION BW = %d HZ", strRemoteCallsign, intSessionBW);
 					QueueCommandToHost(HostCmd);
 				}
 
 				// Initiate the transisiton to IRS
 
-				WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame] BREAK Rcvd from ARQState ISSData, Go to ProtocolState IRS & substate IRSfromISS , send ACK");
+				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] BREAK Rcvd from ARQState ISSData, Go to ProtocolState IRS & substate IRSfromISS , send ACK");
 
 				// With new rules IRS can use BREAK to interrupt data from ISS. It will only
 				// be sent on IDLE or changed data frame type, so we know the last sent data
@@ -2118,12 +2106,12 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				blnEnbARQRpt = FALSE;  // setup for no repeats
 				intTrackingQuality = -1;  // initialize tracking quality to illegal value
 				intNAKctr = 0;
-				WriteDebugLog(LOGINFO, "[STATUS: BREAK received from Protocol State ISS, new state IRS]");
+				ZF_LOGI("[STATUS: BREAK received from Protocol State ISS, new state IRS]");
 				SendCommandToHost("STATUS BREAK received from Protocol State ISS, new state IRS");
 
 				// Send ACK
 				if ((EncLen = EncodeDATAACK(100, bytSessionID, bytEncodedBytes)) <= 0) {
-					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for BREAK->DataACK Invalid EncLen (%d).", EncLen);
+					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for BREAK->DataACK Invalid EncLen (%d).", EncLen);
 					return;
 				}
 				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
@@ -2155,7 +2143,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 					}
 					intACKctr = 0;
 				} else {
-					WriteDebugLog(LOGDEBUG,
+					ZF_LOGD(
 						"Received DataNAK with ARQState == ISSData, but"
 						" blnLastFrameSentData is FALSE.  Not sure how/why"
 						" this happened.  Ignoring.");
@@ -2167,13 +2155,13 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 			if (intFrameType == DISCFRAME)  // if DISC  Handles protocol rule 1.5
 			{
-				WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame]  DISC frame received Send END...go to DISC state");
+				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame]  DISC frame received Send END...go to DISC state");
 				if (AccumulateStats)
 					LogStats();
 
 				QueueCommandToHost("DISCONNECTED");
-				WriteDebugLog(LOGINFO, "[STATUS: ARQ CONNECTION ENDED WITH %s]", strRemoteCallsign);
-				sprintf(HostCmd, "STATUS ARQ CONNECTION ENDED WITH %s", strRemoteCallsign);
+				ZF_LOGI("[STATUS: ARQ CONNECTION ENDED WITH %s]", strRemoteCallsign);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ENDED WITH %s", strRemoteCallsign);
 				QueueCommandToHost(HostCmd);
 
 				bytLastARQSessionID = bytSessionID;  // capture this session ID to allow answering DISC from DISC state
@@ -2185,7 +2173,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				blnEnbARQRpt = FALSE;
 
 				if ((EncLen = Encode4FSKControl(END, bytSessionID, bytEncodedBytes)) <= 0) {
-					WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for DISC->END Invalid EncLen (%d).", EncLen);
+					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for DISC->END Invalid EncLen (%d).", EncLen);
 					return;
 				}
 				Mod4FSKDataAndPlay(END, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
@@ -2194,13 +2182,13 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 			if (intFrameType == END)  // if END
 			{
-				WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessRcvdARQFrame]  END received ... going to DISC state");
+				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame]  END received ... going to DISC state");
 				if (AccumulateStats)
 					LogStats();
 
 				QueueCommandToHost("DISCONNECTED");
-				WriteDebugLog(LOGINFO, "[STATUS: ARQ CONNECTION ENDED WITH %s]", strRemoteCallsign);
-				sprintf(HostCmd, "STATUS ARQ CONNECTION ENDED WITH %s", strRemoteCallsign);
+				ZF_LOGI("[STATUS: ARQ CONNECTION ENDED WITH %s]", strRemoteCallsign);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ENDED WITH %s", strRemoteCallsign);
 				QueueCommandToHost(HostCmd);
 				ClearDataToSend();
 				blnDISCRepeating = FALSE;
@@ -2209,7 +2197,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				{
 					dttLastFECIDSent = Now;
 					if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes)) <= 0) {
-						WriteDebugLog(LOGERROR, "ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
+						ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
 						return;
 					}
 					Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
@@ -2220,12 +2208,12 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				return;
 			}
 			if (blnFrameDecodedOK)
-				WriteDebugLog(LOGDEBUG,
+				ZF_LOGD(
 					"Received correctly decoded frame of unexpected FrameType=%s"
 					" while ARQState == ISSData. Ignoring.",
 					Name(intFrameType));
 			else
-				WriteDebugLog(LOGDEBUG,
+				ZF_LOGD(
 					"Received (FAILED decode) frame of unexpected FrameType=%s"
 					" while ARQState == ISSData. Ignoring.",
 					Name(intFrameType));
@@ -2233,7 +2221,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 		}
 
 	default:
-		WriteDebugLog(LOGDEBUG,
+		ZF_LOGD(
 			"Shouldnt get Here: ProtocolState=%s.  ARQState=%s. FrameType=%s.",
 			ARDOPStates[ProtocolState],
 			ARQSubStates[ARQState],
@@ -2378,12 +2366,12 @@ BOOL SendARQConnectRequest(char * strMycall, char * strTargetCall)
 
 	if (CallBandwidth == UNDEFINED) {
 		if ((EncLen = EncodeARQConRequest(strMycall, strTargetCall, ARQBandwidth, bytEncodedBytes)) <= 0) {
-			WriteDebugLog(LOGERROR, "ERROR: In SendARQConnectRequest() with UNDEFINED BW Invalid EncLen (%d).", EncLen);
+			ZF_LOGE("ERROR: In SendARQConnectRequest() with UNDEFINED BW Invalid EncLen (%d).", EncLen);
 			return FALSE;
 		}
 	} else {
 		if ((EncLen = EncodeARQConRequest(strMycall, strTargetCall, CallBandwidth, bytEncodedBytes)) <= 0) {
-			WriteDebugLog(LOGERROR, "ERROR: In SendARQConnectRequest() Invalid EncLen (%d).", EncLen);
+			ZF_LOGE("ERROR: In SendARQConnectRequest() Invalid EncLen (%d).", EncLen);
 			return FALSE;
 		}
 	}
@@ -2402,7 +2390,7 @@ BOOL SendARQConnectRequest(char * strMycall, char * strTargetCall)
 	bytSessionID = GenerateSessionID(strMycall, strTargetCall);  // Now set bytSessionID to receive ConAck (note the calling staton is the first entry in GenerateSessionID)
 	bytPendingSessionID = bytSessionID;
 
-	WriteDebugLog(LOGINFO, "[SendARQConnectRequest] strMycall=%s  strTargetCall=%s bytPendingSessionID=%x", strMycall, strTargetCall, bytPendingSessionID);
+	ZF_LOGI("[SendARQConnectRequest] strMycall=%s  strTargetCall=%s bytPendingSessionID=%x", strMycall, strTargetCall, bytPendingSessionID);
 	blnPending = TRUE;
 	blnARQConnected = FALSE;
 	wg_send_rcall(0, strTargetCall);
@@ -2430,15 +2418,13 @@ BOOL Send10MinID()
 
 	if (Now - dttLastFECIDSent > 600000 && !blnDISCRepeating)
 	{
-
-		// WriteDebugLog(LOGDEBUG, ("[ARDOPptocol.Send10MinID] Send ID Frame")
 		// Send an ID frame (Handles protocol rule 4.0)
 
 		blnEnbARQRpt = FALSE;
 
 		dttLastFECIDSent = Now;
 		if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes)) <= 0) {
-			WriteDebugLog(LOGERROR, "ERROR: In Send10MinID() Invalid EncLen (%d).", EncLen);
+			ZF_LOGE("ERROR: In Send10MinID() Invalid EncLen (%d).", EncLen);
 			return FALSE;
 		}
 		Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
@@ -2453,9 +2439,9 @@ BOOL CheckForDisconnect()
 {
 	if (blnARQDisconnect)
 	{
-		WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.CheckForDisconnect]  ARQ Disconnect ...Sending DISC (repeat)");
+		ZF_LOGD("[ARDOPprotocol.CheckForDisconnect]  ARQ Disconnect ...Sending DISC (repeat)");
 
-		WriteDebugLog(LOGINFO, "[STATUS: INITIATING ARQ DISCONNECT]");
+		ZF_LOGI("[STATUS: INITIATING ARQ DISCONNECT]");
 		QueueCommandToHost("STATUS INITIATING ARQ DISCONNECT");
 
 		intFrameRepeatInterval = 2000;
@@ -2471,7 +2457,7 @@ BOOL CheckForDisconnect()
 			return TRUE;
 
 		if ((EncLen = Encode4FSKControl(DISCFRAME, bytSessionID, bytEncodedBytes)) <= 0) {
-			WriteDebugLog(LOGERROR, "ERROR: In CheckForDisconnect() Invalid EncLen (%d).", EncLen);
+			ZF_LOGE("ERROR: In CheckForDisconnect() Invalid EncLen (%d).", EncLen);
 			return FALSE;
 		}
 		Mod4FSKDataAndPlay(DISCFRAME, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
@@ -2488,11 +2474,11 @@ void Break()
 
 	if (ProtocolState != IRS)
 	{
-		WriteDebugLog(LOGINFO, "[ARDOPprotocol.Break] |BREAK command received in ProtocolState: %s :", ARDOPStates[ProtocolState]);
+		ZF_LOGI("[ARDOPprotocol.Break] |BREAK command received in ProtocolState: %s :", ARDOPStates[ProtocolState]);
 		return;
 	}
 
-	WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.Break] BREAK command received with AutoBreak = %d", AutoBreak);
+	ZF_LOGD("[ARDOPprotocol.Break] BREAK command received with AutoBreak = %d", AutoBreak);
 	blnBREAKCmd = TRUE;  // Set flag to process pending BREAK
 }
 
@@ -2572,68 +2558,61 @@ void LogStats()
 	int intTotPSKDecodes = intGoodPSKFrameDataDecodes + intFailedPSKFrameDataDecodes;
 	int i;
 
-	Statsprintf("************************* ARQ session stats with %s  %d minutes ****************************", strRemoteCallsign, (Now - dttStartSession) / 60000);
-	Statsprintf("     LeaderDetects= %d   AvgLeader S+N:N(3KHz noise BW)= %f dB  LeaderSyncs= %d", intLeaderDetects, dblLeaderSNAvg - 23.8, intLeaderSyncs);
-	Statsprintf("     AvgCorrelationMax:MaxProd= %f over %d  correlations", dblAvgCorMaxToMaxProduct, intEnvelopeCors);
-	Statsprintf("     FrameSyncs=%d  Good Frame Type Decodes=%d  Failed Frame Type Decodes =%d", intFrameSyncs, intGoodFSKFrameTypes, intFailedFSKFrameTypes);
-	Statsprintf("     Avg Frame Type decode distance= %f over %d decodes", dblAvgDecodeDistance, intDecodeDistanceCount);
+	struct timespec tp = { 0, 0 };
+	clock_gettime(CLOCK_REALTIME, &tp);
+
+	ardop_log_session_header(strRemoteCallsign, &tp, (Now - dttStartSession) / 60000);
+
+	ardop_log_session_info("     LeaderDetects= %d   AvgLeader S+N:N(3KHz noise BW)= %f dB  LeaderSyncs= %d", intLeaderDetects, dblLeaderSNAvg - 23.8, intLeaderSyncs);
+	ardop_log_session_info("     AvgCorrelationMax:MaxProd= %f over %d  correlations", dblAvgCorMaxToMaxProduct, intEnvelopeCors);
+	ardop_log_session_info("     FrameSyncs=%d  Good Frame Type Decodes=%d  Failed Frame Type Decodes =%d", intFrameSyncs, intGoodFSKFrameTypes, intFailedFSKFrameTypes);
+	ardop_log_session_info("     Avg Frame Type decode distance= %f over %d decodes", dblAvgDecodeDistance, intDecodeDistanceCount);
 
 	if (intGoodFSKFrameDataDecodes + intFailedFSKFrameDataDecodes + intGoodFSKSummationDecodes > 0)
 	{
-		Statsprintf(" ");
-		Statsprintf("  FSK:");
-		Statsprintf("     Good FSK Data Frame Decodes= %d  RecoveredFSKCarriers with Summation=%d  Failed FSK Data Frame Decodes=%d", intGoodFSKFrameDataDecodes, intGoodFSKSummationDecodes, intFailedFSKFrameDataDecodes);
-		Statsprintf("     AccumFSKTracking= %d   over %d symbols   Good Data Frame Decodes= %d   Failed Data Frame Decodes=%d", intAccumFSKTracking, intFSKSymbolCnt, intGoodFSKFrameDataDecodes, intFailedFSKFrameDataDecodes);
+		ardop_log_session_info("%s","");
+		ardop_log_session_info("  FSK:");
+		ardop_log_session_info("     Good FSK Data Frame Decodes= %d  RecoveredFSKCarriers with Summation=%d  Failed FSK Data Frame Decodes=%d", intGoodFSKFrameDataDecodes, intGoodFSKSummationDecodes, intFailedFSKFrameDataDecodes);
+		ardop_log_session_info("     AccumFSKTracking= %d   over %d symbols   Good Data Frame Decodes= %d   Failed Data Frame Decodes=%d\n", intAccumFSKTracking, intFSKSymbolCnt, intGoodFSKFrameDataDecodes, intFailedFSKFrameDataDecodes);
 	}
 	if (intGoodPSKFrameDataDecodes + intFailedPSKFrameDataDecodes + intGoodPSKSummationDecodes > 0)
 	{
-		Statsprintf(" ");
-		Statsprintf("  PSK:");
-		Statsprintf("     Good PSK Data Frame Decodes=%d  RecoveredPSKCarriers with Summation=%d  Failed PSK Data Frame Decodes=%d", intGoodPSKFrameDataDecodes, intGoodPSKSummationDecodes, intFailedPSKFrameDataDecodes);
-		Statsprintf("     AccumPSKTracking=%d  %d attempts over %d total PSK Symbols",	intAccumPSKTracking, intPSKTrackAttempts, intPSKSymbolCnt);
-
-		Statsprintf(" ");
+		ardop_log_session_info("%s", "");
+		ardop_log_session_info("  PSK:");
+		ardop_log_session_info("     Good PSK Data Frame Decodes=%d  RecoveredPSKCarriers with Summation=%d  Failed PSK Data Frame Decodes=%d", intGoodPSKFrameDataDecodes, intGoodPSKSummationDecodes, intFailedPSKFrameDataDecodes);
+		ardop_log_session_info("     AccumPSKTracking=%d  %d attempts over %d total PSK Symbols\n", intAccumPSKTracking, intPSKTrackAttempts, intPSKSymbolCnt);
 	}
 	if (intGoodQAMFrameDataDecodes + intFailedQAMFrameDataDecodes + intGoodQAMSummationDecodes > 0)
 	{
-		Statsprintf(" ");
-		Statsprintf("  QAM:");
-		Statsprintf("     Good QAM Data Frame Decodes=%d  RecoveredQAMCarriers with Summation=%d  Failed QAM Data Frame Decodes=%d", intGoodQAMFrameDataDecodes, intGoodQAMSummationDecodes, intFailedQAMFrameDataDecodes);
-		Statsprintf("     AccumQAMTracking=%d  %d attempts over %d total QAM Symbols",	intAccumQAMTracking, intQAMTrackAttempts, intQAMSymbolCnt);
-
-		Statsprintf(" ");
+		ardop_log_session_info("%s", "");
+		ardop_log_session_info("  QAM:");
+		ardop_log_session_info("     Good QAM Data Frame Decodes=%d  RecoveredQAMCarriers with Summation=%d  Failed QAM Data Frame Decodes=%d", intGoodQAMFrameDataDecodes, intGoodQAMSummationDecodes, intFailedQAMFrameDataDecodes);
+		ardop_log_session_info("     AccumQAMTracking=%d  %d attempts over %d total QAM Symbols\n", intAccumQAMTracking, intQAMTrackAttempts, intQAMSymbolCnt);
 	}
 
-	Statsprintf("  Squelch= %d BusyDet= %d Mode Shift UPs= %d   Mode Shift DOWNs= %d  Link Turnovers= %d",
+	ardop_log_session_info("  Squelch= %d BusyDet= %d Mode Shift UPs= %d   Mode Shift DOWNs= %d  Link Turnovers= %d\n",
 		Squelch, BusyDet, intShiftUPs, intShiftDNs, intLinkTurnovers);
-	Statsprintf(" ");
-	Statsprintf("  Received Frame Quality:");
+	ardop_log_session_info("  Received Frame Quality:");
 
 	if (int4FSKQualityCnts > 0)
-		Statsprintf("     Avg 4FSK Quality=%d on %d frame(s)",  int4FSKQuality / int4FSKQualityCnts, int4FSKQualityCnts);
+		ardop_log_session_info("     Avg 4FSK Quality=%d on %d frame(s)", int4FSKQuality / int4FSKQualityCnts, int4FSKQualityCnts);
 
 	if (intPSKQualityCnts[0] > 0)
-		Statsprintf("     Avg 4PSK Quality=%d on %d frame(s)",  intPSKQuality[0] / intPSKQualityCnts[0], intPSKQualityCnts[0]);
+		ardop_log_session_info("     Avg 4PSK Quality=%d on %d frame(s)", intPSKQuality[0] / intPSKQualityCnts[0], intPSKQualityCnts[0]);
 
 	if (intPSKQualityCnts[1] > 0)
-		Statsprintf("     Avg 8PSK Quality=%d on %d frame(s)",  intPSKQuality[1] / intPSKQualityCnts[1], intPSKQualityCnts[1]);
+		ardop_log_session_info("     Avg 8PSK Quality=%d on %d frame(s)", intPSKQuality[1] / intPSKQualityCnts[1], intPSKQualityCnts[1]);
 
 	if (intQAMQualityCnts > 0)
-		Statsprintf("     Avg QAM Quality=%d on %d frame(s)",  intQAMQuality / intQAMQualityCnts, intQAMQualityCnts);
+		ardop_log_session_info("     Avg QAM Quality=%d on %d frame(s)", intQAMQuality / intQAMQualityCnts, intQAMQualityCnts);
 
 	// Experimental logging of Frame Type ACK and NAK counts
-
-	Statsprintf("");
-	Statsprintf("Type              ACKS  NAKS");
+	ardop_log_session_info("\nType              ACKS  NAKS");
 
 	for (i = 0; i < bytFrameTypesForBWLength; i++)
 	{
-		Statsprintf("%-16s %5d %5d", Name(bytFrameTypesForBW[i]), ModeHasWorked[i], ModeNAKS[i]);
+		ardop_log_session_info("%-16s %5d %5d", Name(bytFrameTypesForBW[i]), ModeHasWorked[i], ModeNAKS[i]);
 	}
 
-
-	Statsprintf("************************************************************************************************");
-
-	CloseStatsLog();
-	CloseDebugLog();  // Flush debug log
+	ardop_log_session_footer();
 }

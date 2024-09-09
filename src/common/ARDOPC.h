@@ -1,6 +1,8 @@
 #ifndef ARDOPCHEADERDEFINED
 #define ARDOPCHEADERDEFINED
 
+#include "common/log.h"
+
 extern const char ProductName[];
 extern const char ProductVersion[];
 
@@ -40,18 +42,6 @@ unsigned int getTicks();
 extern unsigned int pttOnTime;
 
 #define Now getTicks()
-
-// DebugLog Severity Levels
-
-#define LOGEMERGENCY 0
-#define LOGALERT 1
-#define LOGCRIT 2
-#define LOGERROR 3
-#define LOGWARNING 4
-#define LOGNOTICE 5
-#define LOGINFO 6
-#define LOGDEBUG 7
-#define LOGDEBUGPLUS 8
 
 #include <time.h>
 
@@ -160,7 +150,6 @@ void UpdateBusyDetector(short * bytNewSamples);
 int UpdatePhaseConstellation(short * intPhases, short * intMags, char * strMod, BOOL blnQAM);
 void SetARDOPProtocolState(int value);
 BOOL BusyDetect3(float * dblMag, int intStart, int intStop);
-void SendLogToHost(char * Msg, int len);
 
 void displayState(const char * State);
 void displayCall(int dirn, char * call);
@@ -192,11 +181,7 @@ int ComputeInterFrameInterval(int intRequestedIntervalMS);
 int Encode4FSKControl(UCHAR bytFrameType, UCHAR bytSessionID, UCHAR * bytreturn);
 int EncodeConACKwTiming(UCHAR bytFrameType, int intRcvdLeaderLenMs, UCHAR bytSessionID, UCHAR * bytreturn);
 int EncodePingAck(int bytFrameType, int intSN, int intQuality, UCHAR * bytreturn);
-VOID WriteExceptionLog(const char * format, ...);
 void SaveQueueOnBreak();
-VOID Statsprintf(const char * format, ...);
-VOID CloseDebugLog();
-VOID CloseStatsLog();
 void Abort();
 void SetLED(int LED, int State);
 VOID ClearBusy();
@@ -206,8 +191,6 @@ VOID COMClearDTR(HANDLE fd);
 
 // #ifdef WIN32
 void ProcessNewSamples(short * Samples, int nSamples);
-VOID Debugprintf(const char * format, ...);
-VOID WriteDebugLog(int LogLevel, const char * format, ...);
 void ardopmain();
 BOOL GetNextFECFrame();
 void GenerateFSKTemplates();
@@ -406,7 +389,6 @@ extern int LeaderLength;
 extern int TrailerLength;
 extern unsigned int ARQTimeout;
 extern int TuningRange;
-extern BOOL DebugLog;
 extern int ARQConReqRepeats;
 extern BOOL CommandTrace;
 extern char strFECMode[];
@@ -420,8 +402,6 @@ extern BOOL AccumulateStats;
 extern BOOL Use600Modes;
 extern BOOL FSKOnly;
 extern BOOL fastStart;
-extern BOOL ConsoleLogLevel;
-extern BOOL FileLogLevel;
 extern BOOL EnablePingAck;
 
 extern int dttLastPINGSent;

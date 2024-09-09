@@ -330,7 +330,7 @@ void print_win32_err(void)
 	err = GetLastError();
 	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, err,
 		0, buf, sizeof(buf), NULL);
-	Debugprintf("err %ld: %s\n", err, buf);
+	ZF_LOGE("err %ld: %s\n", err, buf);
 }
 
 #endif
@@ -405,7 +405,7 @@ int HID_Write_Block()
 
 		if (ret < 0)
 		{
-			Debugprintf("Rigcontrol HID Write Failed %d", errno);
+			ZF_LOGE("Rigcontrol HID Write Failed %d", errno);
 			rawhid_close(0);
 			CM108Handle = NULL;
 			return 0;
@@ -500,8 +500,7 @@ void CM108_set_ptt(int PTTState)
 	n = hid_write(handle, io, 5);
 	if (n < 0)
 	{
-		Debugprintf("Unable to write()\n");
-		Debugprintf("Error: %ls\n", hid_error(handle));
+		ZF_LOGE("Unable to write(): %ls", hid_error(handle));
 	}
 
 	hid_close(handle);
@@ -568,9 +567,9 @@ void DecodeCM108(char * ptr)
 			wcstombs(product, cur_dev->product_string, 255);
 
 			if (product)
-				Debugprintf("HID Device %s VID %04x PID %04x %s", product, cur_dev->vendor_id, cur_dev->product_id, cur_dev->path);
+				ZF_LOGI("HID Device %s VID %04x PID %04x %s", product, cur_dev->vendor_id, cur_dev->product_id, cur_dev->path);
 			else
-				Debugprintf("HID Device %s VID %04x PID %04x %s", "Missing Product", cur_dev->vendor_id, cur_dev->product_id, cur_dev->path);
+				ZF_LOGI("HID Device %s VID %04x PID %04x %s", "Missing Product", cur_dev->vendor_id, cur_dev->product_id, cur_dev->path);
 
 			if (cur_dev->vendor_id == VID && cur_dev->product_id == PID)
 				path_to_open = _strdup(cur_dev->path);
@@ -591,16 +590,16 @@ void DecodeCM108(char * ptr)
 			PTTMode = PTTCM108;
 			RadioControl = TRUE;
 			if (VID || PID)
-				Debugprintf ("Using CM108 device %04x:%04x for PTT", VID, PID);
+				ZF_LOGI("Using CM108 device %04x:%04x for PTT", VID, PID);
 			else
-				Debugprintf ("Using CM108 device %s for PTT", CM108Device);
+				ZF_LOGI("Using CM108 device %s for PTT", CM108Device);
 		}
 		else
 		{
 			if (VID || PID)
-				Debugprintf("Unable to open CM108 device %x %x Error %d", VID, PID, GetLastError());
+				ZF_LOGE("Unable to open CM108 device %x %x Error %d", VID, PID, GetLastError());
 			else
-				Debugprintf("Unable to open CM108 device %s Error %d", CM108Device, GetLastError());
+				ZF_LOGE("Unable to open CM108 device %s Error %d", CM108Device, GetLastError());
 		}
 		free(path_to_open);
 	}

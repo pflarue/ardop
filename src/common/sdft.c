@@ -115,7 +115,7 @@ void update_sdft_coeff(int intCenterFrq, int intDftLen)
 		coeff = cexpf(2 * I * M_PI * (cfrq / SRATE + ((FRQCNT/2 - 0.5) - frqNum) / intDftLen))
 		*/
 		sdft_coeff[frqNum] = cexp(2 * I * M_PI * (cfrq / SRATE + ((FRQCNT/2 - 0.5) - frqNum) / intDftLen));
-		WriteDebugLog(LOGDEBUGPLUS, "sdft_coeff[%d]=%.6f j%.6f", frqNum, creal(sdft_coeff[frqNum]), cimagf(sdft_coeff[frqNum]));
+		ZF_LOGV("sdft_coeff[%d]=%.6f j%.6f", frqNum, creal(sdft_coeff[frqNum]), cimagf(sdft_coeff[frqNum]));
 	}
 	sdft_coeff_dftlen = intDftLen;
 }
@@ -390,7 +390,7 @@ int sdft(short * intSamples, int intToneMags[4096], int *intToneMagsIndex, int i
 		// they are generally differ by less than 1%, with the largest
 		// relative differences occuring for the smallest magnitudes, not
 		// the larger magnitudes of the target tone.
-		WriteDebugLog(LOGDEBUGPLUS, "intToneMags[%d], %d",
+		ZF_LOGV("intToneMags[%d], %d",
 			*intToneMagsIndex,
 			intToneMags[*intToneMagsIndex]
 		);
@@ -400,7 +400,7 @@ int sdft(short * intSamples, int intToneMags[4096], int *intToneMagsIndex, int i
 			// m = intDftLen * (sdft_coeff_cfrq + (frqNum - 1.5) * SRATE / intDftLen) / SRATE
 			intDftLen * (sdft_coeff_cfrq - (frqNum - 1.5) * SRATE / intDftLen) / SRATE,
 			&gReal, &gImag);
-		WriteDebugLog(LOGDEBUGPLUS, "Goertzel = %.0f diff=%.02f\% (m=%.02f)",
+		ZF_LOGV("Goertzel = %.0f diff=%.02f\% (m=%.02f)",
 			gReal*gReal + gImag*gImag,
 			100 * (gReal*gReal + gImag*gImag - intToneMags[*intToneMagsIndex]) / (gReal*gReal + gImag*gImag),
 			intDftLen * (sdft_coeff_cfrq - (frqNum - 1.5) * SRATE / intDftLen) / SRATE

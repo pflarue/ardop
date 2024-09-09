@@ -357,7 +357,7 @@ void FSMixFilter2000Hz(short * intMixedSamples, int intMixedSamplesLength)
 	float intFilteredSample = 0;  // Filtered sample
 
 	if (intFilteredMixedSamplesLength < 0)
-		WriteDebugLog(LOGERROR,
+		ZF_LOGE(
 			"Corrupt intFilteredMixedSamplesLength (%d) in FSMixFilter2000Hz().",
 			intFilteredMixedSamplesLength);
 
@@ -418,7 +418,7 @@ void FSMixFilter2000Hz(short * intMixedSamples, int intMixedSamplesLength)
 	memmove(intPriorMixedSamples, &intMixedSamples[intMixedSamplesLength - xintN], intPriorMixedSamplesLength * 2);
 
 	if (intFilteredMixedSamplesLength > 5000)
-		WriteDebugLog(LOGERROR,
+		ZF_LOGE(
 			"Corrupt intFilteredMixedSamplesLength (%d) in FSMixFilter2000Hz().",
 			intFilteredMixedSamplesLength);
 
@@ -583,7 +583,7 @@ void CountErrors(const UCHAR * Uncorrected, const UCHAR * Corrected, int Len, in
 		// Make ErrMap an empty string so that it won't be written to the log
 		ErrMap[0] = 0x00;
 
-	WriteDebugLog(LOGDEBUGPLUS,
+	ZF_LOGV(
 		"Carrier[%d] %d raw bytes. CER=%.1f%% BER=%.1f%%%s",
 		Carrier,
 		Len,
@@ -596,11 +596,11 @@ void CountErrors(const UCHAR * Uncorrected, const UCHAR * Corrected, int Len, in
 	snprintf(HexData, sizeof(HexData), "Uncorrected: ");
 	for (int i = 0; i < Len; ++i)
 		snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", Uncorrected[i]);
-	WriteDebugLog(LOGDEBUGPLUS, "%s", HexData);
+	ZF_LOGV("%s", HexData);
 	snprintf(HexData, sizeof(HexData), "Corrected:   ");
 	for (int i = 0; i < Len; ++i)
 		snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", Corrected[i]);
-	WriteDebugLog(LOGDEBUGPLUS, "%s", HexData);
+	ZF_LOGV("%s", HexData);
 }
 
 // Function to Correct Raw demodulated data with Reed Solomon FEC
@@ -615,7 +615,7 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 	// RS bytes, and a 2-byte checksum.
 	int CombinedLength = intDataLen + intRSLen + 3;
 	UCHAR RawDataCopy[256];
-	if (FileLogLevel >= LOGDEBUGPLUS || ConsoleLogLevel >= LOGDEBUGPLUS)
+	if (ZF_LOG_ON_VERBOSE)
 		memcpy(RawDataCopy, bytRawData, CombinedLength);
 
 	// Dim bytNoRS(1 + intDataLen + 2 - 1) As Byte  // 1 byte byte Count, Data, 2 byte CRC
@@ -631,11 +631,11 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 
 		memcpy(bytCorrectedData, &bytRawData[1], bytRawData[0]);
 
-		WriteDebugLog(LOGDEBUGPLUS,
+		ZF_LOGV(
 			"Carrier[%d] %d raw bytes. CER and BER not calculated (previously decoded)",
 			Carrier,
 			CombinedLength);
-		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] Carrier %d (%d bytes) already decoded", Carrier, intDataLen);
+		ZF_LOGD("[CorrectRawDataWithRS] Carrier %d (%d bytes) already decoded", Carrier, intDataLen);
 		return bytRawData[0];  // don't do it again
 	}
 
@@ -651,7 +651,7 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 		// return the actual data
 
 		memcpy(bytCorrectedData, &bytRawData[1], bytRawData[0]);
-		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] OK (%d bytes) without RS", intDataLen);
+		ZF_LOGD("[CorrectRawDataWithRS] OK (%d bytes) without RS", intDataLen);
 		CarrierOk[Carrier] = TRUE;
 		return bytRawData[0];
 	}
@@ -662,7 +662,7 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 
 	if (NErrors == 0)
 	{
-//		WriteDebugLog(LOGDEBUG, "RS Says OK without correction");
+//		ZF_LOGD("RS Says OK without correction");
 	}
 	else if (NErrors > 0)
 	{
@@ -676,23 +676,23 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 		// occuring, but it cannot be eliminiated.
 		// For frames like this with a CRC, it provides a more reliable test
 		// to verify whether a frame is correctly decoded.
-//		WriteDebugLog(LOGDEBUG, "RS Says OK after %d correction(s)", NErrors);
+//		ZF_LOGD("RS Says OK after %d correction(s)", NErrors);
 	}
 	else  // NErrors < 0
 	{
-		WriteDebugLog(LOGDEBUGPLUS,
+		ZF_LOGV(
 			"Carrier[%d] %d raw bytes. CER and BER too high. (rs_correct() failed)",
 			Carrier,
 			CombinedLength);
-		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] RS Says Can't Correct (%d bytes) (>%d max corrections)", intDataLen, intRSLen/2);
+		ZF_LOGD("[CorrectRawDataWithRS] RS Says Can't Correct (%d bytes) (>%d max corrections)", intDataLen, intRSLen/2);
 		goto returnBad;
 	}
 
 	if (NErrors >= 0 && CheckCRC16FrameType(bytRawData, intDataLen + 1, bytFrameType))  // RS correction successful
 	{
-		if (FileLogLevel >= LOGDEBUGPLUS || ConsoleLogLevel >= LOGDEBUGPLUS)
+		if (ZF_LOG_ON_VERBOSE)
 			CountErrors(RawDataCopy, bytRawData, CombinedLength, Carrier, true);
-		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] OK (%d bytes) with RS %d (of max %d) corrections", intDataLen, NErrors, intRSLen/2);
+		ZF_LOGD("[CorrectRawDataWithRS] OK (%d bytes) with RS %d (of max %d) corrections", intDataLen, NErrors, intRSLen/2);
 		totalRSErrors += NErrors;
 
 		memcpy(bytCorrectedData, &bytRawData[1], bytRawData[0]);
@@ -700,7 +700,7 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 		return bytRawData[0];
 	}
 	else
-		WriteDebugLog(LOGDEBUG, "[CorrectRawDataWithRS] RS says ok (%d bytes) but CRC still bad", intDataLen);
+		ZF_LOGD("[CorrectRawDataWithRS] RS says ok (%d bytes) but CRC still bad", intDataLen);
 
 	// return uncorrected data without byte count or RS Parity
 
@@ -783,7 +783,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 
 			if (blnLeaderFound)
 			{
-//				WriteDebugLog(LOGDEBUG, "Got Leader");
+//				ZF_LOGD("Got Leader");
 
 				dttLastLeaderDetect = Now;
 
@@ -875,7 +875,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 		intFilteredMixedSamplesLength -= intMFSReadPtr;
 
 		if (intFilteredMixedSamplesLength < 0)
-			WriteDebugLog(LOGERROR,
+			ZF_LOGE(
 				"Corrupt intFilteredMixedSamplesLength (%d) at State == AcquireFrameSync.",
 				intFilteredMixedSamplesLength);
 
@@ -918,7 +918,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			State = SearchingForLeader;
 			ClearAllMixedSamples();
 			DiscardOldSamples();
-			WriteDebugLog(LOGDEBUG, "poor frame type decode");
+			ZF_LOGD("poor frame type decode");
 
 			// stcStatus.BackColor = SystemColors.Control
 			// stcStatus.Text = ""
@@ -937,7 +937,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			intFilteredMixedSamplesLength -= intMFSReadPtr;
 
 			if (intFilteredMixedSamplesLength < 0)
-				WriteDebugLog(LOGERROR,
+				ZF_LOGE(
 					"Corrupt intFilteredMixedSamplesLength (%d) at State == AcquireFrameTypeType.",
 					intFilteredMixedSamplesLength);
 
@@ -983,13 +983,13 @@ void ProcessNewSamples(short * Samples, int nSamples)
 
 					txSleep(250);
 
-					WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessNewSamples] ProtocolState=IRStoISS, substate = %s ACK received. Cease BREAKS, NewProtocolState=ISS, substate ISSData", ARQSubStates[ARQState]);
+					ZF_LOGI("[ARDOPprotocol.ProcessNewSamples] ProtocolState=IRStoISS, substate = %s ACK received. Cease BREAKS, NewProtocolState=ISS, substate ISSData", ARQSubStates[ARQState]);
 					blnEnbARQRpt = FALSE;  // stop the BREAK repeats
 					intLastARQDataFrameToHost = -1;  // initialize to illegal value to capture first new ISS frame and pass to host
 
 					if (bytCurrentFrameType == 0)  // hasn't been initialized yet
 					{
-						WriteDebugLog(LOGINFO, "[ARDOPprotocol.ProcessNewSamples, ProtocolState=IRStoISS, Initializing GetNextFrameData");
+						ZF_LOGI("[ARDOPprotocol.ProcessNewSamples, ProtocolState=IRStoISS, Initializing GetNextFrameData");
 						GetNextFrameData(&intShiftUpDn, 0, "", TRUE);  // just sets the initial data, frame type, and sets intShiftUpDn= 0
 					}
 
@@ -1006,7 +1006,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 				ClearAllMixedSamples();
 				State = SearchingForLeader;
 				blnFrameDecodedOK = TRUE;
-				WriteDebugLog(LOGINFO, "[DecodeFrame] Frame: %s ", Name(intFrameType));
+				ZF_LOGI("[DecodeFrame] Frame: %s ", Name(intFrameType));
 
 				DecodeCompleteTime = Now;
 
@@ -1071,7 +1071,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 
 			if (LastDataFrameType != intFrameType)
 			{
-				WriteDebugLog(LOGDEBUG, "New frame type - MEMARQ flags reset");
+				ZF_LOGD("New frame type - MEMARQ flags reset");
 				memset(CarrierOk, 0, sizeof(CarrierOk));
 				LastDataFrameType = intFrameType;
 
@@ -1091,7 +1091,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 				memset(CarrierOk, 0, sizeof(CarrierOk));
 			}
 
-			WriteDebugLog(LOGDEBUG, "MEMARQ Flags %d %d %d %d %d %d %d %d",
+			ZF_LOGD("MEMARQ Flags %d %d %d %d %d %d %d %d",
 				CarrierOk[0], CarrierOk[1], CarrierOk[2], CarrierOk[3],
 				CarrierOk[4], CarrierOk[5], CarrierOk[6], CarrierOk[7]);
 		}
@@ -1120,13 +1120,13 @@ void ProcessNewSamples(short * Samples, int nSamples)
 		if (strncmp (Name(intFrameType), "4FSK.200.50S", 12) == 0 && UseSDFT)
 		{
 			float observed_baudrate = 50.0 / ((intSampPerSym + ((float) cumAdvances)/symbolCnt)/intSampPerSym);
-			WriteDebugLog(LOGDEBUGPLUS, "Estimated %s symbol rate = %.3f. (ideal=50.000)",
+			ZF_LOGV("Estimated %s symbol rate = %.3f. (ideal=50.000)",
 				Name(intFrameType), observed_baudrate);
 		}
 		else if (strncmp (Name(intFrameType), "4FSK.500.100", 12) == 0 && UseSDFT)
 		{
 			float observed_baudrate = 100.0 / ((intSampPerSym + ((float) cumAdvances)/symbolCnt)/intSampPerSym);
-			WriteDebugLog(LOGDEBUGPLUS, "Estimated %s symbol rate = %.3f. (ideal=100.000)",
+			ZF_LOGV("Estimated %s symbol rate = %.3f. (ideal=100.000)",
 				Name(intFrameType), observed_baudrate);
 		}
 		if (strcmp (strMod, "4FSK") == 0)
@@ -1134,7 +1134,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 
 		// PSK and QAM quality done in Decode routines
 
-		WriteDebugLog(LOGDEBUG, "Qual = %d", intLastRcvdFrameQuality);
+		ZF_LOGD("Qual = %d", intLastRcvdFrameQuality);
 
 		// This mechanism is to skip actual decoding and reply/change state...no need to decode
 
@@ -1145,17 +1145,17 @@ void ProcessNewSamples(short * Samples, int nSamples)
 
 			// Implements protocol rule 3.4 (allows faster break) and does not require a good frame decode.
 
-			WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.ProcessNewSamples] Skip Data Decoding when blnBREAKCmd and ProtcolState=IRS");
+			ZF_LOGD("[ARDOPprotocol.ProcessNewSamples] Skip Data Decoding when blnBREAKCmd and ProtcolState=IRS");
 			intFrameRepeatInterval = ComputeInterFrameInterval(1000 + rand() % 2000);
 			SetARDOPProtocolState(IRStoISS);  // (ONLY IRS State where repeats are used)
 			SendCommandToHost("STATUS QUEUE BREAK new Protocol State IRStoISS");
 			blnEnbARQRpt = TRUE;  // setup for repeats until changeover
-			WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.ProcessNewSamples] %d bytes to send in ProtocolState: %s: Send BREAK,  New state=IRStoISS (Rule 3.3)",
+			ZF_LOGD("[ARDOPprotocol.ProcessNewSamples] %d bytes to send in ProtocolState: %s: Send BREAK,  New state=IRStoISS (Rule 3.3)",
 					bytDataToSendLength,  ARDOPStates[ProtocolState]);
-			WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.ProcessNewSamples] Skip Data Decoding when blnBREAKCmd and ProtcolState=IRS");
+			ZF_LOGD("[ARDOPprotocol.ProcessNewSamples] Skip Data Decoding when blnBREAKCmd and ProtcolState=IRS");
 			blnBREAKCmd = FALSE;
 			if ((EncLen = Encode4FSKControl(BREAK, bytSessionID, bytEncodedBytes)) <= 0) {
-				WriteDebugLog(LOGERROR, "ERROR: In ProcessNewSamples() Invalid EncLen (%d).", EncLen);
+				ZF_LOGE("ERROR: In ProcessNewSamples() Invalid EncLen (%d).", EncLen);
 				goto skipDecode;
 			}
 			Mod4FSKDataAndPlay(BREAK, &bytEncodedBytes[0], EncLen, intARQDefaultDlyMs);  // only returns when all sent
@@ -1168,11 +1168,11 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			// In this state answer any data frame with BREAK
 			// not necessary to decode the frame ....just frame type
 
-			WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.ProcessNewSamples] Skip Data Decoding when ProtcolState=IRStoISS, Answer with BREAK");
+			ZF_LOGD("[ARDOPprotocol.ProcessNewSamples] Skip Data Decoding when ProtcolState=IRStoISS, Answer with BREAK");
 			intFrameRepeatInterval = ComputeInterFrameInterval(1000 + rand() % 2000);
 			blnEnbARQRpt = TRUE;  // setup for repeats until changeover
 			if ((EncLen = Encode4FSKControl(BREAK, bytSessionID, bytEncodedBytes)) <= 0) {
-				WriteDebugLog(LOGERROR, "ERROR: In ProcessNewSamples() Invalid EncLen (%d).", EncLen);
+				ZF_LOGE("ERROR: In ProcessNewSamples() Invalid EncLen (%d).", EncLen);
 				goto skipDecode;
 			}
 			Mod4FSKDataAndPlay(BREAK, &bytEncodedBytes[0], EncLen, intARQDefaultDlyMs);  // only returns when all sent
@@ -1183,13 +1183,13 @@ void ProcessNewSamples(short * Samples, int nSamples)
 		{
 			// In this state transition to ISS if  ACK frame
 
-			WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.ProcessNewSamples] ProtocolState=IRStoISS, substate = %s ACK received. Cease BREAKS, NewProtocolState=ISS, substate ISSData", ARQSubStates[ARQState]);
+			ZF_LOGD("[ARDOPprotocol.ProcessNewSamples] ProtocolState=IRStoISS, substate = %s ACK received. Cease BREAKS, NewProtocolState=ISS, substate ISSData", ARQSubStates[ARQState]);
 			blnEnbARQRpt = FALSE;  // stop the BREAK repeats
 			intLastARQDataFrameToHost = -1;  // initialize to illegal value to capture first new ISS frame and pass to host
 
 			if (bytCurrentFrameType == 0)  // hasn't been initialized yet
 			{
-				WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.ProcessNewSamples, ProtocolState=IRStoISS, Initializing GetNextFrameData");
+				ZF_LOGD("[ARDOPprotocol.ProcessNewSamples, ProtocolState=IRStoISS, Initializing GetNextFrameData");
 				GetNextFrameData(&intShiftUpDn, 0, "", TRUE);  // just sets the initial data, frame type, and sets intShiftUpDn= 0
 			}
 
@@ -1243,13 +1243,13 @@ ProcessFrame:
 				{
 					// Special case to process DISC from previous connection (Ending station must have missed END reply to DISC) Handles protocol rule 1.5
 
-					WriteDebugLog(LOGDEBUG, "[ARDOPprotocol.ProcessNewSamples]  DISC frame received in ProtocolMode FEC, Send END with SessionID= %XX", bytLastARQSessionID);
+					ZF_LOGD("[ARDOPprotocol.ProcessNewSamples]  DISC frame received in ProtocolMode FEC, Send END with SessionID= %XX", bytLastARQSessionID);
 
 					tmrFinalID = Now + 3000;
 					blnEnbARQRpt = FALSE;
 
 					if ((EncLen = Encode4FSKControl(END, bytLastARQSessionID, bytEncodedBytes)) <= 0) {
-						WriteDebugLog(LOGERROR, "ERROR: In ProcessNewSamples() Invalid EncLen (%d).", EncLen);
+						ZF_LOGE("ERROR: In ProcessNewSamples() Invalid EncLen (%d).", EncLen);
 						goto skipDecode;
 					} else
 						Mod4FSKDataAndPlay(END, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
@@ -1281,7 +1281,7 @@ ProcessFrame:
 			{
 				// Unknown Mode
 				bytData[frameLen] = 0;
-				WriteDebugLog(LOGDEBUG, "Received Data, No State %s", bytData);
+				ZF_LOGD("Received Data, No State %s", bytData);
 			}
 		}
 		else
@@ -1704,8 +1704,6 @@ BOOL SearchFor2ToneLeader3(short * intNewSamples, int Length, float * dblOffsetH
 
 	if (dblSNdBPwr > (4 + Squelch) && dblSNdBPwrEarly > Squelch && (dblAvgNoisePerBin > 100.0f || dblPriorFineOffset != 1000.0f))  // making early threshold = lower (after 3 dB compensation for bandwidth)
 	{
-//		WriteDebugLog(LOGDEBUG, "Fine Search S:N= %f dB, Early S:N= %f dblAvgNoisePerBin %f ", dblSNdBPwr, dblSNdBPwrEarly, dblAvgNoisePerBin);
-
 		// Calculate the interpolation based on the left of the two tones
 
 		dblBinInterpLeft = SpectralPeakLocator(dblLeftR[0], dblLeftI[0], dblLeftR[1], dblLeftI[1], dblLeftR[2], dblLeftI[2], &dblLeftMag);
@@ -1732,7 +1730,7 @@ BOOL SearchFor2ToneLeader3(short * intNewSamples, int Length, float * dblOffsetH
 
 			if (fabs(dblPriorFineOffset - *dblOffsetHz) < 2.9f)
 			{
-				WriteDebugLog(LOGDEBUG, "Prior-Offset= %f", (dblPriorFineOffset - *dblOffsetHz));
+				ZF_LOGD("Prior-Offset= %f", (dblPriorFineOffset - *dblOffsetHz));
 
 				// Capture power for debugging ...note: convert to 3 KHz noise bandwidth from 25Hz or 12.Hz for reporting consistancy.
 
@@ -1809,7 +1807,7 @@ BOOL Acquire2ToneLeaderSymbolFraming()
 	}
 
 	intMFSReadPtr = intLocalPtr + intIatMinErr;
-	WriteDebugLog(LOGDEBUG, "[Acquire2ToneLeaderSymbolFraming] intIatMinError= %d", intIatMinErr);
+	ZF_LOGD("[Acquire2ToneLeaderSymbolFraming] intIatMinError= %d", intIatMinErr);
 	State = AcquireFrameSync;
 
 	if (AccumulateStats)
@@ -1869,7 +1867,7 @@ int EnvelopeCorrelator()
 
 	if (dblCorMax > 40 * dblCorMaxProduct)
 	{
-		WriteDebugLog(LOGDEBUG, "EnvelopeCorrelator CorMax:MaxProd= %f  J= %d", dblCorMax / dblCorMaxProduct, intJatMax);
+		ZF_LOGD("EnvelopeCorrelator CorMax:MaxProd= %f  J= %d", dblCorMax / dblCorMaxProduct, intJatMax);
 		return intJatMax;
 	}
 	else
@@ -2002,7 +2000,7 @@ BOOL DemodFrameType4FSK(int intPtr, short * intSamples, int * intToneMags)
 			bytSym = 3;
 
 		// Include these tone values in debug log only if FileLogLevel is LOGDEBUGPLUS
-		WriteDebugLog(LOGDEBUGPLUS, "FrameType_bytSym : %d(%d %03.0f/%03.0f/%03.0f/%03.0f)", bytSym, intMagSum, 100.0*intToneMags[4 * i]/intMagSum, 100.0*intToneMags[1 + 4 * i]/intMagSum, 100.0*intToneMags[2 + 4 * i]/intMagSum, 100.0*intToneMags[3 + 4 * i]/intMagSum);
+		ZF_LOGV("FrameType_bytSym : %d(%d %03.0f/%03.0f/%03.0f/%03.0f)", bytSym, intMagSum, 100.0*intToneMags[4 * i]/intMagSum, 100.0*intToneMags[1 + 4 * i]/intMagSum, 100.0*intToneMags[2 + 4 * i]/intMagSum, 100.0*intToneMags[3 + 4 * i]/intMagSum);
 	}
 
 	return TRUE;
@@ -2095,7 +2093,7 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 		}
 	}
 
-	WriteDebugLog(LOGDEBUG, "Frame Decode type %x %x %x Dist %.2f %.2f %.2f Sess %x pend %d conn %d lastsess %d",
+	ZF_LOGD("Frame Decode type %x %x %x Dist %.2f %.2f %.2f Sess %x pend %d conn %d lastsess %d",
 		intIatMinDistance1, intIatMinDistance2, intIatMinDistance3,
 		dblMinDistance1, dblMinDistance2, dblMinDistance3,
 		bytSessionID, blnPending, blnARQConnected, bytLastARQSessionID);
@@ -2110,7 +2108,7 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 				" MD Decode;1 ID=H%X, Type=H29: %s, D1= %.2f, D3= %.2f",
 				bytLastARQSessionID, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance3);
 
-			WriteDebugLog(LOGDEBUG, "[Frame Type Decode OK  ] %s", strDecodeCapture);
+			ZF_LOGD("[Frame Type Decode OK  ] %s", strDecodeCapture);
 
 			return intIatMinDistance1;
 		}
@@ -2122,7 +2120,7 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 			snprintf(strDecodeCapture + strlen(strDecodeCapture),  sizeof(strDecodeCapture) - strlen(strDecodeCapture),
 				" MD Decode;2 ID=H%X, Type=H%X:%s, D1= %.2f, D2= %.2f",
 				bytSessionID, intIatMinDistance1, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance2);
-			WriteDebugLog(LOGDEBUG, "[Frame Type Decode OK  ] %s", strDecodeCapture);
+			ZF_LOGD("[Frame Type Decode OK  ] %s", strDecodeCapture);
 			dblOffsetLastGoodDecode = dblOffsetHz;
 			dttLastGoodFrameTypeDecode = Now;
 
@@ -2133,7 +2131,7 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 			snprintf(strDecodeCapture + strlen(strDecodeCapture), sizeof(strDecodeCapture) - strlen(strDecodeCapture),
 				" MD Decode;3 ID=H%X, Type=H%X:%s, D1= %.2f, D2= %.2f",
 				bytSessionID, intIatMinDistance1, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance2);
-			WriteDebugLog(LOGDEBUG, "[Frame Type Decode OK  ] %s", strDecodeCapture);
+			ZF_LOGD("[Frame Type Decode OK  ] %s", strDecodeCapture);
 
 			return intIatMinDistance1;
 		}
@@ -2143,7 +2141,7 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 			snprintf(strDecodeCapture + strlen(strDecodeCapture),  sizeof(strDecodeCapture) - strlen(strDecodeCapture),
 				" MD Decode;4 ID=H%X, Type=H%X:%s, D1= %.2f, D2= %.2f",
 				bytSessionID, intIatMinDistance1, Name(intIatMinDistance1), dblMinDistance1, dblMinDistance2);
-			WriteDebugLog(LOGDEBUG, "[Frame Type Decode OK  ] %s", strDecodeCapture);
+			ZF_LOGD("[Frame Type Decode OK  ] %s", strDecodeCapture);
 
 			return intIatMinDistance2;
 		}
@@ -2151,7 +2149,7 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 		snprintf(strDecodeCapture + strlen(strDecodeCapture), sizeof(strDecodeCapture) - strlen(strDecodeCapture),
 			" MD Decode;5 Type1=H%X, Type2=H%X, D1= %.2f, D2= %.2f",
 			intIatMinDistance1, intIatMinDistance2, dblMinDistance1, dblMinDistance2);
-		WriteDebugLog(LOGDEBUG, "[Frame Type Decode Fail] %s", strDecodeCapture);
+		ZF_LOGD("[Frame Type Decode Fail] %s", strDecodeCapture);
 
 		return -1;  // indicates poor quality decode so  don't use
 
@@ -2172,12 +2170,11 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 			{
 				dblOffsetLastGoodDecode = dblOffsetHz;
 				dttLastGoodFrameTypeDecode = Now;  // This allows restricting tuning changes to about +/- 4Hz from last dblOffsetHz
-				WriteDebugLog(LOGDEBUG, "[Frame Type Decode OK  ] %s", strDecodeCapture);
+				ZF_LOGD("[Frame Type Decode OK  ] %s", strDecodeCapture);
 				return intIatMinDistance1;
 			}
 			else
 			{
-//				WriteDebugLog(LOGDEBUG, "[Frame Type Decode Fail] %s", strDecodeCapture);
 				return -1;  // indicates poor quality decode so  don't use
 			}
 		}
@@ -2194,13 +2191,11 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 			{
 				dblOffsetLastGoodDecode = dblOffsetHz;
 				dttLastGoodFrameTypeDecode = Now;  // This allows restricting tuning changes to about +/- 4Hz from last dblOffsetHz
-				WriteDebugLog(LOGDEBUG, "[Frame Type Decode OK  ] %s", strDecodeCapture);
+				ZF_LOGD("[Frame Type Decode OK  ] %s", strDecodeCapture);
 				return intIatMinDistance1;
 			}
 			else
 			{
-//				WriteDebugLog(LOGDEBUG, "[Frame Type Decode Fail] %s", strDecodeCapture);
-
 				return -1;  // indicates poor quality decode so don't use
 			}
 		}
@@ -2225,12 +2220,11 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 				{
 					dblOffsetLastGoodDecode = dblOffsetHz;
 					dttLastGoodFrameTypeDecode = Now;  // This allows restricting tuning changes to about +/- 4Hz from last dblOffsetHz
-					WriteDebugLog(LOGDEBUG, "[Frame Type Decode OK  ] %s", strDecodeCapture);
+					ZF_LOGD("[Frame Type Decode OK  ] %s", strDecodeCapture);
 					return intIatMinDistance1;
 				}
 				else
 				{
-//					WriteDebugLog(LOGDEBUG, "[Frame Type Decode Fail] %s", strDecodeCapture);
 					return -1;  // indicates poor quality decode so don't use
 				}
 			}
@@ -2242,7 +2236,7 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 				// use looser limits here, there is no risk of protocol damage from these frames
 				if ((dblMinDistance1 < 0.4) || (dblMinDistance2 < 0.4))
 				{
-					WriteDebugLog(LOGDEBUG, "[Frame Type Decode OK  ] %s", strDecodeCapture);
+					ZF_LOGD("[Frame Type Decode OK  ] %s", strDecodeCapture);
 
 					dblOffsetLastGoodDecode = dblOffsetHz;
 					dttLastGoodFrameTypeDecode = Now;  // This allows restricting tuning changes to about +/- 4Hz from last dblOffsetHz
@@ -2250,7 +2244,6 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 				}
 				else
 				{
-//					WriteDebugLog(LOGDEBUG, "[Frame Type Decode Fail] %s", strDecodeCapture);
 					return -1;  // indicates poor quality decode so don't use
 				}
 			}
@@ -2260,14 +2253,13 @@ int MinimalDistanceFrameType(int * intToneMags, UCHAR bytSessionID)
 			snprintf(strDecodeCapture + strlen(strDecodeCapture), sizeof(strDecodeCapture) - strlen(strDecodeCapture),
 				" MD Decode;10  Type1=H%X: Type2=H%X: , D1= %.2f, D2= %.2f",
 				intIatMinDistance1 , intIatMinDistance2, dblMinDistance1, dblMinDistance2);
-//			WriteDebugLog(LOGDEBUG, "[Frame Type Decode Fail] %s", strDecodeCapture);
 			return -1;  // indicates poor quality decode so don't use
 		}
 	}
 	snprintf(strDecodeCapture + strlen(strDecodeCapture), sizeof(strDecodeCapture) - strlen(strDecodeCapture),
 		" MD Decode;11  Type1=H%X: Type2=H%X: , D1= %.2f, D2= %.2f",
 		intIatMinDistance1 , intIatMinDistance2, dblMinDistance1, dblMinDistance2);
-	WriteDebugLog(LOGDEBUG, "[Frame Type Decode Fail] %s", strDecodeCapture);
+	ZF_LOGD("[Frame Type Decode Fail] %s", strDecodeCapture);
 	return -1;  // indicates poor quality decode so don't use
 }
 
@@ -2293,7 +2285,7 @@ int Acquire4FSKFrameType()
 
 	if (!DemodFrameType4FSK(intMFSReadPtr, intFilteredMixedSamples, &intToneMags[0]))
 	{
-		WriteDebugLog(LOGWARNING,
+		ZF_LOGW(
 			"Unexpected return from DemodFrameType4FSK indicating insufficient"
 			" audio samples availale.  intFilteredMixedSamplesLength=%d."
 			" intMFSReadPtr=%d.",
@@ -2366,7 +2358,7 @@ BOOL Demod1Car4FSK()
 			// (while checking process - will use cyclic buffer eventually
 
 			if (intFilteredMixedSamplesLength < 0)
-				WriteDebugLog(LOGERROR,
+				ZF_LOGE(
 					"Corrupt intFilteredMixedSamplesLength (%d) in Demod1Car4FSK().",
 					intFilteredMixedSamplesLength);
 
@@ -2387,7 +2379,7 @@ BOOL Demod1Car4FSK()
 			else if (SymbolsLeft == 1)
 			{
 				// Only write this to log once per frame.
-				WriteDebugLog(LOGDEBUG, "All carriers demodulated. Probably a repeated frame.");
+				ZF_LOGD("All carriers demodulated. Probably a repeated frame.");
 			}
 		}
 		else
@@ -2541,7 +2533,7 @@ void Demod1Car4FSK_SDFT(int Start, BOOL blnGetFrameType)
 			bytCharValue = (bytCharValue << 2) + bytSym;
 		}
 		// Include these tone values in debug log only if FileLogLevel is LOGDEBUGPLUS
-		WriteDebugLog(LOGDEBUGPLUS,
+		ZF_LOGV(
 			"Demod4FSK %d(%03.0f/%03.0f/%03.0f/%03.0f) [timing_advance=%d : avg %.02f per symbol]",
 			bytSym,
 			100.0*intToneMags[intToneMagsIndex - 4]/intToneMags_sum,
@@ -2644,7 +2636,7 @@ void Demod1Car4FSKChar(int Start, UCHAR * Decoded)
 	}
 
 	// Include these tone values in debug log only if FileLogLevel is LOGDEBUGPLUS
-	WriteDebugLog(LOGDEBUGPLUS, "%s", DebugMess);
+	ZF_LOGV("%s", DebugMess);
 	if (AccumulateStats)
 		intFSKSymbolCnt += 4;
 
@@ -2675,7 +2667,7 @@ BOOL Demod1Car4FSK600()
 			// (while checking process - will use cyclic buffer eventually
 
 			if (intFilteredMixedSamplesLength < 0)
-				WriteDebugLog(LOGERROR,
+				ZF_LOGE(
 					"Corrupt intFilteredMixedSamplesLength (%d) in Demod1Car4FSK600().",
 					intFilteredMixedSamplesLength);
 
@@ -2816,9 +2808,9 @@ BOOL Decode4FSKConReq()
 		// that the frame is correctly decoded.
 		//
 		// Check for valid callsigns?
-		WriteDebugLog(LOGDEBUG, "CONREQ Frame Corrected by RS");
+		ZF_LOGD("CONREQ Frame Corrected by RS");
 	} else if (NErrors < 0) {
-		WriteDebugLog(LOGDEBUG, "CONREQ Still bad after RS");
+		ZF_LOGD("CONREQ Still bad after RS");
 		FrameOK = FALSE;
 	}
 	memcpy(bytCall, bytFrameData1, COMP_SIZE);
@@ -2848,7 +2840,7 @@ BOOL Decode4FSKConReq()
 		SendCommandToHost("CANCELPENDING");
 
 	intConReqSN = Compute4FSKSN();
-	WriteDebugLog(LOGDEBUG, "DemodDecode4FSKConReq:  S:N=%d Q=%d", intConReqSN, intLastRcvdFrameQuality);
+	ZF_LOGD("DemodDecode4FSKConReq:  S:N=%d Q=%d", intConReqSN, intLastRcvdFrameQuality);
 	intConReqQuality = intLastRcvdFrameQuality;
 
 	return FrameOK;
@@ -2926,9 +2918,9 @@ BOOL Decode4FSKPing()
 		// that the frame is correctly decoded.
 		//
 		// Check for valid callsigns?
-		WriteDebugLog(LOGDEBUG, "PING Frame Corrected by RS");
+		ZF_LOGD("PING Frame Corrected by RS");
 	} else if (NErrors < 0) {
-		WriteDebugLog(LOGDEBUG, "PING Still bad after RS");
+		ZF_LOGD("PING Still bad after RS");
 		FrameOK = FALSE;
 	}
 
@@ -2962,7 +2954,7 @@ BOOL Decode4FSKPing()
 		sprintf(Msg, "PING %s>%s %d %d", strCaller, strTarget, intSNdB, intLastRcvdFrameQuality);
 		SendCommandToHost(Msg);
 
-		WriteDebugLog(LOGDEBUG, "[DemodDecode4FSKPing] PING %s>%s S:N=%d Q=%d", strCaller, strTarget, intSNdB, intLastRcvdFrameQuality);
+		ZF_LOGD("[DemodDecode4FSKPing] PING %s>%s S:N=%d Q=%d", strCaller, strTarget, intSNdB, intLastRcvdFrameQuality);
 
 		stcLastPingdttTimeReceived = time(NULL);
 		stcLastPingintRcvdSN = intSNdB;
@@ -2997,7 +2989,7 @@ BOOL Decode4FSKConACK(UCHAR bytFrameType, int * intTiming)
 	{
 		*intTiming = Timing;
 
-		WriteDebugLog(LOGDEBUG, "[DemodDecode4FSKConACK]  Remote leader timing reported: %d ms", *intTiming);
+		ZF_LOGD("[DemodDecode4FSKConACK]  Remote leader timing reported: %d ms", *intTiming);
 
 		if (AccumulateStats)
 			intGoodFSKFrameDataDecodes++;
@@ -3035,9 +3027,9 @@ BOOL Decode4FSKPingACK(UCHAR bytFrameType, int * intSNdB, int * intQuality)
 		*intQuality = (Ack & 7) * 10 + 30;  // Range 30 to 100 steps of 10
 
 		if (*intSNdB == 21)
-			WriteDebugLog(LOGDEBUG, "[DemodDecode4FSKPingACK]  S:N> 20 dB Quality=%d" ,*intQuality);
+			ZF_LOGD("[DemodDecode4FSKPingACK]  S:N> 20 dB Quality=%d" ,*intQuality);
 		else
-			WriteDebugLog(LOGDEBUG, "[DemodDecode4FSKPingACK]  S:N= %d dB Quality=%d",  *intSNdB, *intQuality);
+			ZF_LOGD("[DemodDecode4FSKPingACK]  S:N= %d dB Quality=%d",  *intSNdB, *intQuality);
 
 		blnPINGrepeating = False;
 		blnFramePending = False;	// Cancels last repeat
@@ -3046,7 +3038,7 @@ BOOL Decode4FSKPingACK(UCHAR bytFrameType, int * intSNdB, int * intQuality)
 	else {
 		*intSNdB = -1;
 		*intQuality = -1;
-		WriteDebugLog(LOGDEBUG, "[DemodDecode4FSKPingACK]  Unable to decode S:N and Quality.");
+		ZF_LOGD("[DemodDecode4FSKPingACK]  Unable to decode S:N and Quality.");
 	}
 	return FALSE;
 }
@@ -3060,7 +3052,7 @@ BOOL Decode4FSKID(UCHAR bytFrameType, char * strCallID, size_t strCallIDLen, cha
 	unsigned char * p = bytFrameData1;
 
 
-	WriteDebugLog(LOGDEBUG, "%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x  %02x %02x %02x %02x ",
+	ZF_LOGD("%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x  %02x %02x %02x %02x ",
 		p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15]);
 
 	int NErrors = rs_correct(bytFrameData1, 16, 4, true, false);
@@ -3080,9 +3072,9 @@ BOOL Decode4FSKID(UCHAR bytFrameType, char * strCallID, size_t strCallIDLen, cha
 		// that the frame is correctly decoded.
 		//
 		// Check for valid callsigns?
-		WriteDebugLog(LOGDEBUG, "ID Frame Corrected by RS");
+		ZF_LOGD("ID Frame Corrected by RS");
 	} else if (NErrors < 0) {
-		WriteDebugLog(LOGDEBUG, "ID Still bad after RS");
+		ZF_LOGD("ID Still bad after RS");
 		FrameOK = FALSE;
 	}
 
@@ -3251,7 +3243,7 @@ void DemodulateFrame(int intFrameType)
 
 		default:
 
-			WriteDebugLog(LOGDEBUG, "Unsupported frame type %x", intFrameType);
+			ZF_LOGD("Unsupported frame type %x", intFrameType);
 			DiscardOldSamples();
 			ClearAllMixedSamples();
 			State = SearchingForLeader;
@@ -3318,7 +3310,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 	if (CarrierOk[0] != 0 && CarrierOk[0] != 1)
 		CarrierOk[0] = 0;
 
-	WriteDebugLog(LOGDEBUG, "DecodeFrame MEMARQ Flags %d %d %d %d %d %d %d %d",
+	ZF_LOGD("DecodeFrame MEMARQ Flags %d %d %d %d %d %d %d %d",
 		CarrierOk[0], CarrierOk[1], CarrierOk[2], CarrierOk[3],
 		CarrierOk[4], CarrierOk[5], CarrierOk[6], CarrierOk[7]);
 
@@ -3560,7 +3552,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 
 	if (blnDecodeOK)
 	{
-		WriteDebugLog(LOGINFO, "[DecodeFrame] Frame: %s Decode PASS,  Quality= %d,  RS fixed %d (of %d max).", Name(intFrameType),  intLastRcvdFrameQuality, totalRSErrors, (intRSLen / 2) * intNumCar);
+		ZF_LOGI("[DecodeFrame] Frame: %s Decode PASS,  Quality= %d,  RS fixed %d (of %d max).", Name(intFrameType),  intLastRcvdFrameQuality, totalRSErrors, (intRSLen / 2) * intNumCar);
 		wg_send_quality(0, intLastRcvdFrameQuality, totalRSErrors, (intRSLen / 2) * intNumCar);
 
 		if (frameLen > 0) {
@@ -3569,10 +3561,10 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 			snprintf(Msg, sizeof(Msg), "[Decoded bytData] %d bytes as hex values: ", frameLen);
 			for (int i = 0; i < frameLen; i++)
 				snprintf(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg) - 1, "%02X ", bytData[i]);
-			WriteDebugLog(LOGDEBUGPLUS, "%s", Msg);
+			ZF_LOGV("%s", Msg);
 
 			if (utf8_check(bytData, frameLen) == NULL)
-				WriteDebugLog(LOGDEBUGPLUS, "[Decoded bytData] %d bytes as utf8 text: '%.*s'", frameLen, frameLen, bytData);
+				ZF_LOGV("[Decoded bytData] %d bytes as utf8 text: '%.*s'", frameLen, frameLen, bytData);
 		}
 
 #ifdef PLOTCONSTELLATION
@@ -3586,7 +3578,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 
 	else
 	{
-		WriteDebugLog(LOGINFO, "[DecodeFrame] Frame: %s Decode FAIL,  Quality= %d", Name(intFrameType),  intLastRcvdFrameQuality);
+		ZF_LOGI("[DecodeFrame] Frame: %s Decode FAIL,  Quality= %d", Name(intFrameType),  intLastRcvdFrameQuality);
 		// For a failure to decode, send max + 1 as the number of
 		// RS errors.
 		wg_send_quality(0, intLastRcvdFrameQuality, (intRSLen / 2) * intNumCar + 1, (intRSLen / 2) * intNumCar);
@@ -3599,7 +3591,7 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 
 	if (blnDecodeOK && (totalRSErrors / intNumCar) < (intRSLen / 4) && intLastRcvdFrameQuality < 80)
 	{
-		WriteDebugLog(LOGDEBUG, "RS Errors %d Carriers %d RLen %d Qual %d - adjusting Qual",
+		ZF_LOGD("RS Errors %d Carriers %d RLen %d Qual %d - adjusting Qual",
 			totalRSErrors, intNumCar, intRSLen, intLastRcvdFrameQuality);
 
 		intLastRcvdFrameQuality = 80;
@@ -3610,19 +3602,6 @@ returnframe:
 
 	if (blnDecodeOK && intFrameType >= DataFRAMEmin && intFrameType <= DataFRAMEmax)
 		bytLastReceivedDataFrameType = intFrameType;
-
-//	if (blnDecodeOK)
-//		stcStatus.BackColor = Color.LightGreen;
-//	else
-//		stcStatus.BackColor = Color.LightSalmon;
-
-//	queTNCStatus.Enqueue(stcStatus);
-
-//	if (DebugLog)
-//		if (blnDecodeOK)
-//			WriteDebugLog(LOGDEBUG, "[DecodeFrame] Frame: %s Decode PASS, Constellation Quality= %d", Name(intFrameType), intLastRcvdFrameQuality);
-//		else
-//			WriteDebugLog(LOGDEBUG, "[DecodeFrame] Frame: %s Decode FAIL, Constellation Quality= %d", Name(intFrameType), intLastRcvdFrameQuality);
 
 	return blnDecodeOK;
 }
@@ -4182,9 +4161,6 @@ void CorrectPhaseForTuningOffset(short * intPhase, int intPhaseLength, char * st
 	if (intAccOffsetCntEnd > 0)
 		intAvgOffsetEnd = (intAccOffsetEnd / intAccOffsetCntEnd);
 
-	// WriteDebugLog(LOGDEBUG, "[CorrectPhaseForOffset] Beginning: %d End: %d Total: %d",
-		// intAvgOffsetBeginning, intAvgOffsetEnd, intAvgOffset);
-
 	if ((intAccOffsetCntBeginning > intPhaseLength / 8) && (intAccOffsetCntEnd > intPhaseLength / 8))
 	{
 		for (i = 0; i < intPhaseLength; i++)
@@ -4195,7 +4171,7 @@ void CorrectPhaseForTuningOffset(short * intPhase, int intPhaseLength, char * st
 			else if (intPhase[i] < -3142)
 				intPhase[i] += 6284;
 		}
-		WriteDebugLog(LOGDEBUG, "[CorrectPhaseForTuningOffset] AvgOffsetBeginning=%d AvgOffsetEnd=%d AccOffsetCnt=%d/%d",
+		ZF_LOGD("[CorrectPhaseForTuningOffset] AvgOffsetBeginning=%d AvgOffsetEnd=%d AccOffsetCnt=%d/%d",
 				intAvgOffsetBeginning, intAvgOffsetEnd, intAccOffsetCnt, intPhaseLength);
 	}
 	else if (intAccOffsetCnt > intPhaseLength / 2)
@@ -4208,7 +4184,7 @@ void CorrectPhaseForTuningOffset(short * intPhase, int intPhaseLength, char * st
 			else if (intPhase[i] < -3142)
 				intPhase[i] += 6284;
 		}
-		WriteDebugLog(LOGDEBUG, "[CorrectPhaseForTuningOffset] AvgOffset=%d AccOffsetCnt=%d/%d",
+		ZF_LOGD("[CorrectPhaseForTuningOffset] AvgOffset=%d AccOffsetCnt=%d/%d",
 				intAvgOffset, intAccOffsetCnt, intPhaseLength);
 
 	}
@@ -4466,7 +4442,7 @@ void DemodPSK()
 		intFilteredMixedSamplesLength -= Used[0];
 
 		if (intFilteredMixedSamplesLength < 0)
-			WriteDebugLog(LOGERROR, "Corrupt intFilteredMixedSamplesLength");
+			ZF_LOGE("Corrupt intFilteredMixedSamplesLength");
 
 		if (SymbolsLeft > 0)
 			continue;
@@ -4549,7 +4525,7 @@ void DemodPSK()
 
 			int OKNow = TRUE;
 
-			WriteDebugLog(LOGDEBUG, "DemodPSK retry RS on MEM ARQ Corrected frames");
+			ZF_LOGD("DemodPSK retry RS on MEM ARQ Corrected frames");
 			frameLen = 0;
 
 			for (Carrier = 0; Carrier < intNumCar; Carrier++)
@@ -4930,7 +4906,7 @@ BOOL DemodQAM()
 				{
 					// We've retryed to decode - see if ok now
 
-					WriteDebugLog(LOGDEBUG, "DemodQAM retry RS on MEM ARQ Corrected frames");
+					ZF_LOGD("DemodQAM retry RS on MEM ARQ Corrected frames");
 
 					frameLen = CorrectRawDataWithRS(bytFrameData1, bytData, intDataLen, intRSLen, intFrameType, 0);
 

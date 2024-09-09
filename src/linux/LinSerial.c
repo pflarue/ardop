@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#include "common/log.h"
 
 void Debugprintf(const char * format, ...);
 int WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite);
@@ -69,12 +70,7 @@ HANDLE OpenCOMPort(void * Port, int speed, int SetDTR, int SetRTS, int Quiet, in
 
 	if ((fd = open(Port, O_RDWR | O_NDELAY)) == -1)
 	{
-		if (Quiet == 0)
-		{
-			perror("Com Open Failed");
-			sprintf(buf," %s could not be opened", Port);
-			Debugprintf(buf);
-		}
+		ZF_LOGE("Com Open failed: %s could not be opened", (const char*)Port);
 		return 0;
 	}
 
@@ -108,7 +104,7 @@ HANDLE OpenCOMPort(void * Port, int speed, int SetDTR, int SetRTS, int Quiet, in
 
 	ioctl(fd, FIONBIO, &param);
 
-	Debugprintf("LinBPQ Port %s fd %d", Port, fd);
+	ZF_LOGI("LinBPQ Port %s fd %d", (const char*)Port, fd);
 
 	return fd;
 }
