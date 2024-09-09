@@ -32,6 +32,14 @@
 #define _POSIX_C_SOURCE 200809L
 #include <time.h>
 
+/* Size of the log line buffer. The buffer is allocated on stack. It limits
+ * maximum length of a log line.  (Default is 512)
+ * Set long enough to log the maximum 1024 bytes of data that is encoded in
+ * any data frame as hex with spaces between bytes (so 3 printed bytes per data
+ * byte) plus with some margin.
+ */
+#define ZF_LOG_BUF_SZ 4000
+
 /* UTC log timestamps */
 #define ZF_LOG_USE_UTC_TIME 1
 
