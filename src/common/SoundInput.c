@@ -2997,8 +2997,6 @@ BOOL Decode4FSKConACK(UCHAR bytFrameType, int * intTiming)
 	{
 		*intTiming = Timing;
 
-		// strRcvFrameTag = "_" & intTiming.ToString & " ms"
-
 		WriteDebugLog(LOGDEBUG, "[DemodDecode4FSKConACK]  Remote leader timing reported: %d ms", *intTiming);
 
 		if (AccumulateStats)
@@ -3132,13 +3130,6 @@ void DemodulateFrame(int intFrameType)
 
 	if ((intFrameType >= DataNAKmin && intFrameType <= DataNAKmax) ||  intFrameType >= DataACKmin)  // DataACK/NAK
 	{
-		// blnDecodeOK = DecodeACKNAK(intFrameType, intRcvdQuality)
-		//  stcStatus.Text = objFrameInfo.Name(intFrameType) & strRcvFrameTag
-		// ElseIf (objFrameInfo.IsShortControlFrame(intFrameType)) Then  // Short Control Frames
-		//  blnDecodeOK = TRUE
-		//  stcStatus.Text = objFrameInfo.Name(intFrameType)
-		// End If
-
 		Demod1Car4FSK();
 		return;
 	}
@@ -3276,7 +3267,6 @@ void DemodulateFrame(int intFrameType)
 BOOL DecodeACKNAK(int intFrameType, int *  intQuality)
 {
 	*intQuality = 38 + (2 * (intFrameType & 0x1F));  // mask off lower 5 bits  // Range of 38 to 100 in steps of 2
-	// strRcvFrameTag = "_Q" & intQuality.ToString
 	return TRUE;
 }
 
