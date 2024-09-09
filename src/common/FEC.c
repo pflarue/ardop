@@ -92,7 +92,11 @@ BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL
 	{
 		if (strcmp(strDataMode, strAllDataModes[i]) == 0)
 		{
-			strcpy(strFECMode, strDataMode);
+			if (strcmp(strFECMode, strDataMode) != 0)
+				// This conditional avoids an undefined strcpy-param-overlap
+				// error that would otherwise occur when StartFEC() is called
+				// with strDataMode=strFECMode.
+				strcpy(strFECMode, strDataMode);
 			blnModeOK = TRUE;
 			break;
 		}
