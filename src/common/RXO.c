@@ -14,7 +14,7 @@ int wg_send_hostdatat(int cnum, char *prefix, unsigned char *data, int datalen);
 int wg_send_hostdatab(int cnum, char *prefix, unsigned char *data, int datalen);
 
 // Use of RXO is assumed to indicate that the user is interested in observing all received traffic.
-// So LOGINFO, rather than a higher log level such as LOGDEBUG, is used for most positive results.
+// So LOGI (level=3), rather than a lower log level such as LOGD (level=2), is used for most positive results.
 
 // Function to compute the "distance" from a specific bytFrame Xored by bytID using 1 symbol parity
 // The tones representing the Frame Type include two parity symbols which should be identical, and
@@ -93,20 +93,20 @@ BOOL RxoDecodeSessionID(UCHAR bytFrameType, int * intToneMags, float dblMaxDista
 	if (dblDistance > dblMaxDistance)
 	{
 		if (bytID == bytSessionID)
-			ZF_LOGD("[RXO DecodeSessionID FAIL] Decoded ID=H%02hhx Dist=%.2f (%.2f Max). (Matches Prior ID)",
+			ZF_LOGD("[RXO DecodeSessionID FAIL] Decoded ID=H%02hhX Dist=%.2f (%.2f Max). (Matches Prior ID)",
 					bytID, dblDistance, dblMaxDistance);
 		else
-			ZF_LOGD("[RXO DecodeSessionID FAIL] Decoded ID=H%02hhx Dist=%.2f (%.2f Max). (Retain prior ID=H%02X)",
+			ZF_LOGD("[RXO DecodeSessionID FAIL] Decoded ID=H%02hhX Dist=%.2f (%.2f Max). (Retain prior ID=H%02X)",
 					bytID, dblDistance, dblMaxDistance, bytSessionID);
 		return FALSE;
 	}
 	if (bytID == bytSessionID)
 	{
-		ZF_LOGD("[RXO DecodeSessionID OK  ] Decoded ID=H%02hhx Dist=%.2f (%.2f Max). (No change)",
+		ZF_LOGD("[RXO DecodeSessionID OK  ] Decoded ID=H%02hhX Dist=%.2f (%.2f Max). (No change)",
 				bytID, dblDistance, dblMaxDistance);
 	return TRUE;
 	}
-	ZF_LOGI("[RXO DecodeSessionID OK  ] Decoded ID=H%02hhx Dist=%.2f (%.2f Max). (Prior ID=H%02hhx)",
+	ZF_LOGI("[RXO DecodeSessionID OK  ] Decoded ID=H%02hhX Dist=%.2f (%.2f Max). (Prior ID=H%02hhX)",
 			bytID, dblDistance, dblMaxDistance, bytSessionID);
 	bytSessionID = bytID;
 	return TRUE;
@@ -166,40 +166,40 @@ void ProcessRXOFrame(UCHAR bytFrameType, int frameLen, UCHAR * bytData, BOOL bln
 		if (bytFrameType >= 0x31 && bytFrameType <= 0x38)  // ConReq####
 		{
 			// Is there a reason why frameLen is not defined for ConReq?
-			ZF_LOGI("    [RXO %02hhx] ConReq data is callerID targetID", bytSessionID);
+			ZF_LOGI("    [RXO %02hhX] ConReq data is callerID targetID", bytSessionID);
 			frameLen = strlen((char*) bytData);
 		}
 		else if (bytFrameType >= 0x39 && bytFrameType <= 0x3C)  // ConAck####
 		{
-			ZF_LOGI("    [RXO %02hhx] ConAck data is the length (in tens of ms) of the received leader repeated 3 times: %d %d %d",
+			ZF_LOGI("    [RXO %02hhX] ConAck data is the length (in tens of ms) of the received leader repeated 3 times: %d %d %d",
 				bytSessionID, bytFrameData1[0], bytFrameData1[1], bytFrameData1[2]);
 		}
 		else if (bytFrameType == 0x3D)  // PingAck
 		{
-			ZF_LOGI("    [RXO %02hhx] PingAck data is S:N=%d and Quality=%d of the Ping. (Any S:N > 20 is reorted as 21.)",
+			ZF_LOGI("    [RXO %02hhX] PingAck data is S:N=%d and Quality=%d of the Ping. (Any S:N > 20 is reorted as 21.)",
 				bytSessionID, intSNdB, intQuality);
 		}
 		else if (bytFrameType == 0x3E)  // Ping
 		{
-			ZF_LOGI("    [RXO %02hhx] Ping data is caller and target callsigns: '%s'.  While this frame does uses FEC to improve likelihood of correct transmission, it does not include a CRC check with which to confirm correctness.  This Ping was received with S:N=%d, Q=%d.",
+			ZF_LOGI("    [RXO %02hhX] Ping data is caller and target callsigns: '%s'.  While this frame does uses FEC to improve likelihood of correct transmission, it does not include a CRC check with which to confirm correctness.  This Ping was received with S:N=%d, Q=%d.",
 				bytSessionID, bytData, stcLastPingintRcvdSN, stcLastPingintQuality);
 		}
 		else if (bytFrameType >= 0xE0)  // DataACK
 		{
-			ZF_LOGI("    [RXO %02hhx] DataAck FrameType (0x%02X) indicates decode quality (%d/100). 60+ typically required for decoding.",
+			ZF_LOGI("    [RXO %02hhX] DataAck FrameType (0x%02X) indicates decode quality (%d/100). 60+ typically required for decoding.",
 				bytSessionID, bytFrameType, 38 + (2 * (bytFrameType & 0x1F)));
 		}
 		else if (bytFrameType <= 0x1F)  // DataNAK
 		{
-			ZF_LOGI("    [RXO %02hhx] DataNak FrameType (0x%02X) indicates decode quality (%d/100). 60+ typically required for decoding.",
+			ZF_LOGI("    [RXO %02hhX] DataNak FrameType (0x%02X) indicates decode quality (%d/100). 60+ typically required for decoding.",
 				bytSessionID, bytFrameType, 38 + (2 * (bytFrameType & 0x1F)));
 		}
 
-		ZF_LOGI("    [RXO %02hhx] %s frame received OK.  frameLen = %d",
+		ZF_LOGI("    [RXO %02hhX] %s frame received OK.  frameLen = %d",
 				bytSessionID, Name(bytFrameType), frameLen);
 		if (frameLen > 0)
 		{
-			snprintf(strMsg, sizeof(strMsg), "    [RXO %02hhx] %d bytes of data as hex values:\n", bytSessionID, frameLen);
+			snprintf(strMsg, sizeof(strMsg), "    [RXO %02hhX] %d bytes of data as hex values:\n", bytSessionID, frameLen);
 			intMsgLen = strlen(strMsg);
 			for (int i = 0; i < frameLen; i++)
 			{
@@ -216,24 +216,24 @@ void ProcessRXOFrame(UCHAR bytFrameType, int frameLen, UCHAR * bytData, BOOL bln
 					if (bytData[i] == 0x0D && bytData[i + 1] != 0x0A)
 						bytData[i] = 0x0A;
 				}
-				ZF_LOGI("    [RXO %02hhx] %d bytes of data as UTF-8 text:\n%.*s", bytSessionID, frameLen, frameLen, bytData);
+				ZF_LOGI("    [RXO %02hhX] %d bytes of data as UTF-8 text:\n%.*s", bytSessionID, frameLen, frameLen, bytData);
 				if (WG_DevMode)
 					wg_send_hostdatat(0, "RXO", bytData, frameLen);
 			}
 			else {
-				ZF_LOGI("    [RXO %02hhx] Data does not appear to be valid UTF-8 text.", bytSessionID);
+				ZF_LOGI("    [RXO %02hhX] Data does not appear to be valid UTF-8 text.", bytSessionID);
 				if (WG_DevMode)
 					wg_send_hostdatab(0, "RXO", bytData, frameLen);
 			}
 		}
-		snprintf(strMsg, sizeof(strMsg), "STATUS [RXO %02hhx] %s frame received OK.", bytSessionID, Name(bytFrameType));
+		snprintf(strMsg, sizeof(strMsg), "STATUS [RXO %02hhX] %s frame received OK.", bytSessionID, Name(bytFrameType));
 		SendCommandToHost(strMsg);
 	}
 	else
 	{
-		ZF_LOGD("    [RXO %02hhx] %s frame decode FAIL.",
+		ZF_LOGD("    [RXO %02hhX] %s frame decode FAIL.",
 				bytSessionID, Name(bytFrameType));
-		snprintf(strMsg, sizeof(strMsg), "STATUS [RXO %02hhx] %s frame decode FAIL.", bytSessionID, Name(bytFrameType));
+		snprintf(strMsg, sizeof(strMsg), "STATUS [RXO %02hhX] %s frame decode FAIL.", bytSessionID, Name(bytFrameType));
 		SendCommandToHost(strMsg);
 		bytData[frameLen] = 0;
 	}

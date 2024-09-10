@@ -33,8 +33,10 @@ def test_contol_wav_io(verbose=1):
         res = subprocess.run(
             [
                 APATH,
-                # --logdir sets the location of the debug log and the
-                # WAV files to be written.
+                # --nologfile prevents the creation of a log file which
+                # is not needed for this testing.
+                "--nologfile",
+                # --logdir sets the location of the WAV files written.
                 "--logdir",
                 TMPPATH,
                 "--writetxwav",
@@ -44,18 +46,16 @@ def test_contol_wav_io(verbose=1):
                 # Whenever audio devices are specified, host port
                 # number must also be specified.
                 "8515", "NOSOUND", "NOSOUND",
-                # LOGLEVEL 0 (LOGEMERGENCY) should prevent most writes
-                # to the log file, which is not used for this testing.
-                # CONSOLELOG 7 (LOGDEBUG) ensures that filename of
-                # the WAV is written to stdout so that it can be
-                # parsed from res.stdout.
+                # CONSOLELOG 2 ensures that the filename of the WAV is
+                # written to stdout so that it can be parsed from
+                # res.stdout.
                 # DRIVELEVEL 30 reduces the volume of the signal in the
                 # WAV file.  This is not expected to impact the ability
                 # of ardopcf to demodulate/decode this WAV file, but it
                 # may be useful if a later stage of this testing uses
                 # noise added to the recording.
                 "--hostcommands",
-                f'LOGLEVEL 0;CONSOLELOG 7;DRIVELEVEL 30;TXFRAME'
+                f'CONSOLELOG 2;DRIVELEVEL 30;TXFRAME'
                 f' {frametype} {paramstr};CLOSE',
             ],
             capture_output=True,
@@ -82,23 +82,22 @@ def test_contol_wav_io(verbose=1):
                 res = subprocess.run(
                     [
                         APATH,
-                        # --logdir sets the location of the debug log and the
-                        # WAV files to be written.
-                        "--logdir",
-                        TMPPATH,
+                        # --nologfile prevents the creation of a log
+                        # file which is not needed for this testing.
+                        "--nologfile",
                         "--decodewav",
                         wavpath,
                         # When sdftstr is "", the standard demodulators
                         # are used.  When it is "--sdft", the
                         # experimental SDFT demodulator is used.
                         sdftstr,
-                        "--hostcommands",
-                        # LOGLEVEL 0 (LOGEMERGENCY) should prevent most writes
-                        # to the log file, which is not used for this testing.
-                        # CONSOLELOG 7 (LOGDEBUG) ensures that [DecodeFrame] and
+                        # CONSOLELOG 2 ensures that [DecodeFrame] and
                         # [Frame Type Decode Fail] are written to stdout as well
                         # as the hex representation of the decoded data.
-                        'LOGLEVEL 0;CONSOLELOG 7',
+                        "--hostcommands",
+                        'CONSOLELOG 2',
+                        # No port number or sound devices are required
+                        # when using the --decodewav option.
                     ],
                     capture_output=True,
                     check=True,
@@ -156,21 +155,6 @@ def test_contol_wav_io(verbose=1):
             print("No failures occured in test_contol_wav_io().")
     return faillist
 
-
-QAM2000_NOTE = (
-    "NOTE: Using ardopcf v1.0.4.1.2+develop, current as of the initial"
-    " use of this test script, one or more of the 16QAM.2000.100 frames"
-    " usually fail to be decoded properly during this test.  These are"
-    " the fastest and least robust of the ardop data frame types.  Even"
-    " when decoded correctly, the large number of RS errors corrected is"
-    " high, except when the fill level of the frame is low.  This"
-    " indicates poor performance of the demodulator that must be"
-    " compensated for by the large amount of forward error correction"
-    " used.  It is unclear at this time whether this mode is simply too"
-    " fragile for the algorithms and parameters being used, or whether"
-    " there is an as yet unidentified bug in ardopcf, which will improve"
-    " the usefulness of this frame type once it is fixed."
-)
 
 def parse_ber_results(logstr, cars, print_bermap=False):
     """For each carrier, print the Bit Error Rate data"""
@@ -233,23 +217,23 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                 res = subprocess.run(
                     [
                         APATH,
-                        # --logdir sets the location of the debug log and the
-                        # WAV files to be written.
+                        # --nologfile prevents the creation of a log
+                        # file which is not needed for this testing.
+                        "--nologfile",
+                        # --logdir sets the location of the WAV files written.
                         "--logdir",
                         TMPPATH,
                         "--writetxwav",
-                        # LOGLEVEL 0 (LOGEMERGENCY) should prevent most writes
-                        # to the log file, which is not used for this testing.
-                        # CONSOLELOG 7 (LOGDEBUG) ensures that filename of
-                        # the WAV is written to stdout so that it can be
-                        # parsed from res.stdout.
+                        # CONSOLELOG 2 ensures that the filename of the WAV is
+                        # written to stdout so that it can be parsed from
+                        # res.stdout.
                         # DRIVELEVEL 30 reduces the volume of the signal in the
                         # WAV file.  This is not expected to impact the ability
                         # of ardopcf to demodulate/decode this WAV file, but it
                         # may be useful if a later stage of this testing uses
                         # noise added to the recording.
                         "--hostcommands",
-                        f'LOGLEVEL 0;CONSOLELOG 7;DRIVELEVEL 30;TXFRAME'
+                        f'CONSOLELOG 2;DRIVELEVEL 30;TXFRAME'
                         f' {frametype[:-1]}{suffix} {rdatahex}'
                         f' 0x{hex(sessionid)[2:]:>02};CLOSE',
                         # Using special audio device name "NOSOUND" tells
@@ -275,8 +259,7 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                         print("stderr:\n", res.stdout.decode("iso-8859-1"))
                     faillist.append(
                         f"ERROR parsing stdout from encoding {frametype[:-1]}"
-                        f"{suffix} ({payload_used}/{payload_capacity} bytes)"
-                        f" {sdftstr}")
+                        f"{suffix} ({payload_used}/{payload_capacity} bytes)")
                     fail = True
                     continue
                 wavpath = m.group(1)
@@ -286,10 +269,9 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                         res = subprocess.run(
                             [
                                 APATH,
-                                # --logdir sets the location of the debug log and
-                                # the WAV files to be written.
-                                "--logdir",
-                                TMPPATH,
+                                # --nologfile prevents the creation of a log
+                                # file which is not needed for this testing.
+                                "--nologfile",
                                 "--decodewav",
                                 wavpath,
                                 # When sdftstr is "", the standard demodulators
@@ -299,16 +281,13 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                                 # frame type header for all data frames.
                                 sdftstr,
                                 "--hostcommands",
-                                # LOGLEVEL 0 (LOGEMERGENCY) should prevent most
-                                # writes to the log file, which is not used for
-                                # this testing.
-                                # CONSOLELOG 8 (LOGDEBUGPLUS) ensures that
+                                # CONSOLELOG 1 ensures that
                                 # [DecodeFrame] and [Frame Type Decode Fail],
                                 # the hex representation of the decoded data,
                                 # and Bit Error results are written to stdout so
                                 # that they can be parsed from res.stdout.
-                                'LOGLEVEL 0;CONSOLELOG 8',
-                                # No port number of sound devices are required
+                                'CONSOLELOG 1',
+                                # No port number or sound devices are required
                                 # when using the --decodewav option.
                             ],
                             capture_output=True,
@@ -359,11 +338,6 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                                 print(
                                     "This error occured when the experiemental"
                                     " SDFT demodulator was used.")
-
-                            if frametype == "16QAM.2000.100.E":
-                                print(
-                                    "NOTE: This failure is not unexpected.  See"
-                                    " note included in summary for more detail.")
                             if verbose > 1:
                                 parse_ber_results(
                                     res.stdout.decode("iso-8859-1"),
@@ -399,7 +373,7 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                     # hex string so that it can be compared to the encoded data.
                     m = re.search(
                         r"\[RXO ([0-9A-F][0-9A-F])\] ([0-9]+) bytes of data as"
-                        r" hex values:\s([0-9A-F ]+)\s\s+",
+                        r" hex values:\s+([0-9A-F ]+)\s\s+",
                         res.stdout.decode("iso-8859-1")
                     )
                     if m is None:
@@ -465,7 +439,6 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
             print(f"{len(faillist)} failures occured in test_data_wav_io().")
             for failnum, failstr in enumerate(faillist):
                 print(f"{failnum + 1}.  {failstr}")
-            print(QAM2000_NOTE)
         else:
             print("No failures occured in test_data_wav_io().")
     return faillist
@@ -495,6 +468,5 @@ if __name__ == '__main__':
         print(f"\n{len(full_faillist)} failures occured in test_wav_io.py.")
         for failnum, failstr in enumerate(full_faillist):
             print(f"{failnum + 1}.  {failstr}")
-        print(QAM2000_NOTE)
     else:
         print("\nNo failures occured in test_wav_io.py.")
