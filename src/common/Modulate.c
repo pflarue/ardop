@@ -107,7 +107,7 @@ void SendLeaderAndSYNC(UCHAR * bytEncodedBytes, int intLeaderLen)
 			bytMask = bytMask >> 2;
 		}
 	}
-	// Include these tone values in debug log only if FileLogLevel is LOGDEBUGPLUS
+	// Include these tone values in debug log only if FileLogLevel is VERBOSE (1)
 	ZF_LOGV("%s", DebugMess);
 }
 
@@ -245,7 +245,7 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 		}
 		intDataPtr += 1;
 	}
-	// Include these tone values in debug log only if FileLogLevel is LOGDEBUGPLUS
+	// Include these tone values in debug log only if FileLogLevel is VERBOSE (1)
 	if (intDataBytesPerCar == 0)
 		sprintf(DebugMess + strlen(DebugMess), "(None)");
 	ZF_LOGV("%s", DebugMess);

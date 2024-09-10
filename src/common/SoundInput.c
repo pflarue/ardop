@@ -1999,7 +1999,7 @@ BOOL DemodFrameType4FSK(int intPtr, short * intSamples, int * intToneMags)
 		else
 			bytSym = 3;
 
-		// Include these tone values in debug log only if FileLogLevel is LOGDEBUGPLUS
+		// Include these tone values in debug log only if FileLogLevel is VERBOSE (1)
 		ZF_LOGV("FrameType_bytSym : %d(%d %03.0f/%03.0f/%03.0f/%03.0f)", bytSym, intMagSum, 100.0*intToneMags[4 * i]/intMagSum, 100.0*intToneMags[1 + 4 * i]/intMagSum, 100.0*intToneMags[2 + 4 * i]/intMagSum, 100.0*intToneMags[3 + 4 * i]/intMagSum);
 	}
 
@@ -2532,7 +2532,7 @@ void Demod1Car4FSK_SDFT(int Start, BOOL blnGetFrameType)
 			}
 			bytCharValue = (bytCharValue << 2) + bytSym;
 		}
-		// Include these tone values in debug log only if FileLogLevel is LOGDEBUGPLUS
+		// Include these tone values in debug log only if FileLogLevel is VERBOSE (1)
 		ZF_LOGV(
 			"Demod4FSK %d(%03.0f/%03.0f/%03.0f/%03.0f) [timing_advance=%d : avg %.02f per symbol]",
 			bytSym,
@@ -2635,7 +2635,7 @@ void Demod1Car4FSKChar(int Start, UCHAR * Decoded)
 		Start += intSampPerSym;  // advance the pointer one symbol
 	}
 
-	// Include these tone values in debug log only if FileLogLevel is LOGDEBUGPLUS
+	// Include these tone values in debug log only if FileLogLevel is VERBOSE (1)
 	ZF_LOGV("%s", DebugMess);
 	if (AccumulateStats)
 		intFSKSymbolCnt += 4;
