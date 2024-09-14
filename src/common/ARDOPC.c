@@ -30,13 +30,13 @@ const char ProductName[] = "ardopcf";
 #endif
 
 #include "common/ARDOPC.h"
+#include "common/Locator.h"
 #include "rockliff/rrs.h"
 
 UCHAR bytDataToSend[DATABUFFERSIZE];
 int bytDataToSendLength = 0;
 
 void CompressCallsign(const char *Callsign, UCHAR *Compressed);
-void CompressGridSquare(char * Square, UCHAR * Compressed);
 void ASCIIto6Bit(const char * Padded, UCHAR * Compressed);
 void GetTwoToneLeaderWithSync(int intSymLen);
 void SendID(BOOL blnEnableCWID);
@@ -64,7 +64,7 @@ void ProcessCommandFromHost(char * strCMD);
 
 // Config parameters
 
-char GridSquare[9] = "";
+Locator GridSquare;
 char Callsign[CALL_BUF_SIZE] = "";
 BOOL wantCWID = FALSE;
 BOOL CWOnOff = FALSE;
@@ -1518,7 +1518,7 @@ int EncodePing(char * strMyCallsign, char * strTargetCallsign, UCHAR * bytReturn
 
 
 
-int Encode4FSKIDFrame(char * Callsign, char * Square, unsigned char * bytreturn)
+int Encode4FSKIDFrame(char * Callsign, const Locator* square, unsigned char * bytreturn)
 {
 	// Function to encodes ID frame
 	// returns length of encoded message
@@ -1538,9 +1538,7 @@ int Encode4FSKIDFrame(char * Callsign, char * Square, unsigned char * bytreturn)
 	// Modified May 9, 2015 to use RS instead of 2 byte CRC.
 
 	CompressCallsign(Callsign, &bytToRS[0]);
-
-	if (Square[0])
-		CompressGridSquare(Square, &bytToRS[6]);  // this uses compression to accept 4, 6, or 8 character Grid squares.
+	memcpy(&bytToRS[PACKED6_SIZE], locator_as_bytes(square), PACKED6_SIZE);
 
 	// Append Reed Solomon codes to end of frame data
 	if (rs_append(bytToRS, 12, 4) != 0) {
@@ -1665,22 +1663,12 @@ void SendID(BOOL blnEnableCWID)
 	if (SoundIsPlaying)
 		return;
 
-	if (GridSquare[0] == 0)
-	{
-		if ((EncLen = Encode4FSKIDFrame(Callsign, "No GS", bytEncodedBytes)) <= 0) {
-			ZF_LOGE("ERROR: In SendID() Invalid EncLen (%d).", EncLen);
-			return;
-		}
-		Len = sprintf(bytIDSent," %s:[No GS] ", Callsign);
+	if ((EncLen = Encode4FSKIDFrame(Callsign, &GridSquare, bytEncodedBytes)) <= 0) {
+		ZF_LOGE("ERROR: In SendID() Invalid EncLen (%d).", EncLen);
+		return;
 	}
-	else
-	{
-		if ((EncLen = Encode4FSKIDFrame(Callsign, GridSquare, bytEncodedBytes)) <= 0) {
-			ZF_LOGE("ERROR: In SendID() Invalid EncLen (%d).", EncLen);
-			return;
-		}
-		Len = sprintf(bytIDSent," %s:[%s] ", Callsign, GridSquare);
-	}
+
+	Len = snprintf(bytIDSent, sizeof(bytIDSent), " %s:[%s] ", Callsign, GridSquare.grid);
 
 	AddTagToDataAndSendToHost(bytIDSent, "IDF", Len);
 
@@ -1856,21 +1844,6 @@ void CompressCallsign(const char * inCallsign, UCHAR * Compressed)
 	ASCIIto6Bit(work, Compressed); // compress to 8 6 bit characters   6 bytes total
 }
 
-// Function to compress Gridsquare (up to 8 characters)
-
-void CompressGridSquare(char * Square, UCHAR * Compressed)
-{
-	char Padded[17];
-
-	if (strlen(Square) > 8)
-		return;
-
-	strcpy(Padded, Square);
-	strcat(Padded, "        ");
-
-	ASCIIto6Bit(Padded, Compressed);  // compress to 8 6 bit characters   6 bytes total
-}
-
 // Function to decompress 6 byte call sign to 7 characters plus optional -SSID of -0 to -15 or -A to -Z
 
 void DeCompressCallsign(const char * bytCallsign, char * returned, size_t returnlen)
@@ -1915,18 +1888,6 @@ void DeCompressCallsign(const char * bytCallsign, char * returned, size_t return
 			"LOGIC-ERROR: returnlen (%lu) passed to DeCompressCallsign was too"
 			" small, so callsign was truncated.",
 			returnlen);
-}
-
-
-// Function to decompress 6 byte Grid square to 4, 6 or 8 characters
-
-void DeCompressGridSquare(char * bytGS, char * returned)
-{
-	char bytTest[10] = "";
-	Bit6ToASCII(bytGS, bytTest);
-
-	strlop(bytTest, ' ');
-	strcpy(returned, bytTest);
 }
 
 // A function to compute the parity symbol used in the frame type encoding
@@ -2134,7 +2095,7 @@ void CheckTimers()
 		// Confirmed proper operation of this timeout and rule 4.0 May 18, 2015
 		// Send an ID frame (Handles protocol rule 4.0)
 
-		if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes)) <= 0) {
+		if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, &GridSquare, bytEncodedBytes)) <= 0) {
 			ZF_LOGE("ERROR: In CheckTimers() sending IDFrame before DIC Invalid EncLen (%d).", EncLen);
 			return;
 		}
@@ -2205,11 +2166,11 @@ void CheckTimers()
 	{
 		tmrFinalID = 0;
 
-		ZF_LOGD("[ARDOPprotocol.tmrFinalID_Elapsed]  Send Final ID (%s, [%s])", strFinalIDCallsign, GridSquare);
+		ZF_LOGD("[ARDOPprotocol.tmrFinalID_Elapsed]  Send Final ID (%s, [%s])", strFinalIDCallsign, GridSquare.grid);
 
 		if (CheckValidCallsignSyntax(strFinalIDCallsign))
 		{
-			if ((EncLen = Encode4FSKIDFrame(strFinalIDCallsign, GridSquare, bytEncodedBytes)) <= 0) {
+			if ((EncLen = Encode4FSKIDFrame(strFinalIDCallsign, &GridSquare, bytEncodedBytes)) <= 0) {
 				ZF_LOGE("ERROR: In CheckTimers() sending IDFrame  Invalid EncLen (%d).", EncLen);
 				return;
 			}

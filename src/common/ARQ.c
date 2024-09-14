@@ -1521,7 +1521,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				if (CheckValidCallsignSyntax(strLocalCallsign))
 				{
 					dttLastFECIDSent = Now;
-					if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes)) <= 0) {
+					if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, &GridSquare, bytEncodedBytes)) <= 0) {
 						ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
 						return;
 					}
@@ -1808,7 +1808,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 			if (CheckValidCallsignSyntax(strLocalCallsign))
 			{
 				dttLastFECIDSent = Now;
-				if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes)) <= 0) {
+				if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, &GridSquare, bytEncodedBytes)) <= 0) {
 					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
 					return;
 				}
@@ -2196,7 +2196,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				if (CheckValidCallsignSyntax(strLocalCallsign))
 				{
 					dttLastFECIDSent = Now;
-					if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes)) <= 0) {
+					if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, &GridSquare, bytEncodedBytes)) <= 0) {
 						ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
 						return;
 					}
@@ -2423,7 +2423,7 @@ BOOL Send10MinID()
 		blnEnbARQRpt = FALSE;
 
 		dttLastFECIDSent = Now;
-		if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, GridSquare, bytEncodedBytes)) <= 0) {
+		if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, &GridSquare, bytEncodedBytes)) <= 0) {
 			ZF_LOGE("ERROR: In Send10MinID() Invalid EncLen (%d).", EncLen);
 			return FALSE;
 		}

@@ -296,7 +296,7 @@ sendit:
 
 			unsigned char bytEncodedBytes[16];
 
-			if ((EncLen = Encode4FSKIDFrame(Callsign, GridSquare, bytEncodedBytes)) <= 0) {
+			if ((EncLen = Encode4FSKIDFrame(Callsign, &GridSquare, bytEncodedBytes)) <= 0) {
 				ZF_LOGE("ERROR: In GetNextFECFrame() IDFrame Invalid EncLen (%d).", EncLen);
 				return FALSE;
 			}

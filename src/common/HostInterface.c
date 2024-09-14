@@ -725,18 +725,21 @@ void ProcessCommandFromHost(char * strCMD)
 	{
 		if (ptrParams == 0)
 		{
-			sprintf(cmdReply, "%s %s", strCMD, GridSquare);
+			snprintf(cmdReply, sizeof(cmdReply), "%s %s", strCMD, GridSquare.grid);
 			SendReplyToHost(cmdReply);
 		}
 		else
-			if (CheckGSSyntax(ptrParams))
-			{
-				strcpy(GridSquare, ptrParams);
-				sprintf(cmdReply, "%s now %s", strCMD, GridSquare);
+		{
+			Locator inp;
+			locator_err e = locator_from_str(ptrParams, &inp);
+			if (e) {
+				snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s: %s", strCMD, ptrParams, locator_strerror(e));
+			} else {
+				memcpy(&GridSquare, &inp, sizeof(GridSquare));
+				snprintf(cmdReply, sizeof(cmdReply), "%s now %s", strCMD, GridSquare.grid);
 				SendReplyToHost(cmdReply);
 			}
-			else
-				snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
+		}
 
 		goto cmddone;
 	}

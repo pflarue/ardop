@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include "common/ARDOPC.h"
+#include "common/Locator.h"
 
 extern int intLastRcvdFrameQuality;  // defined in ARDOPC.c
 
@@ -210,7 +211,8 @@ int txframe(char * frameParams) {
 		// 0x30 IDFrame
 		// Uses globals: Callsign, GridSquare
 		char callsign[CALL_BUF_SIZE];
-		char gridsquare[9];
+		Locator grid;
+		locator_init(&grid);
 		if (paramcount > 2 && strcmp(params[2], "_") != 0) {
 			if (!CheckValidCallsignSyntax(params[2])) {
 				ZF_LOGW(
@@ -226,19 +228,19 @@ int txframe(char * frameParams) {
 				"TXFRAME IDFrame requires an implicit or explicit callsign.");
 			return (1);
 		}
-		if (paramcount > 3 && strcmp(params[3], "_") != 0)
-			// TODO: check whether gridsquare is valid?
-			strncpy(gridsquare, params[3], 8);
-		else if (GridSquare[0] != 0x00)
-			strncpy(gridsquare, GridSquare, 8);
-		else {
-			ZF_LOGW(
-				"TXFRAME IDFrame requires an implicit or explicit gridsquare.");
-			return (1);
+		if (paramcount > 3 && strcmp(params[3], "_") != 0) {
+			locator_err e = locator_from_str(params[3], &grid);
+			if (e) {
+				ZF_LOGW("TXFRAME IDFrame invalid grid square: %s", locator_strerror(e));
+			}
 		}
-		gridsquare[8] = 0x00;  // ensure NULL terminated
-		ZF_LOGD("TXFRAME IDFrame %s %s", callsign, gridsquare);
-		if ((EncLen = Encode4FSKIDFrame(callsign, gridsquare, bytEncodedBytes)) <= 0) {
+		else if (locator_is_populated(&GridSquare)) {
+			// use global GRIDSQUARE
+			memcpy(&grid, &GridSquare, sizeof(grid));
+		}
+
+		ZF_LOGD("TXFRAME IDFrame %s [%s]", callsign, grid.grid);
+		if ((EncLen = Encode4FSKIDFrame(callsign, &grid, bytEncodedBytes)) <= 0) {
 			ZF_LOGE("ERROR: In txframe() IDFrame Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
