@@ -637,36 +637,6 @@ BOOL CheckValidCallsignSyntax(char * strCallsign)
 	return TRUE;
 }
 
-//	 Function to check for proper syntax of a 4, 6 or 8 character GS
-
-BOOL CheckGSSyntax(char * GS)
-{
-	int Len = strlen(GS);
-
-	if (!(Len == 4 || Len == 6 || Len == 8))
-		return FALSE;
-
-	if (!isalpha(GS[0]) || !isalpha(GS[1]))
-		return FALSE;
-
-	if (!isdigit(GS[2]) || !isdigit(GS[3]))
-		return FALSE;
-
-	if (Len == 4)
-		return TRUE;
-
-	if (!isalpha(GS[4]) || !isalpha(GS[5]))
-		return FALSE;
-
-	if (Len == 6)
-		return TRUE;
-
-	if (!isdigit(GS[6]) || !isdigit(GS[7]))
-		return FALSE;
-
-	return TRUE;
-}
-
 // Function polled by Main polling loop to see if time to play next wave stream
 
 BOOL GetNextFrame()

@@ -131,7 +131,6 @@ BOOL SendARQConnectRequest(char * strMycall, char * strTargetCall);
 void AddDataToDataToSend(UCHAR * bytNewData, int Len);
 BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL blnSendID);
 void SendID(BOOL blnEnableCWID);
-BOOL CheckGSSyntax(char * GS);
 // void SetARDOPProtocolState(int value);
 unsigned int GenCRC16(unsigned char * Data, unsigned short length);
 void SendCommandToHost(char * Cmd);
