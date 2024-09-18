@@ -2,6 +2,7 @@
 #define ARDOPCHEADERDEFINED
 
 #include "common/log.h"
+#include "common/Locator.h"
 
 extern const char ProductName[];
 extern const char ProductVersion[];
@@ -125,7 +126,7 @@ void ClearDataToSend();
 int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigned char * bytEncodedBytes);
 int EncodePSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigned char * bytEncodedBytes);
 int EncodePing(char * strMyCallsign, char * strTargetCallsign, UCHAR * bytReturn);
-int Encode4FSKIDFrame(char * Callsign, char * Square, unsigned char * bytreturn);
+int Encode4FSKIDFrame(char * Callsign, const Locator* square, unsigned char * bytreturn);
 int EncodeDATAACK(int intQuality, UCHAR bytSessionID, UCHAR * bytreturn);
 int EncodeDATANAK(int intQuality , UCHAR bytSessionID, UCHAR * bytreturn);
 void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);
@@ -202,7 +203,6 @@ extern void Generate50BaudTwoToneLeaderTemplate();
 extern BOOL blnDISCRepeating;
 
 void DeCompressCallsign(const char * bytCallsign, char * returned, size_t returnlen);
-void DeCompressGridSquare(char * bytGS, char * returned);
 void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDecodedOK);
 void ProcessUnconnectedConReqFrame(int intFrameType, UCHAR * bytData);
 void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL blnFrameDecodedOK);
@@ -381,7 +381,7 @@ extern const short intFSK600bdCarTemplate[4][20];  // Template for 4FSK carriers
 #define AUXCALLS_ALEN 10  // length of AuxCalls array
 #define COMP_SIZE 6  // size of compressed callsign or gridsquare
 // Config Params
-extern char GridSquare[9];
+extern Locator GridSquare;
 extern char Callsign[CALL_BUF_SIZE];
 extern BOOL wantCWID;
 extern BOOL CWOnOff;

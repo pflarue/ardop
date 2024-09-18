@@ -6,6 +6,7 @@
 #endif
 
 #include "common/ARDOPC.h"
+#include "common/Locator.h"
 #include "common/RXO.h"
 #include "common/sdft.h"
 #include "rockliff/rrs.h"
@@ -243,7 +244,7 @@ void Demod1Car4FSKChar(int Start, UCHAR * Decoded);
 VOID Track1Car4FSK(short * intSamples, int * intPtr, int intSampPerSymbol, float intSearchFreq, int intBaud, UCHAR * bytSymHistory);
 VOID Decode1CarPSK(UCHAR * Decoded, int Carrier);
 int EnvelopeCorrelator();
-BOOL DecodeFrame(int intFrameType, UCHAR * bytData);
+BOOL DecodeFrame(int intFrameType, uint8_t bytData[MAX_DATA_LENGTH]);
 
 void Update4FSKConstellation(int * intToneMags, int * intQuality);
 void ProcessPingFrame(char * bytData);
@@ -3044,12 +3045,12 @@ BOOL Decode4FSKPingACK(UCHAR bytFrameType, int * intSNdB, int * intQuality)
 }
 
 
-BOOL Decode4FSKID(UCHAR bytFrameType, char * strCallID, size_t strCallIDLen, char * strGridSquare)
+BOOL Decode4FSKID(UCHAR bytFrameType, char * strCallID, size_t strCallIDLen, Locator * grid)
 {
 	UCHAR bytCall[COMP_SIZE];
-	UCHAR temp[20];
 	BOOL FrameOK;
 	unsigned char * p = bytFrameData1;
+	locator_init(grid);
 
 
 	ZF_LOGD("%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x  %02x %02x %02x %02x ",
@@ -3080,15 +3081,10 @@ BOOL Decode4FSKID(UCHAR bytFrameType, char * strCallID, size_t strCallIDLen, cha
 
 	memcpy(bytCall, bytFrameData1, COMP_SIZE);
 	DeCompressCallsign(bytCall, strCallID, strCallIDLen);
-	memcpy(bytCall, &bytFrameData1[COMP_SIZE], COMP_SIZE);
-	DeCompressGridSquare(bytCall, temp);
-
-	if (strlen(temp) > 5)
-	{
-		temp[4] = tolower(temp[4]);
-		temp[5] = tolower(temp[5]);
+	locator_err e = locator_from_bytes(&bytFrameData1[COMP_SIZE], grid);
+	if (e) {
+		ZF_LOGD("Failed to decode grid ID Frame (sender: %s) grid square: %s", strCallID, locator_strerror(e));
 	}
-	sprintf(strGridSquare, "[%s]", temp);
 
 	if (AccumulateStats) {
 		if (FrameOK)
@@ -3265,11 +3261,12 @@ BOOL DecodeACKNAK(int intFrameType, int *  intQuality)
 
 
 
-BOOL DecodeFrame(int xxx, UCHAR * bytData)
+BOOL DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 {
 	BOOL blnDecodeOK = FALSE;
 	char strIDCallSign[CALL_BUF_SIZE] = "";
-	char strGridSQ[20] = "";
+	Locator gridSQ;
+	locator_init(&gridSQ);
 	int intTiming;
 	int intRcvdQuality;
 	char Reply[80];
@@ -3362,11 +3359,12 @@ BOOL DecodeFrame(int xxx, UCHAR * bytData)
 
 		case IDFRAME:  // 0x30
 
-			blnDecodeOK = Decode4FSKID(IDFRAME, strIDCallSign, sizeof(strIDCallSign), strGridSQ);
+			blnDecodeOK = Decode4FSKID(IDFRAME, strIDCallSign, sizeof(strIDCallSign), &gridSQ);
 
-			frameLen = sprintf(bytData, "ID:%s %s:" , strIDCallSign, strGridSQ);
+			frameLen = snprintf(bytData, MAX_DATA_LENGTH, "ID:%s [%s]:" , strIDCallSign, gridSQ.grid);
 
 			if (blnDecodeOK) {
+				ZF_LOGI("[DecodeFrame] IDFrame: %s [%s]", strIDCallSign, gridSQ.grid);
 				DrawRXFrame(1, bytData);
 				wg_send_rxframet(0, 1, (char *)bytData);
 			}

@@ -194,7 +194,6 @@ extern void Generate50BaudTwoToneLeaderTemplate();
 extern BOOL blnDISCRepeating;
 
 void DeCompressCallsign(const char * bytCallsign, char * returned, size_t returnedlen);
-void DeCompressGridSquare(char * bytGS, char * returned);
 
 int RSEncode(UCHAR * bytToRS, UCHAR * bytRSEncoded, int MaxErr, int Len);
 BOOL RSDecode(UCHAR * bytRcv, int Length, int CheckLen, BOOL * blnRSOK);
@@ -331,7 +330,7 @@ extern struct SEM Semaphore;
 
 
 // Config Params
-extern char GridSquare[9];
+extern Locator GridSquare;
 extern char Callsign[CALL_BUF_SIZE];
 extern BOOL wantCWID;
 extern BOOL CWOnOff;
