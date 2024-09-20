@@ -121,7 +121,7 @@ static void test_decompress_callsign(void **state)
 	// A callsign string may have a maximum length of 9 characters.  Thus, if
 	// the callsign excluding the SSID is the maximum of 7 characters, the
 	// SSID is truncated to a single character.
-	assert_callsign_inout("LONGCAL-15", "LONGCAL-1");
+	assert_callsign_inout("LONGCAL-15", "LONGCAL-15");
 
 	// non-canonical representation
 	assert_callsign_inout("N0CALL-0", "N0CALL");

@@ -376,7 +376,7 @@ extern const short intFSK50bdCarTemplate[4][240];  // Template for 4FSK carriers
 extern const short intFSK100bdCarTemplate[20][120];  // Template for 4FSK carriers spaced at 100 Hz, 100 baud
 extern const short intFSK600bdCarTemplate[4][20];  // Template for 4FSK carriers spaced at 600 Hz, 600 baud  (used for FM only)
 
-#define CALL_BUF_SIZE 10  // size of buffer for callsign strings
+#define CALL_BUF_SIZE 11  // size of buffer for callsign strings
 #define AUXCALLS_ALEN 10  // length of AuxCalls array
 #define COMP_SIZE 6  // size of compressed callsign or gridsquare
 // Config Params
