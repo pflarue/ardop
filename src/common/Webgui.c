@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "common/ardopcommon.h"
+#include "common/StationId.h"
 #include "ws_server/ws_server.h"
 
 /////////////////////////////////////////////////////////////////////////////
@@ -27,7 +28,7 @@ extern BOOL blnPending;
 extern BOOL NeedTwoToneTest;
 extern BOOL NeedID;
 extern BOOL WG_DevMode;
-extern char Callsign[CALL_BUF_SIZE];
+extern StationId Callsign;
 extern char strRemoteCallsign[CALL_BUF_SIZE];
 extern float wS1;
 int ExtractARQBandwidth();
@@ -757,8 +758,8 @@ void WebguiPoll() {
 			wg_send_bandwidth(cnum);
 			wg_send_busy(cnum, blnBusyStatus);
 
-			if (Callsign[0] != 0x00)
-				wg_send_mycall(cnum, Callsign);
+			if (stationid_ok(&Callsign))
+				wg_send_mycall(cnum, Callsign.str);
 			if (strRemoteCallsign[0] != 0x00 && (blnARQConnected || blnPending))
 				wg_send_rcall(cnum, strRemoteCallsign);
 			if (WG_DevMode)
@@ -795,7 +796,7 @@ void WebguiPoll() {
 			else if (ProtocolState != DISC)
 				wg_send_alert(cnum, "Cannot send ID from ProtocolState = %s.",
 					ARDOPStates[ProtocolState]);
-			else if (Callsign[0] == 0x00)
+			else if (! stationid_ok(&Callsign))
 				wg_send_alert(cnum, "Cannot send ID.  Callsign not set.");
 			else
 				NeedID = true;

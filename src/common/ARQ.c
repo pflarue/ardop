@@ -61,8 +61,8 @@ extern const short FrameSize[256];
 
 // ARQ State Variables
 
-char AuxCalls[AUXCALLS_ALEN][CALL_BUF_SIZE] = {0};
-int AuxCallsLength = 0;
+StationId AuxCalls[AUXCALLS_ALEN];
+size_t AuxCallsLength = 0;
 
 int intBW;  // Requested connect speed
 int intSessionBW;  // Negotiated speed
@@ -535,17 +535,15 @@ BOOL IsCallToMe(char * strCallsign, UCHAR * bytReplySessionID)
 {
 	// returns true and sets bytReplySessionID if is to me.
 
-	int i;
-
-	if (strcmp(strCallsign, Callsign) == 0)
+	if (strcmp(strCallsign, Callsign.str) == 0)
 	{
 		*bytReplySessionID = GenerateSessionID(bytData, strCallsign);
 		return TRUE;
 	}
 
-	for (i = 0; i < AuxCallsLength; i++)
+	for (size_t i = 0; i < AuxCallsLength; i++)
 	{
-		if (strcmp(strCallsign, AuxCalls[i]) == 0)
+		if (strcmp(strCallsign, AuxCalls[i].str) == 0)
 		{
 			*bytReplySessionID = GenerateSessionID(bytData, strCallsign);
 			return TRUE;
@@ -557,14 +555,12 @@ BOOL IsCallToMe(char * strCallsign, UCHAR * bytReplySessionID)
 
 BOOL IsPingToMe(char * strCallsign)
 {
-	int i;
-
-	if (strcmp(strCallsign, Callsign) == 0)
+	if (strcmp(strCallsign, Callsign.str) == 0)
 		return TRUE;
 
-	for (i = 0; i < AuxCallsLength; i++)
+	for (size_t i = 0; i < AuxCallsLength; i++)
 	{
-		if (strcmp(strCallsign, AuxCalls[i]) == 0)
+		if (strcmp(strCallsign, AuxCalls[i].str) == 0)
 			return TRUE;
 	}
 
@@ -1521,7 +1517,9 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				if (CheckValidCallsignSyntax(strLocalCallsign))
 				{
 					dttLastFECIDSent = Now;
-					if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, &GridSquare, bytEncodedBytes)) <= 0) {
+					StationId local_callsign_todo_nomerge;
+					station_id_err e = stationid_from_str(strLocalCallsign, &local_callsign_todo_nomerge);
+					if (e == 0 && (EncLen = Encode4FSKIDFrame(&local_callsign_todo_nomerge, &GridSquare, bytEncodedBytes)) <= 0) {
 						ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
 						return;
 					}
@@ -1808,7 +1806,9 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 			if (CheckValidCallsignSyntax(strLocalCallsign))
 			{
 				dttLastFECIDSent = Now;
-				if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, &GridSquare, bytEncodedBytes)) <= 0) {
+				StationId local_callsign_todo_nomerge;
+				station_id_err e = stationid_from_str(strLocalCallsign, &local_callsign_todo_nomerge);
+				if (e == 0 && (EncLen = Encode4FSKIDFrame(&local_callsign_todo_nomerge, &GridSquare, bytEncodedBytes)) <= 0) {
 					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
 					return;
 				}
@@ -2196,7 +2196,9 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				if (CheckValidCallsignSyntax(strLocalCallsign))
 				{
 					dttLastFECIDSent = Now;
-					if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, &GridSquare, bytEncodedBytes)) <= 0) {
+					StationId local_callsign_todo_nomerge;
+					station_id_err e = stationid_from_str(strLocalCallsign, &local_callsign_todo_nomerge);
+					if (e == 0 && (EncLen = Encode4FSKIDFrame(&local_callsign_todo_nomerge, &GridSquare, bytEncodedBytes)) <= 0) {
 						ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
 						return;
 					}
@@ -2423,7 +2425,10 @@ BOOL Send10MinID()
 		blnEnbARQRpt = FALSE;
 
 		dttLastFECIDSent = Now;
-		if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, &GridSquare, bytEncodedBytes)) <= 0) {
+
+		StationId local_callsign_todo_nomerge;
+		station_id_err e = stationid_from_str(strLocalCallsign, &local_callsign_todo_nomerge);
+		if (e == 0 && (EncLen = Encode4FSKIDFrame(&local_callsign_todo_nomerge, &GridSquare, bytEncodedBytes)) <= 0) {
 			ZF_LOGE("ERROR: In Send10MinID() Invalid EncLen (%d).", EncLen);
 			return FALSE;
 		}

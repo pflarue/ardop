@@ -155,7 +155,7 @@ void SetFilter(void * Filter());
 
 void AddTrailer();
 void CWID(char * strID, short * intSamples, BOOL blnPlay);
-void sendCWID(char * Call, BOOL Play);
+void sendCWID(const StationId* station, BOOL Play);
 UCHAR ComputeTypeParity(UCHAR bytFrameType);
 void GenCRC16FrameType(char * Data, int Length, UCHAR bytFrameType);
 BOOL CheckCRC16FrameType(unsigned char * Data, int Length, UCHAR bytFrameType);
@@ -330,7 +330,7 @@ extern struct SEM Semaphore;
 
 // Config Params
 extern Locator GridSquare;
-extern char Callsign[CALL_BUF_SIZE];
+extern StationId Callsign;
 extern BOOL wantCWID;
 extern BOOL CWOnOff;
 extern int LeaderLength;
@@ -429,8 +429,7 @@ extern BOOL AccumulateStats;
 
 extern int EncLen;
 
-extern char AuxCalls[AUXCALLS_ALEN][CALL_BUF_SIZE];
-extern int AuxCallsLength;
+extern size_t AuxCallsLength;
 
 extern int bytValidFrameTypesLength;
 extern int bytValidFrameTypesLengthALL;

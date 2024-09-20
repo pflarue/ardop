@@ -80,7 +80,7 @@ BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL
 
 	// check call sign
 
-	if (!CheckValidCallsignSyntax(Callsign))
+	if (!stationid_ok(&Callsign) || stationid_is_cq(&Callsign))
 	{
 		// Logs.Exception("[ARDOPprotocol.StartFEC] Invalid call sign: " & MCB.Callsign)
 		return FALSE;
@@ -296,7 +296,7 @@ sendit:
 
 			unsigned char bytEncodedBytes[16];
 
-			if ((EncLen = Encode4FSKIDFrame(Callsign, &GridSquare, bytEncodedBytes)) <= 0) {
+			if ((EncLen = Encode4FSKIDFrame(&Callsign, &GridSquare, bytEncodedBytes)) <= 0) {
 				ZF_LOGE("ERROR: In GetNextFECFrame() IDFrame Invalid EncLen (%d).", EncLen);
 				return FALSE;
 			}

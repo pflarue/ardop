@@ -31,6 +31,7 @@ const char ProductName[] = "ardopcf";
 
 #include "common/ARDOPC.h"
 #include "common/Locator.h"
+#include "common/StationId.h"
 #include "rockliff/rrs.h"
 
 UCHAR bytDataToSend[DATABUFFERSIZE];
@@ -65,7 +66,7 @@ void ProcessCommandFromHost(char * strCMD);
 // Config parameters
 
 Locator GridSquare;
-char Callsign[CALL_BUF_SIZE] = "";
+StationId Callsign;
 BOOL wantCWID = FALSE;
 BOOL CWOnOff = FALSE;
 BOOL NeedID = FALSE;  // SENDID Command Flag
@@ -83,7 +84,7 @@ int intPINGRepeats = 0;
 int WaterfallActive = 1;  // Waterfall display on
 int SpectrumActive = 0;  // Spectrum display off
 
-char ConnectToCall[CALL_BUF_SIZE] = "";
+StationId ConnectToCall;
 
 int LeaderLength = 240;
 unsigned int ARQTimeout = 120;
@@ -199,7 +200,7 @@ extern unsigned int tmrIRSPendingTimeout;
 extern unsigned int tmrFinalID;
 extern unsigned int tmrPollOBQueue;
 int Encode4FSKControl(UCHAR bytFrameType, UCHAR bytSessionID, UCHAR * bytreturn);
-void SendPING(char * strMycall, char * strTargetCall, int intRpt);
+void SendPING(const StationId* mycall, const char * strTargetCall, int intRpt);
 
 int intRepeatCnt;
 
@@ -1460,22 +1461,32 @@ int EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, enum _AR
 	return 18;  // 2 bytes for FrameType + 12 bytes data + 4 bytes RS
 }
 
-int EncodePing(char * strMyCallsign, char * strTargetCallsign, UCHAR * bytReturn)
+int EncodePing(const StationId* mycall, const char * strTargetCallsign, UCHAR * bytReturn)
 {
 	// Encodes a 4FSK 200 Hz BW Ping frame ( ~ 1950 ms with default leader/trailer)
 
 	UCHAR * bytToRS= &bytReturn[2];
 
-//        If Not (CheckValidCallsignSyntax(strTargetCallsign) Or CheckValidCallsignSyntax(strMyCallsign)) Then
-//          Logs.Exception("[EncodeModulate.EncodePing] Illegal Call sign syntax. MyCallsign = " & strMyCallsign & ", TargetCallsign = " & strTargetCallsign)
-////         Return Nothing
-//     End If
+	if (!stationid_ok(mycall) || stationid_is_cq(mycall)) {
+		ZF_LOGE("Unable to send ping: MYCALL is unset");
+		return 0;
+	}
+
+	StationId target;
+	station_id_err e = stationid_from_str(strTargetCallsign, &target);
+	if (e) {
+		ZF_LOGE("Unable to send ping: invalid target callsign: %s", stationid_strerror(e));
+		return 0;
+	}
 
 	bytReturn[0] = PING;
 	bytReturn[1] = bytReturn[0] ^ 0xFF;  // Ping always uses session ID of &HFF
 
-	CompressCallsign(strMyCallsign, &bytToRS[0]);
-	CompressCallsign(strTargetCallsign, &bytToRS[6]);  // this uses compression to accept 4, 6, or 8 character Grid squares.
+	bool ok = true;
+	ok &= stationid_to_buffer(mycall, &bytToRS[0]);
+	ok &= stationid_to_buffer(&target, &bytToRS[sizeof(Packed6)]);
+	if (!ok)
+		return 0;
 
 	// Append Reed Solomon codes to end of frame data
 	if (rs_append(bytToRS, 12, 4) != 0) {
@@ -1488,17 +1499,16 @@ int EncodePing(char * strMyCallsign, char * strTargetCallsign, UCHAR * bytReturn
 
 
 
-int Encode4FSKIDFrame(char * Callsign, const Locator* square, unsigned char * bytreturn)
+int Encode4FSKIDFrame(const StationId* callsign, const Locator* square, unsigned char * bytreturn)
 {
 	// Function to encodes ID frame
 	// returns length of encoded message
 
 	UCHAR * bytToRS= &bytreturn[2];
 
-	if (!CheckValidCallsignSyntax(Callsign))
+	if (!stationid_ok(callsign) || stationid_is_cq(callsign))
 	{
-		// Logs.Exception("[EncodeModulate.EncodeIDFrame] Illegal Callsign syntax or Gridsquare length. MyCallsign = " & strMyCallsign & ", Gridsquare = " & strGridSquare)
-
+		ZF_LOGE("Unable to send ID frame: MYCALL is unset");
 		return 0;
 	}
 
@@ -1506,8 +1516,9 @@ int Encode4FSKIDFrame(char * Callsign, const Locator* square, unsigned char * by
 	bytreturn[1] = IDFRAME ^ 0xFF;
 
 	// Modified May 9, 2015 to use RS instead of 2 byte CRC.
+	if (!stationid_to_buffer(callsign, &bytToRS[0]))
+		return 0;
 
-	CompressCallsign(Callsign, &bytToRS[0]);
 	memcpy(&bytToRS[PACKED6_SIZE], locator_as_bytes(square), PACKED6_SIZE);
 
 	// Append Reed Solomon codes to end of frame data
@@ -1633,12 +1644,12 @@ void SendID(BOOL blnEnableCWID)
 	if (SoundIsPlaying)
 		return;
 
-	if ((EncLen = Encode4FSKIDFrame(Callsign, &GridSquare, bytEncodedBytes)) <= 0) {
+	if ((EncLen = Encode4FSKIDFrame(&Callsign, &GridSquare, bytEncodedBytes)) <= 0) {
 		ZF_LOGE("ERROR: In SendID() Invalid EncLen (%d).", EncLen);
 		return;
 	}
 
-	Len = snprintf(bytIDSent, sizeof(bytIDSent), " %s:[%s] ", Callsign, GridSquare.grid);
+	Len = snprintf(bytIDSent, sizeof(bytIDSent), " %s:[%s] ", Callsign.str, GridSquare.grid);
 
 	AddTagToDataAndSendToHost(bytIDSent, "IDF", Len);
 
@@ -1655,7 +1666,7 @@ void SendID(BOOL blnEnableCWID)
 	Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
 
 	if (blnEnableCWID)
-		sendCWID(Callsign, FALSE);
+		sendCWID(&Callsign, FALSE);
 }
 
 // Function to generate a 5 second burst of two tone (1450 and 1550 Hz) used for setting up drive level
@@ -2065,7 +2076,9 @@ void CheckTimers()
 		// Confirmed proper operation of this timeout and rule 4.0 May 18, 2015
 		// Send an ID frame (Handles protocol rule 4.0)
 
-		if ((EncLen = Encode4FSKIDFrame(strLocalCallsign, &GridSquare, bytEncodedBytes)) <= 0) {
+		StationId local_callsign_todo_nomerge;
+		station_id_err e = stationid_from_str(strLocalCallsign, &local_callsign_todo_nomerge);
+		if (e == 0 && (EncLen = Encode4FSKIDFrame(&local_callsign_todo_nomerge, &GridSquare, bytEncodedBytes)) <= 0) {
 			ZF_LOGE("ERROR: In CheckTimers() sending IDFrame before DIC Invalid EncLen (%d).", EncLen);
 			return;
 		}
@@ -2138,9 +2151,11 @@ void CheckTimers()
 
 		ZF_LOGD("[ARDOPprotocol.tmrFinalID_Elapsed]  Send Final ID (%s, [%s])", strFinalIDCallsign, GridSquare.grid);
 
-		if (CheckValidCallsignSyntax(strFinalIDCallsign))
+		StationId final_id_todo_nomerge;
+
+		if (0 == stationid_from_str(strFinalIDCallsign, &final_id_todo_nomerge))
 		{
-			if ((EncLen = Encode4FSKIDFrame(strFinalIDCallsign, &GridSquare, bytEncodedBytes)) <= 0) {
+			if ((EncLen = Encode4FSKIDFrame(&final_id_todo_nomerge, &GridSquare, bytEncodedBytes)) <= 0) {
 				ZF_LOGE("ERROR: In CheckTimers() sending IDFrame  Invalid EncLen (%d).", EncLen);
 				return;
 			}
@@ -2154,12 +2169,12 @@ void CheckTimers()
 	if (NeedConReq)
 	{
 		NeedConReq = 0;
-		SendARQConnectRequest(Callsign, ConnectToCall);
+		SendARQConnectRequest(Callsign.str, ConnectToCall.str);
 	}
 	if (NeedPing)
 	{
 		NeedPing = 0;
-		SendPING(Callsign, ConnectToCall, PingCount);
+		SendPING(&Callsign, ConnectToCall.str, PingCount);
 	}
 
 	// Send Async ID (from SENDID command)
@@ -2172,7 +2187,7 @@ void CheckTimers()
 
 	if (NeedCWID)
 	{
-		sendCWID(Callsign, FALSE);
+		sendCWID(&Callsign, FALSE);
 		NeedCWID = 0;
 	}
 
@@ -2445,9 +2460,9 @@ void UpdateBusyDetector(short * bytNewSamples)
 	wg_send_fftdata(dblMag, 206);
 }
 
-void SendPING(char * strMycall, char * strTargetCall, int intRpt)
+void SendPING(const StationId* mycall, const char* strTargetCall, int intRpt)
 {
-	if ((EncLen = EncodePing(strMycall, strTargetCall, bytEncodedBytes)) <= 0) {
+	if ((EncLen = EncodePing(mycall, strTargetCall, bytEncodedBytes)) <= 0) {
 		ZF_LOGE("ERROR: In SendPING() Invalid EncLen (%d).", EncLen);
 		return;
 	}
@@ -2469,7 +2484,7 @@ void SendPING(char * strMycall, char * strTargetCall, int intRpt)
 	blnPINGrepeating = True;
 	dttLastPINGSent = Now;
 
-	ZF_LOGD("[SendPING] strMycall= %s strTargetCall=%s  Repeat=%d", strMycall, strTargetCall, intRpt);
+	ZF_LOGD("[SendPING] strMycall= %s strTargetCall=%s  Repeat=%d", mycall->str, strTargetCall, intRpt);
 
 	return;
 }
