@@ -160,6 +160,81 @@ bool DoTrueFalseCmd(char * strCMD, char * ptrParams, BOOL * Value)
 	return true;
 }
 
+/**
+ * @brief Parse command `params` like "`N0CALL-A 5`"
+ *
+ * Reads command `params` that take a `target` ID and a `nattempts`
+ * count.
+ *
+ * @param[in] cmd         Command name, like `ARQCALL`. Must be
+ *                        non-NULL and NUL-terminated.
+ * @param[in] params      Command parameters. May be NULL. If not,
+ *                        must be NUL-terminated. Will be
+ *                        destructively overwritten.
+ * @param[out] fault      Destination buffer for failure message
+ * @param[in] fault_size  `sizeof(fault)`
+ * @param[out] target     Station ID parsed
+ * @param[out] nattempts  Attempt count parsed. Will be positive.
+ *
+ * @return true if the params are valid and a `target` and
+ * `nattempts` are populated. false if the params are not valid
+ * and `fault` is populated instead. If this method returns false,
+ * the value of `target` and `nattempts` are undefined.
+ */
+ARDOP_MUSTUSE
+bool parse_station_and_nattempts(
+	const char* cmd,
+	char* params,
+	char* fault,
+	size_t fault_size,
+	StationId* target,
+	long* nattempts)
+{
+	stationid_init(target);
+	*nattempts = 0;
+
+	if (! params) {
+		snprintf(fault, fault_size, "Syntax Err: %s: expected \"TARGET NATTEMPTS\"", cmd);
+		return false;
+	}
+
+	const char* target_str = params;
+	const char* nattempts_str = strlop(params, ' ');
+	if (!nattempts_str) {
+		snprintf(fault, fault_size, "Syntax Err: %s %s: expected \"TARGET NATTEMPTS\"", cmd, target_str);
+		return false;
+	}
+
+	station_id_err e = stationid_from_str(target_str, target);
+	if (e) {
+		snprintf(
+			fault,
+			fault_size,
+			"Syntax Err: %s %s %s: invalid TARGET: %s",
+			cmd, target_str, nattempts_str, stationid_strerror(e));
+		return false;
+	}
+
+	if (! try_parse_long(nattempts_str, nattempts)) {
+		snprintf(
+			fault,
+			fault_size,
+			"Syntax Err: %s %s %s: NATTEMPTS not valid as number",
+			cmd, target_str, nattempts_str);
+		return false;
+	}
+
+	if (! (*nattempts >= 1)) {
+		snprintf(
+			fault,
+			fault_size,
+			"Syntax Err: %s %s %s: NATTEMPTS must be positive",
+			cmd, target_str, nattempts_str);
+		return false;
+	}
+
+	return true;
+}
 
 // Function for processing a command from Host
 
