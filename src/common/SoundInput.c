@@ -1072,6 +1072,10 @@ void ProcessNewSamples(short * Samples, int nSamples)
 
 			if (LastDataFrameType != intFrameType)
 			{
+				// CarrierOk is reset here upon recieving a new frame type.
+				// This is also reset in ProcessRcvFECDataFrame any time an FEC
+				// data frame is correctly decoded since a repeated FEC data
+				// frame type is not always a repetition of the previous frame.
 				ZF_LOGD("New frame type - MEMARQ flags reset");
 				memset(CarrierOk, 0, sizeof(CarrierOk));
 				LastDataFrameType = intFrameType;

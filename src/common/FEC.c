@@ -40,6 +40,11 @@ unsigned int dttLastFECIDSent;
 
 extern int intCalcLeader;  // the computed leader to use based on the reported Leader Length
 
+extern char CarrierOk[8];
+extern int intSumCounts[8];
+extern int intToneMagsAvg[332];
+extern short intCarPhaseAvg[8][652];
+extern short intCarMagAvg[8][652];
 
 // Function to start sending FEC data
 
@@ -355,6 +360,19 @@ void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDec
 
 
 		AddTagToDataAndSendToHost(bytData, "FEC", frameLen);
+		// Unlike ProtocolMode ARQ, in FEC mode a data frame of the same type
+		// as the previously recieved data frame might not be a repeat of that
+		// previously recieved data frame.  Resetting CarrierOk ensures that
+		// the next data frame will always be decoded and passed to this
+		// function so that a CRC of its content can be compared to the CRC of
+		// the content of the last data frame recieved to determine whether or
+		// not it is a duplicate.
+		ZF_LOGD("CarrierOk, and data for SavePSKSamples(). reset after FEC frame decoded OK.");
+		memset(CarrierOk, 0, sizeof(CarrierOk));
+		memset(intSumCounts, 0, sizeof(intSumCounts));
+		memset(intToneMagsAvg, 0, sizeof(intToneMagsAvg));
+		memset(intCarPhaseAvg, 0, sizeof(intCarPhaseAvg));
+		memset(intCarMagAvg, 0, sizeof(intCarMagAvg));
 
 		crcLastFECDataPassedToHost = GenCRC16(bytData, frameLen);
 		intLastFrameIDToHost = intFrameType;
