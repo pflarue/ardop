@@ -891,7 +891,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			DiscardOldSamples();
 			ClearAllMixedSamples();
 			State = SearchingForLeader;
-			printtick("frame sync timeout");
+//			printtick("frame sync timeout");
 		}
 		intToneMagsIndex = 0;
 	}
