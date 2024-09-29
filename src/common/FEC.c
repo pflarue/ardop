@@ -353,7 +353,7 @@ void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDec
 		{
 			AddTagToDataAndSendToHost(bytFailedData, "ERR", bytFailedDataLength);
 			if (CommandTrace)
-				ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass failed frame ID %s to Host (%d bytes)", Name(intFrameType), bytFailedDataLength);
+				ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass failed frame ID %s to Host (%d bytes)", Name(intLastFailedFrameID), bytFailedDataLength);
 			bytFailedDataLength = 0;
 			intLastFailedFrameID = -1;
 		}
@@ -374,13 +374,10 @@ void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDec
 		memset(intCarPhaseAvg, 0, sizeof(intCarPhaseAvg));
 		memset(intCarMagAvg, 0, sizeof(intCarMagAvg));
 
-		crcLastFECDataPassedToHost = GenCRC16(bytData, frameLen);
+		crcLastFECDataPassedToHost = CRC;
 		intLastFrameIDToHost = intFrameType;
-		if (intLastFailedFrameID == intFrameType)
-		{
-			bytFailedDataLength = 0;
-			intLastFailedFrameID = -1;
-		}
+		bytFailedDataLength = 0;
+		intLastFailedFrameID = -1;
 
 		if (CommandTrace)
 			ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass good data frame  ID %s to Host (%d bytes)", Name(intFrameType), frameLen);
@@ -393,11 +390,9 @@ void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDec
 		{
 			AddTagToDataAndSendToHost(bytFailedData, "ERR", bytFailedDataLength);
 			if (CommandTrace)
-				ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass failed frame ID %s to Host (%d bytes)", Name(intFrameType), bytFailedDataLength);
+				ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass failed frame ID %s to Host (%d bytes)", Name(intLastFailedFrameID), bytFailedDataLength);
 			bytFailedDataLength = 0;
 			intLastFrameIDToHost = intLastFailedFrameID;
-			if (CommandTrace)
-				ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass failed frame ID %s to Host (%d bytes)", Name(intFrameType), bytFailedDataLength);
 		}
 		memcpy(bytFailedData, bytData, frameLen);  // capture the current data and frame type
 		bytFailedDataLength = frameLen;
