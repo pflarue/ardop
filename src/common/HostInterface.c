@@ -37,6 +37,7 @@ int wg_send_hostdatab(int cnum, char *prefix, unsigned char *data, int datalen);
 int wg_send_hostdatat(int cnum, char *prefix, unsigned char *data, int datalen);int wg_send_drivelevel(int cnum);
 
 extern BOOL NeedTwoToneTest;
+extern short InputNoiseStdDev;
 
 #ifndef WIN32
 
@@ -1479,6 +1480,21 @@ void ProcessCommandFromHost(char * strCMD)
 		goto cmddone;
 	}
 
+	// Set the standard deviation of AWGN to be added to 16-bit input audio.
+	// Set it to 0 for no noise.
+	if (strcmp(strCMD, "INPUTNOISE") == 0)
+	{
+		if (ptrParams == 0) {
+			sprintf(cmdReply, "%s %d", strCMD, InputNoiseStdDev);
+			SendReplyToHost(cmdReply);
+		} else {
+			// TODO: error checking of value
+			InputNoiseStdDev = atoi(ptrParams);
+			sprintf(cmdReply, "%s now %hd", strCMD, InputNoiseStdDev);
+			SendReplyToHost(cmdReply);
+		}
+		goto cmddone;
+	}
 
 	snprintf(strFault, sizeof(strFault), "CMD %s not recoginized", strCMD);
 

@@ -52,6 +52,9 @@ int wg_send_pttled(int cnum, bool isOn);
 int wg_send_pixels(int cnum, unsigned char *data, size_t datalen);
 void WebguiPoll();
 
+void add_noise(short *samples, unsigned int nSamples, short stddev);
+short InputNoiseStdDev = 0;
+
 extern BOOL blnDISCRepeating;
 
 extern char * CM108Device;
@@ -1562,7 +1565,7 @@ int SoundCardRead(short * input, unsigned int nSamples)
 	{
 		for (n = 0; n < ret; n++)
 		{
-			*(input++) = samples[n];
+			memcpy(input, samples, nSamples*sizeof(short));
 		}
 	}
 	else
@@ -1574,9 +1577,11 @@ int SoundCardRead(short * input, unsigned int nSamples)
 
 		for (n = start; n < (ret * 2); n+=2)  // return alternate
 		{
-			*(input++) = samples[n];
+			input[n] = samples[n];
 		}
 	}
+
+	add_noise(input, nSamples, InputNoiseStdDev);
 
 	if (rxwf != NULL)
 	{
@@ -1588,7 +1593,7 @@ int SoundCardRead(short * input, unsigned int nSamples)
 			rxwf = NULL;
 		}
 		else
-			WriteWav(samples, ret, rxwf);
+			WriteWav(input, ret, rxwf);
 	}
 
 	return ret;
