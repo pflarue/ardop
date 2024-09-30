@@ -636,7 +636,7 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 			"Carrier[%d] %d raw bytes. CER and BER not calculated (previously decoded)",
 			Carrier,
 			CombinedLength);
-		ZF_LOGD("[CorrectRawDataWithRS] Carrier %d (%d bytes) already decoded", Carrier, intDataLen);
+		ZF_LOGD("[CorrectRawDataWithRS] Carrier %d (%d/%d net/gross bytes) already decoded", Carrier, bytRawData[0], intDataLen);
 		return bytRawData[0];  // don't do it again
 	}
 
@@ -685,7 +685,7 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 			"Carrier[%d] %d raw bytes. CER and BER too high. (rs_correct() failed)",
 			Carrier,
 			CombinedLength);
-		ZF_LOGD("[CorrectRawDataWithRS] RS Says Can't Correct (%d bytes) (>%d max corrections)", intDataLen, intRSLen/2);
+		ZF_LOGD("[CorrectRawDataWithRS] RS Says Can't Correct (%d(?)/%d net/gross bytes) (>%d max corrections)", bytRawData[0], intDataLen, intRSLen/2);
 		goto returnBad;
 	}
 
@@ -693,7 +693,7 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 	{
 		if (ZF_LOG_ON_VERBOSE)
 			CountErrors(RawDataCopy, bytRawData, CombinedLength, Carrier, true);
-		ZF_LOGD("[CorrectRawDataWithRS] OK (%d bytes) with RS %d (of max %d) corrections", intDataLen, NErrors, intRSLen/2);
+		ZF_LOGD("[CorrectRawDataWithRS] OK (%d/%d net/gross bytes) with RS %d (of max %d) corrections", bytRawData[0], intDataLen, NErrors, intRSLen/2);
 		totalRSErrors += NErrors;
 
 		memcpy(bytCorrectedData, &bytRawData[1], bytRawData[0]);
@@ -701,7 +701,7 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 		return bytRawData[0];
 	}
 	else
-		ZF_LOGD("[CorrectRawDataWithRS] RS says ok (%d bytes) but CRC still bad", intDataLen);
+		ZF_LOGD("[CorrectRawDataWithRS] RS says ok (%d(?)/%d net/gross bytes) but CRC still bad", bytRawData[0], intDataLen);
 
 	// return uncorrected data without byte count or RS Parity
 
@@ -1072,8 +1072,9 @@ void ProcessNewSamples(short * Samples, int nSamples)
 
 			if (LastDataFrameType != intFrameType)
 			{
-				// CarrierOk is reset here upon recieving a new frame type.
-				// This is also reset in ProcessRcvFECDataFrame any time an FEC
+				// CarrierOk, intSumCounts, intToneMagsAvg, intCarPhaseAvg, and
+				// intCarMagAvg are reset here upon receiving a new frame type.
+				// They are also reset in ProcessRcvFECDataFrame any time an FEC
 				// data frame is correctly decoded since a repeated FEC data
 				// frame type is not always a repetition of the previous frame.
 				ZF_LOGD("New frame type - MEMARQ flags reset");
@@ -4530,7 +4531,7 @@ void DemodPSK()
 
 				if (intSumCounts[Carrier] > 1)
 				{
-					Decode1CarQAM(bytFrameData[Carrier], Carrier);  // try to decode based on the WeightedAveragePhases
+					Decode1CarPSK(bytFrameData[Carrier], Carrier);  // try to decode based on the WeightedAveragePhases
 					MemARQRetries++;
 				}
 			}
@@ -4547,7 +4548,7 @@ void DemodPSK()
 
 			for (Carrier = 0; Carrier < intNumCar; Carrier++)
 			{
-				frameLen += CorrectRawDataWithRS(bytFrameData[Carrier], bytData, intDataLen, intRSLen, intFrameType, Carrier);
+				frameLen += CorrectRawDataWithRS(bytFrameData[Carrier], &bytData[frameLen], intDataLen, intRSLen, intFrameType, Carrier);
 				if (CarrierOk[Carrier] == 0)
 					OKNow = FALSE;
 			}
