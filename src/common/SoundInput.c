@@ -13,8 +13,6 @@
 
 #pragma warning(disable : 4244)  // Code does lots of float to int
 
-#define MEMORYARQ
-
 #undef PLOTWATERFALL
 
 #ifdef PLOTWATERFALL
@@ -131,16 +129,12 @@ short intPhases[8][652] = {0};  // We will decode as soon as we have 4 or 8 depe
 // short intMags[2][195 * 2] = {0};
 short intMags[8][652] = {0};
 
-#ifdef MEMORYARQ
-
-// Enough RAM for memory ARQ so keep all samples for FSK and a copy of tones or phase/amplitude
+// Keep all samples for FSK and a copy of tones or phase/amplitude
 
 int intToneMagsAvg[332];  // ???? FSK Tone averages
 
 short intCarPhaseAvg[8][652];  // array to accumulate phases for averaging (Memory ARQ)
 short intCarMagAvg[8][652];  // array to accumulate mags for averaging (Memory ARQ)
-
-#endif
 
 // If we do Mem ARQ we will need a fair amount of RAM
 
@@ -1084,12 +1078,10 @@ void ProcessNewSamples(short * Samples, int nSamples)
 				// note that although we only do mem arq if enough RAM we
 				// still skip decoding carriers that have been received;
 
-#ifdef MEMORYARQ
 				memset(intSumCounts, 0, sizeof(intSumCounts));
 				memset(intToneMagsAvg, 0, sizeof(intToneMagsAvg));
 				memset(intCarPhaseAvg, 0, sizeof(intCarPhaseAvg));
 				memset(intCarMagAvg, 0, sizeof(intCarMagAvg));
-#endif
 			}
 			else if (ProtocolMode == RXO)
 			{
@@ -4519,8 +4511,6 @@ void DemodPSK()
 
 		}
 
-#ifdef MEMORYARQ
-
 		for (Carrier = 0; Carrier < intNumCar; Carrier++)
 		{
 			if (!CarrierOk[Carrier])
@@ -4556,7 +4546,6 @@ void DemodPSK()
 			if (OKNow && AccumulateStats)
 				intGoodPSKSummationDecodes++;
 		}
-#endif
 
 		// prepare for next
 
@@ -4676,8 +4665,6 @@ VOID InitDemodQAM()
 
 int Demod1CarQAMChar(int Start, int Carrier);
 
-#ifdef MEMORYARQ
-
 // Function to average two angles using magnitude weighting
 
 short WeightedAngleAvg(short intAng1, short intAng2)
@@ -4745,8 +4732,6 @@ void SavePSKSamples(int i)
 	}
 	intSumCounts[i]++;
 }
-
-#endif
 
 BOOL DemodQAM()
 {
@@ -4897,8 +4882,6 @@ BOOL DemodQAM()
 			// Check Data
 
 
-#ifdef MEMORYARQ
-
 			if (!CarrierOk[0] || !CarrierOk[1])
 			{
 				// Decode error - save data for MEM ARQ
@@ -4936,7 +4919,6 @@ BOOL DemodQAM()
 							intGoodQAMSummationDecodes++;
 				}
 			}
-#endif
 			// prepare for next
 
 			DiscardOldSamples();
