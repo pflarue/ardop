@@ -771,7 +771,14 @@ void ProcessCommandFromHost(char * strCMD)
 		{
 			ZF_LOGD("FECRepeats %d", FECRepeats);
 
-			StartFEC(NULL, 0, strFECMode, FECRepeats, FECId);
+			if (!StartFEC(NULL, 0, strFECMode, FECRepeats, FECId)) {
+				// This can occur for several reasons including no data queued
+				// send, an invalid setting for FECREPEATS or FECMODE, MYCALL
+				// not set or invalid.  Previously, no indication was passed
+				// to the host if StartFEC() failed.
+				snprintf(strFault, sizeof(strFault), "StartFEC failed for FECSEND TRUE.");
+				goto cmddone;
+			}
 			SendReplyToHost("FECSEND now TRUE");
 		}
 		else if (strcmp(ptrParams, "FALSE") == 0)
