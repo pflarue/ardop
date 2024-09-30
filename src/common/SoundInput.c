@@ -4350,7 +4350,7 @@ void SavePSKSamples(int i);
 
 void DemodPSK()
 {
-	int Used[8] = {0}, Carrier;
+	int Used[8] = {0};
 	int Start = 0;
 	int MemARQRetries = 0;
 
@@ -4511,7 +4511,7 @@ void DemodPSK()
 
 		}
 
-		for (Carrier = 0; Carrier < intNumCar; Carrier++)
+		for (int Carrier = 0; Carrier < intNumCar; Carrier++)
 		{
 			if (!CarrierOk[Carrier])
 			{
@@ -4536,7 +4536,7 @@ void DemodPSK()
 			ZF_LOGD("DemodPSK retry RS on MEM ARQ Corrected frames");
 			frameLen = 0;
 
-			for (Carrier = 0; Carrier < intNumCar; Carrier++)
+			for (int Carrier = 0; Carrier < intNumCar; Carrier++)
 			{
 				frameLen += CorrectRawDataWithRS(bytFrameData[Carrier], &bytData[frameLen], intDataLen, intRSLen, intFrameType, Carrier);
 				if (CarrierOk[Carrier] == 0)
@@ -4737,6 +4737,7 @@ BOOL DemodQAM()
 {
 	int Used = 0;
 	int Start = 0;
+	int MemARQRetries = 0;
 
 	// We can't wait for the full frame as we don't have enough RAM, so
 	// we do one DMA Buffer at a time, until we run out or end of frame
@@ -4878,47 +4879,43 @@ BOOL DemodQAM()
 			}
 
 
-
 			// Check Data
-
-
-			if (!CarrierOk[0] || !CarrierOk[1])
+			for (int Carrier = 0; Carrier < intNumCar; Carrier++)
 			{
-				// Decode error - save data for MEM ARQ
-
-				if (!CarrierOk[0])
+				if (!CarrierOk[Carrier])
 				{
-					SaveQAMSamples(0);
-					if (intSumCounts[0] > 1)
+					// Decode error - save data for MEM ARQ
+
+					SaveQAMSamples(Carrier);
+
+					if (intSumCounts[Carrier] > 1)
 					{
-						Decode1CarQAM(bytFrameData1, 0);  // try to decode based on the WeightedAveragePhases
+						Decode1CarQAM(bytFrameData[Carrier], Carrier);  // try to decode based on the WeightedAveragePhases
+						MemARQRetries++;
 					}
-				}
-				if (!CarrierOk[1])
-				{
-					SaveQAMSamples(1);
-					if (intSumCounts[1] > 1)
-					{
-						Decode1CarQAM(bytFrameData2, 1);
-					}
-				}
-
-				if (intSumCounts[0] > 1 || intSumCounts[1] > 1)
-				{
-					// We've retryed to decode - see if ok now
-
-					ZF_LOGD("DemodQAM retry RS on MEM ARQ Corrected frames");
-
-					frameLen = CorrectRawDataWithRS(bytFrameData1, bytData, intDataLen, intRSLen, intFrameType, 0);
-
-					if (intNumCar > 1)
-						frameLen +=  CorrectRawDataWithRS(bytFrameData2, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 1);
-
-					if (CarrierOk[0] && CarrierOk[1])
-						if (AccumulateStats)
-							intGoodQAMSummationDecodes++;
 				}
 			}
+
+			if (MemARQRetries)
+			{
+				// We've retryed to decode - see if ok now
+
+				int OKNow = TRUE;
+
+				ZF_LOGD("DemodQAM retry RS on MEM ARQ Corrected frames");
+				frameLen = 0;
+
+				for (int Carrier = 0; Carrier < intNumCar; Carrier++)
+				{
+					frameLen += CorrectRawDataWithRS(bytFrameData[Carrier], &bytData[frameLen], intDataLen, intRSLen, intFrameType, Carrier);
+					if (CarrierOk[Carrier] == 0)
+						OKNow = FALSE;
+				}
+
+				if (OKNow && AccumulateStats)
+					intGoodQAMSummationDecodes++;
+			}
+
 			// prepare for next
 
 			DiscardOldSamples();
