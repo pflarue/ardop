@@ -95,9 +95,15 @@ char strMod[16] = "";
 UCHAR bytMinQualThresh;
 int intPSKMode;
 
-#define MAX_RAW_LENGTH 256  // I think! Max length of an RS block
-// 16QAM.2000.100 requires 8*128.  Add 1.
-#define MAX_DATA_LENGTH 8 * 128 + 1
+// 16QAM carriers each contain 128 data bytes, 64 RS bytes, 1 length byte and 2
+// CRC bytes = 195 bytes.
+#define MAX_RAW_LENGTH 195
+// A 4FSK.2000.600 frame contains 600 data bytes, 150 RS bytes 3 length bytes,
+// and 6 CRC bytes = 759.  While this is broken up into 3 "carriers" for RS
+// error correction, it is demodulated and initially decoded as one long block.
+#define MAX_600B_RAW_LENGTH 759
+// 16QAM.2000.100 requires 8*128.
+#define MAX_DATA_LENGTH 8 * 128
 
 // obsolete versions of this code accommodated multi-carrier FSK modes, for
 // which intToneMags was intToneMags[4][16 * MAX_RAW_LENGTH]
@@ -109,7 +115,8 @@ int intPSKMode;
 // length 16 * max bytes data (2 bits per symbol, 4 samples per symbol in 4FSK.
 // looks like we have 4 samples for each 2 bits, which means 16 samples per byte.
 
-int intToneMags[16 * MAX_RAW_LENGTH] = {0};
+// Size intToneMags for demodulating the long 4FSK.2000.600 frames
+int intToneMags[16 * MAX_600B_RAW_LENGTH] = {0};
 int intToneMagsIndex = 0;
 
 int intSumCounts[8];  // number in above arrays
@@ -119,22 +126,26 @@ int intToneMagsLength;
 unsigned char goodCarriers = 0;  // Carriers we have already decoded
 
 // We always collect all phases for PSK and QAM so we can do phase correction
+// 4PSK uses 4 phase values per byte, and 1+64+32+2=99 bytes per carrier = 396 values per carrier.
+// 8PSK and 16QAM use 8/3 phase values per byte, and up to 1+128+64+2=195 bytes per carrier = 520 values per carrier.
+short intPhases[8][520] = {0};
 
-short intPhases[8][652] = {0};  // We will decode as soon as we have 4 or 8 depending on mode
-								// (but need one set per carrier)
-								// 652 is 163 * 4 (4PSK 167 Baud)
-
-// We only use Mags for QAM, and max is 2 carriers 195 bytes
-// ??????????????????
-// short intMags[2][195 * 2] = {0};
-short intMags[8][652] = {0};
+// We only use Mags for QAM (see intToneMags for FSK)
+short intMags[8][520] = {0};
 
 // Keep all samples for FSK and a copy of tones or phase/amplitude
 
-int intToneMagsAvg[332];  // ???? FSK Tone averages
+// Because intToneMagsAvg is used for Memory ARQ after RS correction has failed,
+// for the long 4FSK.2000.600 frames it is applied to each of the sequential
+// "carrier" blocks separately.  Thus, each part does not need to be large
+// enough to hold tone magnitudes for all of a 4FSK.2000.600 frame, but it does
+// need to be large enough for a third of this.  intToneMagsAvg[1] and [2] are
+// used only for these long 600 baud frames.  intToneMagsAvg[0] is used for all
+// FSK data frame types.
+int intToneMagsAvg[3][16 * (MAX_600B_RAW_LENGTH / 3)];  // FSK Tone averages.
 
-short intCarPhaseAvg[8][652];  // array to accumulate phases for averaging (Memory ARQ)
-short intCarMagAvg[8][652];  // array to accumulate mags for averaging (Memory ARQ)
+short intCarPhaseAvg[8][520];  // array to accumulate phases for averaging (Memory ARQ)
+short intCarMagAvg[8][520];  // array to accumulate mags for averaging (Memory ARQ)
 
 // If we do Mem ARQ we will need a fair amount of RAM
 
@@ -152,7 +163,9 @@ int totalRSErrors;
 // This can be optimized quite a bit to save space
 // We can probably overlay on bytData
 
-UCHAR bytFrameData1[760];  // Received chars
+// bytFrameData1 must be large enough to accomodate 4FSK.2000.600 frames.  The
+// remaining bytFrameDataX must be large enough to accomodate 16QAM carriers.
+UCHAR bytFrameData1[MAX_600B_RAW_LENGTH];  // Received chars
 UCHAR bytFrameData2[MAX_RAW_LENGTH];  // Received chars
 UCHAR bytFrameData3[MAX_RAW_LENGTH];  // Received chars
 UCHAR bytFrameData4[MAX_RAW_LENGTH];  // Received chars
@@ -170,9 +183,6 @@ char CarrierOk[8];  // RS OK Flags per carrier
 int charIndex = 0;  // Index into received chars
 
 int SymbolsLeft;  // number still to decode
-
-int Decode600BlockNum = 0;  // Next block number for decoding long 600 baud frames
-UCHAR * Decode600Buffer = bytFrameData1;
 
 BOOL PSKInitDone = FALSE;
 
@@ -237,6 +247,7 @@ void DemodulateFrame(int intFrameType);
 void Demod1Car4FSKChar(int Start, UCHAR * Decoded);
 VOID Track1Car4FSK(short * intSamples, int * intPtr, int intSampPerSymbol, float intSearchFreq, int intBaud, UCHAR * bytSymHistory);
 VOID Decode1CarPSK(UCHAR * Decoded, int Carrier);
+VOID Decode1Car4FSK(UCHAR * Decoded, int *Magnitudes, int MagsLength);
 int EnvelopeCorrelator();
 BOOL DecodeFrame(int intFrameType, uint8_t bytData[MAX_DATA_LENGTH]);
 
@@ -246,6 +257,18 @@ int Compute4FSKSN();
 
 void DemodPSK();
 BOOL DemodQAM();
+void SaveFSKSamples(int Part, int *Magnitudes, int Length);
+
+void ResetCarrierOk() {
+	memset(CarrierOk, 0, sizeof(CarrierOk));
+}
+
+void ResetAvgs() {
+	memset(intSumCounts, 0, sizeof(intSumCounts));
+	memset(intToneMagsAvg, 0, sizeof(intToneMagsAvg));
+	memset(intCarPhaseAvg, 0, sizeof(intCarPhaseAvg));
+	memset(intCarMagAvg, 0, sizeof(intCarMagAvg));
+}
 
 // Function to determine if frame type is short control frame
 
@@ -606,7 +629,8 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 	// rs_correct() attempts to correct bytRawData in place.  So, preserve a
 	// copy of the uncorrected data so that it can be used for CountBitErrors().
 	// This includes a single byte that indicates the length of the data
-	// intended to be transmitted, that data intended to be transmitted, the
+	// intended to be transmitted, that data intended to be transmitted, padding
+	// bytes (should be 0x00) if that data length was less than intDataLen, the
 	// RS bytes, and a 2-byte checksum.
 	int CombinedLength = intDataLen + intRSLen + 3;
 	UCHAR RawDataCopy[256];
@@ -683,8 +707,12 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 		goto returnBad;
 	}
 
-	if (NErrors >= 0 && CheckCRC16FrameType(bytRawData, intDataLen + 1, bytFrameType))  // RS correction successful
-	{
+	//
+	if (
+		NErrors >= 0
+		&& (bytRawData[0] <= intDataLen)  // Valid reported length
+		&& CheckCRC16FrameType(bytRawData, intDataLen + 1, bytFrameType)
+	) {  // RS correction successful
 		if (ZF_LOG_ON_VERBOSE)
 			CountErrors(RawDataCopy, bytRawData, CombinedLength, Carrier, true);
 		ZF_LOGD("[CorrectRawDataWithRS] OK (%d/%d net/gross bytes) with RS %d (of max %d) corrections", bytRawData[0], intDataLen, NErrors, intRSLen/2);
@@ -708,8 +736,6 @@ returnBad:
 	CarrierOk[Carrier] = FALSE;
 	return intDataLen;
 }
-
-
 
 // Subroutine to process new samples as received from the sound card via Main.ProcessCapturedData
 // Only called when not transmitting
@@ -1021,19 +1047,25 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			else if (intBaud == 600)
 				intSampPerSym = 20;
 
+			// TODO:  SymbolsLeft should really be BytesLeft.  Depending on the
+			// modulation type, each of these bytes may be encoded by as many
+			// as four symbols.
 			if (IsDataFrame(intFrameType))
-				SymbolsLeft = intDataLen + intRSLen + 3;  // Data has crc + length byte
+				// Data frames include 1 length byte and 2 CRC bytes
+				SymbolsLeft = intDataLen + intRSLen + 3;
 			else
+				// Non-data frames do not have a length byte or CRC bytes
 				SymbolsLeft = intDataLen + intRSLen;  // No CRC
 
 			if (intDataLen == 600)
-				SymbolsLeft += 6;  // 600 baud has 3 * RS Blocks
+				// 4FSK.200.600 frames are broken into three "carriers" each of
+				// which have their own length byte and 2 CRC bytes.  So, add
+				// 6 to SymbolsLeft for these for these two extra "carriers".
+				SymbolsLeft += 6;
 
-			intToneMagsLength = 16 * SymbolsLeft;  // 4 tones, 2 bits per set
-			if (intDataLen == 600) {
-				// 4FSK.2000.600 decoded as three blocks
-				intToneMagsLength /= 3;
-			}
+			// For each of SymbolsLeft (see note above this name), there are
+			// 4 FSK Tones per symbol and 4 symbols per byte = 16 values each.
+			intToneMagsLength = 16 * SymbolsLeft;
 
 			intToneMagsIndex = 0;
 
@@ -1042,9 +1074,6 @@ void ProcessNewSamples(short * Samples, int nSamples)
 
 			frameLen = 0;
 			totalRSErrors = 0;  // reset totalRSErrors just before AquireFrame
-
-			Decode600BlockNum = 0;  // Next block number for decoding long 600 baud frames
-			Decode600Buffer = bytFrameData1;
 
 			if (!IsShortControlFrame(intFrameType))
 			{
@@ -1072,21 +1101,20 @@ void ProcessNewSamples(short * Samples, int nSamples)
 				// data frame is correctly decoded since a repeated FEC data
 				// frame type is not always a repetition of the previous frame.
 				ZF_LOGD("New frame type - MEMARQ flags reset");
-				memset(CarrierOk, 0, sizeof(CarrierOk));
+				ResetCarrierOk();
 				LastDataFrameType = intFrameType;
 
 				// note that although we only do mem arq if enough RAM we
 				// still skip decoding carriers that have been received;
 
-				memset(intSumCounts, 0, sizeof(intSumCounts));
-				memset(intToneMagsAvg, 0, sizeof(intToneMagsAvg));
-				memset(intCarPhaseAvg, 0, sizeof(intCarPhaseAvg));
-				memset(intCarMagAvg, 0, sizeof(intCarMagAvg));
+				ResetAvgs();
 			}
 			else if (ProtocolMode == RXO)
 			{
-				// In RXO mode, always try to decode the frame, so reset CarrierOK
-				memset(CarrierOk, 0, sizeof(CarrierOk));
+				// In RXO mode, always try to decode the frame, so reset
+				// CarrierOK.  Memory ARQ is not done in RXO mode, so there is
+				// no need to reset intSumCounts or Avg values.
+				ResetCarrierOk();
 			}
 
 			ZF_LOGD("MEMARQ Flags %d %d %d %d %d %d %d %d",
@@ -2676,8 +2704,10 @@ BOOL Demod1Car4FSK600()
 			return FALSE;
 		}
 
-		if (CarrierOk[Decode600BlockNum] == FALSE)
-			Demod1Car4FSK600Char(Start, Decode600Buffer);
+		// Since "carriers" are sequential (rather than simultaneous on adjacent
+		// frequencies as in multi-carrier PSK and QAM frames), don't attempt
+		// to skip demodulating individual carriers based on CarrierOk.
+		Demod1Car4FSK600Char(Start, bytFrameData1);
 
 		charIndex++;  // Index into received chars
 
@@ -2693,27 +2723,6 @@ BOOL Demod1Car4FSK600()
 			DiscardOldSamples();
 			ClearAllMixedSamples();
 			State = SearchingForLeader;
-
-			Decode600BlockNum = 0;  // Next block number for decoding long 600 baud frames
-			Decode600Buffer = bytFrameData1;
-
-		}
-		else
-		{
-			if (charIndex == 253)  // End of RS fragment (3 per message)
-			{
-				Decode600BlockNum++;  // Next block number for decoding long 600 baud frames
-				charIndex = 0;
-				if (Decode600BlockNum == 1) {
-					// Resuse intToneMags, but with a new decode buffer
-					intToneMagsIndex = 0;
-					Decode600Buffer = bytFrameData2;
-				} else {
-					// Resuse intToneMags, but with a new decode buffer
-					intToneMagsIndex = 0;
-					Decode600Buffer = bytFrameData3;
-				}
-			}
 		}
 	}
 	return TRUE;
@@ -3284,6 +3293,13 @@ BOOL DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 	char Reply[80];
 	char Good[8] = {1, 1, 1, 1, 1, 1, 1, 1};
 
+	// Some value for handling 4FSK.2000.600 frames.
+	int intPartDataLen;
+	int intPartRSLen;
+	int intPartRawLen;
+	int intPartTonesLen;
+	int PriorFrameLen;
+
 	// DataACK/NAK and short control frames
 
 	if (CarrierOk[0] != 0 && CarrierOk[0] != 1)
@@ -3449,6 +3465,7 @@ BOOL DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 			break;
 
 		// FSK 1 Carrier Modes
+		char HexData[1024];
 
 		case 0x48:
 		case 0x49:
@@ -3457,7 +3474,44 @@ BOOL DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 		case 0x4c:
 		case 0x4d:
 
+			snprintf(HexData, sizeof(HexData), "bytFrameData1 as decoded:   ");
+			for (int i = 0; i < intDataLen; ++i)
+				snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytFrameData1[i]);
+			ZF_LOGI("%s", HexData);
 			frameLen = CorrectRawDataWithRS(bytFrameData1, bytData, intDataLen, intRSLen, intFrameType, 0);
+			snprintf(HexData, sizeof(HexData), "bytFrameData1 after RS:   ");
+			for (int i = 0; i < intDataLen; ++i)
+				snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytFrameData1[i]);
+			ZF_LOGI("%s", HexData);
+
+			// Since these are single carrier/part, hard code carrier=part=0
+			if (!CarrierOk[0]) {
+				// SaveFSKSamples() stores a copy of intToneMags for the first
+				// copy (intSumCounts[0] == 0) of a frame that can't be decoded,
+				// and updates intToneMags by averaging the magnitudes with each
+				// additional repeat of that frame.
+				SaveFSKSamples(0, intToneMags, intToneMagsLength); // This increments intSumCounts
+				if (intSumCounts[0] > 1) {
+					ZF_LOGD("Decode FSK retry RS after MEM ARQ");
+					// Re-attempt to decode using intToneMagsAvg[0] updated by
+					// SaveFSKSamples()
+					Decode1Car4FSK(bytFrameData1, intToneMagsAvg[0], intToneMagsLength);
+					snprintf(HexData, sizeof(HexData), "bytFrameData1 after averaging:   ");
+					for (int i = 0; i < intDataLen; ++i)
+						snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytFrameData1[i]);
+					ZF_LOGI("%s", HexData);
+					frameLen = CorrectRawDataWithRS(bytFrameData1, bytData, intDataLen, intRSLen, intFrameType, 0);
+					snprintf(HexData, sizeof(HexData), "bytFrameData1 after RS:   ");
+					for (int i = 0; i < intDataLen; ++i)
+						snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytFrameData1[i]);
+					ZF_LOGI("%s", HexData);
+					// TODO: It might be interesting to calculate Quality and
+					// plot the constellation for this averaged data so as to
+					// quantify how much improvement is achieved by using
+					// averaged data.
+				}
+			}
+
 			blnDecodeOK = CarrierOk[0];
 
 			if (blnDecodeOK) {
@@ -3520,19 +3574,68 @@ BOOL DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 		case 0x7A:
 		case 0x7B:
 
-			// 600 Baud Data. Frame has 3 * 200 RS Blocks
+			// 2000 Hz 600 baud 4FSK frames
+			// These are demodulated as a single long block into bytFrameData1
+			// (and intToneMags).  However, the contents of bytFrameData1
+			// contain three "carriers", each containing their own length byte
+			// and 2-byte CRC.  RS error correction and Memory ARQ operate on
+			// each of these "carriers" independently.
 
-			intDataLen = 200;
-			intRSLen = 50;
+			// intDataLen and intRSLen define the sum of the number of data and
+			// RS bytes over all three "carriers". Define intPartDataLen and
+			// intPartRSLen to represent the number of data and RS bytes in each
+			// one of these "carriers".
+			intPartDataLen = intDataLen / 3;
+			intPartRSLen = intRSLen / 3;
+			// intPartRawLen is the length data in bytFrameData1 corresponding
+			// to each part.
+			intPartRawLen = intPartDataLen + intPartRSLen + 3;
+			intPartTonesLen = intPartRawLen * 16;  // 4 tones per symbol, 4 symbols per byte
 
-			frameLen = CorrectRawDataWithRS(bytFrameData1, bytData, intDataLen, intRSLen, intFrameType, 0);
-			frameLen +=  CorrectRawDataWithRS(bytFrameData2, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 1);
-			frameLen +=  CorrectRawDataWithRS(bytFrameData3, &bytData[frameLen], intDataLen, intRSLen, intFrameType, 2);
+			frameLen = 0;
+			for (int part = 0; part < 3; part++) {
+				PriorFrameLen = frameLen;
+				UCHAR *bytRawPartData = &bytFrameData1[part * intPartRawLen];
+				snprintf(HexData, sizeof(HexData), "bytRawPartData (part=%d) as decoded:   ", part);
+				for (int i = 0; i < intPartDataLen + 1; ++i)
+					snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytRawPartData[i]);
+				ZF_LOGI("%s", HexData);
+				frameLen += CorrectRawDataWithRS(bytRawPartData, &bytData[frameLen], intPartDataLen, intPartRSLen, intFrameType, part);
+				snprintf(HexData, sizeof(HexData), "bytRawPartData (part=%d) after RS:   ", part);
+				for (int i = 0; i < intPartDataLen + 1; ++i)
+					snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytRawPartData[i]);
+				ZF_LOGI("%s", HexData);
 
-			intDataLen = 600;
-			intRSLen = 150;
+				if (!CarrierOk[part]) {
+					// SaveFSKSamples() stores a copy of intToneMags for the first
+					// copy (intSumCounts[part] == 0) of a part that can't be decoded,
+					// and updates intToneMags by averaging the magnitudes with each
+					// additional repeat of that part.
+					SaveFSKSamples(part, &intToneMags[part * intPartTonesLen], intPartTonesLen); // This increments intSumCounts
+					if (intSumCounts[part] > 1) {
+						ZF_LOGD("Decode FSK 600 retry RS after MEM ARQ");
+						// try to decode based on intToneMags revised by SaveFSKSamples()
+						Decode1Car4FSK(bytRawPartData, intToneMagsAvg[part], intPartTonesLen);
+						snprintf(HexData, sizeof(HexData), "bytRawPartData (part=%d) after averaging:   ", part);
+						for (int i = 0; i < intPartDataLen + 1; ++i)
+							snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytRawPartData[i]);
+						ZF_LOGI("%s", HexData);
+						// reset frameLen so new corrections will overwrite prior (failed) corrections
+						frameLen = PriorFrameLen;
+						frameLen = CorrectRawDataWithRS(bytRawPartData, &bytData[frameLen], intDataLen, intRSLen, intFrameType, part);
+						snprintf(HexData, sizeof(HexData), "bytRawPartData (part=%d)after RS:   ", part);
+						for (int i = 0; i < intPartDataLen + 1; ++i)
+							snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytRawPartData[i]);
+						ZF_LOGI("%s", HexData);
+						// TODO: It might be interesting to calculate Quality and
+						// plot the constellation for this averaged data so as to
+						// quantify how much improvement is achieved by using
+						// averaged data.
+					}
+				}
+			}
 
-			if (CarrierOk[0] && CarrierOk[1] && CarrierOk[2])
+			if (memcmp(CarrierOk, Good, 3) == 0)
 				blnDecodeOK = TRUE;
 
 			if (blnDecodeOK) {
@@ -3545,9 +3648,46 @@ BOOL DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 		case 0x7C:
 		case 0x7D:
 
-			// 600 Baud Short.
+			// Short 2000 Hz 600 baud 4FSK frames
 
+			snprintf(HexData, sizeof(HexData), "bytFrameData1 as decoded:   ");
+			for (int i = 0; i < intDataLen; ++i)
+				snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytFrameData1[i]);
+			ZF_LOGI("%s", HexData);
 			frameLen = CorrectRawDataWithRS(bytFrameData1, bytData, intDataLen, intRSLen, intFrameType, 0);
+			snprintf(HexData, sizeof(HexData), "bytFrameData1 after RS:   ");
+			for (int i = 0; i < intDataLen; ++i)
+				snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytFrameData1[i]);
+			ZF_LOGI("%s", HexData);
+
+			// Since these are single carrier/part, hard code carrier=part=0
+			if (!CarrierOk[0]) {
+				// SaveFSKSamples() stores a copy of intToneMags for the first
+				// copy (intSumCounts[0] == 0) of a frame that can't be decoded,
+				// and updates intToneMags by averaging the magnitudes with each
+				// additional repeat of that frame.
+				SaveFSKSamples(0, intToneMags, intToneMagsLength); // This increments intSumCounts
+				if (intSumCounts[0] > 1) {
+					ZF_LOGD("Decode FSK 600 retry RS after MEM ARQ");
+					// Re-attempt to decode using intToneMagsAvg[0] updated by
+					// SaveFSKSamples()
+
+					Decode1Car4FSK(bytFrameData1, intToneMagsAvg[0], intToneMagsLength);
+					snprintf(HexData, sizeof(HexData), "bytFrameData1 after averaging:   ");
+					for (int i = 0; i < intDataLen; ++i)
+						snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytFrameData1[i]);
+					ZF_LOGI("%s", HexData);
+					frameLen = CorrectRawDataWithRS(bytFrameData1, bytData, intDataLen, intRSLen, intFrameType, 0);
+					snprintf(HexData, sizeof(HexData), "bytFrameData1 after RS:   ");
+					for (int i = 0; i < intDataLen; ++i)
+						snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytFrameData1[i]);
+					ZF_LOGI("%s", HexData);
+					// TODO: It might be interesting to calculate Quality and
+					// plot the constellation for this averaged data so as to
+					// quantify how much improvement is achieved by using
+					// averaged data.
+				}
+			}
 
 			blnDecodeOK = CarrierOk[0];
 
@@ -3893,6 +4033,33 @@ VOID Track1Car4FSK(short * intSamples, int * intPtr, int intSampPerSymbol, float
 	}
 }
 
+// Demod1Car4FSKChar() or Demod1Car4FSK_SDFT() populated intToneMags[].
+// This function uses intToneMags to populate Decoded with byte values.
+VOID Decode1Car4FSK(UCHAR * Decoded, int *Magnitudes, int MagsLength) {
+	int maxMag = 0;
+	unsigned char symbol;
+	int index = 0;
+	memset(Decoded, 0x00, MagsLength / 16);
+
+	// 4 sequential values in Magnitudes define a symbol.
+	// 4 symbols (2 bits each) define a decoded data byte.
+	for (int byteNum = 0; byteNum < MagsLength / 16; byteNum++) {
+		for (int symNum = 0; symNum < 4; symNum++) {
+			maxMag = 0;
+			for (int toneNum = 0; toneNum < 4; toneNum++) {
+				if (Magnitudes[index] > maxMag) {
+					symbol = toneNum;
+					maxMag = Magnitudes[index];
+				}
+				index++;
+			}
+			Decoded[byteNum] = (Decoded[byteNum] << 2) + symbol;
+		}
+	}
+	return;
+}
+
+
 // Function to Decode one Carrier of PSK modulation
 
 // Ideally want to be able to call on for each symbol, as I don't have the
@@ -3917,7 +4084,7 @@ VOID Decode1CarPSK(UCHAR * Decoded, int Carrier)
 	charIndex = 0;
 
 
-	while (Len >= 0)
+	while (Len > 0)
 	{
 
 		// Phase Samples are in intPhases
@@ -4231,7 +4398,7 @@ VOID Decode1CarQAM(UCHAR * Decoded, int Carrier)
 
 	// On WGN this appears to improve decoding threshold about 1 dB 9/3/2016
 
-	while (Len >= 0)
+	while (Len > 0)
 	{
 		// Phase Samples are in intPhases
 
@@ -4731,6 +4898,75 @@ void SavePSKSamples(int i)
 		}
 	}
 	intSumCounts[i]++;
+}
+
+
+// Rather than save and average the raw tone magnitude values, convert each set
+// of four tone magnitudes (1 symbol) into relative values.  This way,
+// variations in the the average magnitude between repetitions will not
+// influence the results.  While taking advantage of that average magnitude
+// might be benficial when signal is suppressed by fading, it would be
+// detrimental when a loud static crash or other interference is stronger than
+// the signal that is being decoded.
+
+// Magnitudes are averaged into intToneMagsAvg[Part].  These averaged values
+// should then be used to re-attempt to decode the part.
+void SaveFSKSamples(int Part, int *Magnitudes, int Length) {
+	int m;
+	const float SCALE = 1000.0;  // Sum of each set of 4 tones in intToneMagsAvg
+	char HexData[2000];
+	snprintf(HexData, sizeof(HexData), "Mags (part=%d) :  ", Part);
+	for (int i = 0; i < 20; ++i)
+		snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %d", Magnitudes[i]/1000);
+	snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " ...");
+	for (int i = Length - 20; i < Length; ++i)
+		snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %d", Magnitudes[i]/1000);
+	ZF_LOGI("%s", HexData);
+
+	snprintf(HexData, sizeof(HexData), "intToneMagsAvg[%d] :  ", Part);
+	for (int i = 0; i < 20; ++i)
+		snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %d", intToneMagsAvg[Part][i]);
+	snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " ...");
+	for (int i = Length - 20; i < Length; ++i)
+		snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %d", intToneMagsAvg[Part][i]);
+	ZF_LOGI("%s", HexData);
+
+	if (intSumCounts[Part] == 0)
+	{
+		// First try - copy normalized Magnitudes to intToneMagsAvg
+		for (m = 0; m < Length; m += 4) {
+			// Rescale Magnitudes
+			float sum = 0.0;
+			for(int i = 0; i < 4; i++)
+				sum += Magnitudes[m + i];
+			for(int i = 0; i < 4; i++)
+				intToneMagsAvg[Part][m + i] = (int) round(Magnitudes[m + i] / sum * SCALE);
+		}
+	}
+	else
+	{
+		for (m = 0; m < Length; m += 4)
+		{
+			// Use simple weighted average for Mags
+			// Rescale Magnitudes before averaging in
+			float sum = 0.0;
+			for(int i = 0; i < 4; i++)
+				sum += Magnitudes[m + i];
+			for(int i = 0; i < 4; i++) {
+				int scaledMag = (int) round(Magnitudes[m + i] / sum * SCALE);
+				intToneMagsAvg[Part][m + i] = (intToneMagsAvg[Part][m + i] * intSumCounts[Part] + scaledMag) / (intSumCounts[Part] + 1);
+			}
+		}
+	}
+	snprintf(HexData, sizeof(HexData), "intToneMagsAvg[%d] :  ", Part);
+	for (int i = 0; i < 20; ++i)
+		snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %d", intToneMagsAvg[Part][i]);
+	snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " ...");
+	for (int i = Length - 20; i < Length; ++i)
+		snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %d", intToneMagsAvg[Part][i]);
+	ZF_LOGI("%s", HexData);
+
+	intSumCounts[Part]++;
 }
 
 BOOL DemodQAM()

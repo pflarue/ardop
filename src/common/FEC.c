@@ -40,11 +40,8 @@ unsigned int dttLastFECIDSent;
 
 extern int intCalcLeader;  // the computed leader to use based on the reported Leader Length
 
-extern char CarrierOk[8];
-extern int intSumCounts[8];
-extern int intToneMagsAvg[332];
-extern short intCarPhaseAvg[8][652];
-extern short intCarMagAvg[8][652];
+void ResetCarrierOk();
+void ResetAvgs();
 
 // Function to start sending FEC data
 
@@ -336,10 +333,32 @@ extern int frameLen;
 
 void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDecodedOK)
 {
+	// Unlike ARQ protocolmode, this facilitates decoding of successive unique
+	// data frames of the same type.  Memory ARQ (using CarrierOk[] and Averaged
+	// values) allows results from repeated copies of the same data frame to
+	// also be combined to decode that frame even when no single copy of it
+	// could be completely decoded by itself.  Unfortunately, this approach may
+	// be impaired when a new data frame is received, which has the same type as
+	// the prior frame (with different data), and that prior frame was not
+	// successfully decoded.  For multi-carrier frame types, this can also
+	// result in a data frame which claims to have been successfully decoded,
+	// but which actually contains a mixture of data from multiple different
+	// data frames.
+
 	// Determine if this frame should be passed to Host.
 
 	if (blnFrameDecodedOK)
 	{
+		// Resetting CarrierOk whenever an FEC frame is correctly decoded
+		// ensures that the next data frame received will always be decoded and
+		// passed to this function rather than discarded as an assumed repeated
+		// frame.  The logic which follows this will evaluate whether a frame is
+		// actaully a repeat of the last frame received, and handle it
+		// appropriately.
+		ZF_LOGD("CarrierOk, and data for SaveXXXSamples() reset after FEC data frame decoded OK.");
+		ResetCarrierOk();
+		ResetAvgs();
+
 		int CRC = GenCRC16(bytData, frameLen);
 
 		if (intFrameType == intLastFrameIDToHost && CRC == crcLastFECDataPassedToHost)
@@ -360,19 +379,6 @@ void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDec
 
 
 		AddTagToDataAndSendToHost(bytData, "FEC", frameLen);
-		// Unlike ProtocolMode ARQ, in FEC mode a data frame of the same type
-		// as the previously recieved data frame might not be a repeat of that
-		// previously recieved data frame.  Resetting CarrierOk ensures that
-		// the next data frame will always be decoded and passed to this
-		// function so that a CRC of its content can be compared to the CRC of
-		// the content of the last data frame recieved to determine whether or
-		// not it is a duplicate.
-		ZF_LOGD("CarrierOk, and data for SavePSKSamples(). reset after FEC frame decoded OK.");
-		memset(CarrierOk, 0, sizeof(CarrierOk));
-		memset(intSumCounts, 0, sizeof(intSumCounts));
-		memset(intToneMagsAvg, 0, sizeof(intToneMagsAvg));
-		memset(intCarPhaseAvg, 0, sizeof(intCarPhaseAvg));
-		memset(intCarMagAvg, 0, sizeof(intCarMagAvg));
 
 		crcLastFECDataPassedToHost = CRC;
 		intLastFrameIDToHost = intFrameType;

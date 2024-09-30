@@ -2248,7 +2248,9 @@ void DrawRXFrame(int State, const char * Frame)
 	strcpy(&Msg[1], Frame);
 	SendtoGUI('R', Msg, strlen(Frame) + 1);  // RX Frame
 }
-UCHAR Pixels[4096];
+// mySetPixel() uses 3 bytes from Pixels per call.  So it must be 3 times the
+// size of the larger of inPhases[0] or intToneMags/4. (intToneMags/4 is larger)
+UCHAR Pixels[9108];
 UCHAR * pixelPointer = Pixels;
 
 
