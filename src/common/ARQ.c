@@ -29,7 +29,7 @@ extern int dttPriorLastBusyTrip;
 extern int dttLastBusyClear;
 
 int wg_send_state(int cnum);
-int wg_send_rcall(int cnum, char *call);
+int wg_send_rcall(int cnum, const char *call);
 int wg_send_irsled(int cnum, bool isOn);
 int wg_send_issled(int cnum, bool isOn);
 unsigned char *utf8_check(unsigned char *s, size_t slen);
@@ -78,9 +78,18 @@ const char ARQSubStates[10][11] = {
 	"IRSConAck", "IRSData", "IRSBreak", "IRSfromISS", "DISCArqEnd"
 };
 
-char strRemoteCallsign[CALL_BUF_SIZE];
-char strLocalCallsign[CALL_BUF_SIZE];
-char strFinalIDCallsign[CALL_BUF_SIZE];
+/*
+ * these globals from SoundInput store the callsign
+ * pair received from the last frame, like a ConReq
+ *
+ * NOTE: these are cleared on every new frame!
+ */
+extern StationId LastDecodedStationCaller;
+extern StationId LastDecodedStationTarget;
+
+StationId ARQStationRemote;  // current connection peer callsign
+StationId ARQStationLocal;   // current connection local callsign
+StationId ARQStationFinalId; // post-session local IDF to send
 
 UCHAR bytLastARQSessionID;
 BOOL blnEnbARQRpt;
@@ -367,8 +376,8 @@ BOOL GetNextARQFrame()
 		if (intRepeatCount > 5)  // do 5 tries then force disconnect
 		{
 			QueueCommandToHost("DISCONNECTED");
-			ZF_LOGI("[STATUS: END NOT RECEIVED CLOSING ARQ SESSION WITH %s]", strRemoteCallsign);
-			snprintf(HostCmd, sizeof(HostCmd), "STATUS END NOT RECEIVED CLOSING ARQ SESSION WITH %s", strRemoteCallsign);
+			ZF_LOGI("[STATUS: END NOT RECEIVED CLOSING ARQ SESSION WITH %s]", ARQStationRemote.str);
+			snprintf(HostCmd, sizeof(HostCmd), "STATUS END NOT RECEIVED CLOSING ARQ SESSION WITH %s", ARQStationRemote.str);
 			QueueCommandToHost(HostCmd);
 			blnDISCRepeating = FALSE;
 			blnEnbARQRpt = FALSE;
@@ -403,10 +412,10 @@ BOOL GetNextARQFrame()
 			displayCall(0x20, "");
 			wg_send_rcall(0, "");
 
-			if (strRemoteCallsign[0])
+			if (!stationid_ok(&ARQStationRemote))
 			{
-				ZF_LOGI("[STATUS: CONNECT TO %s FAILED]", strRemoteCallsign);
-				snprintf(HostCmd, sizeof(HostCmd), "STATUS CONNECT TO %s FAILED!", strRemoteCallsign);
+				ZF_LOGI("[STATUS: CONNECT TO %s FAILED]", ARQStationRemote.str);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS CONNECT TO %s FAILED!", ARQStationRemote.str);
 				QueueCommandToHost(HostCmd);
 				InitializeConnection();
 				return FALSE;  // indicates end repeat
@@ -440,8 +449,8 @@ BOOL GetNextARQFrame()
 		{
 			SetARDOPProtocolState(DISC);
 			ARQState = DISCArqEnd;
-			ZF_LOGI("[STATUS: CONNECT TO %s FAILED]", strRemoteCallsign);
-			snprintf(HostCmd, sizeof(HostCmd), "STATUS CONNECT TO %s FAILED!", strRemoteCallsign);
+			ZF_LOGI("[STATUS: CONNECT TO %s FAILED]", ARQStationRemote.str);
+			snprintf(HostCmd, sizeof(HostCmd), "STATUS CONNECT TO %s FAILED!", ARQStationRemote.str);
 			QueueCommandToHost(HostCmd);
 			intRepeatCount = 0;
 			InitializeConnection();
@@ -497,7 +506,7 @@ BOOL GetNextARQFrame()
 
 // function to generate 8 bit session ID
 
-UCHAR GenerateSessionID(char * strCallingCallSign, char *strTargetCallsign)
+UCHAR GenerateSessionID(const char * strCallingCallSign, const char *strTargetCallsign)
 {
 	char bytToCRC[CALL_BUF_SIZE*2 + 1];
 
@@ -531,21 +540,21 @@ void CalculateOptimumLeader(int intReportedReceivedLeaderMS,int  intLeaderSentMS
 
 // Function to determine if call is to Callsign or one of the AuxCalls
 
-BOOL IsCallToMe(char * strCallsign, UCHAR * bytReplySessionID)
+BOOL IsCallToMe(const StationId* caller, const StationId* target, UCHAR* bytReplySessionID)
 {
 	// returns true and sets bytReplySessionID if is to me.
 
-	if (strcmp(strCallsign, Callsign.str) == 0)
+	if (stationid_eq(target, &Callsign))
 	{
-		*bytReplySessionID = GenerateSessionID(bytData, strCallsign);
+		*bytReplySessionID = GenerateSessionID(caller->str, Callsign.str);
 		return TRUE;
 	}
 
 	for (size_t i = 0; i < AuxCallsLength; i++)
 	{
-		if (strcmp(strCallsign, AuxCalls[i].str) == 0)
+		if (stationid_eq(target, &AuxCalls[i]))
 		{
-			*bytReplySessionID = GenerateSessionID(bytData, strCallsign);
+			*bytReplySessionID = GenerateSessionID(caller->str, AuxCalls[i].str);
 			return TRUE;
 		}
 	}
@@ -553,18 +562,10 @@ BOOL IsCallToMe(char * strCallsign, UCHAR * bytReplySessionID)
 	return FALSE;
 }
 
-BOOL IsPingToMe(char * strCallsign)
+BOOL IsPingToMe(const StationId* caller, const StationId* target)
 {
-	if (strcmp(strCallsign, Callsign.str) == 0)
-		return TRUE;
-
-	for (size_t i = 0; i < AuxCallsLength; i++)
-	{
-		if (strcmp(strCallsign, AuxCalls[i].str) == 0)
-			return TRUE;
-	}
-
-	return FALSE;
+	UCHAR _ign = 0;
+	return IsCallToMe(caller, target, &_ign);
 }
 
 // 4FSK.200.50S, 4PSK.200.100S, 4PSK.200.100, 8PSK.200.100, 16QAM.200.100
@@ -1050,7 +1051,9 @@ void InitializeConnection()
 {
 	// Sub to Initialize before a new Connection
 
-	strRemoteCallsign[0] = 0;  // remote station call sign
+	stationid_init(&ARQStationLocal);   // this stations call sign
+	stationid_init(&ARQStationRemote);  // remote station call sign
+
 	intOBBytesToConfirm = 0;  // remaining bytes to confirm
 	intBytesConfirmed = 0;  // Outbound bytes confirmed by ACK and squenced
 	intReceivedLeaderLen = 0;  // Zero out received leader length (the length of the leader as received by the local station
@@ -1061,7 +1064,6 @@ void InitializeConnection()
 	dblAvgPECreepPerCarrier = 0;  // computed phase error creep
 	dttLastIDSent = Now ;  // date/time of last ID
 	intTotalSymbols = 0;  // To compute the sample rate error
-	strLocalCallsign[0] = 0;  // this stations call sign
 	intSessionBW = 0;
 	bytLastACKedDataFrameType = 0;
 
@@ -1153,17 +1155,14 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 		if (!blnFrameDecodedOK || intFrameType < ConReqmin || intFrameType > ConReqmax)
 			return;  // No decode or not a ConReq
 
-		strCallsign  = strlop(bytData, ' ');  // "fromcall tocall"
-		strcpy(strRemoteCallsign, bytData);
-
-		ZF_LOGI("CONREQ From %s to %s Listen = %d", strRemoteCallsign, strCallsign, blnListen);
+		ZF_LOGI("CONREQ From %s to %s Listen = %d", LastDecodedStationCaller.str, LastDecodedStationTarget.str, blnListen);
 
 		if (!blnListen)
 			return;  // ignore connect request if not blnListen
 
 		// see if connect request is to MyCallsign or any Aux call sign
 
-		if (IsCallToMe(strCallsign, &bytPendingSessionID))  // (Handles protocol rules 1.2, 1.3)
+		if (IsCallToMe(&LastDecodedStationCaller, &LastDecodedStationTarget, & bytPendingSessionID))  // (Handles protocol rules 1.2, 1.3)
 		{
 			BOOL blnLeaderTrippedBusy;
 
@@ -1195,10 +1194,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 					}
 					Mod4FSKDataAndPlay(ConRejBusy, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 
-					snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBUSY %s", strRemoteCallsign);
+					snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBUSY %s", LastDecodedStationCaller.str);
 					QueueCommandToHost(HostCmd);
-					ZF_LOGI("[STATUS: ARQ CONNECTION REQUEST FROM %s REJECTED, CHANNEL BUSY.]", strRemoteCallsign);
-					snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION REQUEST FROM %s REJECTED, CHANNEL BUSY.", strRemoteCallsign);
+					ZF_LOGI("[STATUS: ARQ CONNECTION REQUEST FROM %s REJECTED, CHANNEL BUSY.]", LastDecodedStationCaller.str);
+					snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION REQUEST FROM %s REJECTED, CHANNEL BUSY.", LastDecodedStationCaller.str);
 					QueueCommandToHost(HostCmd);
 
 					return;
@@ -1209,11 +1208,12 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 			if (intReply != ConRejBW)  // If not ConRejBW the bandwidth is compatible so answer with correct ConAck frame
 			{
-				snprintf(HostCmd, sizeof(HostCmd), "TARGET %s", strCallsign);
+				// report oncoming connection
+				snprintf(HostCmd, sizeof(HostCmd), "TARGET %s", LastDecodedStationTarget.str);
 				QueueCommandToHost(HostCmd);
 				InitializeConnection();
 				bytDataToSendLength = 0;
-				displayCall('<', bytData);
+				displayCall('<', LastDecodedStationCaller.str);
 				blnPending = TRUE;
 				blnEnbARQRpt = FALSE;
 
@@ -1230,10 +1230,11 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				memset(CarrierOk, 0, sizeof(CarrierOk));  // CLear MEM ARQ Stuff
 				LastDataFrameType = -1;
 
-				strcpy(strRemoteCallsign, bytData);
-				strcpy(strLocalCallsign, strCallsign);
-				strcpy(strFinalIDCallsign, strCallsign);
-				wg_send_rcall(0, strRemoteCallsign);
+				// latch the ConReq callsign pair from the decoder
+				memcpy(&ARQStationRemote, &LastDecodedStationCaller, sizeof(ARQStationRemote));
+				memcpy(&ARQStationLocal, &LastDecodedStationTarget, sizeof(ARQStationLocal));
+				memcpy(&ARQStationFinalId, &LastDecodedStationTarget, sizeof(ARQStationFinalId));
+				wg_send_rcall(0, ARQStationRemote.str);
 
 				intAvgQuality = 0;  // initialize avg quality
 				intReceivedLeaderLen = intLeaderRcvdMs;  // capture the received leader from the remote ISS's ConReq (used for timing optimization)
@@ -1250,10 +1251,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 				// (Handles protocol rule 1.3)
 
-				snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBW %s", strRemoteCallsign);
+				snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBW %s", ARQStationRemote.str);
 				QueueCommandToHost(HostCmd);
-				ZF_LOGI("[STATUS: ARQ CONNECTION REJECTED BY %s]", strRemoteCallsign);
-				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION REJECTED BY %s", strRemoteCallsign);
+				ZF_LOGI("[STATUS: ARQ CONNECTION REJECTED BY %s]", ARQStationRemote.str);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION REJECTED BY %s", ARQStationRemote.str);
 				QueueCommandToHost(HostCmd);
 
 				if ((EncLen = Encode4FSKControl(intReply, bytPendingSessionID, bytEncodedBytes)) <= 0) {
@@ -1292,10 +1293,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 					return;
 
 				// see if connect request is to MyCallsign or any Aux call sign
-
-				strCallsign  = strlop(bytData, ' ');  // "fromcall tocall"
-
-				if (IsCallToMe(strCallsign, &bytPendingSessionID))  // (Handles protocol rules 1.2, 1.3)
+				if (IsCallToMe(&LastDecodedStationCaller, &LastDecodedStationTarget, &bytPendingSessionID))  // (Handles protocol rules 1.2, 1.3)
 				{
 					intReply = IRSNegotiateBW(intFrameType);  // NegotiateBandwidth
 
@@ -1313,6 +1311,8 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 						intAvgQuality = 0;  // initialize avg quality
 						intReceivedLeaderLen = intLeaderRcvdMs;  // capture the received leader from the remote ISS's ConReq (used for timing optimization)
 						InitializeConnection();
+
+
 						bytDataToSendLength = 0;
 
 						dttTimeoutTrip = Now;
@@ -1320,9 +1320,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 						// Stop and restart the Pending timer upon each ConReq received to ME
 						tmrIRSPendingTimeout= Now + 10000;  // Triggers a 10 second timeout before auto abort from pending
 
-						strcpy(strRemoteCallsign, bytData);
-						strcpy(strLocalCallsign, strCallsign);
-						strcpy(strFinalIDCallsign, strCallsign);
+						// latch the ConReq callsign pair from the decoder
+						memcpy(&ARQStationRemote, &LastDecodedStationCaller, sizeof(ARQStationRemote));
+						memcpy(&ARQStationLocal, &LastDecodedStationTarget, sizeof(ARQStationLocal));
+						memcpy(&ARQStationFinalId, &LastDecodedStationTarget, sizeof(ARQStationFinalId));
 
 						if ((EncLen = EncodeConACKwTiming(intReply, intLeaderRcvdMs, bytPendingSessionID, bytEncodedBytes)) <= 0) {
 							ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for ConAck Invalid EncLen (%d).", EncLen);
@@ -1337,10 +1338,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 					// (Handles protocol rule 1.3)
 
-					snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBW %s", strRemoteCallsign);
+					snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBW %s", ARQStationRemote.str);
 					QueueCommandToHost(HostCmd);
-					ZF_LOGI("[STATUS: ARQ CONNECTION FROM %s REJECTED, INCOMPATIBLE BANDWIDTHS.]", strRemoteCallsign);
-					snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION FROM %s REJECTED, INCOMPATIBLE BANDWIDTHS.", strRemoteCallsign);
+					ZF_LOGI("[STATUS: ARQ CONNECTION FROM %s REJECTED, INCOMPATIBLE BANDWIDTHS.]", ARQStationRemote.str);
+					snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION FROM %s REJECTED, INCOMPATIBLE BANDWIDTHS.", ARQStationRemote.str);
 					QueueCommandToHost(HostCmd);
 
 					if ((EncLen = Encode4FSKControl(intReply, bytPendingSessionID, bytEncodedBytes)) <= 0) {
@@ -1396,11 +1397,11 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				dttLastFECIDSent = Now;
 
 				blnEnbARQRpt = FALSE;
-				snprintf(HostCmd, sizeof(HostCmd), "CONNECTED %s %d", strRemoteCallsign, intSessionBW);
+				snprintf(HostCmd, sizeof(HostCmd), "CONNECTED %s %d", ARQStationRemote.str, intSessionBW);
 				QueueCommandToHost(HostCmd);
 
-				ZF_LOGI("[STATUS: ARQ CONNECTION FROM %s: SESSION BW = %d HZ]", strRemoteCallsign, intSessionBW);
-				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION FROM %s: SESSION BW = %d HZ", strRemoteCallsign, intSessionBW);
+				ZF_LOGI("[STATUS: ARQ CONNECTION FROM %s: SESSION BW = %d HZ]", ARQStationRemote.str, intSessionBW);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION FROM %s: SESSION BW = %d HZ", ARQStationRemote.str, intSessionBW);
 				QueueCommandToHost(HostCmd);
 
 				// Send ACK
@@ -1473,8 +1474,8 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 					LogStats();
 
 				QueueCommandToHost("DISCONNECTED");  // Send END
-				ZF_LOGI("[STATUS: ARQ CONNECTION ENDED WITH %s]", strRemoteCallsign);
-				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ENDED WITH %s", strRemoteCallsign);
+				ZF_LOGI("[STATUS: ARQ CONNECTION ENDED WITH %s]", ARQStationRemote.str);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ENDED WITH %s", ARQStationRemote.str);
 				QueueCommandToHost(HostCmd);
 
 				bytLastARQSessionID = bytSessionID;  // capture this session ID to allow answering DISC from DISC state if ISS missed Sent END
@@ -1504,27 +1505,20 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 					LogStats();
 
 				QueueCommandToHost("DISCONNECTED");
-				ZF_LOGI("[STATUS: ARQ CONNECTION ENDED WITH %s]", strRemoteCallsign);
-				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ENDED WITH %s", strRemoteCallsign);
+				ZF_LOGI("[STATUS: ARQ CONNECTION ENDED WITH %s]", ARQStationRemote.str);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ENDED WITH %s", ARQStationRemote.str);
 				QueueCommandToHost(HostCmd);
 				blnDISCRepeating = FALSE;
 				ClearDataToSend();
 
 				SetARDOPProtocolState(DISC);
 
-				// Send IDFrame must be done before InitializeConnection(),
-				// because it resets strLocalCallsign to an empty string.
-				if (CheckValidCallsignSyntax(strLocalCallsign))
-				{
-					dttLastFECIDSent = Now;
-					StationId local_callsign_todo_nomerge;
-					station_id_err e = stationid_from_str(strLocalCallsign, &local_callsign_todo_nomerge);
-					if (e == 0 && (EncLen = Encode4FSKIDFrame(&local_callsign_todo_nomerge, &GridSquare, bytEncodedBytes)) <= 0) {
-						ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
-						return;
-					}
-					Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
+				dttLastFECIDSent = Now;
+				if ((EncLen = Encode4FSKIDFrame(&ARQStationLocal, &GridSquare, bytEncodedBytes)) <= 0) {
+					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
+					return;
 				}
+				Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
 
 				InitializeConnection();
 				blnEnbARQRpt = FALSE;
@@ -1776,8 +1770,8 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				LogStats();
 
 			QueueCommandToHost("DISCONNECTED");
-			ZF_LOGI("[STATUS: ARQ CONNECTION ENDED WITH %s]", strRemoteCallsign);
-			snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ENDED WITH %s ", strRemoteCallsign);
+			ZF_LOGI("[STATUS: ARQ CONNECTION ENDED WITH %s]", ARQStationRemote.str);
+			snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ENDED WITH %s ", ARQStationRemote.str);
 			QueueCommandToHost(HostCmd);
 			tmrFinalID = Now + 3000;
 			blnDISCRepeating = FALSE;
@@ -1798,22 +1792,18 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 			if (AccumulateStats)
 				LogStats();
 			QueueCommandToHost("DISCONNECTED");
-			ZF_LOGI("[STATUS: ARQ CONNECTION ENDED WITH %s]", strRemoteCallsign);
-			snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ENDED WITH %s ", strRemoteCallsign);
+			ZF_LOGI("[STATUS: ARQ CONNECTION ENDED WITH %s]", ARQStationRemote.str);
+			snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ENDED WITH %s ", ARQStationRemote.str);
 			QueueCommandToHost(HostCmd);
 			ClearDataToSend();
 
-			if (CheckValidCallsignSyntax(strLocalCallsign))
-			{
-				dttLastFECIDSent = Now;
-				StationId local_callsign_todo_nomerge;
-				station_id_err e = stationid_from_str(strLocalCallsign, &local_callsign_todo_nomerge);
-				if (e == 0 && (EncLen = Encode4FSKIDFrame(&local_callsign_todo_nomerge, &GridSquare, bytEncodedBytes)) <= 0) {
-					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
-					return;
-				}
-				Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
+			dttLastFECIDSent = Now;
+			if ((EncLen = Encode4FSKIDFrame(&ARQStationLocal, &GridSquare, bytEncodedBytes)) <= 0) {
+				ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
+				return;
 			}
+			Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
+
 			SetARDOPProtocolState(DISC);
 			blnEnbARQRpt = FALSE;
 			blnDISCRepeating = FALSE;
@@ -1895,22 +1885,22 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 			if (intFrameType == ConRejBusy)  // ConRejBusy Handles Protocol Rule 1.5
 			{
-				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] ConRejBusy received from %s ABORT Connect Request", strRemoteCallsign);
-				snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBUSY %s", strRemoteCallsign);
+				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] ConRejBusy received from %s ABORT Connect Request", ARQStationRemote.str);
+				snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBUSY %s", ARQStationRemote.str);
 				QueueCommandToHost(HostCmd);
-				ZF_LOGI("[STATUS: ARQ CONNECTION REJECTED BY %s, REMOTE STATION BUSY.]", strRemoteCallsign);
-				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION REJECTED BY %s, REMOTE STATION BUSY.", strRemoteCallsign);
+				ZF_LOGI("[STATUS: ARQ CONNECTION REJECTED BY %s, REMOTE STATION BUSY.]", ARQStationRemote.str);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION REJECTED BY %s, REMOTE STATION BUSY.", ARQStationRemote.str);
 				QueueCommandToHost(HostCmd);
 				Abort();
 				return;
 			}
 			if (intFrameType == ConRejBW)  // ConRejBW Handles Protocol Rule 1.3
 			{
-				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] ConRejBW received from %s ABORT Connect Request", strRemoteCallsign);
-				snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBW %s", strRemoteCallsign);
+				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] ConRejBW received from %s ABORT Connect Request", ARQStationRemote.str);
+				snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBW %s", ARQStationRemote.str);
 				QueueCommandToHost(HostCmd);
-				ZF_LOGI("[STATUS: ARQ CONNECTION REJECTED BY %s, INCOMPATIBLE BW.]", strRemoteCallsign);
-				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION REJECTED BY %s, INCOMPATIBLE BW.", strRemoteCallsign);
+				ZF_LOGI("[STATUS: ARQ CONNECTION REJECTED BY %s, INCOMPATIBLE BW.]", ARQStationRemote.str);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION REJECTED BY %s, INCOMPATIBLE BW.", ARQStationRemote.str);
 				QueueCommandToHost(HostCmd);
 				Abort();
 				return;
@@ -1952,10 +1942,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				bytLastARQDataFrameAcked = 1;  // initialize to Odd value to start transmission frame on Even
 				blnPending = FALSE;
 
-				snprintf(HostCmd, sizeof(HostCmd), "CONNECTED %s %d", strRemoteCallsign, intSessionBW);
+				snprintf(HostCmd, sizeof(HostCmd), "CONNECTED %s %d", ARQStationRemote.str, intSessionBW);
 				QueueCommandToHost(HostCmd);
-				ZF_LOGI("[STATUS: ARQ CONNECTION ESTABLISHED WITH %s, SESSION BW = %d HZ]", strRemoteCallsign, intSessionBW);
-				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ESTABLISHED WITH %s, SESSION BW = %d HZ", strRemoteCallsign, intSessionBW);
+				ZF_LOGI("[STATUS: ARQ CONNECTION ESTABLISHED WITH %s, SESSION BW = %d HZ]", ARQStationRemote.str, intSessionBW);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ESTABLISHED WITH %s, SESSION BW = %d HZ", ARQStationRemote.str, intSessionBW);
 				QueueCommandToHost(HostCmd);
 
 				ARQState = ISSData;
@@ -1997,10 +1987,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 			{
 				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] ConRejBusy received in ARQState %s. Going to Protocol State DISC", ARQSubStates[ARQState]);
 
-				snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBUSY %s", strRemoteCallsign);
+				snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBUSY %s", ARQStationRemote.str);
 				QueueCommandToHost(HostCmd);
-				ZF_LOGI("[STATUS: ARQ CONNECTION REJECTED BY %s]", strRemoteCallsign);
-				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION REJECTED BY %s", strRemoteCallsign);
+				ZF_LOGI("[STATUS: ARQ CONNECTION REJECTED BY %s]", ARQStationRemote.str);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION REJECTED BY %s", ARQStationRemote.str);
 				QueueCommandToHost(HostCmd);
 
 				SetARDOPProtocolState(DISC);
@@ -2011,10 +2001,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 			{
 				// if (DebugLog) WriteDebug("[ARDOPprotocol.ProcessRcvdARQFrame] ConRejBW received in ARQState " & ARQState.ToString & " Going to Protocol State DISC")
 
-				snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBW %s", strRemoteCallsign);
+				snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBW %s", ARQStationRemote.str);
 				QueueCommandToHost(HostCmd);
-				ZF_LOGI("[STATUS: ARQ CONNECTION REJECTED BY %s]", strRemoteCallsign);
-				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION REJECTED BY %s", strRemoteCallsign);
+				ZF_LOGI("[STATUS: ARQ CONNECTION REJECTED BY %s]", ARQStationRemote.str);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION REJECTED BY %s", ARQStationRemote.str);
 				QueueCommandToHost(HostCmd);
 
 				SetARDOPProtocolState(DISC);
@@ -2084,10 +2074,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 					blnARQConnected = TRUE;
 					blnPending = FALSE;
 
-					snprintf(HostCmd, sizeof(HostCmd), "CONNECTED %s %d", strRemoteCallsign, intSessionBW);
+					snprintf(HostCmd, sizeof(HostCmd), "CONNECTED %s %d", ARQStationRemote.str, intSessionBW);
 					QueueCommandToHost(HostCmd);
-					ZF_LOGI("[STATUS: ARQ CONNECTION ESTABLISHED WITH %s, SESSION BW = %d HZ]", strRemoteCallsign, intSessionBW);
-					snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ESTABLISHED WITH %s, SESSION BW = %d HZ", strRemoteCallsign, intSessionBW);
+					ZF_LOGI("[STATUS: ARQ CONNECTION ESTABLISHED WITH %s, SESSION BW = %d HZ]", ARQStationRemote.str, intSessionBW);
+					snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ESTABLISHED WITH %s, SESSION BW = %d HZ", ARQStationRemote.str, intSessionBW);
 					QueueCommandToHost(HostCmd);
 				}
 
@@ -2160,8 +2150,8 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 					LogStats();
 
 				QueueCommandToHost("DISCONNECTED");
-				ZF_LOGI("[STATUS: ARQ CONNECTION ENDED WITH %s]", strRemoteCallsign);
-				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ENDED WITH %s", strRemoteCallsign);
+				ZF_LOGI("[STATUS: ARQ CONNECTION ENDED WITH %s]", ARQStationRemote.str);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ENDED WITH %s", ARQStationRemote.str);
 				QueueCommandToHost(HostCmd);
 
 				bytLastARQSessionID = bytSessionID;  // capture this session ID to allow answering DISC from DISC state
@@ -2187,23 +2177,18 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 					LogStats();
 
 				QueueCommandToHost("DISCONNECTED");
-				ZF_LOGI("[STATUS: ARQ CONNECTION ENDED WITH %s]", strRemoteCallsign);
-				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ENDED WITH %s", strRemoteCallsign);
+				ZF_LOGI("[STATUS: ARQ CONNECTION ENDED WITH %s]", ARQStationRemote.str);
+				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ENDED WITH %s", ARQStationRemote.str);
 				QueueCommandToHost(HostCmd);
 				ClearDataToSend();
 				blnDISCRepeating = FALSE;
 
-				if (CheckValidCallsignSyntax(strLocalCallsign))
-				{
-					dttLastFECIDSent = Now;
-					StationId local_callsign_todo_nomerge;
-					station_id_err e = stationid_from_str(strLocalCallsign, &local_callsign_todo_nomerge);
-					if (e == 0 && (EncLen = Encode4FSKIDFrame(&local_callsign_todo_nomerge, &GridSquare, bytEncodedBytes)) <= 0) {
-						ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
-						return;
-					}
-					Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
+				dttLastFECIDSent = Now;
+				if (EncLen = Encode4FSKIDFrame(&ARQStationLocal, &GridSquare, bytEncodedBytes) <= 0) {
+					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
+					return;
 				}
+				Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
 
 				SetARDOPProtocolState(DISC);
 				InitializeConnection();
@@ -2351,7 +2336,7 @@ int IRSNegotiateBW(int intConReqFrameType)
 
 // Function to send and ARQ connect request for the current MCB.ARQBandwidth
 
-BOOL SendARQConnectRequest(char * strMycall, char * strTargetCall)
+BOOL SendARQConnectRequest(const StationId* mycall, const StationId* target)
 {
 	// Psuedo Code:
 	// Determine the proper bandwidth and target call
@@ -2362,17 +2347,17 @@ BOOL SendARQConnectRequest(char * strMycall, char * strTargetCall)
 
 	InitializeConnection();
 	intRmtLeaderMeas = 0;
-	strcpy(strRemoteCallsign, strTargetCall);
-	strcpy(strLocalCallsign, strMycall);
-	strcpy(strFinalIDCallsign, strLocalCallsign);
+	memcpy(&ARQStationRemote, target, sizeof(ARQStationRemote));
+	memcpy(&ARQStationLocal, mycall, sizeof(ARQStationLocal));
+	memcpy(&ARQStationFinalId, mycall, sizeof(ARQStationFinalId));
 
 	if (CallBandwidth == UNDEFINED) {
-		if ((EncLen = EncodeARQConRequest(strMycall, strTargetCall, ARQBandwidth, bytEncodedBytes)) <= 0) {
+		if ((EncLen = EncodeARQConRequest(mycall, target, ARQBandwidth, bytEncodedBytes)) <= 0) {
 			ZF_LOGE("ERROR: In SendARQConnectRequest() with UNDEFINED BW Invalid EncLen (%d).", EncLen);
 			return FALSE;
 		}
 	} else {
-		if ((EncLen = EncodeARQConRequest(strMycall, strTargetCall, CallBandwidth, bytEncodedBytes)) <= 0) {
+		if ((EncLen = EncodeARQConRequest(mycall, target, CallBandwidth, bytEncodedBytes)) <= 0) {
 			ZF_LOGE("ERROR: In SendARQConnectRequest() Invalid EncLen (%d).", EncLen);
 			return FALSE;
 		}
@@ -2388,14 +2373,14 @@ BOOL SendARQConnectRequest(char * strMycall, char * strTargetCall)
 	ARQState = ISSConReq;
 	intRepeatCount = 1;
 
-	displayCall('>', strTargetCall);
-	bytSessionID = GenerateSessionID(strMycall, strTargetCall);  // Now set bytSessionID to receive ConAck (note the calling staton is the first entry in GenerateSessionID)
+	displayCall('>', target->str);
+	bytSessionID = GenerateSessionID(mycall->str, target->str);  // Now set bytSessionID to receive ConAck (note the calling staton is the first entry in GenerateSessionID)
 	bytPendingSessionID = bytSessionID;
 
-	ZF_LOGI("[SendARQConnectRequest] strMycall=%s  strTargetCall=%s bytPendingSessionID=%x", strMycall, strTargetCall, bytPendingSessionID);
+	ZF_LOGI("[SendARQConnectRequest] MYCALL=%s  TARGET=%s bytPendingSessionID=%x", mycall->str, target->str, bytPendingSessionID);
 	blnPending = TRUE;
 	blnARQConnected = FALSE;
-	wg_send_rcall(0, strTargetCall);
+	wg_send_rcall(0, target->str);
 
 	intFrameRepeatInterval = 2000;  // ms Finn reported 7/4/2015 that 1600 was too short ...need further evaluation but temporarily moved to 2000 ms
 	blnEnbARQRpt = TRUE;
@@ -2426,9 +2411,7 @@ BOOL Send10MinID()
 
 		dttLastFECIDSent = Now;
 
-		StationId local_callsign_todo_nomerge;
-		station_id_err e = stationid_from_str(strLocalCallsign, &local_callsign_todo_nomerge);
-		if (e == 0 && (EncLen = Encode4FSKIDFrame(&local_callsign_todo_nomerge, &GridSquare, bytEncodedBytes)) <= 0) {
+		if ((EncLen = Encode4FSKIDFrame(&ARQStationLocal, &GridSquare, bytEncodedBytes)) <= 0) {
 			ZF_LOGE("ERROR: In Send10MinID() Invalid EncLen (%d).", EncLen);
 			return FALSE;
 		}
@@ -2566,7 +2549,7 @@ void LogStats()
 	struct timespec tp = { 0, 0 };
 	clock_gettime(CLOCK_REALTIME, &tp);
 
-	ardop_log_session_header(strRemoteCallsign, &tp, (Now - dttStartSession) / 60000);
+	ardop_log_session_header(ARQStationRemote.str, &tp, (Now - dttStartSession) / 60000);
 
 	ardop_log_session_info("     LeaderDetects= %d   AvgLeader S+N:N(3KHz noise BW)= %f dB  LeaderSyncs= %d", intLeaderDetects, dblLeaderSNAvg - 23.8, intLeaderSyncs);
 	ardop_log_session_info("     AvgCorrelationMax:MaxProd= %f over %d  correlations", dblAvgCorMaxToMaxProduct, intEnvelopeCors);

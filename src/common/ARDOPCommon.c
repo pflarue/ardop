@@ -505,7 +505,7 @@ void displayState(const char * State)
 }
 
 
-void displayCall(int dirn, char * Call)
+void displayCall(int dirn, const char * Call)
 {
 	char Msg[32];
 	sprintf(Msg, "%c%s", dirn, Call);

@@ -126,7 +126,7 @@ int * intBaud, int * intDataLen, int * intRSLen, UCHAR * bytQualThres, char * st
 void ClearDataToSend();
 int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigned char * bytEncodedBytes);
 int EncodePSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigned char * bytEncodedBytes);
-int EncodePing(const StationId* mycall, const char* strTargetCallsign, UCHAR* bytReturn);
+int EncodePing(const StationId* mycall, const StationId* target, UCHAR* bytReturn);
 int Encode4FSKIDFrame(const StationId* callsign, const Locator* square, unsigned char* bytreturn);
 int EncodeDATAACK(int intQuality, UCHAR bytSessionID, UCHAR * bytreturn);
 int EncodeDATANAK(int intQuality , UCHAR bytSessionID, UCHAR * bytreturn);
@@ -137,7 +137,7 @@ BOOL IsDataFrame(UCHAR intFrameType);
 BOOL CheckValidCallsignSyntax(char * strTargetCallsign);
 void StartCodec(char * strFault);
 void StopCodec(char * strFault);
-BOOL SendARQConnectRequest(char * strMycall, char * strTargetCall);
+BOOL SendARQConnectRequest(const StationId* mycall, const StationId* target);
 void AddDataToDataToSend(UCHAR * bytNewData, int Len);
 BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL blnSendID);
 void SendID(BOOL blnEnableCWID);
@@ -153,7 +153,7 @@ void SetARDOPProtocolState(int value);
 BOOL BusyDetect3(float * dblMag, int intStart, int intStop);
 
 void displayState(const char * State);
-void displayCall(int dirn, char * call);
+void displayCall(int dirn, const char * call);
 
 void SampleSink(short Sample);
 void SoundFlush();
@@ -573,6 +573,6 @@ extern int initMode;  // 0 - 4PSK 1 - 8PSK 2 = 16QAM
 
 // Has to follow enum defs
 
-int EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, enum _ARQBandwidth ARQBandwidth, UCHAR * bytReturn);
+int EncodeARQConRequest(const StationId* mycall, const StationId* target, enum _ARQBandwidth ARQBandwidth, UCHAR* bytReturn);
 
 #endif

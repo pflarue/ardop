@@ -127,7 +127,7 @@ BOOL IsDataFrame(UCHAR intFrameType);
 BOOL CheckValidCallsignSyntax(char * strTargetCallsign);
 void StartCodec(char * strFault);
 void StopCodec(char * strFault);
-BOOL SendARQConnectRequest(char * strMycall, char * strTargetCall);
+BOOL SendARQConnectRequest(const StationId* mycall, const StationId* target);
 void AddDataToDataToSend(UCHAR * bytNewData, int Len);
 BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL blnSendID);
 void SendID(BOOL blnEnableCWID);
@@ -142,7 +142,7 @@ void SetARDOPProtocolState(int value);
 BOOL BusyDetect3(float * dblMag, int intStart, int intStop);
 
 void displayState(const char * State);
-void displayCall(int dirn, char * call);
+void displayCall(int dirn, const char * call);
 
 void SampleSink(short Sample);
 void SoundFlush();
@@ -519,7 +519,7 @@ extern int extraDelay;
 
 // Has to follow enum defs
 
-BOOL EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, enum _ARQBandwidth ARQBandwidth, UCHAR * bytReturn);
+int EncodeARQConRequest(const StationId* mycall, const StationId* target, enum _ARQBandwidth ARQBandwidth, UCHAR* bytReturn);
 
 
 #define PTTRTS 1

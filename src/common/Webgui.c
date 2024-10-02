@@ -29,7 +29,7 @@ extern BOOL NeedTwoToneTest;
 extern BOOL NeedID;
 extern BOOL WG_DevMode;
 extern StationId Callsign;
-extern char strRemoteCallsign[CALL_BUF_SIZE];
+extern StationId ARQStationRemote;  // current connection peer callsign
 extern float wS1;
 int ExtractARQBandwidth();
 void ProcessCommandFromHost(char * strCMD);
@@ -443,7 +443,7 @@ int wg_send_avglen(int cnum) {
 }
 
 // Provide a zero length string to clear remote callsign.
-int wg_send_rcall(int cnum, char *call) {
+int wg_send_rcall(int cnum, const char *call) {
 	char msg[CALL_BUF_SIZE + 2];
 	if (strlen(call) >= CALL_BUF_SIZE) {
 		ZF_LOGW("Remote callsign (%s) too long for wg_send_rcall().", call);
@@ -760,8 +760,8 @@ void WebguiPoll() {
 
 			if (stationid_ok(&Callsign))
 				wg_send_mycall(cnum, Callsign.str);
-			if (strRemoteCallsign[0] != 0x00 && (blnARQConnected || blnPending))
-				wg_send_rcall(cnum, strRemoteCallsign);
+			if (stationid_ok(&ARQStationRemote) && (blnARQConnected || blnPending))
+				wg_send_rcall(cnum, ARQStationRemote.str);
 			if (WG_DevMode)
 				// This is an "undocumented" feature that may be discontinued in
 				// future releases
