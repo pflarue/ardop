@@ -24,6 +24,7 @@
 #endif
 
 #include <stdbool.h>
+#include <sys/time.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -76,7 +77,10 @@ BOOL TwoToneAndExit = FALSE;
 BOOL UseSDFT = FALSE;
 BOOL FixTiming = TRUE;
 BOOL WG_DevMode = FALSE;
-char DecodeWav[256] = "";  // Pathname of WAV file to decode.
+// the --decodewav option can be repeated to provide the pathnames of multiple
+// WAV files to be decoded.  If more are given than DecodeWav can hold, then the
+// remainder is ignored.
+char DecodeWav[5][256] = {"", "", "", "", ""};
 // HostCommands may contain one or more semicolon separated host commands
 // provided as a command line parameter.  These are to be interpreted at
 // startup of ardopcf as if they were issued by a connected host program
@@ -187,6 +191,7 @@ void processargs(int argc, char * argv[])
 	UCHAR * ptr2;
 	int c;
 	bool enable_log_files = true;
+	unsigned int WavFileCount = 0;
 
 	while (1)
 	{
@@ -386,7 +391,12 @@ void processargs(int argc, char * argv[])
 			break;
 
 		case 'd':
-			strcpy(DecodeWav, optarg);
+			if (WavFileCount < sizeof(DecodeWav) / sizeof(DecodeWav[0]))
+				strcpy(DecodeWav[WavFileCount++], optarg);
+			else
+				printf(
+					"Too many WAV files specified with -d/--decodewav.  %s will"
+					" not be used.\n", optarg);
 			break;
 
 		case 'n':
@@ -515,12 +525,13 @@ void displayCall(int dirn, const char * Call)
 	SendtoGUI('I', Msg, strlen(Msg));
 }
 
-// When decoding a WAV file, WavNow will be set to the offset from the
+// When decoding WAV files, WavNow will be set to the offset from the
 // start of that file to the end of the data about to be passed to
 // ProcessNewSamples() in ms.  Thus, it serves as a proxy for Now()
 // which is otherwise based on clock time.  This substitution occurs
-// in getTicks() in ALSASound.c or Waveout.c.
-int WavNow;
+// in getTicks() in ALSASound.c or Waveout.c.  It is also used to indicate
+// time offsets in the log file.
+int WavNow = 0;
 
 int decode_wav()
 {
@@ -532,8 +543,15 @@ int decode_wav()
 	int sampleRate;
 	short samples[1024];
 	const unsigned int blocksize = 240;  // Number of 16-bit samples to read at a time
+	int WavFileCount = 0;
 	char *nextHostCommand = HostCommands;
-	WavNow = 0;
+
+	// Seed the random number generator.  This is useful if INPUTNOISE is being
+	// used.  Seeding is normally done in ardopmain(), which is bypassed when
+	// using decode_wav().
+	struct timeval t1;
+	gettimeofday(&t1, NULL);
+	srand(t1.tv_usec + t1.tv_sec);
 
 	if (DeprecationWarningsIssued) {
 		ZF_LOGE(
@@ -558,83 +576,121 @@ int decode_wav()
 	// in ardopmain(), which is not used when decoding a WAV file.
 	setProtocolMode("RXO");
 
-	ZF_LOGI("Decoding WAV file %s.", DecodeWav);
-	wavf = fopen(DecodeWav, "rb");
-	if (wavf == NULL)
-	{
-		ZF_LOGE("Unable to open WAV file %s.", DecodeWav);
-		return 1;
-	}
-	readCount = fread(wavHead, 1, 44, wavf);
-	if (readCount != 44)
-	{
-		ZF_LOGE("Error reading WAV file header.");
-		return 2;
-	}
-	if (memcmp(wavHead, headStr, 4) != 0)
-	{
-		ZF_LOGE("%s is not a valid WAV file. 0x%x %x %x %x != 0x%x %x %x %x",
-					DecodeWav, wavHead[0], wavHead[1], wavHead[2], wavHead[3],
-					headStr[0], headStr[1], headStr[2], headStr[3]);
-		return 3;
-	}
-	if (wavHead[20] != 0x01)
-	{
-		ZF_LOGE("Unexpected WAVE type.");
-		return 4;
-	}
-	if (wavHead[22] != 0x01)
-	{
-		ZF_LOGE("Expected single channel WAV.  Consider converting it with SoX.");
-		return 7;
-	}
-	sampleRate = wavHead[24] + (wavHead[25] << 8) + (wavHead[26] << 16) + (wavHead[27] << 24);
-	if (sampleRate != 12000)
-	{
-		ZF_LOGE("Expected 12kHz sample rate but found %d Hz.  Consider converting it with SoX.", sampleRate);
-		return 8;
-	}
-
-	nSamples = (wavHead[40] + (wavHead[41] << 8) + (wavHead[42] << 16) + (wavHead[43] << 24)) / 2;
-	ZF_LOGD("Reading %d 16-bit samples.", nSamples);
-	// Send blocksize silent samples to ProcessNewSamples() before start of WAV file data.
+	// Send blocksize silent/noise samples to ProcessNewSamples() before start of WAV file data.
 	memset(samples, 0, sizeof(samples));
 	add_noise(samples, blocksize, InputNoiseStdDev);
 	ProcessNewSamples(samples, blocksize);
-	while (nSamples >= blocksize)
-	{
-		readCount = fread(samples, 2, blocksize, wavf);
-		if (readCount != blocksize)
+
+	WavNow = 0;
+	unsigned int NowOffset = 0;
+
+	while (true) {
+		NowOffset = Now;
+		ZF_LOGI("Decoding WAV file %s.", DecodeWav[WavFileCount]);
+		wavf = fopen(DecodeWav[WavFileCount], "rb");
+		if (wavf == NULL)
+		{
+			ZF_LOGE("Unable to open WAV file %s.", DecodeWav[WavFileCount]);
+			return 1;
+		}
+		if ((Now - NowOffset) % 100 == 0)  // time stamp at 100 ms intervals
+			ZF_LOGV("%s: %.3f sec (%.3f)", DecodeWav[WavFileCount], (Now - NowOffset)/1000.0, Now/1000.0);
+		readCount = fread(wavHead, 1, 44, wavf);
+		if (readCount != 44)
+		{
+			ZF_LOGE("Error reading WAV file header.");
+			return 2;
+		}
+		if (memcmp(wavHead, headStr, 4) != 0)
+		{
+			ZF_LOGE("%s is not a valid WAV file. 0x%x %x %x %x != 0x%x %x %x %x",
+						DecodeWav[WavFileCount], wavHead[0], wavHead[1], wavHead[2],
+						wavHead[3], headStr[0], headStr[1], headStr[2], headStr[3]);
+			return 3;
+		}
+		if (wavHead[20] != 0x01)
+		{
+			ZF_LOGE("Unexpected WAVE type.");
+			return 4;
+		}
+		if (wavHead[22] != 0x01)
+		{
+			ZF_LOGE("Expected single channel WAV.  Consider converting it with SoX.");
+			return 7;
+		}
+		sampleRate = wavHead[24] + (wavHead[25] << 8) + (wavHead[26] << 16) + (wavHead[27] << 24);
+		if (sampleRate != 12000)
+		{
+			ZF_LOGE("Expected 12kHz sample rate but found %d Hz.  Consider converting it with SoX.", sampleRate);
+			return 8;
+		}
+
+		nSamples = (wavHead[40] + (wavHead[41] << 8) + (wavHead[42] << 16) + (wavHead[43] << 24)) / 2;
+		ZF_LOGD("Reading %d 16-bit samples.", nSamples);
+		while (nSamples >= blocksize)
+		{
+			readCount = fread(samples, 2, blocksize, wavf);
+			if (readCount != blocksize)
+			{
+				ZF_LOGE("Premature end of data while reading WAV file.");
+				return 5;
+			}
+			WavNow += blocksize * 1000 / 12000;
+			if ((Now - NowOffset) % 100 == 0)  // time stamp at 100 ms intervals
+				ZF_LOGV("%s: %.3f sec (%.3f)", DecodeWav[WavFileCount], (Now - NowOffset)/1000.0, Now/1000.0);
+			add_noise(samples, blocksize, InputNoiseStdDev);
+			ProcessNewSamples(samples, blocksize);
+			nSamples -= blocksize;
+		}
+		// nSamples is less than or equal to blocksize.
+		// Fill samples with 0, read nSamples, but pass blocksize samples to
+		// ProcessNewSamples().  This adds a small amount of silence/noise to the end
+		// of the audio, and keeps WavNow incrementing by blocksize (which is
+		// convenient for logging).
+		memset(samples, 0, sizeof(samples));
+		readCount = fread(samples, 2, nSamples, wavf);
+		if (readCount != nSamples)
 		{
 			ZF_LOGE("Premature end of data while reading WAV file.");
-			return 5;
+			return 6;
 		}
 		WavNow += blocksize * 1000 / 12000;
+		if ((Now - NowOffset) % 100 == 0)  // time stamp at 100 ms intervals
+			ZF_LOGV("%s: %.3f sec (%.3f)", DecodeWav[WavFileCount], (Now - NowOffset)/1000.0, Now/1000.0);
 		add_noise(samples, blocksize, InputNoiseStdDev);
 		ProcessNewSamples(samples, blocksize);
-		nSamples -= blocksize;
+		nSamples = 0;
+		fclose(wavf);
+		// Send additional silent/noise samples to ProcessNewSamples() after end of WAV file data.
+		// Without this, a frame that ends too close to the end of the WAV file might not be decoded.
+		// When decoding multiple WAV files (which may also be repeats of the same WAV file to
+		// test Memory ARQ), the extra audio samples between the WAV files avoids problems with
+		// failure to detect the start of the frame in later WAV files.  This same problem would
+		// occur if an adequate delay were not inserted between frames sent over the air.
+		//
+		// Attempting to decode multiple copies of the same noisy WAV file will
+		// not improve results compared to a single copy because the noise is
+		// identical in all copies.  However, if the noise is different between
+		// the copies (as they will be if a frame is repeated over the air, and
+		// as can be simulated with the INPUTNOISE host command), then the noise
+		// can be averaged out.  For multi-carrier frame types successfully
+		// decoded portions from different copies can also be combined.  Thus,
+		// decoding results may improve with repetition.
+		memset(samples, 0, sizeof(samples));
+		for (int i=0; i<20; i++) {
+			WavNow += blocksize * 1000 / 12000;
+			if ((Now - NowOffset) % 100 == 0)  // time stamp at 100 ms intervals
+				ZF_LOGV("Added silence/noise: %.3f sec (%.3f)", (Now - NowOffset)/1000.0, Now/1000.0);
+			add_noise(samples, blocksize, InputNoiseStdDev);
+			ProcessNewSamples(samples, blocksize);
+		}
+		ZF_LOGD("Done decoding %s.", DecodeWav[WavFileCount]);
+		WavFileCount ++;
+		if (WavFileCount == sizeof(DecodeWav) / sizeof(DecodeWav[0])
+			|| DecodeWav[WavFileCount][0] == 0x00
+		)
+			break;
 	}
-	readCount = fread(samples, 2, nSamples, wavf);
-	if (readCount != nSamples)
-	{
-		ZF_LOGE("Premature end of data while reading WAV file.");
-		return 6;
-	}
-	WavNow += nSamples * 1000 / 12000;
-	add_noise(samples, blocksize, InputNoiseStdDev);
-	ProcessNewSamples(samples, nSamples);
-	nSamples = 0;
-	// Send additional silent samples to ProcessNewSamples() after end of WAV file data.
-	// Without this, a frame that too close to the end of the WAV file might not be decoded.
-	memset(samples, 0, sizeof(samples));
-	for (int i=0; i<20; i++) {
-		WavNow += blocksize * 1000 / 12000;
-		add_noise(samples, blocksize, InputNoiseStdDev);
-		ProcessNewSamples(samples, blocksize);
-	}
-
-	fclose(wavf);
-	ZF_LOGD("Done decoding %s.", DecodeWav);
 	return 0;
 }
 
