@@ -37,6 +37,8 @@ void updateDisplay();
 
 void DrawAxes(int Qual, char * Mode);
 
+void PassFECErrDataToHost();
+
 extern int lastmax, lastmin;  // Sample Levels
 
 BOOL blnLeaderFound = FALSE;
@@ -146,6 +148,37 @@ int intToneMagsAvg[3][16 * (MAX_600B_RAW_LENGTH / 3)];  // FSK Tone averages.
 
 short intCarPhaseAvg[8][520];  // array to accumulate phases for averaging (Memory ARQ)
 short intCarMagAvg[8][520];  // array to accumulate mags for averaging (Memory ARQ)
+
+// Use MemarqTime, FECMemarqTimeout, and ARQTimeout to keep track of whether
+// Memory ARQ values have been stored, and whether they have become stale.  If
+// MemarqTime is 0, then no Memory ARQ values (CarrierOk, intSumCounts,
+// intToneMagsAvg, intCarPhaseAvg, intCarMagAvg) are set.  Otherwise, it is the
+// ms resolution time (set with Now) that they were first set.  If MemarqTime is
+// not 0, and (Now - MemarqTime) > 1000 * ARQTimeout, then all Memory ARQ values
+// should be considered stale and should be discarded.  This is intended to
+// reduce the likelihood that Memory ARQ values will be ineffective (or even
+// produce invalid results in the the case of multi-carrier frame types in FEC
+// or RXO modes) when stale results are applied to a new incoming frame that is
+// unrelated to the frames used to set the Memory ARQ values.  In FEC
+// protocolmode, the lesser of 1000 * ARQTimeout and FECMemarqTimeout is used.
+// FECMemarqTimeout is set to slightly longer than the duration of the longest
+// data frame type (less than 6 seconds) times one plus the maximum value of
+// FECRepeats (5).  This is less than the default value of ARQTimeout (120
+// seconds), but ARQTimeout can be set with a host command to any value in the
+// range of 30 to 240 seconds.  If RXO protocolmode is used to monitor FEC
+// transmissions, it may be appropriate to set a reduced ARQTimeout value.
+// However, when RXO protocolmode is used to monitor ARQ transmissions, a larger
+// ARQTimeout may allow a frame that is repeated many times to be successfully
+// decoded.  The use of a larger ARQTimeout also increases the risk that data
+// from frames of the same type but carrying different data may be mistakenly
+// combined and reported as correctly decoded.  The ARQ protocol prevents this
+// from occuring to participants in that protocol, but cannot completely prevent
+// it from occuring when a third party is monitoring the transmissions.
+//
+// CheckMemarqTime() is used to apply these tests, and reset the values if
+// appropriate.
+unsigned int MemarqTime = 0;  // ms Resolution
+unsigned int FECMemarqTimeout = 36000;  // ms Resolution 36 seconds
 
 // If we do Mem ARQ we will need a fair amount of RAM
 
@@ -259,15 +292,48 @@ void DemodPSK();
 BOOL DemodQAM();
 void SaveFSKSamples(int Part, int *Magnitudes, int Length);
 
-void ResetCarrierOk() {
+void ResetMemoryARQ() {
 	memset(CarrierOk, 0, sizeof(CarrierOk));
-}
-
-void ResetAvgs() {
 	memset(intSumCounts, 0, sizeof(intSumCounts));
 	memset(intToneMagsAvg, 0, sizeof(intToneMagsAvg));
 	memset(intCarPhaseAvg, 0, sizeof(intCarPhaseAvg));
 	memset(intCarMagAvg, 0, sizeof(intCarMagAvg));
+	LastDataFrameType = -1;
+	MemarqTime = 0;
+}
+
+// See comments where MemarqTime is defined
+void CheckMemarqTime() {
+	// Now, MemarqTime, and FECMemarqTimeout have ms resolution, but ARQTimeout
+	// is in seconds.
+	if (MemarqTime != 0
+		&& (
+			(Now - MemarqTime) > 1000 * ARQTimeout
+			|| (ProtocolMode == FEC && (Now - MemarqTime) > FECMemarqTimeout)
+		)
+	) {
+		ZF_LOGD("Resetting stale Memory ARQ values.");
+		ResetMemoryARQ();  // This also sets MemarqTime = 0
+		// Calling PassFECErrDataToHost() here also ensures that stale failed
+		// data stored by ProcessRcvdFECDataFrame() is passed to the host tagged
+		// as ERR now.  Otherwise, this would have been done on the next call to
+		// ProcessRcvdFECDataFrame(), or else the data would have been discarded
+		// if another failed data frame of the same type was received and
+		// mistakenly assumed to be another repeat of this data.  So, this
+		// ensures that such failed data, which may be partially readable, is
+		// passed to the host in a timely manner.
+		PassFECErrDataToHost();
+	}
+}
+
+// MemarqUpdated() should be called after any of the Memory ARQ values are set.
+// If this is the first of these values set, then MemarqTime will also be set.
+// MemarqTime is not updated upon further changes to the Memory ARQ values
+// because it is intended to indicate the oldest age of any Memory ARQ values
+// that have been set so that they can be reset upon becoming stale.
+void MemarqUpdated() {
+	if (MemarqTime == 0)
+		MemarqTime = Now;
 }
 
 // Function to determine if frame type is short control frame
@@ -640,9 +706,6 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 	// Dim bytNoRS(1 + intDataLen + 2 - 1) As Byte  // 1 byte byte Count, Data, 2 byte CRC
 	// Array.Copy(bytRawData, 0, bytNoRS, 0, bytNoRS.Length)
 
-	if (CarrierOk[Carrier] && CarrierOk[Carrier] != 1)
-		CarrierOk[Carrier] = CarrierOk[Carrier];
-
 	if (CarrierOk[Carrier])  // Already decoded this carrier?
 	{
 		// Athough we have already checked the data, it may be in the wrong place
@@ -672,6 +735,7 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 		memcpy(bytCorrectedData, &bytRawData[1], bytRawData[0]);
 		ZF_LOGD("[CorrectRawDataWithRS] OK (%d bytes) without RS", intDataLen);
 		CarrierOk[Carrier] = TRUE;
+		MemarqUpdated();
 		return bytRawData[0];
 	}
 	*/
@@ -720,6 +784,7 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 
 		memcpy(bytCorrectedData, &bytRawData[1], bytRawData[0]);
 		CarrierOk[Carrier] = TRUE;
+		MemarqUpdated();
 		return bytRawData[0];
 	}
 	else
@@ -730,10 +795,6 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 returnBad:
 
 	memcpy(bytCorrectedData, &bytRawData[1], intDataLen);
-
-	// Array.Copy(bytRawData, 1, bytCorrectedData, 0, bytCorrectedData.Length)
-
-	CarrierOk[Carrier] = FALSE;
 	return intDataLen;
 }
 
@@ -749,6 +810,14 @@ float dblFreqBin[8];
 void ProcessNewSamples(short * Samples, int nSamples)
 {
 	BOOL blnFrameDecodedOK = FALSE;
+
+	// Reset Memory ARQ values if they have become stale.
+	// This is done here rather than only when a new frame is detected so that
+	// stale failed FEC data is passed to the host in a timely manner when no
+	// further transmissions are detected for an extended time.  It is done
+	// here rather than in CheckTimers() because CheckTimers() is not called in
+	// RXO mode.
+	CheckMemarqTime();
 
 	if (ProtocolState == FECSend)
 		return;
@@ -1095,8 +1164,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 
 			if (LastDataFrameType != intFrameType)
 			{
-				// CarrierOk, intSumCounts, intToneMagsAvg, intCarPhaseAvg, and
-				// intCarMagAvg are reset here upon receiving a new frame type
+				// Memory ARQ values are reset here upon receiving a new frame type
 				// (excluding short control frames: DataNAK, BREAK, IDLE, DISC,
 				// END ConRejBusy, ConRejBW, DataACK).  Thus, they are reset for
 				// non-short control frames: IDFrame, ConReqXXX, ConAckXXX,
@@ -1105,16 +1173,16 @@ void ProcessNewSamples(short * Samples, int nSamples)
 				// this an accident that should be reconsidered?  If reset on
 				// DataNAK is applied, be sure to exclude RXO mode.
 				//
-				// They are also reset any time a successfully decoded data
+				// They are also reset by CheckMemarqTimeout() when they become
+				// stale or any time a successfully decoded data frame
 				// is passed to ProcessRcvFECDataFrame() or ProcessRXOFrame()
 				// since in FEC and RXO protocolmodes, a repeated data frame
 				// type is not always a repetition of the previous frame.
 				ZF_LOGD("New frame type - MEMARQ flags reset");
-				ResetCarrierOk();
-				ResetAvgs();
+				ResetMemoryARQ();
 			}
-			// TODO: Change name of LastDataFrameType since it is set to the
-			// current frame type even when it is not a data frame.
+			// TODO: Change name of LastDataFrameType since it may also be set
+			// to some non-data frame types?.
 			LastDataFrameType = intFrameType;
 
 			ZF_LOGD("MEMARQ Flags %d %d %d %d %d %d %d %d",
@@ -1129,9 +1197,6 @@ void ProcessNewSamples(short * Samples, int nSamples)
 		// Call DemodulateFrame for each set of samples
 
 		DemodulateFrame(intFrameType);
-
-		if (CarrierOk[0] != 0 && CarrierOk[0] != 1)
-			CarrierOk[0] = 0;
 
 		if (State == AcquireFrame)
 
@@ -3302,9 +3367,6 @@ BOOL DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 
 	// DataACK/NAK and short control frames
 
-	if (CarrierOk[0] != 0 && CarrierOk[0] != 1)
-		CarrierOk[0] = 0;
-
 	// TODO: Confirm that this is not used because DecodeFrame() is not called
 	// for short control frames including ACK and NAK.
 	if ((intFrameType >= DataNAKmin && intFrameType <= DataNAKmax) || intFrameType >= DataACKmin)  // DataACK/NAK
@@ -3331,9 +3393,6 @@ BOOL DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 
 	// DON'T reset totalRSErrors here.  RS correction for PSK and QAM frames is already done.
 	// totalRSErrors = 0;
-
-	if (CarrierOk[0] != 0 && CarrierOk[0] != 1)
-		CarrierOk[0] = 0;
 
 	ZF_LOGD("DecodeFrame MEMARQ Flags %d %d %d %d %d %d %d %d",
 		CarrierOk[0], CarrierOk[1], CarrierOk[2], CarrierOk[3],
@@ -4874,6 +4933,7 @@ void SaveQAMSamples(int i)
 		}
 	}
 	intSumCounts[i]++;
+	MemarqUpdated();
 }
 
 void SavePSKSamples(int i)
@@ -4898,6 +4958,7 @@ void SavePSKSamples(int i)
 		}
 	}
 	intSumCounts[i]++;
+	MemarqUpdated();
 }
 
 
@@ -4967,6 +5028,7 @@ void SaveFSKSamples(int Part, int *Magnitudes, int Length) {
 	ZF_LOGI("%s", HexData);
 
 	intSumCounts[Part]++;
+	MemarqUpdated();
 }
 
 BOOL DemodQAM()

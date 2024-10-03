@@ -12,8 +12,7 @@ extern int intLastRcvdFrameQuality;  // defined in SoundInput.c
 extern BOOL WG_DevMode;
 int wg_send_hostdatat(int cnum, char *prefix, unsigned char *data, int datalen);
 int wg_send_hostdatab(int cnum, char *prefix, unsigned char *data, int datalen);
-void ResetCarrierOk();
-void ResetAvgs();
+void ResetMemoryARQ();
 
 // Use of RXO is assumed to indicate that the user is interested in observing all received traffic.
 // So LOGI (level=3), rather than a lower log level such as LOGD (level=2), is used for most positive results.
@@ -163,33 +162,33 @@ void ProcessRXOFrame(UCHAR bytFrameType, int frameLen, UCHAR * bytData, BOOL bln
 	char strMsg[4096];
 	int intMsgLen;
 
-	if (bytFrameType >= 0x31 && bytFrameType <= 0x38)  // ConReq####
+	if (bytFrameType >= ConReqmin && bytFrameType <= ConReqmax)
 	{
 		// Is there a reason why frameLen is not defined for ConReq?
 		ZF_LOGI("    [RXO %02hhX] ConReq data is callerID targetID", bytSessionID);
 		frameLen = strlen((char*) bytData);
 	}
-	else if (bytFrameType >= 0x39 && bytFrameType <= 0x3C)  // ConAck####
+	else if (bytFrameType >= ConAckmin && bytFrameType <= ConAckmax)
 	{
 		ZF_LOGI("    [RXO %02hhX] ConAck data is the length (in tens of ms) of the received leader repeated 3 times: %d %d %d",
 			bytSessionID, bytFrameData1[0], bytFrameData1[1], bytFrameData1[2]);
 	}
-	else if (bytFrameType == 0x3D)  // PingAck
+	else if (bytFrameType == PINGACK)
 	{
 		ZF_LOGI("    [RXO %02hhX] PingAck data is S:N=%d and Quality=%d of the Ping. (Any S:N > 20 is reorted as 21.)",
 			bytSessionID, intSNdB, intQuality);
 	}
-	else if (bytFrameType == 0x3E)  // Ping
+	else if (bytFrameType == PING)
 	{
 		ZF_LOGI("    [RXO %02hhX] Ping data is caller and target callsigns: '%s'.  While this frame does uses FEC to improve likelihood of correct transmission, it does not include a CRC check with which to confirm correctness.  This Ping was received with S:N=%d, Q=%d.",
 			bytSessionID, bytData, stcLastPingintRcvdSN, stcLastPingintQuality);
 	}
-	else if (bytFrameType >= 0xE0)  // DataACK
+	else if (bytFrameType >= DataACKmin)
 	{
 		ZF_LOGI("    [RXO %02hhX] DataAck FrameType (0x%02X) indicates decode quality (%d/100). 60+ typically required for decoding.",
 			bytSessionID, bytFrameType, 38 + (2 * (bytFrameType & 0x1F)));
 	}
-	else if (bytFrameType <= 0x1F)  // DataNAK
+	else if (bytFrameType <= DataNAKmax)
 	{
 		ZF_LOGI("    [RXO %02hhX] DataNak FrameType (0x%02X) indicates decode quality (%d/100). 60+ typically required for decoding.",
 			bytSessionID, bytFrameType, 38 + (2 * (bytFrameType & 0x1F)));
@@ -249,17 +248,19 @@ void ProcessRXOFrame(UCHAR bytFrameType, int frameLen, UCHAR * bytData, BOOL bln
 		// that prior frame was not successfully decoded.  For multi-carrier
 		// frame types, this can also result in a data frame which claims to
 		// have been successfully decoded, but which actually contains a mixture
-		// of data from multiple different data frames.
+		// of data from multiple different data frames.  While this possibility
+		// is not completely eliminated, it is made less likely by resetting
+		// Memory ARQ values when they become stale.  See comments where
+		// MemarqTime is defined.  Those comments suggest that when using
+		// RXO ProtocolMode, it may be advantageous to adjust the value of
+		// ARQTimeout.
 
 		// Like FEC protocolmode, the MemoryARQ values are reset whenever a data
 		// frame is correctly decoded to facilitate decoding a sequence of data
 		// frames of the same type but containing different data.
 		if (blnFrameDecodedOK) {
-			ZF_LOGD(
-				"CarrierOk, and data for SaveXXXSamples() reset after RXO data"
-				" frame decoded OK.");
-			ResetCarrierOk();
-			ResetAvgs();
+			ZF_LOGD("Memory ARQ data reset after RXO data frame decoded OK.");
+			ResetMemoryARQ();
 		}
 	}
 }
