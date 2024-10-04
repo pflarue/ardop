@@ -134,7 +134,6 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);
 void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);
 BOOL IsDataFrame(UCHAR intFrameType);
-BOOL CheckValidCallsignSyntax(char * strTargetCallsign);
 void StartCodec(char * strFault);
 void StopCodec(char * strFault);
 BOOL SendARQConnectRequest(const StationId* mycall, const StationId* target);
@@ -202,7 +201,6 @@ void InitValidFrameTypes();
 extern void Generate50BaudTwoToneLeaderTemplate();
 extern BOOL blnDISCRepeating;
 
-void DeCompressCallsign(const char * bytCallsign, char * returned, size_t returnlen);
 void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDecodedOK);
 void ProcessUnconnectedConReqFrame(int intFrameType, UCHAR * bytData);
 void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL blnFrameDecodedOK);

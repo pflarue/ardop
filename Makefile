@@ -87,7 +87,6 @@ OBJS_EXE = \
 
 # unit test executables
 TESTS = \
-	test/ardop/test_ARDOPC \
 	test/ardop/test_ARDOPCommon \
 	test/ardop/test_HostInterface \
 	test/ardop/test_Locator \

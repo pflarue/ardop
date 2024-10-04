@@ -124,7 +124,6 @@ int EncodeDATAACK(int intQuality, UCHAR bytSessionID, UCHAR * bytreturn);
 int EncodeDATANAK(int intQuality , UCHAR bytSessionID, UCHAR * bytreturn);
 void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);
 BOOL IsDataFrame(UCHAR intFrameType);
-BOOL CheckValidCallsignSyntax(char * strTargetCallsign);
 void StartCodec(char * strFault);
 void StopCodec(char * strFault);
 BOOL SendARQConnectRequest(const StationId* mycall, const StationId* target);
@@ -191,8 +190,6 @@ void setProtocolMode(char* strMode);
 
 extern void Generate50BaudTwoToneLeaderTemplate();
 extern BOOL blnDISCRepeating;
-
-void DeCompressCallsign(const char * bytCallsign, char * returned, size_t returnedlen);
 
 int RSEncode(UCHAR * bytToRS, UCHAR * bytRSEncoded, int MaxErr, int Len);
 BOOL RSDecode(UCHAR * bytRcv, int Length, int CheckLen, BOOL * blnRSOK);
