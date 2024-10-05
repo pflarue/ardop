@@ -444,8 +444,8 @@ int wg_send_avglen(int cnum) {
 
 // Provide a zero length string to clear remote callsign.
 int wg_send_rcall(int cnum, const char *call) {
-	char msg[CALL_BUF_SIZE + 2];
-	if (strlen(call) >= CALL_BUF_SIZE) {
+	char msg[STATIONID_BUF_SIZE + 2];
+	if (strlen(call) >= STATIONID_BUF_SIZE) {
 		ZF_LOGW("Remote callsign (%s) too long for wg_send_rcall().", call);
 		return (0);
 	}
@@ -455,8 +455,8 @@ int wg_send_rcall(int cnum, const char *call) {
 
 // Provide a zero length string to clear my callsign.
 int wg_send_mycall(int cnum, char *call) {
-	char msg[CALL_BUF_SIZE + 2];
-	if (strlen(call) >= CALL_BUF_SIZE) {
+	char msg[STATIONID_BUF_SIZE + 2];
+	if (strlen(call) >= STATIONID_BUF_SIZE) {
 		ZF_LOGW("My callsign (%s) too long for wg_send_mycall().", call);
 		return (0);
 	}

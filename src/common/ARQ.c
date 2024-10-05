@@ -508,7 +508,7 @@ BOOL GetNextARQFrame()
 
 UCHAR GenerateSessionID(const char * strCallingCallSign, const char *strTargetCallsign)
 {
-	char bytToCRC[CALL_BUF_SIZE*2 + 1];
+	char bytToCRC[STATIONID_BUF_SIZE*2 + 1];
 
 	if (snprintf(bytToCRC, sizeof(bytToCRC), "%s%s", strCallingCallSign, strTargetCallsign) >= (int)sizeof(bytToCRC))
 		ZF_LOGW(
