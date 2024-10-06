@@ -23,7 +23,11 @@ FILE* __wrap_fopen(
 	const char* restrict mode
 ) {
 	check_expected_ptr(pathname);
-	return mock_ptr_type(FILE*);
+	// return mock_ptr_type(FILE*);  // This works on Linux but not Windows.
+	// The following works on both Linux and Windows.
+	// Without first casting to size_t, it works but gives a warning when
+	// compiling for 32-bit Windows.
+	return (FILE*) ((size_t) mock_type(int));
 };
 
 FILE* __wrap_freopen(
@@ -32,7 +36,10 @@ FILE* __wrap_freopen(
 	FILE* restrict handle
 ) {
 	check_expected_ptr(pathname);
-	return mock_ptr_type(FILE*);
+	// The following works on both Linux and Windows.
+	// Without first casting to size_t, it works but gives a warning when
+	// compiling for 32-bit Windows.
+	return (FILE*) ((size_t) mock_type(int));
 };
 
 int __wrap_fclose(FILE* handle) {
