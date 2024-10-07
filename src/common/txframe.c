@@ -279,7 +279,7 @@ int txframe(char * frameParams) {
 			if (e) {
 				ZF_LOGE(
 					"Invalid mycall \"%s\" for TXFRAME ConReq: %s",
-					params[2],
+					params[3],
 					stationid_strerror(e));
 				return 1;
 			}
@@ -440,7 +440,7 @@ int txframe(char * frameParams) {
 				"TXFRAME Ping requires an explicit target.");
 			return (1);
 		}
-		if (paramcount > 3 && strcmp(params[2], "_") != 0) {
+		if (paramcount > 3 && strcmp(params[3], "_") != 0) {
 			station_id_err e = stationid_from_str(params[3], &mycall);
 			if (e) {
 				ZF_LOGE(
