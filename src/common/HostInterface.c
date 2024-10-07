@@ -23,7 +23,7 @@ extern BOOL NeedID;  // SENDID Command Flag
 extern BOOL NeedConReq;  // ARQCALL Command Flag
 extern BOOL NeedPing;
 extern BOOL PingCount;
-extern char ConnectToCall[CALL_BUF_SIZE];
+extern StationId ConnectToCall;
 extern enum _ARQBandwidth CallBandwidth;
 extern int extraDelay ;  // Used for long delay paths eg Satellite
 extern BOOL WG_DevMode;
@@ -40,7 +40,6 @@ extern BOOL NeedTwoToneTest;
 
 #ifndef WIN32
 
-#define strtok_s strtok_r
 #define _strupr strupr
 
 char * strupr(char* s)
@@ -160,6 +159,81 @@ bool DoTrueFalseCmd(char * strCMD, char * ptrParams, BOOL * Value)
 	return true;
 }
 
+/**
+ * @brief Parse command `params` like "`N0CALL-A 5`"
+ *
+ * Reads command `params` that take a `target` ID and a `nattempts`
+ * count.
+ *
+ * @param[in] cmd         Command name, like `ARQCALL`. Must be
+ *                        non-NULL and NUL-terminated.
+ * @param[in] params      Command parameters. May be NULL. If not,
+ *                        must be NUL-terminated. Will be
+ *                        destructively overwritten.
+ * @param[out] fault      Destination buffer for failure message
+ * @param[in] fault_size  `sizeof(fault)`
+ * @param[out] target     Station ID parsed
+ * @param[out] nattempts  Attempt count parsed. Will be positive.
+ *
+ * @return true if the params are valid and a `target` and
+ * `nattempts` are populated. false if the params are not valid
+ * and `fault` is populated instead. If this method returns false,
+ * the value of `target` and `nattempts` are undefined.
+ */
+ARDOP_MUSTUSE
+bool parse_station_and_nattempts(
+	const char* cmd,
+	char* params,
+	char* fault,
+	size_t fault_size,
+	StationId* target,
+	long* nattempts)
+{
+	stationid_init(target);
+	*nattempts = 0;
+
+	if (! params) {
+		snprintf(fault, fault_size, "Syntax Err: %s: expected \"TARGET NATTEMPTS\"", cmd);
+		return false;
+	}
+
+	const char* target_str = params;
+	const char* nattempts_str = strlop(params, ' ');
+	if (!nattempts_str) {
+		snprintf(fault, fault_size, "Syntax Err: %s %s: expected \"TARGET NATTEMPTS\"", cmd, target_str);
+		return false;
+	}
+
+	station_id_err e = stationid_from_str(target_str, target);
+	if (e) {
+		snprintf(
+			fault,
+			fault_size,
+			"Syntax Err: %s %s %s: invalid TARGET: %s",
+			cmd, target_str, nattempts_str, stationid_strerror(e));
+		return false;
+	}
+
+	if (! try_parse_long(nattempts_str, nattempts)) {
+		snprintf(
+			fault,
+			fault_size,
+			"Syntax Err: %s %s %s: NATTEMPTS not valid as number",
+			cmd, target_str, nattempts_str);
+		return false;
+	}
+
+	if (! (*nattempts >= 1)) {
+		snprintf(
+			fault,
+			fault_size,
+			"Syntax Err: %s %s %s: NATTEMPTS must be positive",
+			cmd, target_str, nattempts_str);
+		return false;
+	}
+
+	return true;
+}
 
 // Function for processing a command from Host
 
@@ -232,42 +306,37 @@ void ProcessCommandFromHost(char * strCMD)
 
 	if (strcmp(strCMD, "ARQCALL") == 0)
 	{
-		char * strCallParam = NULL;
-		if (ptrParams)
-			strCallParam = strlop(ptrParams, ' ');
-
-		if (strCallParam)
+		long nattempts = 0;
+		if (! parse_station_and_nattempts(
+				strCMD,
+				ptrParams,
+				strFault,
+				sizeof(strFault),
+				&ConnectToCall,
+				&nattempts))
 		{
-			if ((strcmp(ptrParams, "CQ") == 0) || CheckValidCallsignSyntax(ptrParams))
-			{
-				int param = atoi(strCallParam);
-
-				if (param > 1 && param < 16)
-				{
-					if (Callsign[0] == 0)
-					{
-						snprintf(strFault, sizeof(strFault), "MYCALL not Set");
-						goto cmddone;
-					}
-
-					if (ProtocolMode == ARQ)
-					{
-						ARQConReqRepeats = param;
-
-						NeedConReq =  TRUE;
-						strcpy(ConnectToCall, ptrParams);
-						SendReplyToHost(cmdCopy);
-						goto cmddone;
-					}
-					if (ProtocolMode == RXO)
-						snprintf(strFault, sizeof(strFault), "Not from mode RXO");
-					else
-						snprintf(strFault, sizeof(strFault), "Not from mode FEC");
-					goto cmddone;
-				}
-			}
+			goto cmddone;
 		}
-		snprintf(strFault, sizeof(strFault), "Syntax Err: %.80s", cmdCopy);
+
+		if (! stationid_ok(&Callsign)) {
+			snprintf(strFault, sizeof(strFault), "MYCALL not set");
+			goto cmddone;
+		}
+
+		switch (ProtocolMode) {
+			case ARQ:
+				ARQConReqRepeats = (int)nattempts;
+				NeedConReq = TRUE;
+				SendReplyToHost(cmdCopy);
+				break;
+			case FEC:
+				snprintf(strFault, sizeof(strFault), "Not from mode FEC");
+				break;
+			case RXO:
+				snprintf(strFault, sizeof(strFault), "Not from mode RXO");
+				break;
+		}
+
 		goto cmddone;
 	}
 
@@ -825,42 +894,59 @@ void ProcessCommandFromHost(char * strCMD)
 
 	if (strcmp(strCMD, "MYAUX") == 0)
 	{
-		int i, len;
-		char * ptr, * context;
-
 		if (ptrParams == 0)
 		{
-			len = sprintf(cmdReply, "%s", "MYAUX ");
-
-			for (i = 0; i < AuxCallsLength; i++)
-			{
-				len += sprintf(&cmdReply[len], "%s,", AuxCalls[i]);
-			}
-			cmdReply[len - 1] = 0;  // remove trailing space or ,
+			stationid_array_to_str(
+				AuxCalls,
+				AuxCallsLength,
+				cmdReply,
+				sizeof(cmdReply),
+				",",
+				"MYAUX",
+				" "
+			);
 			SendReplyToHost(cmdReply);
 			goto cmddone;
 		}
 
-		ptr = strtok_s(ptrParams, ", ", &context);
-
+		memset(AuxCalls, 0, sizeof(AuxCalls));
 		AuxCallsLength = 0;
+		station_id_err e = stationid_from_str_to_array(
+			ptrParams,
+			&AuxCalls[0],
+			sizeof(AuxCalls) / sizeof(AuxCalls[0]),
+			&AuxCallsLength
+		);
 
-		while (ptr && AuxCallsLength < AUXCALLS_ALEN)
-		{
-			if (CheckValidCallsignSyntax(ptr))
-				strcpy(AuxCalls[AuxCallsLength++], ptr);
-
-			ptr = strtok_s(NULL, ", ", &context);
+		if (e) {
+			snprintf(strFault, sizeof(strFault), "Syntax Err: at callsign %lu: %s", AuxCallsLength, stationid_strerror(e));
+			/* The TNC protocol requires that invalid input
+			 * completely clears the MYAUX array */
+			AuxCallsLength = 0;
+			goto cmddone;
 		}
 
-		len = sprintf(cmdReply, "%s", "MYAUX now ");
-		for (i = 0; i < AuxCallsLength; i++)
-		{
-			len += sprintf(&cmdReply[len], "%s,", AuxCalls[i]);
+		for (size_t i = 0; i < AuxCallsLength; ++i) {
+			if (stationid_is_cq(&AuxCalls[i])) {
+				snprintf(strFault, sizeof(strFault), "Syntax Err: at callsign %lu: a CQ callsign is not permitted", i);
+				/* The TNC protocol requires that invalid input
+				 * completely clears the MYAUX array */
+				AuxCallsLength = 0;
+				break;
+			}
 		}
-		cmdReply[len - 1] = 0;  // remove trailing space or ,
+
+		stationid_array_to_str(
+			AuxCalls,
+			AuxCallsLength,
+			cmdReply,
+			sizeof(cmdReply),
+			",",
+			"MYAUX now",
+			" "
+		);
+		ZF_LOGD_STR(cmdReply);
 		SendReplyToHost(cmdReply);
-
 		goto cmddone;
 	}
 
@@ -868,20 +954,23 @@ void ProcessCommandFromHost(char * strCMD)
 	{
 		if (ptrParams == 0)
 		{
-			sprintf(cmdReply, "%s %s", strCMD, Callsign);
+			snprintf(cmdReply, sizeof(cmdReply), "%s %s", strCMD, Callsign.str);
 			SendReplyToHost(cmdReply);
+			goto cmddone;
 		}
-		else
-		{
-			if (CheckValidCallsignSyntax(ptrParams))
-			{
-				strcpy(Callsign, ptrParams);
-				wg_send_mycall(0, Callsign);
-				sprintf(cmdReply, "%s now %s", strCMD, Callsign);
-				SendReplyToHost(cmdReply);
-			}
-			else
-				snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
+
+		StationId new_mycall;
+		station_id_err e = stationid_from_str(ptrParams, &new_mycall);
+		if (e) {
+			snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s: %s", strCMD, ptrParams, stationid_strerror(e));
+		} else if (stationid_is_cq(&new_mycall)) {
+			snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s: a CQ callsign is not permitted", strCMD, ptrParams);
+		} else {
+			memcpy(&Callsign, &new_mycall, sizeof(Callsign));
+			wg_send_mycall(0, Callsign.str);
+			snprintf(cmdReply, sizeof(cmdReply), "%s now %s", strCMD, Callsign.str);
+			ZF_LOGD_STR(cmdReply);
+			SendReplyToHost(cmdReply);
 		}
 		goto cmddone;
 	}
@@ -894,34 +983,38 @@ void ProcessCommandFromHost(char * strCMD)
 
 	if (strcmp(strCMD, "PING") == 0)
 	{
-		if (ptrParams)
+		long nattempts = 0;
+		if (!parse_station_and_nattempts(
+				strCMD,
+				ptrParams,
+				strFault,
+				sizeof(strFault),
+				&ConnectToCall,
+				&nattempts))
 		{
-			char * countp = strlop(ptrParams, ' ');
-			int count = 0;
+			goto cmddone;
+		}
 
-			if (countp)
-				count = atoi(countp);
+		if (!stationid_ok(&Callsign)) {
+			snprintf(strFault, sizeof(strFault), "MYCALL not set");
+			goto cmddone;
+		}
 
-			if (CheckValidCallsignSyntax(ptrParams) && count > 0 && count < 16)
+		switch (ProtocolMode) {
+		case RXO:
+			snprintf(strFault, sizeof(strFault), "Not from mode RXO");
+			break;
+		default:
+			if (ProtocolState != DISC)
 			{
-				if (ProtocolState != DISC)
-				{
-					snprintf(strFault, sizeof(strFault), "No PING from state %s",  ARDOPStates[ProtocolState]);
-					goto cmddone;
-				}
-				else
-				{
-					SendReplyToHost(cmdCopy);  // echo command back to host.
-					strcpy(ConnectToCall, _strupr(ptrParams));
-					PingCount = count;
-					NeedPing = TRUE;  // request ping from background
-					goto cmddone;
-				}
+				snprintf(strFault, sizeof(strFault), "No PING from state %s", ARDOPStates[ProtocolState]);
+				goto cmddone;
 			}
 		}
 
-		snprintf(strFault, sizeof(strFault), "Syntax Err: %.80s", cmdCopy);
-
+		PingCount = (int)nattempts;
+		NeedPing = TRUE;  // request ping from background
+		SendReplyToHost(cmdCopy);
 		goto cmddone;
 	}
 

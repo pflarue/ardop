@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "common/ardopcommon.h"
+#include "common/StationId.h"
 #include "ws_server/ws_server.h"
 
 /////////////////////////////////////////////////////////////////////////////
@@ -27,8 +28,8 @@ extern BOOL blnPending;
 extern BOOL NeedTwoToneTest;
 extern BOOL NeedID;
 extern BOOL WG_DevMode;
-extern char Callsign[CALL_BUF_SIZE];
-extern char strRemoteCallsign[CALL_BUF_SIZE];
+extern StationId Callsign;
+extern StationId ARQStationRemote;  // current connection peer callsign
 extern float wS1;
 int ExtractARQBandwidth();
 void ProcessCommandFromHost(char * strCMD);
@@ -442,9 +443,9 @@ int wg_send_avglen(int cnum) {
 }
 
 // Provide a zero length string to clear remote callsign.
-int wg_send_rcall(int cnum, char *call) {
-	char msg[CALL_BUF_SIZE + 2];
-	if (strlen(call) >= CALL_BUF_SIZE) {
+int wg_send_rcall(int cnum, const char *call) {
+	char msg[STATIONID_BUF_SIZE + 2];
+	if (strlen(call) >= STATIONID_BUF_SIZE) {
 		ZF_LOGW("Remote callsign (%s) too long for wg_send_rcall().", call);
 		return (0);
 	}
@@ -454,8 +455,8 @@ int wg_send_rcall(int cnum, char *call) {
 
 // Provide a zero length string to clear my callsign.
 int wg_send_mycall(int cnum, char *call) {
-	char msg[CALL_BUF_SIZE + 2];
-	if (strlen(call) >= CALL_BUF_SIZE) {
+	char msg[STATIONID_BUF_SIZE + 2];
+	if (strlen(call) >= STATIONID_BUF_SIZE) {
 		ZF_LOGW("My callsign (%s) too long for wg_send_mycall().", call);
 		return (0);
 	}
@@ -757,10 +758,10 @@ void WebguiPoll() {
 			wg_send_bandwidth(cnum);
 			wg_send_busy(cnum, blnBusyStatus);
 
-			if (Callsign[0] != 0x00)
-				wg_send_mycall(cnum, Callsign);
-			if (strRemoteCallsign[0] != 0x00 && (blnARQConnected || blnPending))
-				wg_send_rcall(cnum, strRemoteCallsign);
+			if (stationid_ok(&Callsign))
+				wg_send_mycall(cnum, Callsign.str);
+			if (stationid_ok(&ARQStationRemote) && (blnARQConnected || blnPending))
+				wg_send_rcall(cnum, ARQStationRemote.str);
 			if (WG_DevMode)
 				// This is an "undocumented" feature that may be discontinued in
 				// future releases
@@ -795,7 +796,7 @@ void WebguiPoll() {
 			else if (ProtocolState != DISC)
 				wg_send_alert(cnum, "Cannot send ID from ProtocolState = %s.",
 					ARDOPStates[ProtocolState]);
-			else if (Callsign[0] == 0x00)
+			else if (! stationid_ok(&Callsign))
 				wg_send_alert(cnum, "Cannot send ID.  Callsign not set.");
 			else
 				NeedID = true;

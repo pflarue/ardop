@@ -46,7 +46,6 @@ BOOL blnLeaderFound = FALSE;
 int intLeaderRcvdMs = 1000;  // Leader length??
 
 extern int intLastRcvdFrameQuality;
-extern int intReceivedLeaderLen;
 extern UCHAR bytLastReceivedDataFrameType;
 extern BOOL blnBREAKCmd;
 extern UCHAR bytLastACKedDataFrameType;
@@ -211,7 +210,8 @@ extern UCHAR bytSessionID;
 int dttLastGoodFrameTypeDecod;
 int dttStartRmtLeaderMeasure;
 
-char lastGoodID[CALL_BUF_SIZE] = "";
+StationId LastDecodedStationCaller;  // most recent frame sender
+StationId LastDecodedStationTarget;  // most recent frame recipient
 
 int GotBitSyncTicks;
 
@@ -2783,12 +2783,11 @@ void Demod1Car4FSK600Char(int Start, UCHAR * Decoded)
 
 extern int intBW;
 
-BOOL Decode4FSKConReq()
+BOOL Decode4FSKConReq(StationId* caller, StationId* target)
 {
-	UCHAR strCaller[CALL_BUF_SIZE];
-	UCHAR strTarget[CALL_BUF_SIZE];
-	UCHAR bytCall[COMP_SIZE];
 	BOOL FrameOK;
+	stationid_init(caller);
+	stationid_init(target);
 
 	// Modified May 24, 2015 to use RS encoding vs CRC (similar to ID Frame)
 
@@ -2814,15 +2813,18 @@ BOOL Decode4FSKConReq()
 		ZF_LOGD("CONREQ Still bad after RS");
 		FrameOK = FALSE;
 	}
-	memcpy(bytCall, bytFrameData1, COMP_SIZE);
-	DeCompressCallsign(bytCall, strCaller, sizeof(strCaller));
-	memcpy(bytCall, &bytFrameData1[COMP_SIZE], COMP_SIZE);
-	DeCompressCallsign(bytCall, strTarget, sizeof(strTarget));
 
-//	printtick(strCaller);
-//	printtick(strTarget);
+	station_id_err ec = stationid_from_bytes(&bytFrameData1[0], caller);
+	if (ec) {
+		ZF_LOGD_MEM(&bytFrameData1[0], PACKED6_SIZE, "Failed to decode ConReq frame calling station ID: %s, bytes: ", stationid_strerror(ec));
+		FrameOK = FALSE;
+	}
 
-	sprintf(bytData, "%s %s", strCaller, strTarget);
+	station_id_err et = stationid_from_bytes(&bytFrameData1[PACKED6_SIZE], target);
+	if (et) {
+		ZF_LOGD_MEM(&bytFrameData1[PACKED6_SIZE], PACKED6_SIZE, "Failed to decode ConReq frame target station ID: %s, bytes: ", stationid_strerror(et));
+		FrameOK = FALSE;
+	}
 
 	// Recheck the returned data by reencoding
 
@@ -2835,10 +2837,15 @@ BOOL Decode4FSKConReq()
 	else if (intFrameType == ConReq2000M)
 		intBW = 2000;
 
-	if (FrameOK)
-		memcpy(lastGoodID, strCaller, CALL_BUF_SIZE);
-	else
+	if (FrameOK) {
+		snprintf(bytData, sizeof(bytData), "%s %s", caller->str, target->str);
+	}
+	else {
+		bytData[0] = '\0';
+		stationid_init(caller);
+		stationid_init(target);
 		SendCommandToHost("CANCELPENDING");
+	}
 
 	intConReqSN = Compute4FSKSN();
 	ZF_LOGD("DemodDecode4FSKConReq:  S:N=%d Q=%d", intConReqSN, intLastRcvdFrameQuality);
@@ -2895,11 +2902,10 @@ int Compute4FSKSN()
 
 // Function to Demodulate and Decode 1 carrier 4FSK 50 baud Ping frame
 
-BOOL Decode4FSKPing()
+BOOL Decode4FSKPing(StationId* caller, StationId* target)
 {
-	UCHAR strCaller[CALL_BUF_SIZE];
-	UCHAR strTarget[CALL_BUF_SIZE];
-	UCHAR bytCall[COMP_SIZE];
+	stationid_init(caller);
+	stationid_init(target);
 	BOOL FrameOK;
 
 	int NErrors = rs_correct(bytFrameData1, 16, 4, true, false);
@@ -2925,25 +2931,32 @@ BOOL Decode4FSKPing()
 		FrameOK = FALSE;
 	}
 
-	memcpy(bytCall, bytFrameData1, COMP_SIZE);
-	DeCompressCallsign(bytCall, strCaller, sizeof(strCaller));
-	memcpy(bytCall, &bytFrameData1[COMP_SIZE], COMP_SIZE);
-	DeCompressCallsign(bytCall, strTarget, sizeof(strTarget));
+	station_id_err ec = stationid_from_bytes(&bytFrameData1[0], caller);
+	if (ec) {
+		ZF_LOGD_MEM(&bytFrameData1[0], PACKED6_SIZE, "Failed to decode Ping frame calling station ID: %s, bytes: ", stationid_strerror(ec));
+		FrameOK = FALSE;
+	}
 
-//	printtick(strCaller);
-//	printtick(strTarget);
+	station_id_err et = stationid_from_bytes(&bytFrameData1[PACKED6_SIZE], target);
+	if (et) {
+		ZF_LOGD_MEM(&bytFrameData1[PACKED6_SIZE], PACKED6_SIZE, "Failed to decode Ping frame target station ID: %s, bytes: ", stationid_strerror(et));
+		FrameOK = FALSE;
+	}
 
-	sprintf(bytData, "%s %s", strCaller, strTarget);
 
 	if (FrameOK == FALSE)
 	{
+		bytData[0] = '\0';
+		stationid_init(caller);
+		stationid_init(target);
 		SendCommandToHost("CANCELPENDING");
 		return FALSE;
 	}
 
+	snprintf(bytData, sizeof(bytData), "%s %s", caller->str, target->str);
 	DrawRXFrame(1, bytData);
 	char fr_info[32] = "";
-	snprintf(fr_info, sizeof(fr_info), "Ping %s>%s", strCaller, strTarget);
+	snprintf(fr_info, sizeof(fr_info), "Ping %s>%s", caller->str, target->str);
 	wg_send_rxframet(0, 1, fr_info);
 
 	intSNdB = Compute4FSKSN();
@@ -2952,10 +2965,10 @@ BOOL Decode4FSKPing()
 	{
 		char Msg[80];
 
-		sprintf(Msg, "PING %s>%s %d %d", strCaller, strTarget, intSNdB, intLastRcvdFrameQuality);
+		snprintf(Msg, sizeof(Msg), "PING %s>%s %d %d", caller->str, target->str, intSNdB, intLastRcvdFrameQuality);
 		SendCommandToHost(Msg);
 
-		ZF_LOGD("[DemodDecode4FSKPing] PING %s>%s S:N=%d Q=%d", strCaller, strTarget, intSNdB, intLastRcvdFrameQuality);
+		ZF_LOGD("[DemodDecode4FSKPing] PING %s>%s S:N=%d Q=%d", caller->str, target->str, intSNdB, intLastRcvdFrameQuality);
 
 		stcLastPingdttTimeReceived = time(NULL);
 		stcLastPingintRcvdSN = intSNdB;
@@ -2996,7 +3009,6 @@ BOOL Decode4FSKConACK(UCHAR bytFrameType, int * intTiming)
 			intGoodFSKFrameDataDecodes++;
 
 		// intTestFrameCorrectCnt++;
-		intReceivedLeaderLen = intLeaderRcvdMs;
 		bytLastReceivedDataFrameType = 0;  // initialize the LastFrameType to an illegal Data frame
 		return TRUE;
 	}
@@ -3045,11 +3057,12 @@ BOOL Decode4FSKPingACK(UCHAR bytFrameType, int * intSNdB, int * intQuality)
 }
 
 
-BOOL Decode4FSKID(UCHAR bytFrameType, char * strCallID, size_t strCallIDLen, Locator * grid)
+BOOL Decode4FSKID(UCHAR bytFrameType, StationId* sender, Locator* grid)
 {
 	UCHAR bytCall[COMP_SIZE];
 	BOOL FrameOK;
 	unsigned char * p = bytFrameData1;
+	stationid_init(sender);
 	locator_init(grid);
 
 
@@ -3079,11 +3092,15 @@ BOOL Decode4FSKID(UCHAR bytFrameType, char * strCallID, size_t strCallIDLen, Loc
 		FrameOK = FALSE;
 	}
 
-	memcpy(bytCall, bytFrameData1, COMP_SIZE);
-	DeCompressCallsign(bytCall, strCallID, strCallIDLen);
+	station_id_err es = stationid_from_bytes(&bytFrameData1[0], sender);
+	if (es) {
+		ZF_LOGD_MEM(&bytFrameData1[0], PACKED6_SIZE, "Failed to decode ID Frame station ID: %s, bytes: ", stationid_strerror(es));
+		FrameOK = FALSE;
+	}
+
 	locator_err e = locator_from_bytes(&bytFrameData1[COMP_SIZE], grid);
 	if (e) {
-		ZF_LOGD("Failed to decode grid ID Frame (sender: %s) grid square: %s", strCallID, locator_strerror(e));
+		ZF_LOGD("Failed to decode ID Frame (sender: %s) grid square: %s", sender->str, locator_strerror(e));
 	}
 
 	if (AccumulateStats) {
@@ -3092,9 +3109,6 @@ BOOL Decode4FSKID(UCHAR bytFrameType, char * strCallID, size_t strCallIDLen, Loc
 		else
 			intFailedFSKFrameDataDecodes++;
 	}
-
-	if (FrameOK)
-		memcpy(lastGoodID, strCallID, CALL_BUF_SIZE);
 
 	return FrameOK;
 }
@@ -3264,7 +3278,8 @@ BOOL DecodeACKNAK(int intFrameType, int *  intQuality)
 BOOL DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 {
 	BOOL blnDecodeOK = FALSE;
-	char strIDCallSign[CALL_BUF_SIZE] = "";
+	stationid_init(&LastDecodedStationCaller);
+	stationid_init(&LastDecodedStationTarget);
 	Locator gridSQ;
 	locator_init(&gridSQ);
 	int intTiming;
@@ -3359,12 +3374,12 @@ BOOL DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 
 		case IDFRAME:  // 0x30
 
-			blnDecodeOK = Decode4FSKID(IDFRAME, strIDCallSign, sizeof(strIDCallSign), &gridSQ);
+			blnDecodeOK = Decode4FSKID(IDFRAME, &LastDecodedStationCaller, &gridSQ);
 
-			frameLen = snprintf(bytData, MAX_DATA_LENGTH, "ID:%s [%s]:" , strIDCallSign, gridSQ.grid);
+			frameLen = snprintf(bytData, MAX_DATA_LENGTH, "ID:%s [%s]:" , LastDecodedStationCaller.str, gridSQ.grid);
 
 			if (blnDecodeOK) {
-				ZF_LOGI("[DecodeFrame] IDFrame: %s [%s]", strIDCallSign, gridSQ.grid);
+				ZF_LOGI("[DecodeFrame] IDFrame: %s [%s]", LastDecodedStationCaller.str, gridSQ.grid);
 				DrawRXFrame(1, bytData);
 				wg_send_rxframet(0, 1, (char *)bytData);
 			}
@@ -3380,7 +3395,7 @@ BOOL DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 		case ConReq1000F:
 		case ConReq2000F:  // 0x31-0x38
 
-			blnDecodeOK = Decode4FSKConReq();
+			blnDecodeOK = Decode4FSKConReq(&LastDecodedStationCaller, &LastDecodedStationTarget);
 			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
 				char fr_info[32] = "";
@@ -3393,7 +3408,7 @@ BOOL DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 
 		case PING:  // 0x3E
 
-			blnDecodeOK = Decode4FSKPing();
+			blnDecodeOK = Decode4FSKPing(&LastDecodedStationCaller, &LastDecodedStationTarget);
 			break;
 
 
@@ -3566,8 +3581,8 @@ BOOL DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 		}
 
 #ifdef PLOTCONSTELLATION
-		if (intFrameType == IDFRAME || (intFrameType >= ConReqmin && intFrameType <= ConReqmax))
-			DrawDecode(lastGoodID);  // ID or CONREQ
+		if ((intFrameType == IDFRAME || (intFrameType >= ConReqmin && intFrameType <= ConReqmax)) && stationid_ok(&LastDecodedStationCaller))
+			DrawDecode(LastDecodedStationCaller.str);  // ID or CONREQ
 		else
 			DrawDecode("PASS");
 		updateDisplay();

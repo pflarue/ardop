@@ -210,20 +210,22 @@ int txframe(char * frameParams) {
 		// 0x2F unused
 		// 0x30 IDFrame
 		// Uses globals: Callsign, GridSquare
-		char callsign[CALL_BUF_SIZE];
+		StationId callsign;
+		stationid_init(&callsign);
 		Locator grid;
 		locator_init(&grid);
 		if (paramcount > 2 && strcmp(params[2], "_") != 0) {
-			if (!CheckValidCallsignSyntax(params[2])) {
-				ZF_LOGW(
-					"Invalid callsign, '%s', for TXFRAME IDFrame.",
-					params[2]);
-				return(1);
+			station_id_err e = stationid_from_str(params[2], &callsign);
+			if (e) {
+				ZF_LOGE(
+					"Invalid callsign \"%s\" for TXFRAME IDFrame: %s",
+					params[2],
+					stationid_strerror(e));
+				return 1;
 			}
-			strncpy(callsign, params[2], CALL_BUF_SIZE);
-		} else if (Callsign[0] != 0x00)
-			strncpy(callsign, Callsign, CALL_BUF_SIZE);
-		else {
+		} else if (stationid_ok(&Callsign)) {
+			memcpy(&callsign, &Callsign, sizeof(callsign));
+		} else {
 			ZF_LOGW(
 				"TXFRAME IDFrame requires an implicit or explicit callsign.");
 			return (1);
@@ -239,49 +241,53 @@ int txframe(char * frameParams) {
 			memcpy(&grid, &GridSquare, sizeof(grid));
 		}
 
-		ZF_LOGD("TXFRAME IDFrame %s [%s]", callsign, grid.grid);
-		if ((EncLen = Encode4FSKIDFrame(callsign, &grid, bytEncodedBytes)) <= 0) {
+		ZF_LOGD("TXFRAME IDFrame %s [%s]", callsign.str, grid.grid);
+		if ((EncLen = Encode4FSKIDFrame(&callsign, &grid, bytEncodedBytes)) <= 0) {
 			ZF_LOGE("ERROR: In txframe() IDFrame Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if(strncmp(params[1], "ConReq", 6) == 0) {
-		// TXFRAME ConReq targetcallsign [mycallsign] [bandwidth]
-		// TXFRAME ConReqXXXX targetcallsign [mycallsign]
+		// TXFRAME ConReq target [mycall] [bandwidth]
+		// TXFRAME ConReqXXXX target [mycallsign]
 		// 0x31 to 0x38
 		// All have unique names indicating bandwidth.  If only 'ConReq' is given,
 		// accept a parameter in the form used for ARQBW, else default to value set
 		// with ARQBW Host Command
 		// Uses globals: Callsign. CallBandwidth, ARQBandwidth
-		char targetcallsign[CALL_BUF_SIZE];
-		char callsign[CALL_BUF_SIZE];
+		StationId mycall;
+		StationId target;
+		stationid_init(&mycall);
+		stationid_init(&target);
 		int bandwidth_num = -1;  // This is an enum value, not an actual bandwith value
 		if (paramcount > 2 && strcmp(params[2], "_") != 0) {
-			if (!CheckValidCallsignSyntax(params[2])) {
-				ZF_LOGW(
-					"Invalid targetcallsign, '%s', for TXFRAME ConReq.",
-					params[2]);
-				return(1);
+			station_id_err e = stationid_from_str(params[2], &target);
+			if (e) {
+				ZF_LOGE(
+					"Invalid target callsign \"%s\" for TXFRAME ConReq: %s",
+					params[2],
+					stationid_strerror(e));
+				return 1;
 			}
-			strncpy(targetcallsign, params[2], CALL_BUF_SIZE);
 		} else {
-			ZF_LOGW(
-				"TXFRAME ConReq requires an explicit targetcallsign.");
+			ZF_LOGE(
+				"TXFRAME ConReq requires an explicit target callsign.");
 			return (1);
 		}
 		if (paramcount > 3 && strcmp(params[3], "_") != 0) {
-			if (!CheckValidCallsignSyntax(params[3])) {
-				ZF_LOGW(
-					"Invalid callsign, '%s', for TXFRAME ConReq.",
-					params[3]);
-				return(1);
+			station_id_err e = stationid_from_str(params[3], &mycall);
+			if (e) {
+				ZF_LOGE(
+					"Invalid mycall \"%s\" for TXFRAME ConReq: %s",
+					params[2],
+					stationid_strerror(e));
+				return 1;
 			}
-			strncpy(callsign, params[3], CALL_BUF_SIZE);
-		} else if (Callsign[0] != 0x00)
-			strncpy(callsign, Callsign, CALL_BUF_SIZE);
-		else {
-			ZF_LOGW(
-				"TXFRAME ConReq requires an implicit or explicit callsign.");
+		} else if (stationid_ok(&Callsign)) {
+			memcpy(&mycall, &Callsign, sizeof(mycall));
+		} else {
+			ZF_LOGE(
+				"TXFRAME ConReq requires an implicit or explicit mycall.");
 			return (1);
 		}
 		if (strlen(params[1]) > 6) {
@@ -323,8 +329,8 @@ int txframe(char * frameParams) {
 				"TXFRAME ConReq requires an implicit or explicit bandwidth.");
 			return (1);
 		}
-		ZF_LOGD("TXFRAME ConReq%s %s %s", ARQBandwidths[bandwidth_num], targetcallsign, callsign);
-		if ((EncLen = EncodeARQConRequest(callsign, targetcallsign, bandwidth_num, bytEncodedBytes)) <= 0) {
+		ZF_LOGD("TXFRAME ConReq%s %s>%s", ARQBandwidths[bandwidth_num], mycall.str, target.str);
+		if ((EncLen = EncodeARQConRequest(&mycall, &target, bandwidth_num, bytEncodedBytes)) <= 0) {
 			ZF_LOGE("ERROR: In txframe() ConReq Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
@@ -412,41 +418,47 @@ int txframe(char * frameParams) {
 		}
 		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 	} else if(strcmp(params[1], "Ping") == 0) {
-		// TXFRAME Ping targetcallsign [mycallsign]
+		// TXFRAME Ping target [mycall]
 		// 0x3$
 		// Uses globals: Callsign
-		char targetcallsign[CALL_BUF_SIZE];
-		char callsign[CALL_BUF_SIZE];
+
+		StationId target;
+		StationId mycall;
+		stationid_init(&target);
+		stationid_init(&mycall);
 		if (paramcount > 2 && strcmp(params[2], "_") != 0) {
-			if (!CheckValidCallsignSyntax(params[2])) {
-				ZF_LOGW(
-					"Invalid targetcallsign, '%s', for TXFRAME Ping.",
-					params[2]);
-				return(1);
+			station_id_err e = stationid_from_str(params[2], &target);
+			if (e) {
+				ZF_LOGE(
+					"Invalid target callsign \"%s\" for TXFRAME Ping: %s",
+					params[2],
+					stationid_strerror(e));
+				return 1;
 			}
-			strncpy(targetcallsign, params[2], CALL_BUF_SIZE);
 		} else {
 			ZF_LOGW(
-				"TXFRAME Ping requires an explicit targetcallsign.");
+				"TXFRAME Ping requires an explicit target.");
 			return (1);
 		}
-		if (paramcount > 3 && strcmp(params[3], "_") != 0) {
-			if (!CheckValidCallsignSyntax(params[3])) {
-				ZF_LOGW(
-					"Invalid callsign, '%s', for TXFRAME IDFrame.",
-					params[3]);
-				return(1);
+		if (paramcount > 3 && strcmp(params[2], "_") != 0) {
+			station_id_err e = stationid_from_str(params[3], &mycall);
+			if (e) {
+				ZF_LOGE(
+					"Invalid mycall \"%s\" for TXFRAME Ping: %s",
+					params[3],
+					stationid_strerror(e));
+				return 1;
 			}
-			strncpy(callsign, params[3], CALL_BUF_SIZE);
-		} else if (Callsign[0] != 0x00)
-			strncpy(callsign, Callsign, CALL_BUF_SIZE);
-		else {
+		}
+		else if (stationid_ok(&Callsign)) {
+			memcpy(&mycall, &Callsign, sizeof(mycall));
+		} else {
 			ZF_LOGW(
-				"TXFRAME Ping requires an implicit or explicit callsign.");
+				"TXFRAME Ping requires an implicit or explicit mycall.");
 			return (1);
 		}
-		ZF_LOGD("TXFRAME Ping %s %s", targetcallsign, callsign);
-		if ((EncLen = EncodePing(callsign, targetcallsign, bytEncodedBytes)) <= 0) {
+		ZF_LOGD("TXFRAME Ping %s>%s", target.str, mycall.str);
+		if ((EncLen = EncodePing(&mycall, &target, bytEncodedBytes)) <= 0) {
 			ZF_LOGE("ERROR: In txframe() Ping Invalid EncLen (%d).", EncLen);
 			return 1;
 		}

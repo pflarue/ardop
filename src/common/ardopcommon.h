@@ -124,10 +124,9 @@ int EncodeDATAACK(int intQuality, UCHAR bytSessionID, UCHAR * bytreturn);
 int EncodeDATANAK(int intQuality , UCHAR bytSessionID, UCHAR * bytreturn);
 void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);
 BOOL IsDataFrame(UCHAR intFrameType);
-BOOL CheckValidCallsignSyntax(char * strTargetCallsign);
 void StartCodec(char * strFault);
 void StopCodec(char * strFault);
-BOOL SendARQConnectRequest(char * strMycall, char * strTargetCall);
+BOOL SendARQConnectRequest(const StationId* mycall, const StationId* target);
 void AddDataToDataToSend(UCHAR * bytNewData, int Len);
 BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL blnSendID);
 void SendID(BOOL blnEnableCWID);
@@ -142,7 +141,7 @@ void SetARDOPProtocolState(int value);
 BOOL BusyDetect3(float * dblMag, int intStart, int intStop);
 
 void displayState(const char * State);
-void displayCall(int dirn, char * call);
+void displayCall(int dirn, const char * call);
 
 void SampleSink(short Sample);
 void SoundFlush();
@@ -155,7 +154,7 @@ void SetFilter(void * Filter());
 
 void AddTrailer();
 void CWID(char * strID, short * intSamples, BOOL blnPlay);
-void sendCWID(char * Call, BOOL Play);
+void sendCWID(const StationId* station, BOOL Play);
 UCHAR ComputeTypeParity(UCHAR bytFrameType);
 void GenCRC16FrameType(char * Data, int Length, UCHAR bytFrameType);
 BOOL CheckCRC16FrameType(unsigned char * Data, int Length, UCHAR bytFrameType);
@@ -191,8 +190,6 @@ void setProtocolMode(char* strMode);
 
 extern void Generate50BaudTwoToneLeaderTemplate();
 extern BOOL blnDISCRepeating;
-
-void DeCompressCallsign(const char * bytCallsign, char * returned, size_t returnedlen);
 
 int RSEncode(UCHAR * bytToRS, UCHAR * bytRSEncoded, int MaxErr, int Len);
 BOOL RSDecode(UCHAR * bytRcv, int Length, int CheckLen, BOOL * blnRSOK);
@@ -330,7 +327,7 @@ extern struct SEM Semaphore;
 
 // Config Params
 extern Locator GridSquare;
-extern char Callsign[CALL_BUF_SIZE];
+extern StationId Callsign;
 extern BOOL wantCWID;
 extern BOOL CWOnOff;
 extern int LeaderLength;
@@ -429,8 +426,7 @@ extern BOOL AccumulateStats;
 
 extern int EncLen;
 
-extern char AuxCalls[AUXCALLS_ALEN][CALL_BUF_SIZE];
-extern int AuxCallsLength;
+extern size_t AuxCallsLength;
 
 extern int bytValidFrameTypesLength;
 extern int bytValidFrameTypesLengthALL;
@@ -520,7 +516,7 @@ extern int extraDelay;
 
 // Has to follow enum defs
 
-BOOL EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, enum _ARQBandwidth ARQBandwidth, UCHAR * bytReturn);
+int EncodeARQConRequest(const StationId* mycall, const StationId* target, enum _ARQBandwidth ARQBandwidth, UCHAR* bytReturn);
 
 
 #define PTTRTS 1

@@ -3,6 +3,7 @@
 
 #include "common/log.h"
 #include "common/Locator.h"
+#include "common/StationId.h"
 
 extern const char ProductName[];
 extern const char ProductVersion[];
@@ -125,18 +126,17 @@ int * intBaud, int * intDataLen, int * intRSLen, UCHAR * bytQualThres, char * st
 void ClearDataToSend();
 int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigned char * bytEncodedBytes);
 int EncodePSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigned char * bytEncodedBytes);
-int EncodePing(char * strMyCallsign, char * strTargetCallsign, UCHAR * bytReturn);
-int Encode4FSKIDFrame(char * Callsign, const Locator* square, unsigned char * bytreturn);
+int EncodePing(const StationId* mycall, const StationId* target, UCHAR* bytReturn);
+int Encode4FSKIDFrame(const StationId* callsign, const Locator* square, unsigned char* bytreturn);
 int EncodeDATAACK(int intQuality, UCHAR bytSessionID, UCHAR * bytreturn);
 int EncodeDATANAK(int intQuality , UCHAR bytSessionID, UCHAR * bytreturn);
 void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);
 void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);
 void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);
 BOOL IsDataFrame(UCHAR intFrameType);
-BOOL CheckValidCallsignSyntax(char * strTargetCallsign);
 void StartCodec(char * strFault);
 void StopCodec(char * strFault);
-BOOL SendARQConnectRequest(char * strMycall, char * strTargetCall);
+BOOL SendARQConnectRequest(const StationId* mycall, const StationId* target);
 void AddDataToDataToSend(UCHAR * bytNewData, int Len);
 BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL blnSendID);
 void SendID(BOOL blnEnableCWID);
@@ -152,7 +152,7 @@ void SetARDOPProtocolState(int value);
 BOOL BusyDetect3(float * dblMag, int intStart, int intStop);
 
 void displayState(const char * State);
-void displayCall(int dirn, char * call);
+void displayCall(int dirn, const char * call);
 
 void SampleSink(short Sample);
 void SoundFlush();
@@ -165,7 +165,7 @@ void SetFilter(void * Filter());
 
 void AddTrailer();
 void CWID(char * strID, short * intSamples, BOOL blnPlay);
-void sendCWID(char * Call, BOOL Play);
+void sendCWID(const StationId* Call, BOOL Play);
 UCHAR ComputeTypeParity(UCHAR bytFrameType);
 void GenCRC16FrameType(char * Data, int Length, UCHAR bytFrameType);
 BOOL CheckCRC16FrameType(unsigned char * Data, int Length, UCHAR bytFrameType);
@@ -201,7 +201,6 @@ void InitValidFrameTypes();
 extern void Generate50BaudTwoToneLeaderTemplate();
 extern BOOL blnDISCRepeating;
 
-void DeCompressCallsign(const char * bytCallsign, char * returned, size_t returnlen);
 void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDecodedOK);
 void ProcessUnconnectedConReqFrame(int intFrameType, UCHAR * bytData);
 void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL blnFrameDecodedOK);
@@ -376,12 +375,11 @@ extern const short intFSK50bdCarTemplate[4][240];  // Template for 4FSK carriers
 extern const short intFSK100bdCarTemplate[20][120];  // Template for 4FSK carriers spaced at 100 Hz, 100 baud
 extern const short intFSK600bdCarTemplate[4][20];  // Template for 4FSK carriers spaced at 600 Hz, 600 baud  (used for FM only)
 
-#define CALL_BUF_SIZE 10  // size of buffer for callsign strings
 #define AUXCALLS_ALEN 10  // length of AuxCalls array
 #define COMP_SIZE 6  // size of compressed callsign or gridsquare
 // Config Params
 extern Locator GridSquare;
-extern char Callsign[CALL_BUF_SIZE];
+extern StationId Callsign;
 extern BOOL wantCWID;
 extern BOOL CWOnOff;
 extern int LeaderLength;
@@ -480,8 +478,8 @@ extern BOOL AccumulateStats;
 extern unsigned char bytEncodedBytes[1800];
 extern int EncLen;
 
-extern char AuxCalls[AUXCALLS_ALEN][CALL_BUF_SIZE];
-extern int AuxCallsLength;
+extern StationId AuxCalls[AUXCALLS_ALEN];
+extern size_t AuxCallsLength;
 
 extern int bytValidFrameTypesLength;
 extern int bytValidFrameTypesLengthALL;
@@ -572,6 +570,6 @@ extern int initMode;  // 0 - 4PSK 1 - 8PSK 2 = 16QAM
 
 // Has to follow enum defs
 
-int EncodeARQConRequest(char * strMyCallsign, char * strTargetCallsign, enum _ARQBandwidth ARQBandwidth, UCHAR * bytReturn);
+int EncodeARQConRequest(const StationId* mycall, const StationId* target, enum _ARQBandwidth ARQBandwidth, UCHAR* bytReturn);
 
 #endif
