@@ -87,7 +87,7 @@ const char ARQSubStates[10][11] = {
 extern StationId LastDecodedStationCaller;
 extern StationId LastDecodedStationTarget;
 
-StationId ARQStationRemote;  // current connection peer callsign
+StationId ARQStationRemote;  // current connection remote callsign
 StationId ARQStationLocal;   // current connection local callsign
 StationId ARQStationFinalId; // post-session local IDF to send
 

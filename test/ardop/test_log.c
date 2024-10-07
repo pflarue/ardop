@@ -182,7 +182,7 @@ static void test_ardop_logfile_handle(void** state) {
 static void test_ardop_logfile_write(void** state) {
 	(void)state; /* unused */
 
-	const static char MSG[] = "x";
+	static const char MSG[] = "x";
 
 	ArdopLogFile uut;
 	ardop_logfile_init(&uut, "", "ARDOPDebug", ".log", 8515);
@@ -209,7 +209,7 @@ static void test_ardop_logfile_write(void** state) {
 }
 
 static void test_ardop_log_verbosity(void** state) {
-	const static int LEVELS[] = {
+	static const int LEVELS[] = {
 		ZF_LOG_VERBOSE,
 		ZF_LOG_DEBUG,
 		ZF_LOG_INFO,

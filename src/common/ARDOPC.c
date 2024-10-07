@@ -196,7 +196,7 @@ enum _ProtocolMode ProtocolMode = FEC;
 
 extern BOOL blnEnbARQRpt;
 extern BOOL blnDISCRepeating;
-extern StationId ARQStationRemote;  // current connection peer callsign
+extern StationId ARQStationRemote;  // current connection remote callsign
 extern StationId ARQStationLocal;   // current connection local callsign
 extern StationId ARQStationFinalId; // post-session local IDF to send
 extern int dttTimeoutTrip;
@@ -1343,7 +1343,7 @@ int EncodeARQConRequest(const StationId* mycall, const StationId* target, enum _
 {
 	// Encodes a 4FSK 200 Hz BW Connect Request frame ( ~ 1950 ms with default leader/trailer)
 
-	if (!stationid_ok(mycall) || stationid_is_cq(mycall)) {
+	if (!stationid_ok(mycall)) {
 		ZF_LOGE("Unable to send connection request: MYCALL is unset");
 		return 0;
 	}
@@ -1403,7 +1403,7 @@ int EncodePing(const StationId* mycall, const StationId* target, UCHAR * bytRetu
 
 	UCHAR * bytToRS= &bytReturn[2];
 
-	if (!stationid_ok(mycall) || stationid_is_cq(mycall)) {
+	if (!stationid_ok(mycall)) {
 		ZF_LOGE("Unable to send ping: MYCALL is unset");
 		return 0;
 	}
@@ -1440,7 +1440,7 @@ int Encode4FSKIDFrame(const StationId* callsign, const Locator* square, unsigned
 
 	UCHAR * bytToRS= &bytreturn[2];
 
-	if (!stationid_ok(callsign) || stationid_is_cq(callsign))
+	if (!stationid_ok(callsign))
 	{
 		ZF_LOGE("Unable to send ID frame: MYCALL is unset");
 		return 0;

@@ -207,6 +207,13 @@ static void test_stationid_from_str(void **state)
 	assert_string_equal("N0CALL", id.call);
 	assert_string_equal("Z", id.ssid);
 
+	// 2-character callsign, uppercased
+	assert_int_equal(STATIONID_OK, stationid_from_str("aa-15", &id));
+	assert_true(stationid_ok(&id));
+	assert_string_equal("AA", id.call);
+	assert_string_equal("15", id.ssid);
+	assert_string_equal("AA-15", id.str);
+
 	// 7-character callsign, uppercased
 	assert_int_equal(STATIONID_OK, stationid_from_str("longcal-15", &id));
 	assert_true(stationid_ok(&id));
@@ -229,10 +236,10 @@ static void test_stationid_from_str(void **state)
 	assert_int_equal(STATIONID_ERR_CALLSIGN_SHORT, stationid_from_str("X", &id));
 
 	// spaces not allowed
-	assert_int_equal(STATIONID_ERR_CALLSIGN_CHARS, stationid_from_str("CQ M", &id));
+	assert_int_equal(STATIONID_ERR_CALLSIGN_CHARS, stationid_from_str("A1A M", &id));
 
 	// invalid characters don't compress
-	assert_int_equal(STATIONID_ERR_CALLSIGN_CHARS, stationid_from_str("CQ\t", &id));
+	assert_int_equal(STATIONID_ERR_CALLSIGN_CHARS, stationid_from_str("A1A\t", &id));
 
 	// too long SSID
 	assert_int_equal(STATIONID_ERR_TOOLONG, stationid_from_str("CAF-234", &id));
@@ -424,7 +431,7 @@ static void test_stationid_to_buffer(void** state) {
 	assert_memory_equal(&compare, &dest, sizeof(compare));
 
 	// valid id copied
-	assert_int_equal(0, stationid_from_str("CQ", &a));
+	assert_int_equal(0, stationid_from_str("A1A", &a));
 	assert_true(stationid_to_buffer(&a, dest.b));
 	assert_memory_equal(dest.b, a.wire.b, sizeof(dest.b));
 }
@@ -453,25 +460,6 @@ static void test_stationid_eq(void** state)
 	assert_false(stationid_eq(&a, &b));
 }
 
-static void test_stationid_cq(void** state) {
-	(void)state; /* unused */
-
-	StationId cq;
-	stationid_make_cq(&cq);
-
-	assert_true(stationid_ok(&cq));
-	assert_true(stationid_is_cq(&cq));
-	assert_string_equal(cq.call, "CQ");
-	assert_string_equal(cq.ssid, "0");
-	assert_string_equal(cq.str, "CQ");
-
-	// a regular callsign is not CQ
-	StationId regular;
-	assert_int_equal(STATIONID_OK, stationid_from_str("CQDX", &regular));
-	assert_true(stationid_ok(&regular));
-	assert_false(stationid_is_cq(&regular));
-}
-
 static void test_stationid_strerror(void** state) {
 	(void)state; /* unused */
 
@@ -491,7 +479,6 @@ int main(void)
 		cmocka_unit_test(test_stationid_wireline),
 		cmocka_unit_test(test_stationid_to_buffer),
 		cmocka_unit_test(test_stationid_eq),
-		cmocka_unit_test(test_stationid_cq),
 		cmocka_unit_test(test_stationid_strerror),
 	};
 

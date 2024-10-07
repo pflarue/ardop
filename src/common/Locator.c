@@ -5,13 +5,15 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include "common/log.h"
+
 // Legacy ARDOPC used to transmit "No GS" in IDFRAMEs to indicate
 // that the grid square is unset. This is *not* valid as a
 // Packed6 since it was actually encoded with a lowercase "o."
 //
 // To support this, we quietly accept any of the following
 // byte sequences as an unset grid square.
-const static Packed6 LOCATOR_NOGS[] = {
+static const Packed6 LOCATOR_NOGS[] = {
 	{{0xbc, 0xf0, 0x27, 0xcc, 0x00, 0x00}},
 	{{0xba, 0xf0, 0x27, 0xcc, 0x00, 0x00}},
 };
@@ -108,37 +110,41 @@ static locator_err locator_uncompress(const Packed6* in, Locator* locator) {
 
 ARDOP_MUSTUSE locator_err
 locator_validate_grid(const Locator* locator) {
+	locator_err err = LOCATOR_OK;
 	size_t len = strnlen(locator->grid, sizeof(locator->grid));
 	if (len % 2 != 0) {
-		return LOCATOR_ERR_FMT_LENGTH;
-	}
-
-	for (size_t i = 0; i < len; ++i) {
-		switch (i/2) {
-			case 0:
-				// field A – R
-				if (! is_ascii_alpha_range(locator->grid[i], 'R'))
-					return LOCATOR_ERR_FMT_FIELD;
-				break;
-			case 1:
-				// square 0 – 9
-				if (! is_ascii_digit(locator->grid[i]))
-					return LOCATOR_ERR_FMT_SQUARE;
-				break;
-			case 2:
-				// subsquare A – X
-				if (! is_ascii_alpha_range(locator->grid[i], 'X'))
-					return LOCATOR_ERR_FMT_SUBSQUARE;
-				break;
-			default:
-				// extended square, 0 – 9
-				if (! is_ascii_digit(locator->grid[i]))
-					return LOCATOR_ERR_FMT_EXTSQUARE;
-				break;
+		err = LOCATOR_ERR_FMT_LENGTH;
+	} else {
+		for (size_t i = 0; i < len; ++i) {
+			switch (i/2) {
+				case 0:
+					// field A – R
+					if (! is_ascii_alpha_range(locator->grid[i], 'R'))
+						err = LOCATOR_ERR_FMT_FIELD;
+					break;
+				case 1:
+					// square 0 – 9
+					if (! is_ascii_digit(locator->grid[i]))
+						err = LOCATOR_ERR_FMT_SQUARE;
+					break;
+				case 2:
+					// subsquare A – X
+					if (! is_ascii_alpha_range(locator->grid[i], 'X'))
+						err = LOCATOR_ERR_FMT_SUBSQUARE;
+					break;
+				default:
+					// extended square, 0 – 9
+					if (! is_ascii_digit(locator->grid[i]))
+						err = LOCATOR_ERR_FMT_EXTSQUARE;
+					break;
+			}
 		}
 	}
 
-	return LOCATOR_OK;
+	if (err != LOCATOR_OK)
+		ZF_LOGD("Grid square=\"%s\" is invalid: %s", locator->grid, locator_strerror(err));
+
+	return err;
 }
 
 void locator_init(Locator* locator) {
@@ -211,7 +217,7 @@ bool locator_is_populated(const Locator* locator) {
 }
 
 const char* locator_strerror(locator_err err) {
-	const static char* MSGS[] = {
+	static const char* MSGS[] = {
 		"unknown error",
 		"length exceeded",
 		"locator must be 2, 4, 6, or 8 characters",

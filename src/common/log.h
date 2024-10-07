@@ -236,7 +236,7 @@ int ardop_log_get_level_file();
  * This method writes the banner that occurs at the start of
  * every record.
  *
- * @param[in] peer_callsign  The callsign of the remote station
+ * @param[in] remote_callsign  The callsign of the remote station
  * @param[in] now  UNIX time as of session end
  * @param[in] duration  The duration of the session, as a UNIX
  *            time in seconds
@@ -245,7 +245,7 @@ int ardop_log_get_level_file();
  * @see ardop_log_session_footer
  */
 void ardop_log_session_header(
-	const char* peer_callsign,
+	const char* remote_callsign,
 	const struct timespec* now,
 	const time_t duration
 );
