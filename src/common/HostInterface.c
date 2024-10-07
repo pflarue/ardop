@@ -988,16 +988,11 @@ void ProcessCommandFromHost(char * strCMD)
 			goto cmddone;
 		}
 
-		switch (ProtocolMode) {
-		case RXO:
+		if (ProtocolMode == RXO) {
 			snprintf(strFault, sizeof(strFault), "Not from mode RXO");
-			break;
-		default:
-			if (ProtocolState != DISC)
-			{
-				snprintf(strFault, sizeof(strFault), "No PING from state %s", ARDOPStates[ProtocolState]);
-				goto cmddone;
-			}
+		} else if (ProtocolState != DISC) {
+			snprintf(strFault, sizeof(strFault), "No PING from state %s", ARDOPStates[ProtocolState]);
+			goto cmddone;
 		}
 
 		PingCount = (int)nattempts;
