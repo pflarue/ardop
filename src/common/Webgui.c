@@ -29,7 +29,7 @@ extern BOOL NeedTwoToneTest;
 extern BOOL NeedID;
 extern BOOL WG_DevMode;
 extern StationId Callsign;
-extern StationId ARQStationRemote;  // current connection peer callsign
+extern StationId ARQStationRemote;  // current connection remote callsign
 extern float wS1;
 int ExtractARQBandwidth();
 void ProcessCommandFromHost(char * strCMD);

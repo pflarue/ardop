@@ -228,7 +228,7 @@ int ardop_log_get_level_file() {
 }
 
 void ardop_log_session_header(
-	const char* peer_callsign,
+	const char* remote_callsign,
 	const struct timespec* now,
 	const time_t duration
 )
@@ -250,7 +250,7 @@ void ardop_log_session_header(
 		"%s,%09ld+00:00\n************************* ARQ session stats with %s  %d minutes ****************************\n",
 		datefmt,
 		now->tv_nsec,
-		peer_callsign,
+		remote_callsign,
 		(int)duration
 	);
 }

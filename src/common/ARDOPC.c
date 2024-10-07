@@ -196,7 +196,7 @@ enum _ProtocolMode ProtocolMode = FEC;
 
 extern BOOL blnEnbARQRpt;
 extern BOOL blnDISCRepeating;
-extern StationId ARQStationRemote;  // current connection peer callsign
+extern StationId ARQStationRemote;  // current connection remote callsign
 extern StationId ARQStationLocal;   // current connection local callsign
 extern StationId ARQStationFinalId; // post-session local IDF to send
 extern int dttTimeoutTrip;
