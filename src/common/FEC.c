@@ -80,7 +80,7 @@ BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL
 
 	// check call sign
 
-	if (!stationid_ok(&Callsign) || stationid_is_cq(&Callsign))
+	if (!stationid_ok(&Callsign))
 	{
 		// Logs.Exception("[ARDOPprotocol.StartFEC] Invalid call sign: " & MCB.Callsign)
 		return FALSE;

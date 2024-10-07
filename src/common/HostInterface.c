@@ -926,16 +926,6 @@ void ProcessCommandFromHost(char * strCMD)
 			goto cmddone;
 		}
 
-		for (size_t i = 0; i < AuxCallsLength; ++i) {
-			if (stationid_is_cq(&AuxCalls[i])) {
-				snprintf(strFault, sizeof(strFault), "Syntax Err: at callsign %lu: a CQ callsign is not permitted", i);
-				/* The TNC protocol requires that invalid input
-				 * completely clears the MYAUX array */
-				AuxCallsLength = 0;
-				break;
-			}
-		}
-
 		stationid_array_to_str(
 			AuxCalls,
 			AuxCallsLength,
@@ -963,8 +953,6 @@ void ProcessCommandFromHost(char * strCMD)
 		station_id_err e = stationid_from_str(ptrParams, &new_mycall);
 		if (e) {
 			snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s: %s", strCMD, ptrParams, stationid_strerror(e));
-		} else if (stationid_is_cq(&new_mycall)) {
-			snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s: a CQ callsign is not permitted", strCMD, ptrParams);
 		} else {
 			memcpy(&Callsign, &new_mycall, sizeof(Callsign));
 			wg_send_mycall(0, Callsign.str);

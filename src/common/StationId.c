@@ -13,9 +13,6 @@
 // maximum number of characters in a callsign
 #define CALLSIGN_MAX 7
 
-// broadcast message directed at all stations
-#define CQ "CQ"
-
 /**
  * Validate callsign
  *
@@ -236,11 +233,6 @@ void stationid_init(StationId* station) {
 	station->ssid[0] = '0';
 }
 
-void stationid_make_cq(StationId* station) {
-	station_id_err ignore = stationid_from_str_slice(CQ, sizeof(CQ), station);
-	(void)ignore; /* unused */
-}
-
 station_id_err stationid_from_str(const char* str, StationId* station) {
 	const char* inp = str ? str : "";
 	size_t len = strlen(inp);
@@ -410,10 +402,6 @@ bool stationid_ok(const StationId* station) {
 		ok |= station->wire.b[i];
 	}
 	return ok;
-}
-
-bool stationid_is_cq(const StationId* station) {
-	return 0 == strncmp(CQ, station->call, sizeof(station->call));
 }
 
 bool stationid_eq(const StationId* a, const StationId* b) {

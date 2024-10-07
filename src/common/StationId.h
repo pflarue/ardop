@@ -141,17 +141,6 @@ typedef struct {
 void stationid_init(StationId* station);
 
 /**
- * @brief Make a CQ call
- *
- * Construct a station ID that represents a broadcast message to
- * all stations. CQ calls are not valid as source callsigns and
- * should never be used in IDFRAMEs.
- *
- * @param[in] station    Station ID to populate.
- */
-void stationid_make_cq(StationId* station);
-
-/**
  * @brief Create a station ID from a string
  *
  * Accepts a string of the form "`N0CALL-15`" and parses it into a
@@ -334,17 +323,6 @@ bool stationid_array_to_str(
  * if otherwise.
  */
 bool stationid_ok(const StationId* station);
-
-/**
- * @brief True if the station ID is a "CQ" broadcast
- *
- * Messages directed at "`CQ`" with any SSID are intended for
- * all stations. A station ID of "`CQ`" is not valid for use
- * as a source callsign or for use in IDFRAMEs.
- *
- * @return true if the station ID is a CQ call
- */
-bool stationid_is_cq(const StationId* station);
 
 /**
  * @brief Equality test
