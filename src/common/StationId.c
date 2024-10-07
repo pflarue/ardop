@@ -423,7 +423,7 @@ bool stationid_eq(const StationId* a, const StationId* b) {
 }
 
 const char* stationid_strerror(station_id_err err) {
-	const static char* MSGS[] = {
+	static const char* MSGS[] = {
 		"unknown error",
 		"maximum length exceeded or unsupported format",
 		"callsign uses unsupported characters",

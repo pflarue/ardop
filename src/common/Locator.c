@@ -11,7 +11,7 @@
 //
 // To support this, we quietly accept any of the following
 // byte sequences as an unset grid square.
-const static Packed6 LOCATOR_NOGS[] = {
+static const Packed6 LOCATOR_NOGS[] = {
 	{{0xbc, 0xf0, 0x27, 0xcc, 0x00, 0x00}},
 	{{0xba, 0xf0, 0x27, 0xcc, 0x00, 0x00}},
 };
@@ -211,7 +211,7 @@ bool locator_is_populated(const Locator* locator) {
 }
 
 const char* locator_strerror(locator_err err) {
-	const static char* MSGS[] = {
+	static const char* MSGS[] = {
 		"unknown error",
 		"length exceeded",
 		"locator must be 2, 4, 6, or 8 characters",

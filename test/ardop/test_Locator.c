@@ -36,7 +36,7 @@ static void test_locator_from_str(void **state)
 {
 	(void)state; /* unused */
 
-	const static Packed6 PZERO = {{
+	static const Packed6 PZERO = {{
 		0, 0, 0, 0, 0, 0
 	}};
 
@@ -146,15 +146,15 @@ static void test_locator_reject_badrange(void** state) {
 // a lowercase `o`. The legacy encoder did not encode this
 // correctly.
 static void test_locator_accept_unpopulated(void** state) {
-	const static Packed6 EMPTY = {{
+	static const Packed6 EMPTY = {{
 		0, 0, 0, 0, 0, 0
 	}};
 
-	const static Packed6 NOGS_1 = {{
+	static const Packed6 NOGS_1 = {{
 		0xbc, 0xf0, 0x27, 0xcc, 0x00, 0x00
 	}};
 
-	const static Packed6 NOGS_2 = {{
+	static const Packed6 NOGS_2 = {{
 		0xba, 0xf0, 0x27, 0xcc, 0x00, 0x00
 	}};
 
@@ -174,7 +174,7 @@ static void test_locator_accept_unpopulated(void** state) {
 }
 
 static void test_locator_from_bytes(void** state) {
-	const static char* TESTGRID[] = {
+	static const char* TESTGRID[] = {
 		"AA",
 		"BL11",
 		"BH16kk",
