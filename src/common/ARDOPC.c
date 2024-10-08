@@ -47,7 +47,7 @@ extern StationId LastDecodedStationCaller;
 extern StationId LastDecodedStationTarget;
 
 void GetTwoToneLeaderWithSync(int intSymLen);
-void SendID(BOOL blnEnableCWID);
+bool SendID(const StationId * id, char * reason);
 void PollReceivedSamples();
 void CheckTimers();
 BOOL GetNextARQFrame();
@@ -1572,40 +1572,48 @@ int EncodeDATANAK(int intQuality , UCHAR bytSessionID, UCHAR * bytreturn)
 	return 2;
 }
 
-void SendID(BOOL blnEnableCWID)
+// SendID() should be the only function that sends an IDFrame.
+// If id is not null, send it, else use global Callsign.
+// always use global GridSquare.
+// always use global wantCWID to determine whether CWID is also sent.
+// reason is used to log info about why SendID is being called.
+// Return true on success or false if no ID was sent.
+bool SendID(const StationId * id, char * reason)
 {
+	const StationId *id_to_send = &Callsign;  // default to Callsign if id not provided
 	unsigned char bytIDSent[80];
 	int Len;
-	unsigned char * p;
 
 	// Scheduler needs to ensure this isnt called if already playing
-
-	if (SoundIsPlaying)
-		return;
-
-	if ((EncLen = Encode4FSKIDFrame(&Callsign, &GridSquare, bytEncodedBytes)) <= 0) {
-		ZF_LOGE("ERROR: In SendID() Invalid EncLen (%d).", EncLen);
-		return;
+	if (SoundIsPlaying) {
+		ZF_LOGD("Don't send ID now because SoundIsPlaying");
+		return false;
 	}
 
-	Len = snprintf(bytIDSent, sizeof(bytIDSent), " %s:[%s] ", Callsign.str, GridSquare.grid);
+	if (id != NULL && stationid_ok(id))
+		id_to_send = id;
+
+	if (!stationid_ok(id_to_send)) {
+		ZF_LOGD("No valid StationID available for SendID.");
+		return false;
+	}
+	Len = snprintf(bytIDSent, sizeof(bytIDSent), " %s:[%s] ", id_to_send->str, GridSquare.grid);
+	ZF_LOGD("SendID %s %s", bytIDSent, reason);
+
+	if ((EncLen = Encode4FSKIDFrame(id_to_send, &GridSquare, bytEncodedBytes)) <= 0) {
+		ZF_LOGE("ERROR: In SendID() Invalid EncLen (%d).", EncLen);
+		return false;
+	}
 
 	AddTagToDataAndSendToHost(bytIDSent, "IDF", Len);
 
-	// On embedded platforms we don't have the memory to create full sound stream before playiong,
-	// so this is structured differently from Rick's code
-
-
-	p = bytEncodedBytes;
-
-	ZF_LOGD("%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x ",
-		p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17]);
-
-
 	Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
+	dttLastFECIDSent = Now;
 
-	if (blnEnableCWID)
-		sendCWID(&Callsign, FALSE);
+	if (wantCWID)
+		sendCWID(id_to_send);
+
+	return true;
 }
 
 // Function to generate a 5 second burst of two tone (1450 and 1550 Hz) used for setting up drive level
@@ -1929,13 +1937,13 @@ void CheckTimers()
 
 	if (NeedID)
 	{
-		SendID(wantCWID);
+		SendID(NULL, "Host/User requested");
 		NeedID = 0;
 	}
 
 	if (NeedCWID)
 	{
-		sendCWID(&Callsign, FALSE);
+		sendCWID(&Callsign);
 		NeedCWID = 0;
 	}
 

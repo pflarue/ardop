@@ -917,9 +917,8 @@ void Flush()
 
 
 
-// Function to make a CW ID Wave File
-
-void sendCWID(const StationId* station, BOOL blnPlay)
+// Send station id as FSK MORSE
+void sendCWID(const StationId * id)
 {
 	// This generates a phase synchronous FSK MORSE keying of strID
 	// FSK used to maintain VOX on some sound cards
@@ -954,12 +953,12 @@ void sendCWID(const StationId* station, BOOL blnPlay)
 	int idoffset;
 	char gui_frametype[15];
 
-	if (!stationid_ok(station)) {
+	if (!stationid_ok(id)) {
 		ZF_LOGW("Unable to send CWID due to unpopulated station ID");
 		return;
 	}
 
-	snprintf(gui_frametype, sizeof(gui_frametype), "CW.ID.%s", station->call);
+	snprintf(gui_frametype, sizeof(gui_frametype), "CW.ID.%s", id->call);
 	wg_send_txframet(0, gui_frametype);
 
 	// Generate the dot samples (high tone) and space samples (low tone)
@@ -989,9 +988,9 @@ void sendCWID(const StationId* station, BOOL blnPlay)
 		for (i = 0; i < intDotSampCnt; i++)
 			SampleSink(intSpace[i]);
 
-	for (j = 0; j < strnlen(station->call, sizeof(station->call)); j++)
+	for (j = 0; j < strnlen(id->call, sizeof(id->call)); j++)
 	{
-		index = strchr(strAlphabet, station->call[j]);
+		index = strchr(strAlphabet, id->call[j]);
 		if (index)
 			idoffset = index - &strAlphabet[0];
 		else
