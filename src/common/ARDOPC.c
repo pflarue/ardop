@@ -194,6 +194,7 @@ BOOL blnARQDisconnect = FALSE;
 
 int dttLastPINGSent;
 
+unsigned int LastIDFrameTime = 0;
 enum _ProtocolMode ProtocolMode = FEC;
 
 extern BOOL blnEnbARQRpt;
@@ -202,7 +203,6 @@ extern StationId ARQStationRemote;  // current connection remote callsign
 extern StationId ARQStationLocal;   // current connection local callsign
 extern StationId ARQStationFinalId; // post-session local IDF to send
 extern int dttTimeoutTrip;
-extern unsigned int dttLastFECIDSent;
 extern int intFrameRepeatInterval;
 extern BOOL blnPending;
 extern unsigned int tmrIRSPendingTimeout;
@@ -1608,10 +1608,14 @@ bool SendID(const StationId * id, char * reason)
 	AddTagToDataAndSendToHost(bytIDSent, "IDF", Len);
 
 	Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
-	dttLastFECIDSent = Now;
 
 	if (wantCWID)
 		sendCWID(id_to_send);
+
+	// LastIDFrameTime is reset after Mod4FSKDataAndPlay and sendCWID() are done.
+	// Setting it to zero indicates that no transmissions have been made since
+	// the last IDFrame was sent.
+	LastIDFrameTime = 0;
 
 	return true;
 }
@@ -1894,7 +1898,7 @@ void CheckTimers()
 
 	// Subroutine for tmrFinalIDElapsed
 
-	if (tmrFinalID && Now > tmrFinalID)
+	if (tmrFinalID && Now > tmrFinalID && !blnBusyStatus)
 	{
 		tmrFinalID = 0;
 
@@ -1937,6 +1941,29 @@ void CheckTimers()
 		NeedTwoToneTest = 0;
 	}
 
+	// In addition to other times when an IDFrame is sent by protocol (such as
+	// after receiving and END frame), an IDFrame will be sent at least once
+	// every 10 minutes if any transmissions have been made.  During an active
+	// ARQ connection or in the FECSend state, the LastIDFrameTime is checked
+	// in the code that handles those states so that the IDFrame is sent when it
+	// fits well with other frames being sent and is not too disruptive.  The
+	// following handles sending an IDFrame in the DISC state.  It will defer
+	// sending an IDFrame while sending a series of PINGs, while actively trying
+	// to decode a signal (State != SearchingForLeader), and while the busy
+	// detector indicates that the frequency is is use.  To allow for such
+	// delays, it is actually set to begin trying to send an IDFrame after only
+	// 9 minutes.
+	if (
+		ProtocolState == DISC // Not ARQ connected or FECSend
+		&& State == SearchingForLeader // not receiving an incoming frame
+		&& !blnBusyStatus  // no other traffic on this frequency has been detected
+		&& !blnPINGrepeating  // not sending a sequence of PING frames
+		&& LastIDFrameTime != 0  // Some transmission has been since last IDFrame
+		&& Now - LastIDFrameTime > 540000  // more than 9 minutes elapsed
+	) {
+		// 9 minutes since the first transmission after the last IDFrame was sent.
+		SendID(NULL, "10 minute ID");
+	}
 
 	if (Now > tmrPollOBQueue)
 	{

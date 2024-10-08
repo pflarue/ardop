@@ -31,12 +31,11 @@ extern BOOL blnOdd;
 extern char strType[18];
 extern char strMod[16];
 extern UCHAR bytMinQualThresh;
+extern unsigned int LastIDFrameTime;
 
 UCHAR bytLastFECDataFrameSent;
 
 char strCurrentFrameFilename[16];
-
-unsigned int dttLastFECIDSent;
 
 extern int intCalcLeader;  // the computed leader to use based on the reported Leader Length
 
@@ -289,9 +288,14 @@ sendit:
 
 		txSleep(400);
 
-		if ((Now - dttLastFECIDSent) > 600000)  // 10 Mins
-			// Send ID every 10 Mins
-			return SendID(NULL, "FEC 10 minute ID");
+		// While sending FEC data, only send an IDFrame before sending new data
+		// so as not to disrupt repeated frames.  Because some delay is
+		// possible, begin trying to send an IDFrame every 9 minutes rather than
+		// waiting for a full 10 minutes.
+		if(LastIDFrameTime != 0 && Now - LastIDFrameTime > 540000) {  // more than 9 minutes elapsed
+			SendID(NULL, "FECSend 10 minute ID");
+			return FALSE; // Don't repeat
+		}
 
 		FrameInfo(bytLastFECDataFrameSent, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType);
 

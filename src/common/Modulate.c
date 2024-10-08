@@ -8,7 +8,10 @@
 #include "common/ARDOPC.h"
 #include "common/wav.h"
 
-unsigned int pttOnTime;
+// pttOnTime is used both as a reference for how long audio has been playing
+// and as an indication of whether or not any transmissions have been made
+// since the last 10-minute ID.
+unsigned int pttOnTime = 0;
 
 #pragma warning(disable : 4244)  // Code does lots of float to int
 
@@ -21,6 +24,7 @@ FILE * fp1;
 extern short Dummy;
 extern int DriveLevel;
 extern BOOL WriteTxWav;
+extern unsigned int LastIDFrameTime;
 
 int wg_send_txframet(int cnum, const char *frame);
 
@@ -688,6 +692,10 @@ void initFilter(int Width, int Centre)
 
 	KeyPTT(TRUE);
 	pttOnTime = Now;
+	if (LastIDFrameTime == 0)
+		// This is the first transmission since the last IDFrame.  Schedule the
+		// next IDFrame to be sent in about 10 minutes unless one is sent sooner.
+		LastIDFrameTime = pttOnTime - 1;
 
 	SoundIsPlaying = TRUE;
 	StopCapture();
@@ -957,6 +965,8 @@ void sendCWID(const StationId * id)
 		ZF_LOGW("Unable to send CWID due to unpopulated station ID");
 		return;
 	}
+
+	ZF_LOGD("Sending CW ID of %s", id->call);
 
 	snprintf(gui_frametype, sizeof(gui_frametype), "CW.ID.%s", id->call);
 	wg_send_txframet(0, gui_frametype);
