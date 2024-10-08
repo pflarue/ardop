@@ -290,20 +290,8 @@ sendit:
 		txSleep(400);
 
 		if ((Now - dttLastFECIDSent) > 600000)  // 10 Mins
-		{
 			// Send ID every 10 Mins
-
-			unsigned char bytEncodedBytes[16];
-
-			if ((EncLen = Encode4FSKIDFrame(&Callsign, &GridSquare, bytEncodedBytes)) <= 0) {
-				ZF_LOGE("ERROR: In GetNextFECFrame() IDFrame Invalid EncLen (%d).", EncLen);
-				return FALSE;
-			}
-			Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
-
-			dttLastFECIDSent = Now;
-			return TRUE;
-		}
+			return SendID(NULL, "FEC 10 minute ID");
 
 		FrameInfo(bytLastFECDataFrameSent, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType);
 

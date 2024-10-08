@@ -242,6 +242,7 @@ int txframe(char * frameParams) {
 		}
 
 		ZF_LOGD("TXFRAME IDFrame %s [%s]", callsign.str, grid.grid);
+		// SendID() always uses global GridSquare, so don't use is here.
 		if ((EncLen = Encode4FSKIDFrame(&callsign, &grid, bytEncodedBytes)) <= 0) {
 			ZF_LOGE("ERROR: In txframe() IDFrame Invalid EncLen (%d).", EncLen);
 			return 1;

@@ -1831,16 +1831,8 @@ void CheckTimers()
 		// Confirmed proper operation of this timeout and rule 4.0 May 18, 2015
 		// Send an ID frame (Handles protocol rule 4.0)
 
-		const StationId* id_callsign = &ARQStationFinalId;
-		if (!stationid_ok(id_callsign))
-			id_callsign = &Callsign;
-
-		if ((EncLen = Encode4FSKIDFrame(id_callsign, &GridSquare, bytEncodedBytes)) <= 0) {
-			ZF_LOGE("ERROR: In CheckTimers() sending IDFrame before DIC Invalid EncLen (%d).", EncLen);
-			return;
-		}
-		Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
-		dttLastFECIDSent = Now;
+		// SendID will default to Callsign if ARQStationFinalId is not valid.
+		SendID(&ARQStationFinalId, "ARQ Timeout");
 
 		if (AccumulateStats)
 			LogStats();
@@ -1906,18 +1898,8 @@ void CheckTimers()
 	{
 		tmrFinalID = 0;
 
-		const StationId* id_callsign = &ARQStationFinalId;
-		if (!stationid_ok(id_callsign))
-			id_callsign = &Callsign;
-
-		ZF_LOGD("[ARDOPprotocol.tmrFinalID_Elapsed]  Send Final ID (%s, [%s])", id_callsign->str, GridSquare.grid);
-
-		if ((EncLen = Encode4FSKIDFrame(id_callsign, &GridSquare, bytEncodedBytes)) <= 0) {
-			ZF_LOGE("ERROR: In CheckTimers() sending IDFrame  Invalid EncLen (%d).", EncLen);
-			return;
-		}
-		Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
-		dttLastFECIDSent = Now;
+		// SendID will default to Callsign if ARQStationFinalId is not valid.
+		SendID(&ARQStationFinalId, "ARQ FinalID");
 	}
 
 	// Send Conect Request (from ARQCALL command)
@@ -1934,9 +1916,11 @@ void CheckTimers()
 	}
 
 	// Send Async ID (from SENDID command)
-
 	if (NeedID)
 	{
+		// This occurs from SENDID Host command, from Gui, and from StartFEC()
+		// with blnSendID=true (due to FECSEND TRUE host command after FECID
+		// TRUE HOST COMMAND)
 		SendID(NULL, "Host/User requested");
 		NeedID = 0;
 	}

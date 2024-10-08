@@ -1513,12 +1513,8 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 				SetARDOPProtocolState(DISC);
 
-				dttLastFECIDSent = Now;
-				if ((EncLen = Encode4FSKIDFrame(&ARQStationLocal, &GridSquare, bytEncodedBytes)) <= 0) {
-					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
-					return;
-				}
-				Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
+				// SendID will default to Callsign if ARQStationLocal is not valid.
+				SendID(&ARQStationLocal, "Rcvd END in IRSData or IRSfromISS ARQState");
 
 				InitializeConnection();
 				blnEnbARQRpt = FALSE;
@@ -1797,12 +1793,8 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 			QueueCommandToHost(HostCmd);
 			ClearDataToSend();
 
-			dttLastFECIDSent = Now;
-			if ((EncLen = Encode4FSKIDFrame(&ARQStationLocal, &GridSquare, bytEncodedBytes)) <= 0) {
-				ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
-				return;
-			}
-			Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
+			// SendID will default to Callsign if ARQStationLocal is not valid.
+			SendID(&ARQStationLocal, "Rcvd END in IDLE ProtocolState");
 
 			SetARDOPProtocolState(DISC);
 			blnEnbARQRpt = FALSE;
@@ -2185,12 +2177,8 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				ClearDataToSend();
 				blnDISCRepeating = FALSE;
 
-				dttLastFECIDSent = Now;
-				if (EncLen = Encode4FSKIDFrame(&ARQStationLocal, &GridSquare, bytEncodedBytes) <= 0) {
-					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
-					return;
-				}
-				Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
+				// SendID will default to Callsign if ARQStationLocal is not valid.
+				SendID(&ARQStationLocal, "Rcvd END in ISSData ARQState");
 
 				SetARDOPProtocolState(DISC);
 				InitializeConnection();
@@ -2411,14 +2399,9 @@ BOOL Send10MinID()
 
 		blnEnbARQRpt = FALSE;
 
-		dttLastFECIDSent = Now;
+		// SendID will default to Callsign if ARQStationLocal is not valid.
+		return SendID(&ARQStationLocal, "10 Minute ID");
 
-		if ((EncLen = Encode4FSKIDFrame(&ARQStationLocal, &GridSquare, bytEncodedBytes)) <= 0) {
-			ZF_LOGE("ERROR: In Send10MinID() Invalid EncLen (%d).", EncLen);
-			return FALSE;
-		}
-		Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
-		return TRUE;
 	}
 	return FALSE;
 }
