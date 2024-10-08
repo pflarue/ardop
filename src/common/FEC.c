@@ -60,8 +60,6 @@ BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL
 		ZF_LOGD("[ARDOPprotocol.StartFEC] %d bytes received while in FECSend state...append to data to send.", Len);
 		return TRUE;
 	}
-	else
-		dttLastFECIDSent = Now;
 
 	// Check to see that there is data in the buffer.
 
