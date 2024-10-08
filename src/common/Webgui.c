@@ -770,6 +770,8 @@ void WebguiPoll() {
 		case '2':
 			if (ProtocolMode == RXO)
 				wg_send_alert(cnum, "Cannot transmit in RXO ProtocolMode.");
+			else if (! stationid_ok(&Callsign))
+				wg_send_alert(cnum, "Cannot send Two Tone Test.  Callsign not set.");
 			else if (ProtocolState == DISC)
 				NeedTwoToneTest = true;
 			else

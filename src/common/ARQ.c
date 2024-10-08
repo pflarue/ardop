@@ -1185,6 +1185,13 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 		if (IsCallToMe(&LastDecodedStationCaller, &LastDecodedStationTarget, & bytPendingSessionID))  // (Handles protocol rules 1.2, 1.3)
 		{
+			if (! stationid_ok(&Callsign)) {
+				// ConReq must have matched a value in AuxCalls, but without MYCALL
+				// (Callsign) also set, transmitting is not permitted.
+				ZF_LOGI("[ProcessRcvdARQFrame] ConReq to me decoded, but not responding because MYCALL is not set.");
+				return;
+			}
+
 			BOOL blnLeaderTrippedBusy;
 
 			// This logic works like this:

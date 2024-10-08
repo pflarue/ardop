@@ -42,9 +42,13 @@ extern int intCalcLeader;  // the computed leader to use based on the reported L
 void ResetMemoryARQ();
 
 // Function to start sending FEC data
-
 BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL blnSendID)
 {
+	// Previously this function included a check to ensure that Callsign
+	// was set and valid.  This check is now done in ProcessCommandFromHost().
+	// Moving the check there helps provide a consistent fault message for
+	// any host command that attempts to initiate transmitting without first
+	// setting Callsign.
 	// Return True if OK false if problem
 
 	BOOL blnModeOK = FALSE;
@@ -73,14 +77,6 @@ BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL
 	if (intRepeats < 0 || intRepeats > 5)
 	{
 		// Logs.Exception("[ARDOPprotocol.StartFEC] Repeats out of range: " & intRepeats.ToString)
-		return FALSE;
-	}
-
-	// check call sign
-
-	if (!stationid_ok(&Callsign))
-	{
-		// Logs.Exception("[ARDOPprotocol.StartFEC] Invalid call sign: " & MCB.Callsign)
 		return FALSE;
 	}
 

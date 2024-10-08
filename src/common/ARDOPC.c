@@ -1586,6 +1586,8 @@ bool SendID(const StationId * id, char * reason)
 
 	// Scheduler needs to ensure this isnt called if already playing
 	if (SoundIsPlaying) {
+		// LastIDFrameTime is not reset.  So, this doesn't cancel sending the
+		// IDFrame, it only delays it.
 		ZF_LOGD("Don't send ID now because SoundIsPlaying");
 		return false;
 	}
@@ -1594,7 +1596,19 @@ bool SendID(const StationId * id, char * reason)
 		id_to_send = id;
 
 	if (!stationid_ok(id_to_send)) {
-		ZF_LOGD("No valid StationID available for SendID.");
+		// This should not happen (so it is logged as an ERROR).  Host/Gui
+		// commands to transmit are designed to fail if Callsign is not set and
+		// automatic transmissions in response to received frames (ConReq ->
+		// ConAck, Ping -> PingAck) only respond to frames whose target callsign
+		// matches Callsign or a value in AuxCalls.  For those automatic
+		// responses, additional checks have been added so that a response to a
+		// value in AuxCalls will not proceed unless MyCall is also set.
+		// An argument could be made for responding to a ConReq for an AuxCall
+		// without setting MYCALL (Callsign), but I have chosen not to accept
+		// this.
+		// If this occurs, it may result in a bad loop condition as repeated
+		// attempts to send an IDFrame fail.  TODO: Is there a better response?
+		ZF_LOGE("MYCALL not set.  No valid StationID available for SendID.");
 		return false;
 	}
 	Len = snprintf(bytIDSent, sizeof(bytIDSent), " %s:[%s] ", id_to_send->str, GridSquare.grid);
@@ -2268,6 +2282,13 @@ void ProcessPingFrame(char * _bytData)
 		{
 			// Ack Ping
 			ZF_LOGI("[ProcessPingFrame] PING from %s>%s S:N=%d Qual=%d Reply=1", LastDecodedStationCaller.str, LastDecodedStationTarget.str, stcLastPingintRcvdSN, stcLastPingintQuality);
+
+			if (! stationid_ok(&Callsign)) {
+				// Ping must have matched a value in AuxCalls, but without MYCALL
+				// (Callsign) also set, transmitting is not permitted.
+				ZF_LOGI("[ProcessPingFrame] PINGACK reply to PING not sent because MYCALL is not set.");
+				return;
+			}
 
 			if ((EncLen = EncodePingAck(PINGACK, stcLastPingintRcvdSN, stcLastPingintQuality, bytEncodedBytes)) <= 0) {
 				ZF_LOGE("ERROR: In ProcessPingFrame() Invalid EncLen (%d).", EncLen);
