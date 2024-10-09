@@ -132,7 +132,7 @@ extern int useHamLib;
 #define TARGET_RESOLUTION 1  // 1-millisecond target resolution
 
 extern int WavNow;  // Time since start of WAV file being decoded
-extern char DecodeWav[256];
+extern char DecodeWav[5][256];
 extern BOOL WriteTxWav;
 extern BOOL WriteRxWav;
 extern BOOL TwoToneAndExit;
@@ -379,7 +379,7 @@ int platform_main(int argc, char * argv[])
 	);
 	ZF_LOGD("Command line: %s", cmdstr);
 
-	if (DecodeWav[0])
+	if (DecodeWav[0][0])
 	{
 		decode_wav();
 		return (0);
@@ -501,7 +501,7 @@ unsigned int getTicks()
 {
 	// When decoding a WAV file, return WavNow, a measure of the offset
 	// in ms from the start of the WAV file.
-	if (DecodeWav[0])
+	if (DecodeWav[0][0])
 		return WavNow;
 
 	return timeGetTime();
