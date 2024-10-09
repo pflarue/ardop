@@ -40,8 +40,7 @@ unsigned int dttLastFECIDSent;
 
 extern int intCalcLeader;  // the computed leader to use based on the reported Leader Length
 
-void ResetCarrierOk();
-void ResetAvgs();
+void ResetMemoryARQ();
 
 // Function to start sending FEC data
 
@@ -329,6 +328,19 @@ sendit:
 
 extern int frameLen;
 
+// If failed FEC data exists, pass it to the host tagged as ERR
+// In addition to its use in ProcessRcvdFECDataFrame(), this function is also
+// called by CheckMemarqTimeout() when bytFailedData has become stale.
+void PassFECErrDataToHost() {
+	if (bytFailedDataLength > 0) {
+		AddTagToDataAndSendToHost(bytFailedData, "ERR", bytFailedDataLength);
+		if (CommandTrace)
+			ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass failed frame ID %s to Host (%d bytes)", Name(intLastFailedFrameID), bytFailedDataLength);
+		bytFailedDataLength = 0;
+		intLastFailedFrameID = -1;
+	}
+}
+
 // Function to process Received FEC data
 
 void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDecodedOK)
@@ -343,21 +355,22 @@ void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDec
 	// successfully decoded.  For multi-carrier frame types, this can also
 	// result in a data frame which claims to have been successfully decoded,
 	// but which actually contains a mixture of data from multiple different
-	// data frames.
+	// data frames.  While this possibility is not completely eliminated, it is
+	// made less likely by resetting Memory ARQ values when they become stale.
+	// See comments where MemarqTime is defined.
 
 	// Determine if this frame should be passed to Host.
 
 	if (blnFrameDecodedOK)
 	{
-		// Resetting CarrierOk whenever an FEC frame is correctly decoded
+		// Resetting Memory ARQ values whenever an FEC frame is correctly decoded
 		// ensures that the next data frame received will always be decoded and
 		// passed to this function rather than discarded as an assumed repeated
 		// frame.  The logic which follows this will evaluate whether a frame is
 		// actaully a repeat of the last frame received, and handle it
 		// appropriately.
-		ZF_LOGD("CarrierOk, and data for SaveXXXSamples() reset after FEC data frame decoded OK.");
-		ResetCarrierOk();
-		ResetAvgs();
+		ZF_LOGD("Memory ARQ data reset after FEC data frame decoded OK.");
+		ResetMemoryARQ();
 
 		int CRC = GenCRC16(bytData, frameLen);
 
@@ -368,38 +381,25 @@ void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDec
 			return;
 		}
 
-		if (bytFailedDataLength > 0 && intLastFailedFrameID != intFrameType)
-		{
-			AddTagToDataAndSendToHost(bytFailedData, "ERR", bytFailedDataLength);
-			if (CommandTrace)
-				ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass failed frame ID %s to Host (%d bytes)", Name(intLastFailedFrameID), bytFailedDataLength);
-			bytFailedDataLength = 0;
-			intLastFailedFrameID = -1;
-		}
-
+		if (intLastFailedFrameID != intFrameType)
+			PassFECErrDataToHost();
 
 		AddTagToDataAndSendToHost(bytData, "FEC", frameLen);
+		if (CommandTrace)
+			ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass good data frame  ID %s to Host (%d bytes)", Name(intFrameType), frameLen);
 
 		crcLastFECDataPassedToHost = CRC;
 		intLastFrameIDToHost = intFrameType;
 		bytFailedDataLength = 0;
 		intLastFailedFrameID = -1;
-
-		if (CommandTrace)
-			ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass good data frame  ID %s to Host (%d bytes)", Name(intFrameType), frameLen);
 	}
 	else
 	{
 		// Bad Decode
 
-		if (bytFailedDataLength > 0 && intLastFailedFrameID != intFrameType)
-		{
-			AddTagToDataAndSendToHost(bytFailedData, "ERR", bytFailedDataLength);
-			if (CommandTrace)
-				ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass failed frame ID %s to Host (%d bytes)", Name(intLastFailedFrameID), bytFailedDataLength);
-			bytFailedDataLength = 0;
-			intLastFrameIDToHost = intLastFailedFrameID;
-		}
+		if (intLastFailedFrameID != intFrameType)
+			PassFECErrDataToHost();
+
 		memcpy(bytFailedData, bytData, frameLen);  // capture the current data and frame type
 		bytFailedDataLength = frameLen;
 		intLastFailedFrameID = intFrameType;

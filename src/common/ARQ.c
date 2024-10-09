@@ -54,8 +54,7 @@ int bytQDataInProcessLen = 0;  // Length of frame to send/last sent
 
 BOOL blnLastFrameSentData = FALSE;
 
-void ResetCarrierOk();
-void ResetAvgs();
+void ResetMemoryARQ();
 extern int LastDataFrameType;
 extern BOOL blnARQDisconnect;
 extern const short FrameSize[256];
@@ -1229,9 +1228,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 				intLastARQDataFrameToHost = -1;  // precondition to an illegal frame type
 				// CLear MEM ARQ Stuff
-				ResetCarrierOk();
-				ResetAvgs();
-				LastDataFrameType = -1;
+				ResetMemoryARQ();
 
 				// latch the ConReq callsign pair from the decoder
 				memcpy(&ARQStationRemote, &LastDecodedStationCaller, sizeof(ARQStationRemote));
@@ -1309,9 +1306,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 						intLastARQDataFrameToHost = -1;  // precondition to an illegal frame type
 						// CLear MEM ARQ Stuff
-						ResetCarrierOk();
-						ResetAvgs();
-						LastDataFrameType = -1;
+						ResetMemoryARQ();
 
 						intAvgQuality = 0;  // initialize avg quality
 						intReceivedLeaderLen = intLeaderRcvdMs;  // capture the received leader from the remote ISS's ConReq (used for timing optimization)
@@ -1764,9 +1759,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 			intLinkTurnovers += 1;
 			intLastARQDataFrameToHost = -1;  // precondition to an illegal frame type (insures the new IRS does not reject a frame)
 			// CLear MEM ARQ Stuff
-			ResetCarrierOk();
-			ResetAvgs();
-			LastDataFrameType = -1;
+			ResetMemoryARQ();
 			return;
 		}
 		if (intFrameType == DISCFRAME)  // IF DISC received from IRS Handles protocol rule 1.5
@@ -1983,8 +1976,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 					intLinkTurnovers += 1;
 					intLastARQDataFrameToHost = -1;  // precondition to an illegal frame type (insures the new IRS does not reject a frame)
 					// CLear MEM ARQ Stuff
-					ResetCarrierOk();
-					ResetAvgs();
+					ResetMemoryARQ();
 					LastDataFrameType = intFrameType;
 				}
 				else
@@ -2121,8 +2113,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 				intLinkTurnovers += 1;
 				// CLear MEM ARQ Stuff
-				ResetCarrierOk();
-				ResetAvgs();
+				ResetMemoryARQ();
 				LastDataFrameType = intFrameType;
 				intLastARQDataFrameToHost = -1;  // precondition to an illegal frame type (insures the new IRS does not reject a frame)
 				return;
