@@ -12,6 +12,8 @@ extern int intLastRcvdFrameQuality;  // defined in SoundInput.c
 extern BOOL WG_DevMode;
 int wg_send_hostdatat(int cnum, char *prefix, unsigned char *data, int datalen);
 int wg_send_hostdatab(int cnum, char *prefix, unsigned char *data, int datalen);
+void ResetCarrierOk();
+void ResetAvgs();
 
 // Use of RXO is assumed to indicate that the user is interested in observing all received traffic.
 // So LOGI (level=3), rather than a lower log level such as LOGD (level=2), is used for most positive results.
@@ -161,81 +163,104 @@ void ProcessRXOFrame(UCHAR bytFrameType, int frameLen, UCHAR * bytData, BOOL bln
 	char strMsg[4096];
 	int intMsgLen;
 
-	if (blnFrameDecodedOK)
+	if (bytFrameType >= 0x31 && bytFrameType <= 0x38)  // ConReq####
 	{
-		if (bytFrameType >= 0x31 && bytFrameType <= 0x38)  // ConReq####
-		{
-			// Is there a reason why frameLen is not defined for ConReq?
-			ZF_LOGI("    [RXO %02hhX] ConReq data is callerID targetID", bytSessionID);
-			frameLen = strlen((char*) bytData);
-		}
-		else if (bytFrameType >= 0x39 && bytFrameType <= 0x3C)  // ConAck####
-		{
-			ZF_LOGI("    [RXO %02hhX] ConAck data is the length (in tens of ms) of the received leader repeated 3 times: %d %d %d",
-				bytSessionID, bytFrameData1[0], bytFrameData1[1], bytFrameData1[2]);
-		}
-		else if (bytFrameType == 0x3D)  // PingAck
-		{
-			ZF_LOGI("    [RXO %02hhX] PingAck data is S:N=%d and Quality=%d of the Ping. (Any S:N > 20 is reorted as 21.)",
-				bytSessionID, intSNdB, intQuality);
-		}
-		else if (bytFrameType == 0x3E)  // Ping
-		{
-			ZF_LOGI("    [RXO %02hhX] Ping data is caller and target callsigns: '%s'.  While this frame does uses FEC to improve likelihood of correct transmission, it does not include a CRC check with which to confirm correctness.  This Ping was received with S:N=%d, Q=%d.",
-				bytSessionID, bytData, stcLastPingintRcvdSN, stcLastPingintQuality);
-		}
-		else if (bytFrameType >= 0xE0)  // DataACK
-		{
-			ZF_LOGI("    [RXO %02hhX] DataAck FrameType (0x%02X) indicates decode quality (%d/100). 60+ typically required for decoding.",
-				bytSessionID, bytFrameType, 38 + (2 * (bytFrameType & 0x1F)));
-		}
-		else if (bytFrameType <= 0x1F)  // DataNAK
-		{
-			ZF_LOGI("    [RXO %02hhX] DataNak FrameType (0x%02X) indicates decode quality (%d/100). 60+ typically required for decoding.",
-				bytSessionID, bytFrameType, 38 + (2 * (bytFrameType & 0x1F)));
-		}
+		// Is there a reason why frameLen is not defined for ConReq?
+		ZF_LOGI("    [RXO %02hhX] ConReq data is callerID targetID", bytSessionID);
+		frameLen = strlen((char*) bytData);
+	}
+	else if (bytFrameType >= 0x39 && bytFrameType <= 0x3C)  // ConAck####
+	{
+		ZF_LOGI("    [RXO %02hhX] ConAck data is the length (in tens of ms) of the received leader repeated 3 times: %d %d %d",
+			bytSessionID, bytFrameData1[0], bytFrameData1[1], bytFrameData1[2]);
+	}
+	else if (bytFrameType == 0x3D)  // PingAck
+	{
+		ZF_LOGI("    [RXO %02hhX] PingAck data is S:N=%d and Quality=%d of the Ping. (Any S:N > 20 is reorted as 21.)",
+			bytSessionID, intSNdB, intQuality);
+	}
+	else if (bytFrameType == 0x3E)  // Ping
+	{
+		ZF_LOGI("    [RXO %02hhX] Ping data is caller and target callsigns: '%s'.  While this frame does uses FEC to improve likelihood of correct transmission, it does not include a CRC check with which to confirm correctness.  This Ping was received with S:N=%d, Q=%d.",
+			bytSessionID, bytData, stcLastPingintRcvdSN, stcLastPingintQuality);
+	}
+	else if (bytFrameType >= 0xE0)  // DataACK
+	{
+		ZF_LOGI("    [RXO %02hhX] DataAck FrameType (0x%02X) indicates decode quality (%d/100). 60+ typically required for decoding.",
+			bytSessionID, bytFrameType, 38 + (2 * (bytFrameType & 0x1F)));
+	}
+	else if (bytFrameType <= 0x1F)  // DataNAK
+	{
+		ZF_LOGI("    [RXO %02hhX] DataNak FrameType (0x%02X) indicates decode quality (%d/100). 60+ typically required for decoding.",
+			bytSessionID, bytFrameType, 38 + (2 * (bytFrameType & 0x1F)));
+	}
 
+	if (blnFrameDecodedOK) {
 		ZF_LOGI("    [RXO %02hhX] %s frame received OK.  frameLen = %d",
 				bytSessionID, Name(bytFrameType), frameLen);
-		if (frameLen > 0)
+	} else {
+		ZF_LOGD("    [RXO %02hhX] %s frame decode FAIL.  frameLen = %d",
+				bytSessionID, Name(bytFrameType), frameLen);
+	}
+	if (frameLen > 0)
+	{
+		snprintf(strMsg, sizeof(strMsg), "    [RXO %02hhX] %d bytes of data as hex values:\n", bytSessionID, frameLen);
+		intMsgLen = strlen(strMsg);
+		for (int i = 0; i < frameLen; i++)
 		{
-			snprintf(strMsg, sizeof(strMsg), "    [RXO %02hhX] %d bytes of data as hex values:\n", bytSessionID, frameLen);
-			intMsgLen = strlen(strMsg);
+			sprintf(strMsg + intMsgLen, "%02X ", bytData[i]);
+			intMsgLen += 3;
+		}
+		ZF_LOGI("%s", strMsg);
+		// If there is a Null (0x00) anywhere other than as the last byte
+		// of bytData, or if utf8_check() indicates that it is not valid
+		// utf8, then bytData should not be displayed as text.
+		if (memchr(bytData, 0x00, frameLen - 1) == NULL && utf8_check(bytData, frameLen) == NULL) {
 			for (int i = 0; i < frameLen; i++)
 			{
-				sprintf(strMsg + intMsgLen, "%02X ", bytData[i]);
-				intMsgLen += 3;
+				if (bytData[i] == 0x0D && bytData[i + 1] != 0x0A)
+					bytData[i] = 0x0A;
 			}
-			ZF_LOGI("%s", strMsg);
-			// If there is a Null (0x00) anywhere other than as the last byte
-			// of bytData, or if utf8_check() indicates that it is not valid
-			// utf8, then bytData should not be displayed as text.
-			if (memchr(bytData, 0x00, frameLen - 1) == NULL && utf8_check(bytData, frameLen) == NULL) {
-				for (int i = 0; i < frameLen; i++)
-				{
-					if (bytData[i] == 0x0D && bytData[i + 1] != 0x0A)
-						bytData[i] = 0x0A;
-				}
-				ZF_LOGI("    [RXO %02hhX] %d bytes of data as UTF-8 text:\n%.*s", bytSessionID, frameLen, frameLen, bytData);
-				if (WG_DevMode)
-					wg_send_hostdatat(0, "RXO", bytData, frameLen);
-			}
-			else {
-				ZF_LOGI("    [RXO %02hhX] Data does not appear to be valid UTF-8 text.", bytSessionID);
-				if (WG_DevMode)
-					wg_send_hostdatab(0, "RXO", bytData, frameLen);
-			}
+			ZF_LOGI("    [RXO %02hhX] %d bytes of data as UTF-8 text:\n%.*s", bytSessionID, frameLen, frameLen, bytData);
+			if (WG_DevMode)
+				wg_send_hostdatat(0, "RXO", bytData, frameLen);
 		}
-		snprintf(strMsg, sizeof(strMsg), "STATUS [RXO %02hhX] %s frame received OK.", bytSessionID, Name(bytFrameType));
-		SendCommandToHost(strMsg);
+		else {
+			ZF_LOGI("    [RXO %02hhX] Data does not appear to be valid UTF-8 text.", bytSessionID);
+			if (WG_DevMode)
+				wg_send_hostdatab(0, "RXO", bytData, frameLen);
+		}
 	}
-	else
-	{
-		ZF_LOGD("    [RXO %02hhX] %s frame decode FAIL.",
-				bytSessionID, Name(bytFrameType));
+	if (blnFrameDecodedOK) {
+		snprintf(strMsg, sizeof(strMsg), "STATUS [RXO %02hhX] %s frame received OK.", bytSessionID, Name(bytFrameType));
+	} else {
 		snprintf(strMsg, sizeof(strMsg), "STATUS [RXO %02hhX] %s frame decode FAIL.", bytSessionID, Name(bytFrameType));
-		SendCommandToHost(strMsg);
-		bytData[frameLen] = 0;
+	}
+	SendCommandToHost(strMsg);
+
+	if (blnFrameDecodedOK && IsDataFrame(bytFrameType)) {
+		// Like FEC protocolmode, this facilitates decoding of successive unique
+		// data frames of the same type.  Memory ARQ (using CarrierOk[] and
+		// Averaged values) allows results from repeated copies of the same data
+		// frame to also be combined to decode that frame even when no single
+		// copy of it could be completely decoded by itself.  Unfortunately,
+		// this approach may be impaired when a new data frame is received,
+		// which has the same type as the prior frame (with different data), and
+		// that prior frame was not successfully decoded.  For multi-carrier
+		// frame types, this can also result in a data frame which claims to
+		// have been successfully decoded, but which actually contains a mixture
+		// of data from multiple different data frames.
+
+		// Like FEC protocolmode, the MemoryARQ values are reset whenever a data
+		// frame is correctly decoded to facilitate decoding a sequence of data
+		// frames of the same type but containing different data.
+		if (blnFrameDecodedOK) {
+			ZF_LOGD(
+				"CarrierOk, and data for SaveXXXSamples() reset after RXO data"
+				" frame decoded OK.");
+			ResetCarrierOk();
+			ResetAvgs();
+		}
 	}
 }
 

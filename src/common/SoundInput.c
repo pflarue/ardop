@@ -1096,26 +1096,26 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			if (LastDataFrameType != intFrameType)
 			{
 				// CarrierOk, intSumCounts, intToneMagsAvg, intCarPhaseAvg, and
-				// intCarMagAvg are reset here upon receiving a new frame type.
-				// They are also reset in ProcessRcvFECDataFrame any time an FEC
-				// data frame is correctly decoded since a repeated FEC data
-				// frame type is not always a repetition of the previous frame.
+				// intCarMagAvg are reset here upon receiving a new frame type
+				// (excluding short control frames: DataNAK, BREAK, IDLE, DISC,
+				// END ConRejBusy, ConRejBW, DataACK).  Thus, they are reset for
+				// non-short control frames: IDFrame, ConReqXXX, ConAckXXX,
+				// PingAck, Ping.
+				// TODO: Is this choice of control frames appropriate, or was
+				// this an accident that should be reconsidered?  If reset on
+				// DataNAK is applied, be sure to exclude RXO mode.
+				//
+				// They are also reset any time a successfully decoded data
+				// is passed to ProcessRcvFECDataFrame() or ProcessRXOFrame()
+				// since in FEC and RXO protocolmodes, a repeated data frame
+				// type is not always a repetition of the previous frame.
 				ZF_LOGD("New frame type - MEMARQ flags reset");
 				ResetCarrierOk();
-				LastDataFrameType = intFrameType;
-
-				// note that although we only do mem arq if enough RAM we
-				// still skip decoding carriers that have been received;
-
 				ResetAvgs();
 			}
-			else if (ProtocolMode == RXO)
-			{
-				// In RXO mode, always try to decode the frame, so reset
-				// CarrierOK.  Memory ARQ is not done in RXO mode, so there is
-				// no need to reset intSumCounts or Avg values.
-				ResetCarrierOk();
-			}
+			// TODO: Change name of LastDataFrameType since it is set to the
+			// current frame type even when it is not a data frame.
+			LastDataFrameType = intFrameType;
 
 			ZF_LOGD("MEMARQ Flags %d %d %d %d %d %d %d %d",
 				CarrierOk[0], CarrierOk[1], CarrierOk[2], CarrierOk[3],
