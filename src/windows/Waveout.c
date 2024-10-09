@@ -1245,8 +1245,9 @@ void CatWrite(char * Buffer, int Len)
 		WriteCOMBlock(hCATDevice, Buffer, Len);
 }
 
-
-UCHAR Pixels[16384];
+// mySetPixel() uses 3 bytes from Pixels per call.  So it must be 3 times the
+// size of the larger of inPhases[0] or intToneMags/4. (intToneMags/4 is larger)
+UCHAR Pixels[9108];
 UCHAR * pixelPointer = Pixels;
 
 

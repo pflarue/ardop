@@ -40,6 +40,8 @@ unsigned int dttLastFECIDSent;
 
 extern int intCalcLeader;  // the computed leader to use based on the reported Leader Length
 
+void ResetCarrierOk();
+void ResetAvgs();
 
 // Function to start sending FEC data
 
@@ -331,10 +333,32 @@ extern int frameLen;
 
 void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDecodedOK)
 {
+	// Unlike ARQ protocolmode, this facilitates decoding of successive unique
+	// data frames of the same type.  Memory ARQ (using CarrierOk[] and Averaged
+	// values) allows results from repeated copies of the same data frame to
+	// also be combined to decode that frame even when no single copy of it
+	// could be completely decoded by itself.  Unfortunately, this approach may
+	// be impaired when a new data frame is received, which has the same type as
+	// the prior frame (with different data), and that prior frame was not
+	// successfully decoded.  For multi-carrier frame types, this can also
+	// result in a data frame which claims to have been successfully decoded,
+	// but which actually contains a mixture of data from multiple different
+	// data frames.
+
 	// Determine if this frame should be passed to Host.
 
 	if (blnFrameDecodedOK)
 	{
+		// Resetting CarrierOk whenever an FEC frame is correctly decoded
+		// ensures that the next data frame received will always be decoded and
+		// passed to this function rather than discarded as an assumed repeated
+		// frame.  The logic which follows this will evaluate whether a frame is
+		// actaully a repeat of the last frame received, and handle it
+		// appropriately.
+		ZF_LOGD("CarrierOk, and data for SaveXXXSamples() reset after FEC data frame decoded OK.");
+		ResetCarrierOk();
+		ResetAvgs();
+
 		int CRC = GenCRC16(bytData, frameLen);
 
 		if (intFrameType == intLastFrameIDToHost && CRC == crcLastFECDataPassedToHost)
@@ -348,7 +372,7 @@ void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDec
 		{
 			AddTagToDataAndSendToHost(bytFailedData, "ERR", bytFailedDataLength);
 			if (CommandTrace)
-				ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass failed frame ID %s to Host (%d bytes)", Name(intFrameType), bytFailedDataLength);
+				ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass failed frame ID %s to Host (%d bytes)", Name(intLastFailedFrameID), bytFailedDataLength);
 			bytFailedDataLength = 0;
 			intLastFailedFrameID = -1;
 		}
@@ -356,13 +380,10 @@ void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDec
 
 		AddTagToDataAndSendToHost(bytData, "FEC", frameLen);
 
-		crcLastFECDataPassedToHost = GenCRC16(bytData, frameLen);
+		crcLastFECDataPassedToHost = CRC;
 		intLastFrameIDToHost = intFrameType;
-		if (intLastFailedFrameID == intFrameType)
-		{
-			bytFailedDataLength = 0;
-			intLastFailedFrameID = -1;
-		}
+		bytFailedDataLength = 0;
+		intLastFailedFrameID = -1;
 
 		if (CommandTrace)
 			ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass good data frame  ID %s to Host (%d bytes)", Name(intFrameType), frameLen);
@@ -375,11 +396,9 @@ void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDec
 		{
 			AddTagToDataAndSendToHost(bytFailedData, "ERR", bytFailedDataLength);
 			if (CommandTrace)
-				ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass failed frame ID %s to Host (%d bytes)", Name(intFrameType), bytFailedDataLength);
+				ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass failed frame ID %s to Host (%d bytes)", Name(intLastFailedFrameID), bytFailedDataLength);
 			bytFailedDataLength = 0;
 			intLastFrameIDToHost = intLastFailedFrameID;
-			if (CommandTrace)
-				ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass failed frame ID %s to Host (%d bytes)", Name(intFrameType), bytFailedDataLength);
 		}
 		memcpy(bytFailedData, bytData, frameLen);  // capture the current data and frame type
 		bytFailedDataLength = frameLen;

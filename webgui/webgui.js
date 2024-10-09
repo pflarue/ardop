@@ -43,7 +43,7 @@ window.addEventListener("load", function(evt) {
 
 	// rsize should match WG_SSIZE in Webgui.c.
 	// This is the maximum length of messages received from ardopcf
-	const rsize = 2048;
+	const rsize = 10000;
 	// ssize should match WG_RSIZE in Webgui.c.
 	// This is the maximum length of messages sent to ardopcf
 	const ssize = 512;

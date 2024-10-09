@@ -16,7 +16,7 @@
 
 #define MAX_WG_CLIENTS 4  // maximum number of simultaneous clients
 #define WG_RSIZE 512  // maximum length of messages received from Webgui clients
-#define WG_SSIZE 2048  // maximum length of messages sent to Webgui clients
+#define WG_SSIZE 10000  // maximum length of messages sent to Webgui clients
 #define MAX_AVGLEN 10  // maximum supported length of FFT averaging
 
 extern int wg_port;  // Port number of WebGui.  If 0, no WebGui

@@ -61,6 +61,10 @@ const char* PlatformSignalAbbreviation(int signal);
 BOOL BusyDetect2(float * dblMag, int intStart, int intStop);
 BOOL IsPingToMe(const StationId* caller, const StationId* target);
 
+void ResetCarrierOk();
+void ResetAvgs();
+extern int LastDataFrameType;
+
 void WebguiInit();
 void WebguiPoll();
 int wg_send_fftdata(float *mags, int magsLen);
@@ -633,6 +637,11 @@ void setProtocolMode(char* strMode)
 		ProtocolMode = ARQ;
 		return;
 	}
+	// CLear MEM ARQ Stuff
+	ResetCarrierOk();
+	ResetAvgs();
+	LastDataFrameType = -1;
+
 	wg_send_protocolmode(0);
 }
 

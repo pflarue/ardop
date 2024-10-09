@@ -408,13 +408,11 @@ void ProcessReceivedData()
 	// as a command line arguemnt. It is used for all data sent to the TNC, such as
 	// for ARQ or FEC.
 
-	// The command format is expected to be "<LENGTH><MODE><DATA>"
-	// The LENGTH is a two-byte big-endian integer, followed by the text FEC or ARQ, followed by the data.
+	// The command format is expected to be "<LENGTH><DATA>"
+	// The LENGTH is a two-byte big-endian integer, followed by the data.
 	// No carriage return is expected, as the data may contain binary data.
-	// An example valid message is "0008FECHELLO"
-	// This will load FECHELLO into the buffer.
-	// Note that the MODE is included in the length, so the data length is the total length + 3
-	// This behavior is a little strange, to keep the FEC, but right now it is simply what it does.
+	// An example valid message is "0005HELLO"
+	// This will load HELLO into the buffer.
 
 	Len = recv(TCPDataSock, &ARDOPDataBuffer[DataInputLen], 8192 - DataInputLen, 0);
 
