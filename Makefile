@@ -70,6 +70,7 @@ OBJS = \
 	src/common/gen-webgui.html.o \
 	src/common/gen-webgui.js.o \
 	src/common/Webgui.o \
+	src/common/noise.o \
 
 # Linux-only object files
 OBJS_LIN = \

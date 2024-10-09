@@ -100,6 +100,9 @@ WAVEHDR inheader[5] =
 WAVEOUTCAPS pwoc;
 WAVEINCAPS pwic;
 
+void add_noise(short *samples, unsigned int nSamples, short stddev);
+short InputNoiseStdDev = 0;
+
 int InitSound(BOOL Quiet);
 void HostPoll();
 void TCPHostPoll();
@@ -732,6 +735,8 @@ void PollReceivedSamples()
 	{
 		short * ptr = &inbuffer[inIndex][0];
 		int i;
+
+		add_noise(inbuffer[inIndex], ReceiveSize, InputNoiseStdDev);
 
 		for (i = 0; i < ReceiveSize; i++)
 		{

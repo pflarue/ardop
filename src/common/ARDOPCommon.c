@@ -62,6 +62,9 @@ extern char HostPort[80];
 extern char CaptureDevice[80];
 extern char PlaybackDevice[80];
 
+extern short InputNoiseStdDev;
+void add_noise(short *samples, unsigned int nSamples, short stddev);
+
 int extraDelay = 0;  // Used for long delay paths eg Satellite
 int	intARQDefaultDlyMs = 240;
 int TrailerLength = 20;
@@ -596,6 +599,7 @@ int decode_wav()
 	ZF_LOGD("Reading %d 16-bit samples.", nSamples);
 	// Send blocksize silent samples to ProcessNewSamples() before start of WAV file data.
 	memset(samples, 0, sizeof(samples));
+	add_noise(samples, blocksize, InputNoiseStdDev);
 	ProcessNewSamples(samples, blocksize);
 	while (nSamples >= blocksize)
 	{
@@ -606,6 +610,7 @@ int decode_wav()
 			return 5;
 		}
 		WavNow += blocksize * 1000 / 12000;
+		add_noise(samples, blocksize, InputNoiseStdDev);
 		ProcessNewSamples(samples, blocksize);
 		nSamples -= blocksize;
 	}
@@ -616,6 +621,7 @@ int decode_wav()
 		return 6;
 	}
 	WavNow += nSamples * 1000 / 12000;
+	add_noise(samples, blocksize, InputNoiseStdDev);
 	ProcessNewSamples(samples, nSamples);
 	nSamples = 0;
 	// Send additional silent samples to ProcessNewSamples() after end of WAV file data.
@@ -623,6 +629,7 @@ int decode_wav()
 	memset(samples, 0, sizeof(samples));
 	for (int i=0; i<20; i++) {
 		WavNow += blocksize * 1000 / 12000;
+		add_noise(samples, blocksize, InputNoiseStdDev);
 		ProcessNewSamples(samples, blocksize);
 	}
 
