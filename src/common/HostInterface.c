@@ -769,6 +769,15 @@ void ProcessCommandFromHost(char * strCMD)
 		}
 		if (strcmp(ptrParams, "TRUE") == 0)
 		{
+			// Previously this check to ensure that MYCALL is set was included
+			// in StartFEC().  Moving this test here helps provide a consistent
+			// fault message for any attempt to initiate transmitting without
+			// first setting MYCALL so that an IDFrame can be sent when needed.
+			if (!stationid_ok(&Callsign)) {
+				snprintf(strFault, sizeof(strFault), "MYCALL not set");
+				goto cmddone;
+			}
+
 			ZF_LOGD("FECRepeats %d", FECRepeats);
 
 			if (!StartFEC(NULL, 0, strFECMode, FECRepeats, FECId)) {
@@ -1319,6 +1328,15 @@ void ProcessCommandFromHost(char * strCMD)
 
 	if (strcmp(strCMD, "SENDID") == 0)
 	{
+		// Previously this check to ensure that MYCALL is set was handled in
+		// the response to seting NeedID=TRUE.  Adding this test here helps
+		// provide a consistent fault message for any attempt to initiate
+		// transmitting without first setting MYCALL.
+		if (!stationid_ok(&Callsign)) {
+			snprintf(strFault, sizeof(strFault), "MYCALL not set");
+			goto cmddone;
+		}
+
 		if (ProtocolState == DISC)
 		{
 			NeedID = TRUE;  // Send from background
@@ -1410,6 +1428,14 @@ void ProcessCommandFromHost(char * strCMD)
 
 	if (strcmp(strCMD, "TWOTONETEST") == 0)
 	{
+		// Previously this was permitted without MYCALL being set.  However,
+		// this new restriction helps ensure that an IDFrame can be sent to
+		// identify all transmissions including this two tone test signal.
+		if (!stationid_ok(&Callsign)) {
+			snprintf(strFault, sizeof(strFault), "MYCALL not set");
+			goto cmddone;
+		}
+
 		if (ProtocolState == DISC)
 		{
 			NeedTwoToneTest = TRUE;  // Send from background
@@ -1474,6 +1500,13 @@ void ProcessCommandFromHost(char * strCMD)
 	///////////////////////////////////////////////////////////////
 	if (strcmp(strCMD, "TXFRAME") == 0)
 	{
+		// Like all other host commands that initiate transmitting, MYCALL must
+		// be set first.
+		if (!stationid_ok(&Callsign)) {
+			snprintf(strFault, sizeof(strFault), "MYCALL not set");
+			goto cmddone;
+		}
+
 		if (ptrParams == 0)
 		{
 			snprintf(strFault, sizeof(strFault), "Syntax Err: TXFRAME sendParams");

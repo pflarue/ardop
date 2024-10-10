@@ -139,7 +139,7 @@ void StopCodec(char * strFault);
 BOOL SendARQConnectRequest(const StationId* mycall, const StationId* target);
 void AddDataToDataToSend(UCHAR * bytNewData, int Len);
 BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL blnSendID);
-void SendID(BOOL blnEnableCWID);
+bool SendID(const StationId * id, char * reason);
 // void SetARDOPProtocolState(int value);
 unsigned int GenCRC16(unsigned char * Data, unsigned short length);
 void SendCommandToHost(char * Cmd);
@@ -165,7 +165,7 @@ void SetFilter(void * Filter());
 
 void AddTrailer();
 void CWID(char * strID, short * intSamples, BOOL blnPlay);
-void sendCWID(const StationId* Call, BOOL Play);
+void sendCWID(const StationId * id);
 UCHAR ComputeTypeParity(UCHAR bytFrameType);
 void GenCRC16FrameType(char * Data, int Length, UCHAR bytFrameType);
 BOOL CheckCRC16FrameType(unsigned char * Data, int Length, UCHAR bytFrameType);

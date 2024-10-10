@@ -47,7 +47,7 @@ extern StationId LastDecodedStationCaller;
 extern StationId LastDecodedStationTarget;
 
 void GetTwoToneLeaderWithSync(int intSymLen);
-void SendID(BOOL blnEnableCWID);
+bool SendID(const StationId * id, char * reason);
 void PollReceivedSamples();
 void CheckTimers();
 BOOL GetNextARQFrame();
@@ -194,6 +194,7 @@ BOOL blnARQDisconnect = FALSE;
 
 int dttLastPINGSent;
 
+unsigned int LastIDFrameTime = 0;
 enum _ProtocolMode ProtocolMode = FEC;
 
 extern BOOL blnEnbARQRpt;
@@ -202,7 +203,6 @@ extern StationId ARQStationRemote;  // current connection remote callsign
 extern StationId ARQStationLocal;   // current connection local callsign
 extern StationId ARQStationFinalId; // post-session local IDF to send
 extern int dttTimeoutTrip;
-extern unsigned int dttLastFECIDSent;
 extern int intFrameRepeatInterval;
 extern BOOL blnPending;
 extern unsigned int tmrIRSPendingTimeout;
@@ -1572,40 +1572,66 @@ int EncodeDATANAK(int intQuality , UCHAR bytSessionID, UCHAR * bytreturn)
 	return 2;
 }
 
-void SendID(BOOL blnEnableCWID)
+// SendID() should be the only function that sends an IDFrame.
+// If id is not null, send it, else use global Callsign.
+// always use global GridSquare.
+// always use global wantCWID to determine whether CWID is also sent.
+// reason is used to log info about why SendID is being called.
+// Return true on success or false if no ID was sent.
+bool SendID(const StationId * id, char * reason)
 {
+	const StationId *id_to_send = &Callsign;  // default to Callsign if id not provided
 	unsigned char bytIDSent[80];
 	int Len;
-	unsigned char * p;
 
 	// Scheduler needs to ensure this isnt called if already playing
-
-	if (SoundIsPlaying)
-		return;
-
-	if ((EncLen = Encode4FSKIDFrame(&Callsign, &GridSquare, bytEncodedBytes)) <= 0) {
-		ZF_LOGE("ERROR: In SendID() Invalid EncLen (%d).", EncLen);
-		return;
+	if (SoundIsPlaying) {
+		// LastIDFrameTime is not reset.  So, this doesn't cancel sending the
+		// IDFrame, it only delays it.
+		ZF_LOGD("Don't send ID now because SoundIsPlaying");
+		return false;
 	}
 
-	Len = snprintf(bytIDSent, sizeof(bytIDSent), " %s:[%s] ", Callsign.str, GridSquare.grid);
+	if (id != NULL && stationid_ok(id))
+		id_to_send = id;
+
+	if (!stationid_ok(id_to_send)) {
+		// This should not happen (so it is logged as an ERROR).  Host/Gui
+		// commands to transmit are designed to fail if Callsign is not set and
+		// automatic transmissions in response to received frames (ConReq ->
+		// ConAck, Ping -> PingAck) only respond to frames whose target callsign
+		// matches Callsign or a value in AuxCalls.  For those automatic
+		// responses, additional checks have been added so that a response to a
+		// value in AuxCalls will not proceed unless MyCall is also set.
+		// An argument could be made for responding to a ConReq for an AuxCall
+		// without setting MYCALL (Callsign), but I have chosen not to accept
+		// this.
+		// If this occurs, it may result in a bad loop condition as repeated
+		// attempts to send an IDFrame fail.  TODO: Is there a better response?
+		ZF_LOGE("MYCALL not set.  No valid StationID available for SendID.");
+		return false;
+	}
+	Len = snprintf(bytIDSent, sizeof(bytIDSent), " %s:[%s] ", id_to_send->str, GridSquare.grid);
+	ZF_LOGD("SendID %s %s", bytIDSent, reason);
+
+	if ((EncLen = Encode4FSKIDFrame(id_to_send, &GridSquare, bytEncodedBytes)) <= 0) {
+		ZF_LOGE("ERROR: In SendID() Invalid EncLen (%d).", EncLen);
+		return false;
+	}
 
 	AddTagToDataAndSendToHost(bytIDSent, "IDF", Len);
 
-	// On embedded platforms we don't have the memory to create full sound stream before playiong,
-	// so this is structured differently from Rick's code
-
-
-	p = bytEncodedBytes;
-
-	ZF_LOGD("%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x ",
-		p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17]);
-
-
 	Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
 
-	if (blnEnableCWID)
-		sendCWID(&Callsign, FALSE);
+	if (wantCWID)
+		sendCWID(id_to_send);
+
+	// LastIDFrameTime is reset after Mod4FSKDataAndPlay and sendCWID() are done.
+	// Setting it to zero indicates that no transmissions have been made since
+	// the last IDFrame was sent.
+	LastIDFrameTime = 0;
+
+	return true;
 }
 
 // Function to generate a 5 second burst of two tone (1450 and 1550 Hz) used for setting up drive level
@@ -1823,16 +1849,8 @@ void CheckTimers()
 		// Confirmed proper operation of this timeout and rule 4.0 May 18, 2015
 		// Send an ID frame (Handles protocol rule 4.0)
 
-		const StationId* id_callsign = &ARQStationFinalId;
-		if (!stationid_ok(id_callsign))
-			id_callsign = &Callsign;
-
-		if ((EncLen = Encode4FSKIDFrame(id_callsign, &GridSquare, bytEncodedBytes)) <= 0) {
-			ZF_LOGE("ERROR: In CheckTimers() sending IDFrame before DIC Invalid EncLen (%d).", EncLen);
-			return;
-		}
-		Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
-		dttLastFECIDSent = Now;
+		// SendID will default to Callsign if ARQStationFinalId is not valid.
+		SendID(&ARQStationFinalId, "ARQ Timeout");
 
 		if (AccumulateStats)
 			LogStats();
@@ -1894,22 +1912,12 @@ void CheckTimers()
 
 	// Subroutine for tmrFinalIDElapsed
 
-	if (tmrFinalID && Now > tmrFinalID)
+	if (tmrFinalID && Now > tmrFinalID && !blnBusyStatus)
 	{
 		tmrFinalID = 0;
 
-		const StationId* id_callsign = &ARQStationFinalId;
-		if (!stationid_ok(id_callsign))
-			id_callsign = &Callsign;
-
-		ZF_LOGD("[ARDOPprotocol.tmrFinalID_Elapsed]  Send Final ID (%s, [%s])", id_callsign->str, GridSquare.grid);
-
-		if ((EncLen = Encode4FSKIDFrame(id_callsign, &GridSquare, bytEncodedBytes)) <= 0) {
-			ZF_LOGE("ERROR: In CheckTimers() sending IDFrame  Invalid EncLen (%d).", EncLen);
-			return;
-		}
-		Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
-		dttLastFECIDSent = Now;
+		// SendID will default to Callsign if ARQStationFinalId is not valid.
+		SendID(&ARQStationFinalId, "ARQ FinalID");
 	}
 
 	// Send Conect Request (from ARQCALL command)
@@ -1926,16 +1934,18 @@ void CheckTimers()
 	}
 
 	// Send Async ID (from SENDID command)
-
 	if (NeedID)
 	{
-		SendID(wantCWID);
+		// This occurs from SENDID Host command, from Gui, and from StartFEC()
+		// with blnSendID=true (due to FECSEND TRUE host command after FECID
+		// TRUE HOST COMMAND)
+		SendID(NULL, "Host/User requested");
 		NeedID = 0;
 	}
 
 	if (NeedCWID)
 	{
-		sendCWID(&Callsign, FALSE);
+		sendCWID(&Callsign);
 		NeedCWID = 0;
 	}
 
@@ -1945,6 +1955,29 @@ void CheckTimers()
 		NeedTwoToneTest = 0;
 	}
 
+	// In addition to other times when an IDFrame is sent by protocol (such as
+	// after receiving and END frame), an IDFrame will be sent at least once
+	// every 10 minutes if any transmissions have been made.  During an active
+	// ARQ connection or in the FECSend state, the LastIDFrameTime is checked
+	// in the code that handles those states so that the IDFrame is sent when it
+	// fits well with other frames being sent and is not too disruptive.  The
+	// following handles sending an IDFrame in the DISC state.  It will defer
+	// sending an IDFrame while sending a series of PINGs, while actively trying
+	// to decode a signal (State != SearchingForLeader), and while the busy
+	// detector indicates that the frequency is is use.  To allow for such
+	// delays, it is actually set to begin trying to send an IDFrame after only
+	// 9 minutes.
+	if (
+		ProtocolState == DISC // Not ARQ connected or FECSend
+		&& State == SearchingForLeader // not receiving an incoming frame
+		&& !blnBusyStatus  // no other traffic on this frequency has been detected
+		&& !blnPINGrepeating  // not sending a sequence of PING frames
+		&& LastIDFrameTime != 0  // Some transmission has been since last IDFrame
+		&& Now - LastIDFrameTime > 540000  // more than 9 minutes elapsed
+	) {
+		// 9 minutes since the first transmission after the last IDFrame was sent.
+		SendID(NULL, "10 minute ID");
+	}
 
 	if (Now > tmrPollOBQueue)
 	{
@@ -2249,6 +2282,13 @@ void ProcessPingFrame(char * _bytData)
 		{
 			// Ack Ping
 			ZF_LOGI("[ProcessPingFrame] PING from %s>%s S:N=%d Qual=%d Reply=1", LastDecodedStationCaller.str, LastDecodedStationTarget.str, stcLastPingintRcvdSN, stcLastPingintQuality);
+
+			if (! stationid_ok(&Callsign)) {
+				// Ping must have matched a value in AuxCalls, but without MYCALL
+				// (Callsign) also set, transmitting is not permitted.
+				ZF_LOGI("[ProcessPingFrame] PINGACK reply to PING not sent because MYCALL is not set.");
+				return;
+			}
 
 			if ((EncLen = EncodePingAck(PINGACK, stcLastPingintRcvdSN, stcLastPingintQuality, bytEncodedBytes)) <= 0) {
 				ZF_LOGE("ERROR: In ProcessPingFrame() Invalid EncLen (%d).", EncLen);

@@ -845,15 +845,15 @@ Lost:
 			}
 			else if (strcmp(GUIMsg, "SENDID") == 0)
 			{
-				if (ProtocolState == DISC)
+				if (stationid_ok(&Callsign) && ProtocolState == DISC)
 					NeedID = TRUE;  // Send from background
 			}
 			else if (strcmp(GUIMsg, "TWOTONETEST") == 0)
 			{
-				if (ProtocolState == DISC)
+				if (stationid_ok(&Callsign) && ProtocolState == DISC)
 					NeedTwoToneTest = TRUE;  // Send from background
 			}
-			else if (strcmp(GUIMsg, "SENDCWID") == 0)
+			else if (stationid_ok(&Callsign) && strcmp(GUIMsg, "SENDCWID") == 0)
 			{
 				if (ProtocolState == DISC)
 					NeedCWID = TRUE;  // Send from background

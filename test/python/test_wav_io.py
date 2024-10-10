@@ -49,13 +49,20 @@ def test_contol_wav_io(verbose=1):
                 # CONSOLELOG 2 ensures that the filename of the WAV is
                 # written to stdout so that it can be parsed from
                 # res.stdout.
+                # MYCALL N0CALL sets the station callsign.  Like all
+                # host commands that initiate transmitting, TXFRAME
+                # will respond with a fault message if MYCALL is not
+                # set first.  This is done to ensure that an IDFrame
+                # can be sent when required.  Since the frames generated
+                # by this script will not actaully be transmitted, it
+                # is OK to use a fake callsign.
                 # DRIVELEVEL 30 reduces the volume of the signal in the
                 # WAV file.  This is not expected to impact the ability
                 # of ardopcf to demodulate/decode this WAV file, but it
                 # may be useful if a later stage of this testing uses
                 # noise added to the recording.
                 "--hostcommands",
-                f'CONSOLELOG 2;DRIVELEVEL 30;TXFRAME'
+                f'CONSOLELOG 2;MYCALL N0CALL;DRIVELEVEL 30;TXFRAME'
                 f' {frametype} {paramstr};CLOSE',
             ],
             capture_output=True,
@@ -227,13 +234,20 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                         # CONSOLELOG 2 ensures that the filename of the WAV is
                         # written to stdout so that it can be parsed from
                         # res.stdout.
+                        # MYCALL N0CALL sets the station callsign.  Like all
+                        # host commands that initiate transmitting, TXFRAME
+                        # will respond with a fault message if MYCALL is not
+                        # set first.  This is done to ensure that an IDFrame
+                        # can be sent when required.  Since the frames generated
+                        # by this script will not actaully be transmitted, it
+                        # is OK to use a fake callsign.
                         # DRIVELEVEL 30 reduces the volume of the signal in the
                         # WAV file.  This is not expected to impact the ability
                         # of ardopcf to demodulate/decode this WAV file, but it
                         # may be useful if a later stage of this testing uses
                         # noise added to the recording.
                         "--hostcommands",
-                        f'CONSOLELOG 2;DRIVELEVEL 30;TXFRAME'
+                        f'CONSOLELOG 2;MYCALL N0CALL;DRIVELEVEL 30;TXFRAME'
                         f' {frametype[:-1]}{suffix} {rdatahex}'
                         f' 0x{hex(sessionid)[2:]:>02};CLOSE',
                         # Using special audio device name "NOSOUND" tells

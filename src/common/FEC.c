@@ -31,21 +31,24 @@ extern BOOL blnOdd;
 extern char strType[18];
 extern char strMod[16];
 extern UCHAR bytMinQualThresh;
+extern unsigned int LastIDFrameTime;
 
 UCHAR bytLastFECDataFrameSent;
 
 char strCurrentFrameFilename[16];
-
-unsigned int dttLastFECIDSent;
 
 extern int intCalcLeader;  // the computed leader to use based on the reported Leader Length
 
 void ResetMemoryARQ();
 
 // Function to start sending FEC data
-
 BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL blnSendID)
 {
+	// Previously this function included a check to ensure that Callsign
+	// was set and valid.  This check is now done in ProcessCommandFromHost().
+	// Moving the check there helps provide a consistent fault message for
+	// any host command that attempts to initiate transmitting without first
+	// setting Callsign.
 	// Return True if OK false if problem
 
 	BOOL blnModeOK = FALSE;
@@ -60,8 +63,6 @@ BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL
 		ZF_LOGD("[ARDOPprotocol.StartFEC] %d bytes received while in FECSend state...append to data to send.", Len);
 		return TRUE;
 	}
-	else
-		dttLastFECIDSent = Now;
 
 	// Check to see that there is data in the buffer.
 
@@ -76,14 +77,6 @@ BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL
 	if (intRepeats < 0 || intRepeats > 5)
 	{
 		// Logs.Exception("[ARDOPprotocol.StartFEC] Repeats out of range: " & intRepeats.ToString)
-		return FALSE;
-	}
-
-	// check call sign
-
-	if (!stationid_ok(&Callsign))
-	{
-		// Logs.Exception("[ARDOPprotocol.StartFEC] Invalid call sign: " & MCB.Callsign)
 		return FALSE;
 	}
 
@@ -291,20 +284,13 @@ sendit:
 
 		txSleep(400);
 
-		if ((Now - dttLastFECIDSent) > 600000)  // 10 Mins
-		{
-			// Send ID every 10 Mins
-
-			unsigned char bytEncodedBytes[16];
-
-			if ((EncLen = Encode4FSKIDFrame(&Callsign, &GridSquare, bytEncodedBytes)) <= 0) {
-				ZF_LOGE("ERROR: In GetNextFECFrame() IDFrame Invalid EncLen (%d).", EncLen);
-				return FALSE;
-			}
-			Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
-
-			dttLastFECIDSent = Now;
-			return TRUE;
+		// While sending FEC data, only send an IDFrame before sending new data
+		// so as not to disrupt repeated frames.  Because some delay is
+		// possible, begin trying to send an IDFrame every 9 minutes rather than
+		// waiting for a full 10 minutes.
+		if(LastIDFrameTime != 0 && Now - LastIDFrameTime > 540000) {  // more than 9 minutes elapsed
+			SendID(NULL, "FECSend 10 minute ID");
+			return FALSE; // Don't repeat
 		}
 
 		FrameInfo(bytLastFECDataFrameSent, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType);

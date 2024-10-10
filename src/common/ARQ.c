@@ -21,12 +21,12 @@ extern int intLastRcvdFrameQuality;
 extern int intRmtLeaderMeasure;
 extern BOOL blnAbort;
 extern int intRepeatCount;
-extern unsigned int dttLastFECIDSent;
 extern unsigned int tmrSendTimeout;
 extern BOOL blnFramePending;
 extern int dttLastBusyTrip;
 extern int dttPriorLastBusyTrip;
 extern int dttLastBusyClear;
+extern unsigned int LastIDFrameTime;
 
 int wg_send_state(int cnum);
 int wg_send_rcall(int cnum, const char *call);
@@ -129,7 +129,6 @@ int	intReportedLeaderLen = 0;  // Zero out the Reported leader length the length
 BOOL blnLastPSNPassed = FALSE;  // the last PSN passed True for Odd, FALSE for even.
 BOOL blnInitiatedConnection = FALSE;  // flag to indicate if this station initiated the connection
 short dblAvgPECreepPerCarrier = 0;  // computed phase error creep
-int dttLastIDSent;  // date/time of last ID
 int	intTotalSymbols = 0;  // To compute the sample rate error
 
 extern int bytDataToSendLength;
@@ -147,7 +146,6 @@ int Encode4FSKControl(UCHAR bytFrameType, UCHAR bytSessionID, UCHAR * bytreturn)
 int IRSNegotiateBW(int intConReqFrameType);
 int GetNextFrameData(int * intUpDn, UCHAR * bytFrameTypeToSend, UCHAR * strMod, BOOL blnInitialize);
 BOOL CheckForDisconnect();
-BOOL Send10MinID();
 void ProcessPingFrame(char * bytData);
 
 void LogStats();
@@ -846,7 +844,19 @@ void SendData()
 		if (CheckForDisconnect())
 			return;
 
-		Send10MinID();  // Send ID if 10 minutes since last
+		// In an active ARQ Connection, only send an IDFrame when ProtocolState
+		// is ISS or IDLE.  If ProtocolState is IRS and an IDLEFRAME is
+		// received when an IDFrame is needed, BREAK to become ISS or IDLE.
+		// This leaves the possibility that a station that is IRS and receiving
+		// data (not IDLE) may be delayed in sending an IDFrame.  However, it is
+		// assumed that usually there will be enough back and forth between IRS
+		// and ISS that this is unlikely to last long.  Because some delay is
+		// possible, begin trying to send an IDFrame after 9 minutes rather than
+		// waiting for a full 10 minutes.
+		if(LastIDFrameTime != 0 && Now - LastIDFrameTime > 540000) {  // 9 minutes
+			blnEnbARQRpt = FALSE;  // Only send once.
+			SendID(&ARQStationLocal, "ARQ 10 minute ID (while ISS)");
+		}
 
 		if (bytDataToSendLength > 0)
 		{
@@ -1062,7 +1072,6 @@ void InitializeConnection()
 	blnLastPSNPassed = FALSE;  // the last PSN passed True for Odd, FALSE for even.
 	blnInitiatedConnection = FALSE;  // flag to indicate if this station initiated the connection
 	dblAvgPECreepPerCarrier = 0;  // computed phase error creep
-	dttLastIDSent = Now ;  // date/time of last ID
 	intTotalSymbols = 0;  // To compute the sample rate error
 	intSessionBW = 0;
 	bytLastACKedDataFrameType = 0;
@@ -1132,6 +1141,18 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 			ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame]  DISC frame received in ProtocolState DISC, Send END with SessionID= %XX Stay in DISC state", bytLastARQSessionID);
 
+			// Send END.  The other station should respond by immediately
+			// sending an IDFrame.  tmrFinalID should be set so that IDFrame
+			// will not be sent until after the other station's IDFrame, which
+			// may or may not include a CW ID, is finished.  Now + 3000 (3
+			// seconds) would be sufficient time for END plus the other
+			// station's IDFrame.  A CW ID (assumed worst case QQQ0QQQ) could
+			// take as long as 10 additional seconds, but is likely to be much
+			// less.  Rather than add a lot of extra delay, use Now + 3000, but
+			// also require handling of tmpFinalID to wait for the busy detector
+			// to indicate that the frequency is not in use.  Even with the
+			// delay used by the busy detector, this will normally be a lesser
+			// delay, especially when the other station does not send a CW ID.
 			tmrFinalID = Now + 3000;
 			blnEnbARQRpt = FALSE;
 
@@ -1164,6 +1185,13 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 		if (IsCallToMe(&LastDecodedStationCaller, &LastDecodedStationTarget, & bytPendingSessionID))  // (Handles protocol rules 1.2, 1.3)
 		{
+			if (! stationid_ok(&Callsign)) {
+				// ConReq must have matched a value in AuxCalls, but without MYCALL
+				// (Callsign) also set, transmitting is not permitted.
+				ZF_LOGI("[ProcessRcvdARQFrame] ConReq to me decoded, but not responding because MYCALL is not set.");
+				return;
+			}
+
 			BOOL blnLeaderTrippedBusy;
 
 			// This logic works like this:
@@ -1394,7 +1422,6 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				intLastARQDataFrameToHost = -1;
 				intTrackingQuality = -1;
 				intNAKctr = 0;
-				dttLastFECIDSent = Now;
 
 				blnEnbARQRpt = FALSE;
 				snprintf(HostCmd, sizeof(HostCmd), "CONNECTED %s %d", ARQStationRemote.str, intSessionBW);
@@ -1481,6 +1508,18 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				bytLastARQSessionID = bytSessionID;  // capture this session ID to allow answering DISC from DISC state if ISS missed Sent END
 
 				ClearDataToSend();
+				// Send END.  The other station should respond by immediately
+				// sending an IDFrame.  tmrFinalID should be set so that IDFrame
+				// will not be sent until after the other station's IDFrame, which
+				// may or may not include a CW ID, is finished.  Now + 3000 (3
+				// seconds) would be sufficient time for END plus the other
+				// station's IDFrame.  A CW ID (assumed worst case QQQ0QQQ) could
+				// take as long as 10 additional seconds, but is likely to be much
+				// less.  Rather than add a lot of extra delay, use Now + 3000, but
+				// also require handling of tmpFinalID to wait for the busy detector
+				// to indicate that the frequency is not in use.  Even with the
+				// delay used by the busy detector, this will normally be a lesser
+				// delay, especially when the other station does not send a CW ID.
 				tmrFinalID = Now + 3000;
 				blnDISCRepeating = FALSE;
 
@@ -1513,12 +1552,8 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 				SetARDOPProtocolState(DISC);
 
-				dttLastFECIDSent = Now;
-				if ((EncLen = Encode4FSKIDFrame(&ARQStationLocal, &GridSquare, bytEncodedBytes)) <= 0) {
-					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
-					return;
-				}
-				Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
+				// SendID will default to Callsign if ARQStationLocal is not valid.
+				SendID(&ARQStationLocal, "Rcvd END in IRSData or IRSfromISS ARQState");
 
 				InitializeConnection();
 				blnEnbARQRpt = FALSE;
@@ -1552,8 +1587,21 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				if (CheckForDisconnect())
 					return;
 
-				if ((AutoBreak && bytDataToSendLength > 0) || blnBREAKCmd)
-				{
+				if ((AutoBreak && bytDataToSendLength > 0) || blnBREAKCmd
+					|| (LastIDFrameTime != 0 && Now - LastIDFrameTime > 540000)  // 9 minutes, so BREAK
+				) {
+					// In an active ARQ Connection, only send an IDFrame when ProtocolState
+					// is ISS or IDLE.  If ProtocolState is IRS and an IDLEFRAME is
+					// received when an IDFrame is needed, BREAK to become ISS or IDLE.
+					// This leaves the possibility that a station that is IRS and receiving
+					// data (not IDLE) may be delayed in sending an IDFrame.  However, it is
+					// assumed that usually there will be enough back and forth between IRS
+					// and ISS that this is unlikely to last long.  Because some delay is
+					// possible, begin trying to send an IDFrame after 9 minutes rather than
+					// waiting for a full 10 minutes.
+					if(LastIDFrameTime != 0 && Now - LastIDFrameTime > 540000)  // 9 minutes
+						ZF_LOGD("Need 10 minute ID, but IRS, so BREAK on receiving IDLEFRAME");
+
 					// keep BREAK Repeats fairly short (preliminary value 1 - 3 seconds)
 					intFrameRepeatInterval = ComputeInterFrameInterval(1000 + rand() % 2000);
 
@@ -1724,16 +1772,50 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 		if (!blnFrameDecodedOK)
 			return;  // No decode so continue to wait
 
-		if (intFrameType >= DataACKmin && bytDataToSendLength > 0)  // If ACK and Data to send
-		{
-			ZF_LOGI("[ARDOPprotocol.ProcessedRcvdARQFrame] Protocol state IDLE, ACK Received with Data to send. Go to ISS Data state.");
+		if (intFrameType >= DataACKmin) {
+			if (bytDataToSendLength > 0)  // If ACK and Data to send
+			{
+				ZF_LOGI("[ARDOPprotocol.ProcessedRcvdARQFrame] Protocol state IDLE, ACK Received with Data to send. Go to ISS Data state.");
 
-			SetARDOPProtocolState(ISS);
-			ARQState = ISSData;
-			SendData(FALSE);
+				SetARDOPProtocolState(ISS);
+				ARQState = ISSData;
+				SendData(FALSE);
+				return;
+			}
+			// In an active ARQ Connection, only send an IDFrame when ProtocolState
+			// is ISS or IDLE.  If ProtocolState is IRS and an IDLEFRAME is
+			// received when an IDFrame is needed, BREAK to become ISS or IDLE.
+			// This leaves the possibility that a station that is IRS and receiving
+			// data (not IDLE) may be delayed in sending an IDFrame.  However, it is
+			// assumed that usually there will be enough back and forth between IRS
+			// and ISS that this is unlikely to last long.  Because some delay is
+			// possible, begin trying to send an IDFrame after 9 minutes rather than
+			// waiting for a full 10 minutes.
+			if(LastIDFrameTime != 0 && Now - LastIDFrameTime > 540000) {  // 9 minutes
+				blnEnbARQRpt = FALSE;  // Only send once.
+				SendID(&ARQStationLocal, "ARQ 10 minute ID (while IDLE)");
+
+				// Then send repeating IDLE
+				// The following is copied from SendData() when there is no more data
+				blnEnbARQRpt = TRUE;
+				blnLastFrameSentData = FALSE;
+				intFrameRepeatInterval = ComputeInterFrameInterval(2000);  // keep IDLE repeats at 2 sec
+
+				if ((EncLen = Encode4FSKControl(IDLEFRAME, bytSessionID, bytEncodedBytes)) <= 0) {
+					ZF_LOGE("ERROR: In SendData() for IDLE Invalid EncLen (%d).", EncLen);
+					return;
+				}
+				Mod4FSKDataAndPlay(IDLEFRAME, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
+
+				ZF_LOGI("[ARDOPprotocol.SendData]  Send IDLE with Repeat (after IDFrame), ProtocolState=IDLE ");
+				return;
+			}
+
+			ZF_LOGI("[ARDOPprotocol.ProcessedRcvdARQFrame] Protocol state IDLE, ACK Received with No Data to send. Ignore, will repeat IDLE.");
+			// DataACK but no data to send
+
 			return;
 		}
-
 		// process BREAK here Send ID if over 10 min.
 
 		if (intFrameType == BREAK)
@@ -1773,6 +1855,18 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 			ZF_LOGI("[STATUS: ARQ CONNECTION ENDED WITH %s]", ARQStationRemote.str);
 			snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ENDED WITH %s ", ARQStationRemote.str);
 			QueueCommandToHost(HostCmd);
+			// Send END.  The other station should respond by immediately
+			// sending an IDFrame.  tmrFinalID should be set so that IDFrame
+			// will not be sent until after the other station's IDFrame, which
+			// may or may not include a CW ID, is finished.  Now + 3000 (3
+			// seconds) would be sufficient time for END plus the other
+			// station's IDFrame.  A CW ID (assumed worst case QQQ0QQQ) could
+			// take as long as 10 additional seconds, but is likely to be much
+			// less.  Rather than add a lot of extra delay, use Now + 3000, but
+			// also require handling of tmpFinalID to wait for the busy detector
+			// to indicate that the frequency is not in use.  Even with the
+			// delay used by the busy detector, this will normally be a lesser
+			// delay, especially when the other station does not send a CW ID.
 			tmrFinalID = Now + 3000;
 			blnDISCRepeating = FALSE;
 			if ((EncLen = Encode4FSKControl(END, bytSessionID, bytEncodedBytes)) <= 0) {
@@ -1797,12 +1891,8 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 			QueueCommandToHost(HostCmd);
 			ClearDataToSend();
 
-			dttLastFECIDSent = Now;
-			if ((EncLen = Encode4FSKIDFrame(&ARQStationLocal, &GridSquare, bytEncodedBytes)) <= 0) {
-				ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
-				return;
-			}
-			Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
+			// SendID will default to Callsign if ARQStationLocal is not valid.
+			SendID(&ARQStationLocal, "Rcvd END in IDLE ProtocolState");
 
 			SetARDOPProtocolState(DISC);
 			blnEnbARQRpt = FALSE;
@@ -1873,7 +1963,6 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				blnEnbARQRpt = TRUE;  // Setup for repeats of the ConACK if no answer from IRS
 				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] Compatible bandwidth received from IRS ConAck: %d Hz", intSessionBW);
 				ARQState = ISSConAck;
-				dttLastFECIDSent = Now;
 
 				if ((EncLen = EncodeConACKwTiming(intFrameType, intReceivedLeaderLen, bytSessionID, bytEncodedBytes)) <= 0) {
 					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for ConAck->ConAck Invalid EncLen (%d).", EncLen);
@@ -2158,6 +2247,19 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 
 				bytLastARQSessionID = bytSessionID;  // capture this session ID to allow answering DISC from DISC state
 				blnDISCRepeating = FALSE;
+
+				// Send END.  The other station should respond by immediately
+				// sending an IDFrame.  tmrFinalID should be set so that IDFrame
+				// will not be sent until after the other station's IDFrame, which
+				// may or may not include a CW ID, is finished.  Now + 3000 (3
+				// seconds) would be sufficient time for END plus the other
+				// station's IDFrame.  A CW ID (assumed worst case QQQ0QQQ) could
+				// take as long as 10 additional seconds, but is likely to be much
+				// less.  Rather than add a lot of extra delay, use Now + 3000, but
+				// also require handling of tmpFinalID to wait for the busy detector
+				// to indicate that the frequency is not in use.  Even with the
+				// delay used by the busy detector, this will normally be a lesser
+				// delay, especially when the other station does not send a CW ID.
 				tmrFinalID = Now + 3000;
 				ClearDataToSend();
 				SetARDOPProtocolState(DISC);
@@ -2185,12 +2287,8 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL 
 				ClearDataToSend();
 				blnDISCRepeating = FALSE;
 
-				dttLastFECIDSent = Now;
-				if (EncLen = Encode4FSKIDFrame(&ARQStationLocal, &GridSquare, bytEncodedBytes) <= 0) {
-					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END->IDFrame Invalid EncLen (%d).", EncLen);
-					return;
-				}
-				Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
+				// SendID will default to Callsign if ARQStationLocal is not valid.
+				SendID(&ARQStationLocal, "Rcvd END in ISSData ARQState");
 
 				SetARDOPProtocolState(DISC);
 				InitializeConnection();
@@ -2398,30 +2496,6 @@ BOOL SendARQConnectRequest(const StationId* mycall, const StationId* target)
 	return TRUE;
 }
 
-
-// Function to send 10 minute ID
-
-BOOL Send10MinID()
-{
-	int dttSafetyBailout = 40;  // 100 mS intervals
-
-	if (Now - dttLastFECIDSent > 600000 && !blnDISCRepeating)
-	{
-		// Send an ID frame (Handles protocol rule 4.0)
-
-		blnEnbARQRpt = FALSE;
-
-		dttLastFECIDSent = Now;
-
-		if ((EncLen = Encode4FSKIDFrame(&ARQStationLocal, &GridSquare, bytEncodedBytes)) <= 0) {
-			ZF_LOGE("ERROR: In Send10MinID() Invalid EncLen (%d).", EncLen);
-			return FALSE;
-		}
-		Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
-		return TRUE;
-	}
-	return FALSE;
-}
 
 // Function to check for and initiate disconnect from a Host DISCONNECT command
 

@@ -8,7 +8,10 @@
 #include "common/ARDOPC.h"
 #include "common/wav.h"
 
-unsigned int pttOnTime;
+// pttOnTime is used both as a reference for how long audio has been playing
+// and as an indication of whether or not any transmissions have been made
+// since the last 10-minute ID.
+unsigned int pttOnTime = 0;
 
 #pragma warning(disable : 4244)  // Code does lots of float to int
 
@@ -21,6 +24,7 @@ FILE * fp1;
 extern short Dummy;
 extern int DriveLevel;
 extern BOOL WriteTxWav;
+extern unsigned int LastIDFrameTime;
 
 int wg_send_txframet(int cnum, const char *frame);
 
@@ -688,6 +692,10 @@ void initFilter(int Width, int Centre)
 
 	KeyPTT(TRUE);
 	pttOnTime = Now;
+	if (LastIDFrameTime == 0)
+		// This is the first transmission since the last IDFrame.  Schedule the
+		// next IDFrame to be sent in about 10 minutes unless one is sent sooner.
+		LastIDFrameTime = pttOnTime - 1;
 
 	SoundIsPlaying = TRUE;
 	StopCapture();
@@ -917,9 +925,8 @@ void Flush()
 
 
 
-// Function to make a CW ID Wave File
-
-void sendCWID(const StationId* station, BOOL blnPlay)
+// Send station id as FSK MORSE
+void sendCWID(const StationId * id)
 {
 	// This generates a phase synchronous FSK MORSE keying of strID
 	// FSK used to maintain VOX on some sound cards
@@ -954,12 +961,14 @@ void sendCWID(const StationId* station, BOOL blnPlay)
 	int idoffset;
 	char gui_frametype[15];
 
-	if (!stationid_ok(station)) {
+	if (!stationid_ok(id)) {
 		ZF_LOGW("Unable to send CWID due to unpopulated station ID");
 		return;
 	}
 
-	snprintf(gui_frametype, sizeof(gui_frametype), "CW.ID.%s", station->call);
+	ZF_LOGD("Sending CW ID of %s", id->call);
+
+	snprintf(gui_frametype, sizeof(gui_frametype), "CW.ID.%s", id->call);
 	wg_send_txframet(0, gui_frametype);
 
 	// Generate the dot samples (high tone) and space samples (low tone)
@@ -989,9 +998,9 @@ void sendCWID(const StationId* station, BOOL blnPlay)
 		for (i = 0; i < intDotSampCnt; i++)
 			SampleSink(intSpace[i]);
 
-	for (j = 0; j < strnlen(station->call, sizeof(station->call)); j++)
+	for (j = 0; j < strnlen(id->call, sizeof(id->call)); j++)
 	{
-		index = strchr(strAlphabet, station->call[j]);
+		index = strchr(strAlphabet, id->call[j]);
 		if (index)
 			idoffset = index - &strAlphabet[0];
 		else
