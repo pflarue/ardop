@@ -1600,15 +1600,15 @@ bool SendID(const StationId * id, char * reason)
 		// commands to transmit are designed to fail if Callsign is not set and
 		// automatic transmissions in response to received frames (ConReq ->
 		// ConAck, Ping -> PingAck) only respond to frames whose target callsign
-		// matches Callsign or a value in AuxCalls.  For those automatic
-		// responses, additional checks have been added so that a response to a
-		// value in AuxCalls will not proceed unless MyCall is also set.
-		// An argument could be made for responding to a ConReq for an AuxCall
-		// without setting MYCALL (Callsign), but I have chosen not to accept
-		// this.
-		// If this occurs, it may result in a bad loop condition as repeated
-		// attempts to send an IDFrame fail.  TODO: Is there a better response?
-		ZF_LOGE("MYCALL not set.  No valid StationID available for SendID.");
+		// matches Callsign or a value in AuxCalls.
+		// If this occurs, it could result in a bad loop condition as repeated
+		// attempts to send an IDFrame fail.  So, reset tmrFinalID and
+		// LastIDFrameTime to prevent that from happening.
+		ZF_LOGE(
+			"SendID() called with an invalid StationId and fallback to MYCALL"
+			" is also invalid!");
+		tmrFinalID = 0;
+		LastIDFrameTime = 0;
 		return false;
 	}
 	Len = snprintf(bytIDSent, sizeof(bytIDSent), " %s:[%s] ", id_to_send->str, GridSquare.grid);
@@ -1626,9 +1626,10 @@ bool SendID(const StationId * id, char * reason)
 	if (wantCWID)
 		sendCWID(id_to_send);
 
-	// LastIDFrameTime is reset after Mod4FSKDataAndPlay and sendCWID() are done.
-	// Setting it to zero indicates that no transmissions have been made since
-	// the last IDFrame was sent.
+	// tmrFinalID and LastIDFrameTime are reset after Mod4FSKDataAndPlay and
+	// sendCWID() are done.  Setting them to zero indicates that no
+	// transmissions have been made since the last IDFrame was sent.
+	tmrFinalID = 0;
 	LastIDFrameTime = 0;
 
 	return true;
@@ -1914,8 +1915,6 @@ void CheckTimers()
 
 	if (tmrFinalID && Now > tmrFinalID && !blnBusyStatus)
 	{
-		tmrFinalID = 0;
-
 		// SendID will default to Callsign if ARQStationFinalId is not valid.
 		SendID(&ARQStationFinalId, "ARQ FinalID");
 	}
@@ -2283,12 +2282,10 @@ void ProcessPingFrame(char * _bytData)
 			// Ack Ping
 			ZF_LOGI("[ProcessPingFrame] PING from %s>%s S:N=%d Qual=%d Reply=1", LastDecodedStationCaller.str, LastDecodedStationTarget.str, stcLastPingintRcvdSN, stcLastPingintQuality);
 
-			if (! stationid_ok(&Callsign)) {
-				// Ping must have matched a value in AuxCalls, but without MYCALL
-				// (Callsign) also set, transmitting is not permitted.
-				ZF_LOGI("[ProcessPingFrame] PINGACK reply to PING not sent because MYCALL is not set.");
-				return;
-			}
+			// An earlier version of this function would refuse to send a
+			// PingAck if Callsign was not valid.  The use of tmrFinalID to send
+			// an ID frame with lastDecodedStationTarget (which may have matched
+			// a value in AuxCalls instead of Callsign) eliminated that need.
 
 			if ((EncLen = EncodePingAck(PINGACK, stcLastPingintRcvdSN, stcLastPingintQuality, bytEncodedBytes)) <= 0) {
 				ZF_LOGE("ERROR: In ProcessPingFrame() Invalid EncLen (%d).", EncLen);
@@ -2297,6 +2294,32 @@ void ProcessPingFrame(char * _bytData)
 			Mod4FSKDataAndPlay(PINGACK, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 
 			SendCommandToHost("PINGREPLY");
+
+			// The mechanism built around tmrFinalID and ARQStationFinalId is
+			// used to send a station ID frame after an ARQ session has
+			// finished.  Reuse this mechanism to also send an ID frame after
+			// sending a PingAck, and to use the station ID that was the Ping's
+			// target for this IDFrame.  This target ID may match either
+			// Callsign or a value in AuxCalls.  Because of this, if the normal
+			// 10 minute ID timer was used to ID after a PingAck, it might not
+			// have used the same ID as the Ping's target.
+			if (tmrFinalID != 0)
+				// The only way that this would disrupt other use of tmrFinalID
+				// or ARQStationFinalId is if tmrFinalID is already set.  This
+				// is unlikely, but possible.  If it is, then do nothing and
+				// accept the station ID that will be sent for it is sufficient.
+				return;
+			// Set ARQStationFinalId to contain the target callsign from the Ping.
+			memcpy(&ARQStationFinalId, &LastDecodedStationTarget, sizeof(ARQStationFinalId));
+			// The response to tmrFinalID will be deferred if the busy detector
+			// indicates that the frequency is in use.  This will prevent the
+			// ID frame being sent until the sequence of repeated Pings is done.
+			// The sequence of Pings normally stops in response to the first
+			// PingAck, but may continue if the sender of the Pings fails to
+			// decode the PingAck.  So, set tmrFinalID to provide only a short
+			// initial delay.  This works well because the hold time of the busy
+			// detector is longer than the delay between repeated Ping frames.
+			tmrFinalID = Now + 3000;
 			return;
 		}
 	}
