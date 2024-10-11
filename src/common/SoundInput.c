@@ -3681,7 +3681,7 @@ BOOL DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 						ZF_LOGI("%s", HexData);
 						// reset frameLen so new corrections will overwrite prior (failed) corrections
 						frameLen = PriorFrameLen;
-						frameLen = CorrectRawDataWithRS(bytRawPartData, &bytData[frameLen], intDataLen, intRSLen, intFrameType, part);
+						frameLen = CorrectRawDataWithRS(bytRawPartData, &bytData[frameLen], intPartDataLen, intPartRSLen, intFrameType, part);
 						snprintf(HexData, sizeof(HexData), "bytRawPartData (part=%d)after RS:   ", part);
 						for (int i = 0; i < intPartDataLen + 1; ++i)
 							snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytRawPartData[i]);
