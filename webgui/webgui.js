@@ -352,6 +352,7 @@ window.addEventListener("load", function(evt) {
 	let rcvoverflowtimer = null;
 	let rcvunderflowtimer = null;
 	let lastRXtype = "";
+	let lastTXtype = "";
 	WebSocketClient.onOpen = function() {
 		// Connection to ardopcf established.
 		console.log("WS connection to ardopcf opened.  Notify ardopcf.");
@@ -544,6 +545,14 @@ window.addEventListener("load", function(evt) {
 				case "F": {
 					// TX Frame type
 					let txfrtype = decodestr(rdata, -1);
+					if ((txfrtype.endsWith(".E")
+							|| txfrtype.endsWith(".O")
+						) && txfrtype == lastTXtype
+					) {
+						txfrtype += " (REPEATED TYPE)"
+					} else if (txfrtype != "") {
+						lastTXtype = txfrtype;
+					}
 					let txe = document.getElementById("txtype");
 					if (txfrtype != "") {
 						txtlog.value += "TX Frame Type = " + txfrtype + "\n";
@@ -560,13 +569,11 @@ window.addEventListener("load", function(evt) {
 					// RX Frame type
 					let rxstatus = decodestr(rdata, 1);
 					let rxfrtype = decodestr(rdata, -1);
-					if (
-						document.getElementById("protocolmode").innerHTML == "ARQ"
-						&& (rxfrtype.endsWith(".E")
+					if ((rxfrtype.endsWith(".E")
 							|| rxfrtype.endsWith(".O")
 						) && rxfrtype == lastRXtype
 					) {
-						rxfrtype += " (REPEAT)"
+						rxfrtype += " (REPEATED TYPE)"
 					}
 					let rxe = document.getElementById("rxtype");
 					rxe.classList.remove("rxstate_pending");
@@ -598,7 +605,7 @@ window.addEventListener("load", function(evt) {
 						}, 5000);  // clear after 5 seconds
 						txtlog.value += "RX: " + rxfrtype + " PASS\n";
 						txtlog.scrollTo(0, txtlog.scrollHeight);
-						if (!rxfrtype.endsWith(" (REPEAT)"))
+						if (!rxfrtype.endsWith(" (REPEATED TYPE)"))
 							lastRXtype = rxfrtype;
 						break;
 					case "F":
@@ -610,7 +617,7 @@ window.addEventListener("load", function(evt) {
 						}, 5000);  // clear after 5 seconds
 						txtlog.value += "RX: " + rxfrtype + " FAIL\n";
 						txtlog.scrollTo(0, txtlog.scrollHeight);
-						if (!rxfrtype.endsWith(" (REPEAT)"))
+						if (!rxfrtype.endsWith(" (REPEATED TYPE)"))
 							lastRXtype = rxfrtype;
 						break;
 					}
@@ -1142,6 +1149,20 @@ window.addEventListener("load", function(evt) {
 	document.getElementById("avglenslider").oninput = function() {
 		throttledcontrol(setavglen, 250, avglencontroltimer);
 	}
+	document.getElementById("decrease-avg").onclick = function() {
+		let ale = document.getElementById("avglenslider");
+		let alv = Math.max(ale.min, Number(ale.value) - 1);
+		ale.value = alv;
+		document.getElementById("avglentext").innerHTML = "" + alv;
+		send_msg(new Uint8Array([0x9A, 0x7E, alv]), 3);
+	};
+	document.getElementById("increase-avg").onclick = function() {
+		let ale = document.getElementById("avglenslider");
+		let alv = Math.min(ale.max, Number(ale.value) + 1);
+		ale.value = alv;
+		document.getElementById("avglentext").innerHTML = "" + alv;
+		send_msg(new Uint8Array([0x9A, 0x7E, alv]), 3);
+	};
 	document.getElementById("plotscaleslider").oninput = function() {
 		plotscale = document.getElementById("plotscaleslider").value;
 		wfCanvas.width = plotscale * wfWidth;
@@ -1156,9 +1177,55 @@ window.addEventListener("load", function(evt) {
 		cnstCtx.fillRect(0, 0, plotscale * cnstWidth, plotscale * cnstHeight);
 		drawCnstGridlines();
 	}
+	document.getElementById("decrease-scale").onclick = function() {
+		let pse = document.getElementById("plotscaleslider");
+		plotscale = Math.max(pse.min, Number(pse.value) - 1);
+		pse.value = plotscale;
+		wfCanvas.width = plotscale * wfWidth;
+		wfCanvas.height = plotscale * wfHeight;
+		wfCtx.fillStyle = "#000000";
+		wfCtx.fillRect(0, 0, plotscale * wfWidth, plotscale * wfHeight);
+		spCanvas.width = plotscale * spWidth;
+		spCanvas.height = plotscale * spHeight;
+		cnstCanvas.width = plotscale * cnstWidth;
+		cnstCanvas.height = plotscale * cnstHeight;
+		cnstCtx.fillStyle = "#000000";
+		cnstCtx.fillRect(0, 0, plotscale * cnstWidth, plotscale * cnstHeight);
+		drawCnstGridlines();
+	};
+	document.getElementById("increase-scale").onclick = function() {
+		let pse = document.getElementById("plotscaleslider");
+		plotscale = Math.min(pse.max, Number(pse.value) + 1);
+		pse.value = plotscale;
+		wfCanvas.width = plotscale * wfWidth;
+		wfCanvas.height = plotscale * wfHeight;
+		wfCtx.fillStyle = "#000000";
+		wfCtx.fillRect(0, 0, plotscale * wfWidth, plotscale * wfHeight);
+		spCanvas.width = plotscale * spWidth;
+		spCanvas.height = plotscale * spHeight;
+		cnstCanvas.width = plotscale * cnstWidth;
+		cnstCanvas.height = plotscale * cnstHeight;
+		cnstCtx.fillStyle = "#000000";
+		cnstCtx.fillRect(0, 0, plotscale * cnstWidth, plotscale * cnstHeight);
+		drawCnstGridlines();
+	};
 	document.getElementById("drivelevelslider").oninput = function() {
 		throttledcontrol(setdrivelevel, 250, drivelevelcontroltimer);
 	}
+	document.getElementById("decrease-drivelevel").onclick = function() {
+		let dle = document.getElementById("drivelevelslider");
+		let dlv = Math.max(dle.min, Number(dle.value) - 1);
+		dle.value = dlv;
+		document.getElementById("driveleveltext").innerHTML = "" + dlv;
+		send_msg(new Uint8Array([0x8D, 0x7E, dlv]), 3);
+	};
+	document.getElementById("increase-drivelevel").onclick = function() {
+		let dle = document.getElementById("drivelevelslider");
+		let dlv = Math.min(dle.max, Number(dle.value) + 1);
+		dle.value = dlv;
+		document.getElementById("driveleveltext").innerHTML = "" + dlv;
+		send_msg(new Uint8Array([0x8D, 0x7E, dlv]), 3);
+	};
 
 	WebSocketClient.init("ws://" + document.location.host + "/ws");
 	document.getElementById("hostcommand").value = "";

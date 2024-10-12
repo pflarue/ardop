@@ -23,7 +23,8 @@
 			.txnak {background-color: lightpink;}
 			.txack {background-color: aquamarine;}
 			.state {background-color: #D0D0D0;}
-			.sltext {vertical-align: top;}
+			.sltext, .slbutton, .slider {vertical-align: middle;}
+			.slbutton {height: 3em; width: 3em;}
 			dt {font-weight: bold;}
 		</style>
 		<script src="webgui.js"></script>
@@ -74,17 +75,23 @@
 		<div>TX Frame Type: <span id="txtype"></span></div>
 		<div>
 			<span class="sltext">TX DriveLevel:</span>
+			<button class="slbutton" id="decrease-drivelevel">-</button>
 			<input type="range" min="0" max="100" value="100" class="slider" id="drivelevelslider">
+			<button class="slbutton" id="increase-drivelevel">+</button>
 			<span class="sltext" id="driveleveltext"></span>
 		</div>
 		<div>
 			<span class="sltext">Plot Averaging:</span>
+			<button class="slbutton" id="decrease-avg">-</button>
 			<input type="range" min="1" max="10" value="1" class="slider" id="avglenslider">
+			<button class="slbutton" id="increase-avg">+</button>
 			<span class="sltext" id="avglentext"></span>
 		</div>
 		<div>
 			<span class="sltext">Plot Scale:</span>
+			<button class="slbutton" id="decrease-scale">-</button>
 			<input type="range" min="1" max="8" value="1" class="slider" id="plotscaleslider">
+			<button class="slbutton" id="increase-scale">+</button>
 		</div>
 		<div>
 			<button id="send2tone">Send2Tone</button>
@@ -227,16 +234,24 @@
 			were unable to decode some received data.
 			</p><p>
 			Received DataACK and DataNAK frames include a value indicating the quality of your
-			sent frame as recieved by the other station.  This quality is shown in the <b>RX
+			sent frame as received by the other station.  This quality is shown in the <b>RX
 			Frame Type</b> field along with the Frame Type.
 			</p><p>
-			In ARQ Protocol Mode, if a station does not receive a DataACK in response to
-			sending a data frame, it will re-send that frame.  When a repeated data frame
-			is received, the <b>RX Frame Type</b> field will show '(REPEAT)' after the frame
-			type.  If this occurs after you send a DataACK frame, it probably means that
-			the other station did not receive that DataACK.  This is only shown in ARQ
-			Protocol Mode, and only for data frames (not for control frames like IDLE or
-			BREAK).
+			If a transmitted or received data frame type matches the previously transmitted or
+			received data frame type, then the <b>TX Frame Type</b> or <b>RX Frame Type</b> field
+			will show '(REPEATED TYPE)' after the frame type. This is only shown for data frames
+			(not for control frames like IDLE or BREAK).  In ARQ Protocol Mode, a frame is repeated
+			because a DataNAK was received or because no DataACK received.  So, if your station
+			correctly decoded a data frame and sent a DataACK, but the next frame is a REPEATED TYPE,
+			this means that the other station did not correctly decode your DataACK.  In ARQ Protocol
+			Mode, REPEATED TYPE always means that a duplicate copy of the data frame is being sent
+			or received.  In FEC Protocol Mode, frames are sometimes sent multiple times to increase
+			the likelihood that they will be received correctly.  Unlike in ARQ Protocol Mode, in FEC
+			Protocol Mode, it is also possible that consecutively received frames may have the same type
+			but diffent content.  This is most likely to occur when they are sent by different stations.
+			Ardopcf's Memory ARQ feature allows information from repeated copies of a received frame
+			to be combined to increase the likelihood of correctly decoding it, even when no single
+			copy could be correctly be decoded on its own.
 			</p><p>
 			The <b>'TX DriveLevel'</b> slider linearly scales the amplitude of the audio sent to
 			your radio by ardopcf.  This, along with your radio's settings and the 'speaker'
@@ -274,17 +289,26 @@
 			</p><p>
 			The <b>'Send2Tone'</b> button causes ardopcf to transmit a 5 second two tone signal
 			similar, but longer than what is used as the leader at the start of all Ardop
-			frames.  This will not be sent if the Protocol 'STATE', as shown near the top
-			of this page, is not 'DISC' for disconnected.  An alert is displayed for this
-			failure.
+			frames.  If MYCALL has not been set, such that '(MYCALL NOT SET)' is shown, then this
+			frame signal cannot be sent, and an alert is displayed instead.  This restriction
+			ensures that your station ID can be sent after all transmissions.  Normally MYCALL
+			is set when a host program such as Pat Winlink connects to ardopcf.  If you want
+			to be able to use Send2Tone before the host program connects, you can set MYCALL
+			upon starting ardopcf with the --hostcommands option.  This signal will also not
+			be sent if the Protocol 'STATE', as shown near the top of this page, is not 'DISC'
+			for disconnected.  An alert is displayed for this failure.
 			</p><p>
 			The <b>'SendID'</b> button causes ardopcf to transmit an ID frame containing your
-			callsign.  If MYCALL has not been set, such that '(MYCALL NOT SET)', then this
+			callsign.  If MYCALL has not been set, such that '(MYCALL NOT SET)' is shown, then this
 			frame cannot be sent, and an alert is displayed instead.  Similarly, this will
 			not be sent if the Protocol 'STATE', as shown near the top of this page, is
 			not 'DISC' for disconnected.  An alert is displayed for this failure as well.
 			If a Maidenhead grid square indicating your location has been set by the Host
-			program, this is also included in an ID frame.
+			program, this is also included in an ID frame.  Host programs can also optionally
+			set ardopcf to send a CW ID whenever an ID frame is sent.  In addition to being
+			sent by pressing this button, ID frames are sent every 9-10 minutes when
+			transmitting.  They are also automatically sent at the end of an ARQ session, and
+			after sending a PingACK in response to a received Ping.
 			</p><p>
 			Either of these transmissions may be useful for antenna tuning or for making
 			initial adjustments to DRIVELEVEL settings.  However, <u>the various frame types
