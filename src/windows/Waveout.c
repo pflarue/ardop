@@ -100,7 +100,7 @@ WAVEHDR inheader[5] =
 WAVEOUTCAPS pwoc;
 WAVEINCAPS pwic;
 
-void add_noise(short *samples, unsigned int nSamples, short stddev);
+int add_noise(short *samples, unsigned int nSamples, short stddev);
 short InputNoiseStdDev = 0;
 
 int InitSound(BOOL Quiet);
@@ -736,15 +736,18 @@ void PollReceivedSamples()
 		short * ptr = &inbuffer[inIndex][0];
 		int i;
 
-		add_noise(inbuffer[inIndex], ReceiveSize, InputNoiseStdDev);
-
-		for (i = 0; i < ReceiveSize; i++)
-		{
-			if (*(ptr) < min)
-				min = *ptr;
-			else if (*(ptr) > max)
-				max = *ptr;
-			ptr++;
+		if (add_noise(inbuffer[inIndex], ReceiveSize, InputNoiseStdDev) > 0) {
+			max = 32767;
+			min = -32768;
+		} else {
+			for (i = 0; i < ReceiveSize; i++)
+			{
+				if (*(ptr) < min)
+					min = *ptr;
+				else if (*(ptr) > max)
+					max = *ptr;
+				ptr++;
+			}
 		}
 
 		CurrentLevel = ((max - min) * 75) /32768;  // Scale to 150 max
@@ -760,15 +763,17 @@ void PollReceivedSamples()
 			if ((Now - lastlevelreport) > 10000)  // 10 Secs
 			{
 				lastlevelreport = Now;
-				// Report input peaks to host if in debug mode or if close to clipping
-				if (max >= 32000 || ZF_LOG_ON_DEBUG)
+				// Report input peaks to host and log if CONSOLELOG is ZF_LOG_DEBUG (2) or ZF_LOG_VERBOSE (1) or if close to clipping
+				// TODO: Are these good conditions for logging (and sending to host) Input Peaks values?
+				// Conditions were changed with the introduction of ZF_LOG, but are now restored.
+				if (max >= 32000 || ardop_log_get_level_console() <= ZF_LOG_DEBUG)
 				{
 					char HostCmd[64] = "";
 					snprintf(HostCmd, sizeof(HostCmd), "INPUTPEAKS %d %d", min, max);
 					SendCommandToHostQuiet(HostCmd);
 					ZF_LOGD("Input peaks = %d, %d", min, max);
-					// A user NOT in debug mode will see this message if they are clipping
-					if (! ZF_LOG_ON_DEBUG)
+					// A user with the default of CONSOLELOG = ZF_LOG_INFO will see this message if they are close to clipping
+					if (ardop_log_get_level_console() > ZF_LOG_DEBUG)
 					{
 						ZF_LOGI(
 							"Your input signal is probably clipping.  If you"

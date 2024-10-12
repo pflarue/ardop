@@ -52,9 +52,11 @@ short grand_s16(short stddev) {
 }
 
 
-void add_noise(short *samples, unsigned int nSamples, short stddev) {
+// Return number of samples that were clipped
+int add_noise(short *samples, unsigned int nSamples, short stddev) {
+	int clipcount = 0;
 	if (stddev == 0)
-		return;
+		return 0;
 
 	// In case stsddev has changed, discard the first value.
 	grand_s16(stddev);
@@ -62,11 +64,16 @@ void add_noise(short *samples, unsigned int nSamples, short stddev) {
 	short noise = 0;
 	for (unsigned i = 0; i < nSamples; i++) {
 		noise = grand_s16(stddev);
-		if (samples[i] + noise < -32769)
+		if (samples[i] + noise < -32769) {
 			samples[i] = -32768;
-		else if (samples[i] + noise > 32767)
+			++clipcount;
+		}
+		else if (samples[i] + noise > 32767) {
 			samples[i] = 32767;
+			++clipcount;
+		}
 		else
 			samples[i] += noise;
 	}
+	return clipcount;
 }

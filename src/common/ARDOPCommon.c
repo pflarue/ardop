@@ -64,7 +64,7 @@ extern char CaptureDevice[80];
 extern char PlaybackDevice[80];
 
 extern short InputNoiseStdDev;
-void add_noise(short *samples, unsigned int nSamples, short stddev);
+int add_noise(short *samples, unsigned int nSamples, short stddev);
 
 int extraDelay = 0;  // Used for long delay paths eg Satellite
 int	intARQDefaultDlyMs = 240;
@@ -545,6 +545,7 @@ int decode_wav()
 	const unsigned int blocksize = 240;  // Number of 16-bit samples to read at a time
 	int WavFileCount = 0;
 	char *nextHostCommand = HostCommands;
+	bool warnedClipping = false;  // Use this to only log warning about clipping once.
 
 	// Seed the random number generator.  This is useful if INPUTNOISE is being
 	// used.  Seeding is normally done in ardopmain(), which is bypassed when
@@ -638,7 +639,14 @@ int decode_wav()
 			WavNow += blocksize * 1000 / 12000;
 			if ((Now - NowOffset) % 100 == 0)  // time stamp at 100 ms intervals
 				ZF_LOGV("%s: %.3f sec (%.3f)", DecodeWav[WavFileCount], (Now - NowOffset)/1000.0, Now/1000.0);
-			add_noise(samples, blocksize, InputNoiseStdDev);
+			if (add_noise(samples, blocksize, InputNoiseStdDev) > 0 && !warnedClipping) {
+				// The warning normally logged when audio is too loud does not
+				// appear when using decode_wav().  So, add it here.
+				ZF_LOGI(
+					"WARNING: In decode_wav(), samples are clipped after adding"
+					" noise because they exceeded the range of a 16-bit integer.");
+				warnedClipping = true;
+			}
 			ProcessNewSamples(samples, blocksize);
 			nSamples -= blocksize;
 		}
@@ -657,7 +665,14 @@ int decode_wav()
 		WavNow += blocksize * 1000 / 12000;
 		if ((Now - NowOffset) % 100 == 0)  // time stamp at 100 ms intervals
 			ZF_LOGV("%s: %.3f sec (%.3f)", DecodeWav[WavFileCount], (Now - NowOffset)/1000.0, Now/1000.0);
-		add_noise(samples, blocksize, InputNoiseStdDev);
+		if (add_noise(samples, blocksize, InputNoiseStdDev) > 0 && !warnedClipping) {
+			// The warning normally logged when audio is too loud does not
+			// appear when using decode_wav().  So, add it here.
+			ZF_LOGI(
+				"WARNING: In decode_wav(), samples are clipped after adding"
+				" noise because they exceeded the range of a 16-bit integer.");
+			warnedClipping = true;
+		}
 		ProcessNewSamples(samples, blocksize);
 		nSamples = 0;
 		fclose(wavf);
