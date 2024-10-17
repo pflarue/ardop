@@ -859,7 +859,12 @@ void ProcessCommandFromHost(char * strCMD)
 				LeaderLength = (i + 9) /10;
 				LeaderLength *= 10;  // round to 10 mS
 				// Also set this to intARQDefaultDlyMs to make this equivalent
-				// to the DEPRECATED --leaderlength command line option.
+				// to the obsolete --leaderlength command line option.
+				// TODO:  Need to review use of LeaderLength, intARQDefaultDlyMS,
+				// and intCalcLeader.  It appears that calculation of optimum
+				// leader length (see CalculateOptimumLeader()) is not being done.
+				// It this OK or might implementing (or re-implementing) this
+				// improve reliability under some conditions?
 				intARQDefaultDlyMs = LeaderLength;
 				sprintf(cmdReply, "%s now %d", strCMD, LeaderLength);
 				SendReplyToHost(cmdReply);

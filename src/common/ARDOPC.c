@@ -96,6 +96,8 @@ int SpectrumActive = 0;  // Spectrum display off
 StationId ConnectToCall;
 
 int LeaderLength = 240;
+int TrailerLength = 20;
+int extraDelay = 0;  // Used for long delay paths eg Satellite
 unsigned int ARQTimeout = 120;
 int TuningRange = 100;
 int ARQConReqRepeats = 5;
@@ -220,9 +222,6 @@ int closedByPosixSignal = 0;
 BOOL blnCodecStarted = FALSE;
 
 unsigned int dttNextPlay = 0;
-
-extern BOOL InitRXO;
-extern bool DeprecationWarningsIssued;
 
 const UCHAR bytValidFrameTypesALL[] = {
 	DataNAKmin, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
@@ -671,19 +670,10 @@ void ardopmain()
 
 	tmrPollOBQueue = Now + 10000;
 
-	if (InitRXO)
-		setProtocolMode("RXO");
-	else
-		setProtocolMode("ARQ");
+	// Always start in ARQ ProtocolMode.  Use --hostcommands to start in another
+	// ProtocolMode.
+	setProtocolMode("ARQ");
 
-	if (DeprecationWarningsIssued) {
-		ZF_LOGE(
-			"*********************************************************************\n"
-			"* WARNING: DEPRECATED command line parameters used.  Details shown  *\n"
-			"* above.  You may need to scroll up or review the Debug Log file to *\n"
-			"* see those details                                                 *\n"
-			"*********************************************************************\n");
-	}
 	while(!blnClosing)
 	{
 		if (nextHostCommand != NULL) {

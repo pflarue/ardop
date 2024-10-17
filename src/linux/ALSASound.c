@@ -46,7 +46,6 @@ int CloseSoundCard();
 int PackSamplesAndSend(short * input, int nSamples);
 BOOL WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite);
 VOID processargs(int argc, char * argv[]);
-void Send5SecTwoTone();
 int wg_send_currentlevel(int cnum, unsigned char level);
 int wg_send_pttled(int cnum, bool isOn);
 int wg_send_pixels(int cnum, unsigned char *data, size_t datalen);
@@ -71,10 +70,8 @@ BOOL UseRightRX = TRUE;
 BOOL UseLeftTX = TRUE;
 BOOL UseRightTX = TRUE;
 
-extern BOOL InitRXO;
 extern BOOL WriteRxWav;
 extern BOOL WriteTxWav;
-extern BOOL TwoToneAndExit;
 extern BOOL FixTiming;
 extern char DecodeWav[5][256];
 extern int WavNow;  // Time since start of WAV file being decoded
@@ -581,18 +578,6 @@ int platform_main(int argc, char * argv[])
 
 	if (sigaction(SIGPIPE, &act, NULL) < 0)
 		perror ("SIGPIPE");
-
-	if (TwoToneAndExit)
-	{
-		if (!InitSound())
-		{
-			ZF_LOGF("Error in InitSound().  Stopping ardop.");
-			return (0);
-		}
-		ZF_LOGI("Sending a 5 second 2-tone signal. Then exiting ardop.");
-		Send5SecTwoTone();
-		return (0);
-	}
 
 	ardopmain();
 
