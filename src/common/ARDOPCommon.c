@@ -66,14 +66,10 @@ extern char PlaybackDevice[80];
 extern short InputNoiseStdDev;
 int add_noise(short *samples, unsigned int nSamples, short stddev);
 
-int extraDelay = 0;  // Used for long delay paths eg Satellite
 int	intARQDefaultDlyMs = 240;
-int TrailerLength = 20;
 int wg_port = 0;  // If not changed from 0, do not use WebGui
-BOOL InitRXO = FALSE;
 BOOL WriteRxWav = FALSE;
 BOOL WriteTxWav = FALSE;
-BOOL TwoToneAndExit = FALSE;
 BOOL UseSDFT = FALSE;
 BOOL FixTiming = TRUE;
 BOOL WG_DevMode = FALSE;
@@ -85,15 +81,11 @@ char DecodeWav[5][256] = {"", "", "", "", ""};
 // provided as a command line parameter.  These are to be interpreted at
 // startup of ardopcf as if they were issued by a connected host program
 char HostCommands[3000] = "";
-bool DeprecationWarningsIssued = false;
 
 int PTTMode = PTTRTS;  // PTT Control Flags.
 
 struct sockaddr HamlibAddr;  // Dest for above
 int useHamLib = 0;
-
-
-extern int LeaderLength;
 
 extern BOOL UseLeftRX;
 extern BOOL UseRightRX;
@@ -110,15 +102,10 @@ static struct option long_options[] =
 	{"cat",  required_argument, 0 , 'c'},
 	{"keystring",  required_argument, 0 , 'k'},
 	{"unkeystring",  required_argument, 0 , 'u'},
-	{"extradelay",  required_argument, 0 , 'e'},
-	{"leaderlength",  required_argument, 0 , 'x'},
-	{"trailerlength",  required_argument, 0 , 't'},
 	{"webgui",  required_argument, 0 , 'G'},
-	{"receiveonly", no_argument, 0, 'r'},
 	{"writewav",  no_argument, 0, 'w'},
 	{"writetxwav",  no_argument, 0, 'T'},
 	{"decodewav",  required_argument, 0, 'd'},
-	{"twotone", no_argument, 0, 'n'},
 	{"sdft", no_argument, 0, 's'},
 	{"ignorealsaerror", no_argument, 0, 'A'},
 	{"help",  no_argument, 0 , 'h'},
@@ -131,46 +118,34 @@ char HelpScreen[] =
 	"defaults are port = 8515, capture device ARDOP playback device ARDOP\n"
 	"If you need to specify capture and playback devices you must specify port\n"
 	"\n"
-	"port is TCP Port Number\n"
+	"port is TCP Command Port Number.  Data port number is automatically 1 higher.\n"
 	"\n"
 	"Optional Paramters\n"
+	"-h or --help                         Display this help screen.\n"
 	"-l path or --logdir path             Path for log files\n"
 	"-H string or --hostcommands string   String of semicolon separated host commands to apply\n"
 	"                                       to ardopcf during startup, as if they had come from\n"
-	"                                       a connected host.  Since this duplicates the\n"
-	"                                       functionality of several existing optional parameters,\n"
-	"                                       they are marked below as (D) for deprecated.\n"
-	"                                       This indicates that they will be removed in a future\n"
-	"                                       release of ardopcf, and that their use should immediately\n"
-	"                                       be discontinued.  Information about replacement host\n"
-	"                                       commands is given for all deprecated parameters.\n"
+	"                                       a connected host.  This provides some capabilities\n"
+	"                                       provided by obsolete command line options available\n"
+	"                                       from earlier versions of ardopcf and ardopc.\n"
 	"-m or --nologfile                    Don't write log files. Use console output only.\n"
 	"-c device or --cat device            Device to use for CAT Control\n"
 	"-p device or --ptt device            Device to use for PTT control using RTS\n"
-#ifdef LINBPQ
-	"                                     or CM108-like Device to use for PTT\n"
-#else
+	// TODO: Verify that this actually works with a CM108-like device for PTT
 	"                                     or VID:PID of CM108-like Device to use for PTT\n"
-#endif
 	"-g [Pin]                             GPIO pin to use for PTT (ARM Only)\n"
 	"                                     Default 17. use -Pin to invert PTT state\n"
 	"-k string or --keystring string      String (In HEX) to send to the radio to key PTT\n"
 	"-u string or --unkeystring string    String (In HEX) to send to the radio to unkey PTT\n"
 	"-L use Left Channel of Soundcard for receive in stereo mode\n"
 	"-R use Right Channel of Soundcard for receive in stereo mode\n"
-	"-e val or --extradelay val           Extend no response timeout for use on paths with long delay\n"
-	"(D) -x val or --leaderlength val     Sets Leader Length (mS)\n"
-	"-----> Use -H \"LEADER #\" instead, where # is an integer in the range or 120 to 2500 (mS)\n"
-	"(D) -t val or --trailerlength val    Sets Trailer Length (mS)\n"
-	"-----> Use -H \"TRAILER #\" instead, where # is an integer in the range or 0 to 200 (mS)\n"
+	"-y use Left Channel of Soundcard for transmit in stereo mode\n"
+	"-z use Right Channel of Soundcard for transmit in stereo mode\n"
 	"-G port or --webgui port             Enable WebGui and specify port number.\n"
-	"(D) -r or --receiveonly              Start in RXO (receive only) mode.\n"
-	"-----> Use -H \"PROTOCOLMODE RXO\" instead\n"
 	"-w or --writewav                     Write WAV files of received audio for debugging.\n"
 	"-T or --writetxwav                   Write WAV files of sent audio for debugging.\n"
 	"-d pathname or --decodewav pathname  Pathname of WAV file to decode instead of listening.\n"
-	"(D) -n or --twotone                  Send a 5 second two tone signal and exit.\n"
-	"-----> Use -H \"TWOTONETEST;CLOSE\" instead\n"
+	"                                       Repeat up to 5 times, multiple WAV files."
 	"-s or --sdft                         Use the alternative Sliding DFT based 4FSK decoder.\n"
 	"-A or --ignorealsaerror              Ignore ALSA config error that causes timing error.\n"
 	"                                       DO NOT use -A option except for testing/debugging,\n"
@@ -197,7 +172,7 @@ void processargs(int argc, char * argv[])
 	{
 		int option_index = 0;
 
-		c = getopt_long(argc, argv, "l:H:mc:p:g::k:u:e:G:x:hLRyt:rzwTd:nsA", long_options, &option_index);
+		c = getopt_long(argc, argv, "l:H:mc:p:g::k:u:G:hLRyzwTd:sA", long_options, &option_index);
 
 
 		// Check for end of operation or error
@@ -336,50 +311,8 @@ void processargs(int argc, char * argv[])
 			UseRightTX = 1;
 			break;
 
-		case 'e':
-			extraDelay = atoi(optarg);
-			break;
-
 		case 'G':
 			wg_port = atoi(optarg);
-			break;
-
-		case 'x':
-			printf(
-				"*********************************************************************\n"
-				"* WARNING: The -x and --leaderlength parameters are DEPRECATED.     *\n"
-				"* They will be eliminated in a future release of ardopcf.  So,      *\n"
-				"* their use should be immediately discontinued.  Use                *\n"
-				"* -H \"LEADER #\" instead, where # is an integer in the range of      *\n"
-				"* 120 to 2500 (mS).                                                 *\n"
-				"*********************************************************************\n");
-			intARQDefaultDlyMs = LeaderLength = atoi(optarg);
-			DeprecationWarningsIssued = true;
-			break;
-
-		case 't':
-			printf(
-				"*********************************************************************\n"
-				"* WARNING: The -t and --trailerlength parameters are DEPRECATED.    *\n"
-				"* They will be eliminated in a future release of ardopcf.  So,      *\n"
-				"* their use should be immediately discontinued.  Use                *\n"
-				"* -H \"TRAILER #\" instead, where # is an integer in the range of     *\n"
-				"* 0 to 200 (mS).                                                    *\n"
-				"*********************************************************************\n");
-			DeprecationWarningsIssued = true;
-			TrailerLength = atoi(optarg);
-			break;
-
-		case 'r':
-			printf(
-				"*********************************************************************\n"
-				"* WARNING: The -r and --receiveonly parameters are DEPRECATED.      *\n"
-				"* They will be eliminated in a future release of ardopcf.  So,      *\n"
-				"* their use should be immediately discontinued.  Use                *\n"
-				"* -H \"PROTOCOLMODE RXO\" instead.                                    *\n"
-				"*********************************************************************\n");
-			DeprecationWarningsIssued = true;
-			InitRXO = TRUE;
 			break;
 
 		case 'w':
@@ -397,18 +330,6 @@ void processargs(int argc, char * argv[])
 				printf(
 					"Too many WAV files specified with -d/--decodewav.  %s will"
 					" not be used.\n", optarg);
-			break;
-
-		case 'n':
-			printf(
-				"*********************************************************************\n"
-				"* WARNING: The -n and --twotonetest parameters are DEPRECATED.      *\n"
-				"* They will be eliminated in a future release of ardopcf.  So,      *\n"
-				"* their use should be immediately discontinued.  Use                *\n"
-				"* -H \"TWOTONETEST;CLOSE\" instead.                                   *\n"
-				"*********************************************************************\n");
-			DeprecationWarningsIssued = true;
-			TwoToneAndExit = TRUE;
 			break;
 
 		case 's':
@@ -554,14 +475,6 @@ int decode_wav()
 	gettimeofday(&t1, NULL);
 	srand(t1.tv_usec + t1.tv_sec);
 
-	if (DeprecationWarningsIssued) {
-		ZF_LOGE(
-			"*********************************************************************\n"
-			"* WARNING: DEPRECATED command line parameters used.  Details shown  *\n"
-			"* above.  You may need to scroll up or review the Debug Log file to *\n"
-			"* see those details                                                 *\n"
-			"*********************************************************************\n");
-	}
 	while (nextHostCommand != NULL) {
 		// Process the next host command from the --hostcommands
 		// command line argument.

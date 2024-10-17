@@ -121,9 +121,7 @@ LARGE_INTEGER NewTicks;
 
 int LastNow;
 
-extern void Generate50BaudTwoToneLeaderTemplate();
 extern BOOL blnDISCRepeating;
-void Send5SecTwoTone();
 
 extern struct sockaddr HamlibAddr;  // Dest for above
 extern int useHamLib;
@@ -135,7 +133,6 @@ extern int WavNow;  // Time since start of WAV file being decoded
 extern char DecodeWav[5][256];
 extern BOOL WriteTxWav;
 extern BOOL WriteRxWav;
-extern BOOL TwoToneAndExit;
 struct WavFile *rxwf = NULL;
 struct WavFile *txwff = NULL;
 // writing unfiltered tx audio to WAV disabled
@@ -482,17 +479,6 @@ int platform_main(int argc, char * argv[])
 	if(!SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS))
 		printf("Failed to set High Priority (%d)\n"), GetLastError();
 
-	if (TwoToneAndExit)
-	{
-		if (!InitSound(TRUE))
-		{
-			ZF_LOGF("Error in InitSound().  Stopping ardop.");
-			return (0);
-		}
-		ZF_LOGI("Sending a 5 second 2-tone signal. Then exiting ardop.");
-		Send5SecTwoTone();
-		return (0);
-	}
 	ardopmain();
 	return (0);
 }
