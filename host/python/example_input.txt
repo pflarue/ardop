@@ -6,30 +6,30 @@
 # Use the -n or --nohelp command line option to not print the interactive usage instructions
 # python diagnostichost.py --nohelp --files example_input.txt
 
-# Lines beginning with a single colon (:) are interpreted as host commands for
-# Ardop.  Lines beginning with two colons (::) are interpreted as internal
-# commands for diagnostichost.py.
+# Lines beginning with a single exclamation point (!) are interpreted as host
+# commands for Ardop.  Lines beginning with two exclamation points (!!) are
+# interpreted as internal commands for diagnostichost.py.
 
 # Commands and Data are sent to Ardop on two different ports.  So, the relative
 # order in which Commands and Data are processed may not be the same as the
 # order in which they are entered.  A "BUFFER" response is returned on the
 # Command port for every block of data submitted to the Data port.  Until that
 # "BUFFER" response is received, the data may or may not have been accepted.
-# ::pause can be used give Ardop time to respond for non-interactive use.
+# !!pause can be used give Ardop time to respond for non-interactive use.
 
 # Most Ardop host commands are case insensitive
 
 # Get the version string for the Ardop implementation that is running.
-:VERSION
+!VERSION
 
 # set the transmit drive level
-:DRIVELEVEL 90
+!DRIVELEVEL 90
 
 # set the level of detail written to the debug log file
-:LOGLEVEL 2
+!LOGLEVEL 2
 
 # set the level of detail written to the conosole
-:CONSOLELOG 3
+!CONSOLELOG 3
 
 # enter some text data
 This is some text data
@@ -37,24 +37,24 @@ This is some text data
 # \xHH can be used to enter text or non-text data
 \x00\x20\xff\x40
 
-# ::rndtXX adds XX random printable text bytes
-::rndt10
+# !!rndtXX adds XX random printable text bytes
+!!rndt10
 
-# ::rndXX adds XX random bytes
-::rnd10
+# !!rndXX adds XX random bytes
+!!rnd10
 
 # Allow some time for Ardop to catch up.  For non-interactive use where
 # sequencing is really important, consider adapting diagnostichost.py to build a
 # tool that watches for and reacts to responses from Ardop.  That would be much
 # more reliable than trying to predict timing.
-::pause
+!!pause
 
 # Clear all data that has been sent to Ardop.  Expect two CMD responses to
-# :PURGEBUFFER.  Expect "BUFFER 0" followed by "PURGEBUFFER"
-:PURGEBUFFER
-::pause
+# !PURGEBUFFER.  Expect "BUFFER 0" followed by "PURGEBUFFER"
+!PURGEBUFFER
+!!pause
 
-# ::zerosXX adds XX null \x00 bytes
-::zeros10
+# !!zerosXX adds XX null \x00 bytes
+!!zeros10
 # If you uncomment the following line, then diagnostichost.py will exit
-#::quit
+#!!quit
