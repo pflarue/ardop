@@ -2615,10 +2615,7 @@ void LogStats()
 	int intTotPSKDecodes = intGoodPSKFrameDataDecodes + intFailedPSKFrameDataDecodes;
 	int i;
 
-	struct timespec tp = { 0, 0 };
-	clock_gettime(CLOCK_REALTIME, &tp);
-
-	ardop_log_session_header(ARQStationRemote.str, &tp, (Now - dttStartSession) / 60000);
+	ardop_log_session_header(ARQStationRemote.str,(Now - dttStartSession) / 60000);
 
 	ardop_log_session_info("     LeaderDetects= %d   AvgLeader S+N:N(3KHz noise BW)= %f dB  LeaderSyncs= %d", intLeaderDetects, dblLeaderSNAvg - 23.8, intLeaderSyncs);
 	ardop_log_session_info("     AvgCorrelationMax:MaxProd= %f over %d  correlations", dblAvgCorMaxToMaxProduct, intEnvelopeCors);
