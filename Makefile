@@ -126,6 +126,7 @@ WIN32 ?= $(filter $(OS),Windows_NT)
 ifneq ($(WIN32),)
 OBJS += $(OBJS_WIN)
 LDLIBS += -lwsock32 -lwinmm -lsetupapi -lws2_32
+LDFLAGS += -static-libgcc -static
 else
 OBJS += $(OBJS_LIN)
 LDLIBS += -lrt -lasound
