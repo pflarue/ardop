@@ -1,6 +1,6 @@
 ### About `diagnostichost.py`
 
-This directory contains a simple command line python based interactive host program that was created 
+This directory contains a simple command line python based interactive host program that was created
 to facilitate development and debugging work on ardopcf.  **It is not intended for actual communication
 using Ardop.  It is a diagnostic/development tool.** It works on both Linux and Windows, and has
 a very simple text based interface.  It can be used when connected to a headless Linux machine
@@ -33,8 +33,8 @@ module may be run as a script with no installation required. Only modules includ
 standard library are required.
 
 Using the --strings and/or --files option, this can also be used to send commands non-interactively
-to a running Ardop instance from the command line. For non-interactive use, include "::quit" at the
-end of the last string. Without "::quit", --strings and/or --files can be used to configure some
+to a running Ardop instance from the command line. For non-interactive use, include "!!quit" at the
+end of the last string. Without "!!quit", --strings and/or --files can be used to configure some
 settings before beginning interactive use.  See the example_input.txt file for additional details
 and commentary on using --files.
 
@@ -73,18 +73,18 @@ entered as multiple shorter lines.
 Data passed to Ardop is printed as a "DATA >>>>" line. Data from Ardop is printed as
 a "DATA <<" line, which also includes the data type indicator provided by Ardop
 
-A line of input that begins with an colon (:) is passed to the Ardop
+A line of input that begins with an exclamation point (!) is passed to the Ardop
 command socket. Ardop host commands and their parameters are mostly case insensitive.
 Strings passed to the Ardop command port are printed as "CMD  >>>>" lines. Strings
 received from the Ardop command port are printed as "CMD  <<" lines.
 
-Internal commands interpreted by this host program begin with "::". "::quit" exits
-this host program. "::rndXX", "::rndtXX", and "::zerosXX" sends XX random bytes, random
+Internal commands interpreted by this host program begin with "!!". "!!quit" exits
+this host program. "!!rndXX", "!!rndtXX", and "!!zerosXX" sends XX random bytes, random
 printable text bytes, and null bytes respectively to the Ardop data port where XX are
-one or more digits. "::pause" causes a brief delay to let input from Ardop be read and
+one or more digits. "!!pause" causes a brief delay to let input from Ardop be read and
 processed before processing the next line of user input.
 
 #### `example_input.txt`
 
-This file is an example file that can be used as an input script for `diagnostichost.py`.  
+This file is an example file that can be used as an input script for `diagnostichost.py`.
 It contains comments to further explain how such files can be used.

@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/time.h>
 
 #include "common/log.h"
 
@@ -35,10 +36,10 @@ bool ardop_logfile_write(
 	const void* msg,
 	const size_t msglen)
 {
-	struct timespec tp = { 0, 0 };
-	clock_gettime(CLOCK_REALTIME, &tp);
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
 
-	FILE* outfile = ardop_logfile_handle(logfile, tp.tv_sec);
+	FILE* outfile = ardop_logfile_handle(logfile, tv.tv_sec);
 	if (!!outfile) {
 		size_t nwritten = fwrite(msg, msglen, 1, outfile);
 		fflush(outfile);

@@ -237,7 +237,6 @@ int ardop_log_get_level_file();
  * every record.
  *
  * @param[in] remote_callsign  The callsign of the remote station
- * @param[in] now  UNIX time as of session end
  * @param[in] duration  The duration of the session, as a UNIX
  *            time in seconds
  *
@@ -246,7 +245,6 @@ int ardop_log_get_level_file();
  */
 void ardop_log_session_header(
 	const char* remote_callsign,
-	const struct timespec* now,
 	const time_t duration
 );
 

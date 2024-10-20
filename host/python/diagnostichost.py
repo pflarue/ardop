@@ -22,8 +22,8 @@ module may be run as a script with no installation required. Only modules includ
 standard library are required.
 
 Using the --strings and/or --files option, this can also be used to send commands non-interactively
-to a running Ardop instance from the command line. For non-interactive use, include "::quit" at the
-end of the last string. Without "::quit", --strings and/or --files can be used to configure some
+to a running Ardop instance from the command line. For non-interactive use, include "!!quit" at the
+end of the last string. Without "!!quit", --strings and/or --files can be used to configure some
 settings before beginning interactive use.  See the example_input.txt file for additional details
 and commentary on using --files.
 """
@@ -208,28 +208,28 @@ class DiagnosticHost():
     def _process_input_line(self, inputline):
         # Process a single line of input from the keyboard (or files or strings)
         data = b''  # no data currently queued to pass to Ardop
-        if inputline.startswith('::'):
+        if inputline.startswith('!!'):
             # A command internal to this host program
-            if inputline.rstrip().lower() == '::quit':
+            if inputline.rstrip().lower() == '!!quit':
                 self._println('(quitting)')
                 time.sleep(0.05)  # Give Ardop time to respond to prior input
                 # This gets responses from Ardop for recent host commands before closing.
                 self._from_ardop()  # Get and process (print) input from Ardop
                 self.close()
                 return False
-            if inputline.rstrip().lower() == '::pause':
+            if inputline.rstrip().lower() == '!!pause':
                 self._println('(pause)')
                 time.sleep(0.05)  # Give Ardop time to respond to prior input
                 self._from_ardop()  # Get and process (print) input from Ardop
-            elif (m := re.fullmatch('::rnd([0-9]+)', inputline.rstrip().lower())) is not None:
+            elif (m := re.fullmatch('!!rnd([0-9]+)', inputline.rstrip().lower())) is not None:
                 data = randbytes(int(m.group(1)))  # random bytes
-            elif (m := re.fullmatch('::rndt([0-9]+)', inputline.rstrip().lower())) is not None:
+            elif (m := re.fullmatch('!!rndt([0-9]+)', inputline.rstrip().lower())) is not None:
                 data = bytes(choices(range(0x20, 0x7E), k=int(m.group(1))))  # printable text
-            elif (m := re.fullmatch('::zeros([0-9]+)', inputline.rstrip().lower())) is not None:
+            elif (m := re.fullmatch('!!zeros([0-9]+)', inputline.rstrip().lower())) is not None:
                 data = b'\x00' * int(m.group(1))  # zero bytes
             else:
                 self._println(f'Ingoring invalid internal command: {inputline}')
-        elif inputline.startswith(':'):
+        elif inputline.startswith('!'):
             # Send to Ardop as a host command
             self._println(f'CMD  >>>> "{inputline[1:]}"')
             try:  # TODO: buffer and select() to send?
@@ -362,14 +362,14 @@ class DiagnosticHost():
         f' entered as multiple shorter lines.\n'
         f'   Data passed to Ardop is printed as a "DATA >>>>" line. Data from Ardop is printed as'
         f' a "DATA <<" line, which also includes the data type indicator provided by Ardop\n'
-        f'   A line of input that begins with an colon (:) is passed to the Ardop'
+        f'   A line of input that begins with an exclamation point (!) is passed to the Ardop'
         f' command socket. Ardop host commands and their parameters are mostly case insensitive.'
         f' Strings passed to the Ardop command port are printed as "CMD  >>>>" lines. Strings'
         f' received from the Ardop command port are printed as "CMD  <<" lines.\n'
-        f'   Internal commands interpreted by this host program begin with "::". "::quit" exits'
-        f' this host program. "::rndXX", "::rndtXX", and "::zerosXX" sends XX random bytes, random'
+        f'   Internal commands interpreted by this host program begin with "!!". "!!quit" exits'
+        f' this host program. "!!rndXX", "!!rndtXX", and "!!zerosXX" sends XX random bytes, random'
         f' printable text bytes, and null bytes respectively to the Ardop data port where XX are'
-        f' one or more digits. "::pause" causes a brief delay to let input from Ardop be read and'
+        f' one or more digits. "!!pause" causes a brief delay to let input from Ardop be read and'
         f' processed before processing the next line of user input.\n')
 
 if __name__ == '__main__':
