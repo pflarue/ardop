@@ -1,7 +1,6 @@
 #include "common/log.h"
 
 #include <string.h>
-#include <sys/time.h>
 
 #if defined(_WIN32) || defined(_WIN64)
 #include <windows.h>
@@ -230,6 +229,7 @@ int ardop_log_get_level_file() {
 
 void ardop_log_session_header(
 	const char* remote_callsign,
+	const struct timespec* now,
 	const time_t duration
 )
 {
@@ -238,20 +238,18 @@ void ardop_log_session_header(
 
 	char datefmt[32] = "";
 
-	// Get current time and convert to to calendar time
-	struct timeval now;
+	// convert time_t to calendar time
 	struct tm cal;
-	gettimeofday(&now, NULL);
-	gmtime_r((time_t *) &(now.tv_sec), &cal);
+	gmtime_r(&now->tv_sec, &cal);
 	// 2024-08-10T17:57:36
 	strftime(datefmt, sizeof(datefmt), "%Y-%m-%dT%H:%M:%S", &cal);
 
 	ZF_LOG_WRITE(
 		ZF_LOG_INFO,
 		"A",
-		"%s,%06ld+00:00\n************************* ARQ session stats with %s  %d minutes ****************************\n",
+		"%s,%09ld+00:00\n************************* ARQ session stats with %s  %d minutes ****************************\n",
 		datefmt,
-		now.tv_usec,
+		now->tv_nsec,
 		remote_callsign,
 		(int)duration
 	);
