@@ -234,8 +234,8 @@ ARDOP_MUSTUSE bool ardop_logfile_calc_filename(
  * @param[in] current_file_tm  UNIX time at which the current
  *            file was opened.
  *
- * @param[in] now  Current system UNIX time (seconds), from
- *            gettimeofday() or similar
+ * @param[in] now  Current system UNIX time, from clock_gettime()
+ *            or similar
  *
  * @return true if a new log file is needed or false if the
  * current log file is OK.
