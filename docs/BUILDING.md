@@ -14,7 +14,7 @@ No.  You do not need programming experience to build **ardopcf** from source.  O
 
 ## Does **ardopcf** work with my hardware and operating system.
 
-**ardopcf** is built and tested on computers with Intel/AMD processors having 32-bit and 64-bit Windows operating systems.  It is also built and tested both on computers having Linux operating systems including those with Intel/AMD and ARM processors.  Specifically, Raspberry Pi Zero W and Zero 2W computers are used to build and test **ardopcf** for ARM processors.  Users have reported success building and using **ardopcf** on some addional Linux machines.
+**ardopcf** is built and tested on computers with Intel/AMD processors having 32-bit and 64-bit Windows operating systems.  It is also built and tested on computers having Linux operating systems including those with Intel/AMD and ARM processors.  Specifically, Raspberry Pi Zero W and Zero 2W computers are used to build and test **ardopcf** for ARM processors.  Users have reported success building and using **ardopcf** on some addional Linux machines.
 
 I don't know whether anyone has tried building **ardopcf** for macOS or any other operating system.  Anyone who attempts to build for another OS is encouraged to send a message to the free users subgroup of ardop.groups.io to let us know whether it worked.  If it didn't work well, perhaps someone from that group will be able to help.
 
@@ -78,7 +78,7 @@ sudo cp ardopcf /usr/local/bin
 # also need to logout and log back in before $HOME/bin will be added to your $PATH
 cp ardopcf $HOME/bin/ardopcf
 
-# Now typeing 'ardopcf -h' at the command line should work from any directory.
+# Now typing 'ardopcf -h' at the command line should work from any directory.
 ```
 See [USAGE_linux.md](USAGE_linux.md) for guidance on use of **ardopcf** with Linux.  This includes instructions for determining what command line options you should use.
 
