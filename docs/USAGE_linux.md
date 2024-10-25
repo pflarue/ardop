@@ -16,13 +16,14 @@ If you downloaded a pre-built binary executable, you should rename it from somet
 
 ## Ardopcf PTT/CAT conrol
 
-**ardopcf** has the ability to handle the PTT of your radio in a variety of ways, but other than activating PTT, it does not do other CAT control.  (ardopcf does allow a host program to provide hex strings to pass to a CAT port, but since these strings must be appropriate for the specific model of radio that you are using, this feature is not generally used.)  **ardopcf** can also allow a host program like [Pat](https://getpat.io) to handle PTT.  With Pat, this is convenient because it can also use CAT control to set your radio's frequency.  Other host programs, such as [ARIM](https://www.whitemesa.net/arim/arim.html) and [gARIM](https://www.whitemesa.net/arim/arim.html) do not have CAT or PTT capabilities, so they require **ardopcf** to handle PTT and require you to manually set the frequency on your radio.  A third option is to use the VOX capability of your radio to engage the PTT.  This may work OK for FEC mode operation with ARIM or gARIM, but can be unreliable for the ARQ mode operation used by Pat because it may not engage or disengage quickly enough.
+**ardopcf** has the ability to handle the PTT of your radio in a variety of ways, but other than activating PTT, it does not do other CAT control.  (ardopcf does allow a host program to provide hex strings to pass to a CAT port, but since these strings must be appropriate for the specific model of radio that you are using, this feature is not generally used.)  **ardopcf** can also allow a host program like [Pat](https://getpat.io) to handle PTT.  With Pat, this is convenient because it can also use CAT control to set your radio's frequency.  Other host programs, such as [ARIM](https://www.whitemesa.net/arim/arim.html) and [gARIM](https://www.whitemesa.net/garim/garim.html) do not have CAT or PTT capabilities, so they require **ardopcf** to handle PTT and require you to manually set the frequency on your radio.  A third option is to use the VOX capability of your radio to engage the PTT.  This may work OK for FEC mode operation with ARIM or gARIM, but can be unreliable for the ARQ mode operation used by Pat because it may not engage or disengage quickly enough.
 
 If you want Pat to do PTT and CAT control then do not use any of the `-p`, `--ptt`, `-c`, `--cat`, `-g`, `-k`, `--keystring`, `-u`, `--unkeystring`, or `-g` options described in the remainder of this section.  Instead, set `"ptt_ctrl": true` in the ardop section of the Pat configuration and use the `"rig"` setting to point to a rig defined in the `"hamlib_rigs"` section.  The remainder of this section will assume that you want **ardopcf** to control PTT.  Note that you should **NOT** try to have **ardopcf** do PTT using the same USB or serial device that you will ask PAT (via Hamlib/rigctld) or any other program use for CAT control.
 
 **ardopcf** has a few methods available to controlling PTT.  Serial Port RTS and CAT commands will be described here.  It may also be possible to use PTT via a CM108 device or using a GPIO pin on an ARM computer like a Raspberry Pi.  However, I haven't tried these myself, so I don't know for sure whether they work or know how to reliably configure them.  I may add instructions for these methods to future versions of these instructiosn.  It appears that a partial attempt was also made to allow ardopc to use Hamlib's rigctld to do PTT, but this is not currently usable (it might be usable in the future).
 
 Both RTS and CAT PTT require the device name of the radio interface.  Usually this will be something line `/dev/ttyUSB1`.  While there may be other ways of determining this, I recommend the following.  If your radio interface is already connected to your computer, disconnect it and wait a few seconds.  Connect/reconnect your radio to your computer and run:
+
 `dmesg | tail`
 
 This will print the last 10 lines of the dmesg log.  You should see something like either a reference to `/dev/ttyUSB1` or `attached to ttyUSB1`.
@@ -91,16 +92,17 @@ or
 
 `ardopcf -c /dev/ttyUSB1 --keystring FEFE88E01C0001FD --unkeystring FEFE88E01C0000FD 8515 plughw:1,0 plughw:1,0`
 
-4. There are some additional command line options that you might want to use.  Other than port, capture device, playback device, the order in which the command line options are given does not matter.  See [Commandline_options.md](Commandline_options.md) for info on all possible options.
+There are some additional command line options that you might want to use.  Other than port, capture device, playback device, the order in which the command line options are given does not matter.  See [Commandline_options.md](Commandline_options.md) for info on all possible options.
 
-A.  By default, **ardopcf** writes log files in the directory where it is started.  You can change where these files are created with the `-l` or `--logdir` option.  For example, I created an `$HOME/ardop_logs` and use `--logdir ~/ardop_logs`.
+A.  By default, **ardopcf** writes log files in the directory where it is started.  You can change where these files are created with the `-l` or `--logdir` option.  For example, I created `$HOME/ardop_logs` and use `--logdir ~/ardop_logs`.
 
 B.  To enable the WebGui use `-G 8514` or `--webgui 8514`.  This sets the WebGui to be available by typing `localhost:8514` into the navgation bar of your web browser.  You may choose a different port number if 8514 causes a conflict with other software.  The WebGui is likely to be useful when you adjust the transmit and receive audio levels as described later.
 
-C.  The `-H` or `--hostcommands` option can be used to automatically apply one or more semicolon separated commands that **ardopcf** accepts from host programs like [Pat](https://getpat.io).  See [Host_Interface_Commands.md](Host_Interface_Commands.md) for more information about these commands.  The commands are applied in the order that they are written, but usually this doesn't matter.  As an example, `--hostcommands "MYCALL AI7YN"` sets my callsign to `AI7YN`.  Pat will do this, so it isn't usually necessary, but it is a convenient example.  Because most commands will include a command, a space, and a value, you usually need to put quotation marks around the commands string.  After you adjust your sound audio levels, you may discover that you want the **ardopcf** transmit drive level to be less than the default of 100%.  `--hostcommands "MYCALL AI7YN;DRIVELEVEL 90"` would set my callsign and set the transmit drive level to 90%.
+C.  The `-H` or `--hostcommands` option can be used to automatically apply one or more semicolon separated commands that **ardopcf** accepts from host programs like [Pat](https://getpat.io).  See [Host_Interface_Commands.md](Host_Interface_Commands.md) for more information about these commands.  The commands are applied in the order that they are written, but usually this doesn't matter.  As an example, `--hostcommands "MYCALL AI7YN"` sets my callsign to `AI7YN`.  Pat will do this, so it isn't usually necessary as a startup option, but it is a convenient example.  Because most commands will include a command, a space, and a value, you usually need to put quotation marks around the commands string.  After you adjust your sound audio levels, you may discover that you want the **ardopcf** transmit drive level to be less than the default of 100%.  `--hostcommands "MYCALL AI7YN;DRIVELEVEL 90"` would set my callsign and set the transmit drive level to 90%.
 
 So, an example of the complete command you might want to use to start **ardopcf** is:
-`ardopcf --logdif ~\ardopc_logs -p /dev/ttyUSB1 -G 8514 --hostcommands "DRIVELEVEL 90" 8515 plughw:1,0 plughw:1,0`
+
+`ardopcf --logdir ~/ardopc_logs -p /dev/ttyUSB1 -G 8514 --hostcommands "DRIVELEVEL 90" 8515 plughw:1,0 plughw:1,0`
 
 With this running, **ardopcf** is functional and ready to be used by a host program like [Pat](https://getpat.io).  However, you probably don't want to type all of this every time you want to start **ardopcf**.  So, the next sections describe some better options for starting **ardopcf**.  All of them will use the sequence of options that you identified in this section.
 
@@ -110,7 +112,7 @@ With this running, **ardopcf** is functional and ready to be used by a host prog
 Starting **ardopcf** from the command line is useful if you access your Linux machine through a text only interface such as ssh, or if you use a Linux desktop but prefer the use of a terminal window to GUI menus.  For this use, a bash script containing all of the necessary command line options make starting **ardopcf** easy.  So, use a text editor to create `$HOME/bin/ardop` with contents similar to the following.  See the [section](#ardopcf-audio-devices-and-other-options) on audio devices and other options for help understanding the ardopcf command line.
 ```
 #! /bin/bash
-ardopcf --logdif ~\ardopc_logs -p /dev/ttyUSB1 -G 8514 --hostcommands "DRIVELEVEL 90" 8515 plughw:1,0 plughw:1,0
+ardopcf --logdir ~/ardopc_logs -p /dev/ttyUSB1 -G 8514 --hostcommands "DRIVELEVEL 90" 8515 plughw:1,0 plughw:1,0
 ```
 
 Once you have created this file, use `chmod` or an equivalent feature in a file manager to make it executable.
