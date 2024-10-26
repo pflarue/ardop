@@ -2,17 +2,20 @@
 
 [Pat](https://getpat.io) is a [Winlink](https://winlink.org) client program that can be used to send and recieve email messages using amateur radio, including when Internet and Cell service is not available. [ardopcf](https://github.com/pflarue/ardop) is one of several programs that Pat can use to connect to a radio.  This page provides instructions specific to setting up Pat to use with **ardopcf** on a Windows computer.
 
-Other related pages provide instructions on configuring and running [ardopcf for Windows](USAGE_windows.md), and configuring and running [Hamlib/rigctld for Windows](Hamlib_Windows11.md) (which Pat can use to control your radio).  If you are using Linux instead of Windows, see [Pat_linux.md](Pat_linux.md) instead.
+Other related pages provide instructions on configuring and running [ardopcf for Windows](USAGE_windows.md), and configuring and running [Hamlib/rigctld for Windows](Hamlib_Windows11.md) (which Pat can use to control your radio).
 
 Using Pat and Ardop may seem complex and confusing.  If you need additional help, there are some users groups where you can ask for help:
 
 This group is for everybody using Pat, though most are probably using Linux instead of Windows.
+
 https://groups.google.com/g/pat-users
 
 This group is for everybody using Ardop, including users of **ardopcf** and other Ardop implementations such as Ardop_Win.
+
 https://ardop.groups.io/g/users
 
 This group is for everybody using Winlink, though most are probably using Winlink Express rather than Pat, and most Winlink users don't use Ardop.
+
 https://groups.io/g/Winlink
 
 
@@ -50,7 +53,7 @@ or
 
 Edit your config.json to include your callsign, your Winlink Password, and a locator value that indicates your location.  If you change locations, such as for portable operations, you don't always need to update ths value.  However, if you move very far it will be useful to update this value, since this will help Pat to show you the correct distance to known Winlink gateway stations.
 
-If you don't already have an account at `winlink.org`, then you can leave the "secure_loging_password" value blank (justs empty quotes followed by a comma).  The first time you connect to a winlink server it will recognize you as a new user and send you a message with a temporary password.  You will use this temporary password to login online and configure your account.  
+If you don't already have an account at `winlink.org`, then you can leave the "secure_login_password" value blank (justs empty quotes followed by a comma).  The first time you connect to a winlink server it will recognize you as a new user and send you a message with a temporary password.  You will use this temporary password to login online and configure your account.  
 
 If you don't know your Maidenhead locator, try using https://www.f5len.org/tools/locator.  This will show show you an interactive world map with an overlay showing grid locator values up to 6 characters in length.
 
@@ -88,13 +91,13 @@ If Hamlib/rigctld is not running, or if the address:port number are not correct,
 
 The addr "localhost:8515" is the default value and doesn't usually need to be changed.  It has two parts.  The part before the colon is the IP address of the machine where **ardopcf** is running.  'localhost' means that it **ardopcf** is running on the same computer where Pat is running, and is equivalent to '127.0.0.1'.  If **ardopcf** is running on a different machine, you would use the IP address of that machine: probably something like '192.168.100.103' or '10.0.0.5'.  The part after the colon is the TCP port number of the **ardopcf** host interface.  This is usually 8515 but can be set to a different value when starting **ardopcf**.  This is **NOT** the WebGui port number, which is typically 8514.
 
-The arq_bandwidth "Forced" can always be set to false.  Otherwise, it would refuse a connection request with a different bandwidth.  The "Max" value has two effects.  First, it sets the amount of bandwidth that **ardopcf** is permitted to use if it responds to another station calling it.  This does not change the amount of bandwidth that **ardopcf** will use if initiating a connection to a Winlink Gateway.  So, it this is only important if you will also be using **ardopcf** for a Peer-to-Peer connection initiated by another station.  However, the other thing that the "Max" value does is controls how wide of a bandwidth the **ardopcf** busy detector considers before allowing you to transmit a Connect Request to another station.  So, this busy detector will be most appropraitely engaged if "Max" is set to the bandwidth that you intend to use.  Acceptable values are 200, 500, 10000, and 2000.  Setting it wider than the Connect Requests that you intend to send may prevent you from sending them if **ardopcf** detects traffic that is within the "Max" bandwidth, even if you would not be interfering with them.  On the other hand, setting it narrower that the Connect Requests that you inted to send may cause you to interfere with another station's traffic, which will also impair your own ability to communicate.  Since I normally connect to a Winlink gateway using a 500 Hz maximum bandwidth, I set Max to 500.  After you have used Pat for a while and determine what bandwidth settings you normally use, you may want to adjust this value..
+The arq_bandwidth "Forced" can always be set to false.  Otherwise, it would refuse a connection request with a different bandwidth.  The "Max" value has two effects.  First, it sets the amount of bandwidth that **ardopcf** is permitted to use if it responds to another station calling it.  This does not change the amount of bandwidth that **ardopcf** will use if initiating a connection to a Winlink Gateway.  So, it this is only important if you will also be using **ardopcf** for a Peer-to-Peer connection initiated by another station.  However, the other thing that the "Max" value does is controls how wide of a bandwidth the **ardopcf** busy detector considers before allowing you to transmit a Connect Request to another station.  So, this busy detector will be most appropraitely engaged if "Max" is set to the bandwidth that you intend to use.  Acceptable values are 200, 500, 1000, and 2000.  Setting it wider than the Connect Requests that you intend to send may prevent you from sending them if **ardopcf** detects traffic that is within the "Max" bandwidth, even if you would not be interfering with them.  On the other hand, setting it narrower that the Connect Requests that you inted to send may cause you to interfere with another station's traffic, which will also impair your own ability to communicate.  Since I normally connect to a Winlink gateway using a 500 Hz maximum bandwidth, I set Max to 500.  After you have used Pat for a while and determine what bandwidth settings you normally use, you may want to adjust this value..
 
 The "Rig" value of "G90" matches the label used in the "hamlib_rigs" section, telling Pat to use this connection for CAT control when using Ardop. 
 
 Setting "ptt_control" to true tells Pat to handle PTT on and off (using Hamlib).  If it is false, then **ardopcf** must handle PTT itself (or use VOX).
 
-"beacon_interval" should always be set to zero to avoid sending Ardop beacons.  If a number is given here, it is interpreted an an interval in seconds at which an ardop FrameID will be sent when listening for an ardop connection.
+"beacon_interval" should always be set to zero to avoid sending Ardop beacons.  If a number is given here, it is interpreted as an interval in seconds at which an ardop FrameID will be sent when listening for an ardop connection.
 
 As legally required, every 10 minutes during a long Ardop connection, and at the end of a winlink session, ardop will automatically send an IDFrame.  An IDFrame includes your callsign and location.  If "cwid_enabled" is true, then it will follow each IDFrame with a CW/Morse code version of your callsign.  By my reading of FCC rules, sending a CW ID is not required, though others may disagree.  So, I leave "cwid_enabled" as false.  If the amateur radio rules of your country require ID in CW, or if choose to ID in CW for any other reason, you may set "cwid_enabled" to true.
 
@@ -106,7 +109,7 @@ If I do not want Pat to do CAT ccontrol or handle PTT, then I congfigure **ardop
 
 If "ptt_ctrl" is true, but a valid "rig" is not defined, then Pat will produce an error like "unable to set PTT rig '': not defined or not loaded."  As mentioned above, if Pat cannot connect to a rig defined in "hamlib_rigs" it will also produce an error. 
 
-9. The settings configured the last few steps are sufficient to connect to another station using Ardop if you initiate the connection.  If you also want your station to listen for other stations calling it (for a Peer-to-Peer Winlink connection), you also most add "ardop" to the "listen" setting.  This is right before "hamlib_rigs" in the configuration file, and looks like:
+9. The settings configured the last few steps are sufficient to connect to another station using Ardop if you initiate the connection.  If you also want your station to listen for other stations calling it (for a Peer-to-Peer Winlink connection), you also must add "ardop" to the "listen" setting.  This is right before "hamlib_rigs" in the configuration file, and looks like:
 
 ` "listen": ["ardop"],`
 
@@ -121,12 +124,13 @@ Without this setting, **ardopcf** will not respond to a heard connection request
 
 ## Creating a Desktop Shortcut to start [Pat](https://getpat.io) Winlink
 
-Pat has a web browser based GUI that works well in conjunction with the **ardopcf** WebGui.  This GUI is what inspired the creation of the **ardopcf** WebGui.  To start Pat so that you can connect to its GUI you can run `pat http` from the command line just like you ran `pat configure`.  However, for Windows users, it is more convenient to use a Desktop Shortcut and/or set Pat to start automatically every time you log on to your computer.  
+Pat has a web browser based GUI that works well in conjunction with the **ardopcf** WebGui.  This GUI is what inspired the creation of the **ardopcf** WebGui.  To start Pat so that you can connect to its GUI, you can run `pat http` from the command line just like you ran `pat configure`.  However, for Windows users, it is more convenient to use a Desktop Shortcut and/or set Pat to start automatically every time you log on to your computer.  
 
 ### Create a Desktop Shortcut to start pat http as needed.
 
 1. Find pat.exe with Windows File Explorer, Right click on it, Select `Show more options`, Select `Create shortcut`.  If you installed Pat in 'C:\Program Files', Windows will say that it can't create a shortcut here, and ask whether you want to place it on the Desktop instead.  Click `Yes`.  This will create a new icon on your Desktop with the name 'pat.exe - Shortcut'.  If you installed Pat in 'C:\Users\<USERNAME>', windows will create a shorcut in the same directory where pat.exe is located.  In that case, move the shortcut to the Desktop by dragging it to the desktop or using CTRL-X and CTRL-V.
 2. Configure the shortcut: Right click on the shortcut icon on your Desktop, Select `Properties`.  Add ` http` to the end of the command line after pat.exe in the `Target` line.  If there is a space anywhere in the path to pat.exe, then this will be wrapped in double quotation marks.  In that case, ` http` must be placed after the closing quotion mark not within them.  So, in my case, I set the `Target` line to read:
+
 `"C:\Program Files\pat_0.16.0_windows_i386\pat" http`
 
 or 
@@ -147,7 +151,14 @@ Depending on how you use your radio, computer, and other software on it, this ma
 1. First create a Desktop Shortcut for Pat as described above. 
 
 2. Use Windows File Explorer to Copy that shortcut from the Desktop to either:
-`C:\Users\<USERNAME>\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup` or `C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup`  The first option starts Pat http only when a specific user logs on to Windows, while the later starts it when any user logs on.  If you do not have admin rights on this windows computer, you can only use the first option.  If your PC has only one user account, then it shouldn't matter which one you choose.
+
+`C:\Users\<USERNAME>\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup` 
+
+or 
+
+`C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup`  
+
+The first option starts Pat http only when a specific user logs on to Windows, while the later starts it when any user logs on.  If you do not have admin rights on this windows computer, you can only use the first option.  If your PC has only one user account, then it shouldn't matter which one you choose.
 
 If you want to stop Pat http, you can either right click on the icon in your task bar and then click `Close Window`, or you can left click on the icon in your task bar to open the window, and then either type CTRL-C or click on the red X in the upper right corner of the window.  The next time you logout or restart your computer and log back in, it will be automatically restarted.  In case you do this accidentally, it may be useful to keep the shortcut on your desktop.
 
@@ -180,7 +191,7 @@ When you connect to a Winlink Gateway with Pat, it will send any queued messages
 
 2. You can manually set `target` to the callsign of the station you want to connect to and `freq` to one of the frequencies that station is listening on.  Winlink gateway stations usually listen on multiple frequencies/bands so that they can be reached using whatever band is currently providing the best propogation to their location.  (If you are not using CAT control, then `freq` may be displayed, but is not used by Pat.  In that case you must manually tune your radio to the correct frequency.)  
 
-While you can set `freq` manually, the more common approach is to click the `Show RMS list` button to see a list of available Winlink gateway stations.  (If the list is empty or outdated, AND you have an internet connection then clicking `Update cache` will download an updated version.)  To see only Ardop station, set the mode pulldown to `ARDOP`.  You can also filter the list to show only a specific band such as `40m`.  The list is shown in order from closest to furthest away, based on your location as set with `pat configure`.  If you click one one of these, it automatically populates the `target`, `freq`, and `bandwidth` fields.  Note that `bandwidth` is set to the maximum the the station accepts.  However, if you know (from experience) that due to distance, power, antenna, etc. that you are unlikely to be able to actaully use a high bandwidth setting like 1000 Hz or 2000 Hz, it can be advantageous to manually reduce `bandwidth` to 500 Hz.  
+While you can set `freq` manually, the more common approach is to click the `Show RMS list` button to see a list of available Winlink gateway stations.  (If the list is empty or outdated, AND you have an internet connection then clicking `Update cache` will download an updated version.)  To see only Ardop stations, set the mode pulldown to `ARDOP`.  You can also filter the list to show only a specific band such as `40m`.  The list is shown in order from closest to furthest away, based on your location as set with `pat configure`.  If you click one one of these, it automatically populates the `target`, `freq`, and `bandwidth` fields.  Note that `bandwidth` is set to the maximum the the station accepts.  However, if you know (from experience) that due to distance, power, antenna, etc. that you are unlikely to be able to actaully use a high bandwidth setting like 1000 Hz or 2000 Hz, it can be advantageous to manually reduce `bandwidth` to 500 Hz.  
 
 On HF, the closest stations are not neccessarily the ones most likely to work well for you.  This is especially true on the higher frequency bands like 20m, in which you cannot normally communicate with stations in the skip zone.  If you need help determining what Winlink stations you are likely to be able to communicate with, these resources may be helpful.  https://winlink.org/RMSChannels shows a map of all of the Winlink gateway stations.  Be sure to select ARDOP at the top of the map to show the stations that use Ardop.  Clicking on any of these stations shows a variety of information including what frequencies/bands it is listening on and the Gridsqure where it is located.  Using this information, as well as your own location, you can use the tools available at https://www.voacap.com/hf to predict the band/time combinations that are most likely to allow you to connect to that station.  By using Winlink regularly, you can learn which stations you can reliably connect to at what times of day and season.  This knowledge is will allow you to make these connections without having to use these sites or other online resources.
 
