@@ -1,8 +1,8 @@
-# Intallation and configuration of [Hamlib](https://hamlib.github.io) (rigctld) on Windows 11.
+# Installation and configuration of [Hamlib](https://hamlib.github.io) (rigctld) on Windows 11.
 
-These instructions are provided here to help people who want to use **ardopcf** with [Pat](https://getpat.io) Winlink on a Windows computer.  Hamlib allows Pat to tune your radio to the correct frequency and to handle PTT of your radio.  Pat with **ardopcf** can be used without Hamlib.  In that case, you will need to tune your radio to the correcct frequency manually, and you will need to configure **ardopcf** to handle PTT itself.
+These instructions are provided here to help people who want to use **ardopcf** with [Pat](https://getpat.io) Winlink on a Windows computer.  Hamlib allows Pat to tune your radio to the correct frequency and to handle PTT of your radio.  Pat with **ardopcf** can be used without Hamlib.  In that case, you will need to tune your radio to the correct frequency manually, and you will need to configure **ardopcf** to handle PTT itself.
 
-Hamlib is library to help other programs control amateur radio hardware.  In addition to allowing other programs to use it directly, it also provides two executables: rigctl and rigctld.  rigctl allows interactive use, in which you can type commands to control your radio.  It can also be used to control your radio from a Command Prompt window or from a .bat or .cmd script.  Only one instance of rigctl or one program that uses the Hamlib library directly can control any radio at once.
+Hamlib is a library to help other programs control amateur radio hardware.  In addition to allowing other programs to use it directly, it also provides two executables: rigctl and rigctld.  rigctl allows interactive use, in which you can type commands to control your radio.  It can also be used to control your radio from a Command Prompt window or from a .bat or .cmd script.  Only one instance of rigctl or one program that uses the Hamlib library directly can control any radio at once.
 
 rigctld is much more flexible.  It provides a "network" interface that other programs, such as [Pat](https://getpat.io), can connect to to control your radio.  An advantage of using rigctld is that multiple programs can use an instance of rigctld at the same time.  So, rigctld is normally run in the background, and then one or more other programs like [Pat](https://getpat.io) are configured to connect to it.
 
@@ -18,7 +18,7 @@ In the following instructions, I'll use configuring Hamlib/rigctld to work with 
 
 Using Hamlib/rigctld does **NOT** require admin rights on your windows computer.  As described below, depending on whether you have admin rights and on where you choose to install hamlib, you may have to do things slightly differently.
 
-1. Go to https://github.com/Hamlib/Hamlib/releases/latest.  As I'm writing this in Oct 2024, the most recent version is 4.5.5 dated April 5, 2023.  If a newer version is available to you, the numbers in the file and directory names I use below will be different.  All Windows 11 systems are 64 bit, you want a file with -w64 in its name: `hamilb-w64-4.5.5.zip`.  The following instructions describe downloading and extracting the contents from this `zip` file.  An `exe` file is also available that will guide you through extracting the files into a directory of your choice.
+1. Go to https://github.com/Hamlib/Hamlib/releases/latest.  As I'm writing this in Oct 2024, the most recent version is 4.5.5 dated April 5, 2023.  If a newer version is available to you, the numbers in the file and directory names I use below will be different.  All Windows 11 systems are 64 bit.  So, you want a file with -w64 in its name: `hamilb-w64-4.5.5.zip`.  The following instructions describe downloading and extracting the contents from this `zip` file.  An `exe` file is also available that will guide you through extracting the files into a directory of your choice.
 
 If you discover that the latest release of hamlib does not support your model of radio well, you can try a daily snapshot distribution from https://n0nb.users.sourceforge.net.  As with the downloads from GitHub, choose the `zip` file with -w64 in its name for Windows 11.  You can install multiple versions of hamlib on your computer at the same time, each in a different directory.  So, if you installed the latest release, but want to try a daily snapshot, you can have both.  If you discover that the daily snapshot works better, you can then delete the latest release and any shortcuts to it if you want to.
 
@@ -31,9 +31,12 @@ The 'doc' subdirectory within the Hamlib directory you just created contains som
 4. Next, you need to determine what hamlib model number matches your radio. Open a Windows Command Prompt by pressing the Windows Start button and typing 'Command Prompt' into the search bar and pressing Enter.  Then run rigctl with the -l option (that is a lowercase L) to list all of the supported radio model numbers.  You can also view this list at https://github.com/Hamlib/Hamlib/wiki/Supported-Radios.
 
 `"C:\Program Files\hamblib-w64-4.5.5\bin\rigctl" -l`
+
+or
+
 `C:\Users\<USERNAME\hamblib-w64-4.5.5\bin\rigctl -l`
 
-Notice that if you installed hamlib in a directory that contains spaces (like `Program Files`), then quotes are required around the program name but not the command line options.  These quotes are not needed if there are no spaces in the direcory names.  Other than perhaps adding the quotes, this is just `\bin\rigctl -l` added to the directory created when you extracted the contents of the zip file.  This comamnd prints a long list of supported radio models.  So, you'll need to scroll back through the results to look for your radio model.  If you don't find your exact model, you may need to do some searching on the iternet to see if you find a recommendation for a similar model that works.  For my Xiegu G90, I find the following line:
+Notice that if you installed hamlib in a directory that contains spaces (like `Program Files`), then quotes are required around the program name but not the command line options.  These quotes are not needed if there are no spaces in the direcory names.  Other than perhaps adding the quotes, this is just `\bin\rigctl -l` added to the directory created when you extracted the contents of the zip file.  This command prints a long list of supported radio models.  So, you'll need to scroll back through the results to look for your radio model.  If you don't find your exact model, you may need to do some searching on the iternet to see if you find a recommendation for a similar model that works.  For my Xiegu G90, I find the following line:
 
 `3088  Xiegu        G90        20230109.4   Stable    RIG_MODEL_G90`
 
@@ -43,7 +46,7 @@ If you already use [FLRig](http://www.w1hkj.com), notice model 4:
 
 `   4  FLRig                   20220910.0   Stable    RIG_MODEL_FLRIG`
 
-This virtual radio type allows programs that can use Hamblib, but that do not support using FLRig directly to use FLRig via Hamlib.  If Hamlib, including the recent daily snapshot does not support your radio well, it may also be worth exploring whether FLRig does, and trying this option.  When using Hamlib with FLRig, you will need to configure FLRig to work with your specific radio model.  Installing, configuring, and starting FLRig is beyond the scope of these instructions.  I assume that most people wanting to use Hamlib with FLRig are doing so because they are have already installed and configured FLRig.
+This virtual radio type allows programs that can use Hamblib, but that do not support using FLRig directly to use FLRig via Hamlib.  If Hamlib, including the recent daily snapshot, does not support your radio well, it may also be worth exploring whether FLRig does, and trying this option.  When using Hamlib with FLRig, you will need to configure FLRig to work with your specific radio model.  Installing, configuring, and starting FLRig is beyond the scope of these instructions.  I assume that most people wanting to use Hamlib with FLRig are doing so because they are have already installed and configured FLRig.
 
 Some additional notes for a few specific radio models including the FT-747, FT-890, FT-920, Ten-Tec Orion and Orion II, Elektor SDR, Si570 AVR-USB/SoftRock, and FUNcube are available at https://github.com/Hamlib/Hamlib/wiki/Radio-Specific-Notes.
 
