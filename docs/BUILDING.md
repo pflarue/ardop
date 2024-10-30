@@ -14,7 +14,7 @@ No.  You do not need programming experience to build **ardopcf** from source.  O
 
 ## Does **ardopcf** work with my hardware and operating system.
 
-**ardopcf** is built and tested on computers with Intel/AMD processors having 32-bit and 64-bit Windows operating systems.  It is also built and tested both on computers having Linux operating systems including those with Intel/AMD and ARM processors.  Specifically, Raspberry Pi Zero W and Zero 2W computers are used to build and test **ardopcf** for ARM processors.  Users have reported success building and using **ardopcf** on some addional Linux machines.
+**ardopcf** is built and tested on computers with Intel/AMD processors having 32-bit and 64-bit Windows operating systems.  It is also built and tested on computers having Linux operating systems including those with Intel/AMD and ARM processors.  Specifically, Raspberry Pi Zero W and Zero 2W computers are used to build and test **ardopcf** for ARM processors.  Users have reported success building and using **ardopcf** on some addional Linux machines.
 
 I don't know whether anyone has tried building **ardopcf** for macOS or any other operating system.  Anyone who attempts to build for another OS is encouraged to send a message to the free users subgroup of ardop.groups.io to let us know whether it worked.  If it didn't work well, perhaps someone from that group will be able to help.
 
@@ -78,12 +78,15 @@ sudo cp ardopcf /usr/local/bin
 # also need to logout and log back in before $HOME/bin will be added to your $PATH
 cp ardopcf $HOME/bin/ardopcf
 
-# Now typeing 'ardopcf -h' at the command line should work from any directory.
+# Now typing 'ardopcf -h' at the command line should work from any directory.
 ```
-See [USAGE.md](USAGE.md) for guideance on use of **ardopcf**.
+See [USAGE_linux.md](USAGE_linux.md) for guidance on use of **ardopcf** with Linux.  This includes instructions for determining what command line options you should use.
+
 
 
 ## Building ardopcf for Windows using MinGW:
+
+It **is** possible to build and run **ardopcf** on a Windows computer without admin privledges.
 
 ### Downloading the ardopcf source code
 
@@ -115,13 +118,13 @@ You may notice that there are packages labeled '(with POSIX threads)' and '(with
 `7-Zip` and `Zip` format archives are available for each download.  Since Windows can extract `Zip` files, choose the `Zip` archive unless you have installed the `7-Zip` program and know how to use it.
 </details>
 
-After downloading the Zip archive, it should be extracted into a path with no spaces in it using the same process as was used to unzip the source code.  For simplicty, I extract it to the root directory on my C drive, which creates something like `C:\mingw64` (or `C:\mingw32`)
+When the download is complete, use Windows File Explorer to find the zip file in the Downloads directory.  Right click on it and choose `Extract All...`.  Choose a suitable directory.  It should be extracted into a path with no spaces in it.  For simplicty, I extract it to the root directory on my C drive, which creates something like `C:\mingw64` (or `C:\mingw32`)
 
 To use this MinGW system, it is necessary to add the `bin` directory within the MinGW installation to the PATH used to find programs run from the command line.  I choose not to permanently add this to my system's PATH for two reasons.  First, running **ardopcf** without the mingw64\bin directory in the system PATH helps confirm that the binary will also work on other Windows systems where MinGW is not installed.  Also, I have both 64-bit and 32-bit versions of MinGW on my computer so that I can build the 64-bit and 32-bit releases of **ardopcf**.  I couldn't use both of them with a single system PATH setting.  So, rather than permemently add this to the system PATH, I add it temporarily as a part of the build process described below.
 
 ### Build ardopcf
 
-1. Open a Windows Command Prompt.  On Windows 11, this can be done by pressing the Windows Start button and typing 'Command Prompt' into the search bar.  On older versions of Windows it is probably available in the Windows System folder after pressing the Windows Start button.
+1. Open a Windows Command Prompt.  On Windows 11, this can be done by pressing the Windows Start button and typing 'Command Prompt' into the search bar and pressing Enter.  On older versions of Windows it is probably available in the Windows System folder after pressing the Windows Start button.
 2. Use `cd` to navigate to the `ardop-master\ARDOPC` (or `ardop-develop`) directory that was created when you downloaded the source code.  Use `dir` to confirm that you are in the correct directory by verifying that `Makefile` is located there.  For example
 
 ```
@@ -141,6 +144,8 @@ dir Makefile
 
 `ardopcf -h`
 
-6. If you want to, you can copy ardopcf.exe to somewhere in your system PATH or modify your system PATH to point to the directory where it is found.  Unfortunately, Windows does not have a common location that is in the default PATH where users without admin privledges can put programs or scripts (like Linux systems' $HOME/bin).  It is also likely that most Windows users will create a desktop shortcut and/or a .bat or .cmd file to start **ardopcf** so that you don't have to type all of the command line options that you want to use each time you start ardopcf.  Any of these can include the full path to ardopcf.exe so that it does not need to be in your PATH.
+The first time that you run `ardopcf` without the `-h` option,  Windows will ask you whether you want to allow public and private networks to access this app.  Host programs like [Pat](https://getpat.io) use a TCP "network" connection to work with **ardopcf**.  Without a program like Pat, **ardopcf** isn't useful.  Also, the **ardopcf** WebGui connects from a browser window to **ardopcf** using a TCP "network" connection.  If you choose `Allow` in this windows dialog, then you will be able to use the Webgui in a browser running on any computer on your local network and/or run a host program on any computer on your local network.  If instead you choose 'Cancel' in this windows dialog, then these programs/features will still work, but only if they are all running on the same computer.  If you do not have admin privledges on this Windows computer, then `Allow` won't work.  On a Windows computer this usually isn't a problem since you probably intend to run everything on this one computer anyway.  The ability to run **ardopcf** on one computer and a host or the WebGui on another is more likely to be useful when **ardopcf** is running on a small computer like a Raspberry Pi that does not have a monitor conencted to it.
 
-See [USAGE.md](USAGE.md) for guideance on use of **ardopcf**.
+6. You may leave `ardopcf.exe` where it is or copy or move it to a different directory.  The choice is yours.  One option is to put it in `C:\Users\<USERNAME>\ardop` and also create a `C:\Users\<USERNAME>\ardop\logs` directory for the log files that ardopcf creates.  If you copy `ardopcf.exe` to a directory other than where you built it from source, you may choose to delete the source directory and even the MinGW directory.
+
+See [USAGE_windows.md](USAGE_windows.md) for guidance on use of **ardopcf** with Windows.  This includes instructions for determining what command line options you should use, how to set up a Desktop Shortcut to start **ardopcf**, and how to adjust your audio settings.
