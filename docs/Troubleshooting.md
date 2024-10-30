@@ -1,6 +1,6 @@
 # Troubleshooting Suggestions
 
-First, ensure that you are invoking ardopcf correctly.  See * [USAGE_linux.md](docs/USAGE.md) or [USAGE_windows.md](docs/USAGE.md) for basic instructions to install, configure, and run **ardopcf**.
+First, ensure that you are invoking ardopcf correctly.  See [USAGE_linux.md](USAGE_linux.md) or [USAGE_windows.md](USAGE_windows.md) for basic instructions to install, configure, and run **ardopcf**.
 
 Then, review your logs to see if you can figure out why an issue is happening.
 
