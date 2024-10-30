@@ -1,14 +1,6 @@
 # Troubleshooting Suggestions
 
-First, ensure that you are invoking ardopcf correctly. Normally, ardopcf is invoked on Linux like this:
-
-`./ardopcf 8515 plughw:1,0 plughw:1,0` 
-- `8515` is the default port that host applications (like PAT) expect an ardop-compatible tcp interface.
-- `plughw:1,0` is the audio device used for receiving or transmitting. If you use the same audio device (such as a SignaLink or DigiRig or a built-in radio sound card) then yes, you must specify it twice, otherwise you will get an audio error.
-
-Windows: `stub`
-
-MacOS: `stub`
+First, ensure that you are invoking ardopcf correctly.  See * [USAGE_linux.md](docs/USAGE.md) or [USAGE_windows.md](docs/USAGE.md) for basic instructions to install, configure, and run **ardopcf**.
 
 Then, review your logs to see if you can figure out why an issue is happening.
 
@@ -30,7 +22,7 @@ This means that you did not invoke ardopcf correctly (see the top of this page),
 
 ### ALSA Device Sharing
 
-You may run into issues as well (device or resource busy) if you have another program (like Direwolf) trying to access the same audio device (radio) at the same time. ardopcf is not a jack/pulseaudio/portaudio/oss/pipewire aware program, and alsa does not do mixing and audio redirecting between sources and sinks by default. You might be able to use alsa plugins like dsnoop or create a new pcm definition in ~/.asoundrc to do point to the PulseAudio default device, but your mileage may vary and this author has not tested it. If you find an elegant solution, please open a github issue or let us know in the users groups. 
+You may run into issues as well (device or resource busy) if you have another program (like Direwolf) trying to access the same audio device (radio) at the same time. ardopcf is not a jack/pulseaudio/portaudio/oss/pipewire aware program, and alsa does not do mixing and audio redirecting between sources and sinks by default. You might be able to use alsa plugins like dsnoop or create a new pcm definition in ~/.asoundrc to do point to the PulseAudio default device, but your mileage may vary and this author has not tested it. If you find an elegant solution, please open a github issue or let us know in the users groups.
 
 
 ## Audio Device Related Issues (Windows)
@@ -41,7 +33,7 @@ Stub.
 
 "Why can't I connect to any other ARDOP stations?"
 
-Keep in mind that normal radio communications limitations apply, such as your local noise level, propagation, and it's up to you to determine 
+Keep in mind that normal radio communications limitations apply, such as your local noise level, propagation, and it's up to you to determine
 
 Barring any radio link quality related issues...
 
