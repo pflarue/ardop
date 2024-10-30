@@ -1,0 +1,33 @@
+# Contributing Guidelines
+
+**ardopcf** is released under the MIT open source license.  See [LICENSE](../LICENSE) for details.  Use, study, and experimentation with this software is not only permitted, it is strongly encouraged.  I believe that such activity should be central to both amateur radio and open source software development.  However, I ask that if this source code is used to develop software that deviates from the Ardop [specification](refs/ARDOP_Specification_20171127.pdf), or that is incompatible with existing implementations, that the `ardop` name not be used for such software.  Software claiming to be usable implementations of `ardop` should all be interoperable.  Otherwise, users may be confused and attempts to communicate with this software may fail.
+
+I sometimes spend a couple of weeks at a time in locations without internet or cell service.  This is part of why Ardop and Winlink are important to me.  (See [Motivation.md](Motivation.md))  However, this also means that sometimes there may be a delay in my response to questions/comments to the Ardop users group or to Issues or Pull Requests at GitHub.
+
+While the most obvious way to contribute to an open source project is to propose changes to the source code via pull requests, as described below, there are other ways to support this project that are just as helpful.  First among these is to use the software and provide feedback if you find problems or have suggestions about how it might be improved.  I use ardopcf regularly, but your use with different hardware, software, or modes of use may identify issues that I wouldn't otherwise be aware of.
+
+Anyone with comments or questions about ardopcf, is encouraged to join and send a message to the free users subgroup of ardop.groups.io.  General comments and requests for assistance are best directed to that group.  I try to respond to all ardopcf related comments and questions posted to that group.  In contrast, creating a new [Issue](https://github.com/pflarue/ardop/issues) here in the GitHub repository may be more appropriate to report a bug or suggest a change in the operation of ardopcf.
+
+Other ways that you can contribute to this project include submitting (as a Pull Request) or suggesting (as an Issue or message to the users group) improvements to the documentation, encouraging/helping other amateur radio operators to know about and use ardopcf, and showing the Winlink gateway operators that you find continued support for Ardop important by using it more frequently.
+
+### Pull Requests
+
+The MIT license allows anyone who wants to create their own independent fork of **ardopcf** to do so.  However, I would like to encourage any useful changes developed to be contributed back to the **ardopcf** repository at https://github.com/pflarue/ardop.  A Pull Request is the mechanism for doing this.  See https://docs.github.com/en/pull-requests for general information about how Pull Requests work on GitHub.
+
+When I first started making changes to John Wiseman's [ardopc](https://github.com/g8bpq/ardop), I offered to submit pull requests to that repository.  However, John explained that he doesn't use git or GitHub for his ongoing development work.  So, I've continued on with development of this ardopcf fork and I've encouraged John to adopt any changes from ardopcf into ardopc that he finds useful.
+
+Please consider the following guidelines before creating a pull request:
+
+* Pull requests for general improvements to documentation that are relevant to the latest release of ardopcf should target the master branch.
+
+* All pull requests except those described in the previous item should target the develop branch rather than the master branch.  The develop branch is used to collect changes.  From time to time I will merge the develop branch into the master branch and create a new release.
+
+* When creating a pull request, please include a brief description of what changes are being made.  This description should also explain how this change contributes to the goals of improving the stability or over the air performance of ardopcf.  Efforts to reorganize the code base to make it easier to understand, debug, and maintain, as well as improvements to testing all contribute to improved stability, and are thus welcome.  However, the amount of my time that I am willing to commit to reviewing, testing, and perhaps helping to further refine a proposed change will be influenced by how useful/important I think that change is.  So, changes (by others or my own) that fix known problems or enhance usability will usually take priority over refactoring that doesn't provide these sorts of changes.
+
+* One of the design goals of ardopcf is to make building from source as simple as possible.  So, pull requests that require additional external libraries or build tools are unlikely to be accepted.
+
+* The ardopcf code base should be useful and approachable to amateur radio operators interested in experimenting with digitial modes, but who don't yet have much programming experience or who may be experienced programmers but are new to working with digital radio communications.  Therefore, plentiful comments within the source code files that explain both what the code is doing and why are encouraged.  Where appropriate, such as where complex or inovative DSP algorithms are implemented, links to external references are useful.  See the comments in sdft.c as an example.
+
+* The changes proposed by a pull request should be fully developed.  Discussion of design goals or implementation details prior to implemention are better handled as [Issues](https://github.com/pflarue/ardop/issues).
+
+* After submitting a pull request, you should be willing to answer questions and/or make changes in response to comments.  I don't claim to be an expert in anything, including digital communications modes or programming in general.  Thus, sometimes I need to ask for help understanding the changes that others propose, or the reasons that these changes are being proposed.  I welcome well supported arguments that help me to better understand these things.  However, if I don't think that your pull request improves ardopcf, it is also possible that I will decline to accept and merge it.  This doesn't necesssaily mean that there is anything wrong with your changes.  It may mean that those changes simply don't fit wth my vision for the continued development of ardopcf.
