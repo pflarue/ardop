@@ -6,11 +6,11 @@ The ARDOP protocol [specification](refs/ARDOP_Specification_20171127.pdf) includ
 
 # Ardop implementations:
 
-### [ARDOP_Win]
+### ARDOP_Win
 
-**ARDOP_Win** by Rick Muething KN6KB, is the original implentation of Ardop that runs natively only on Windows computers.  It is distributed by the Winlink Development team as a component of [Winlink Express](https://winlink.org/WinlinkExpress).
+**ARDOP_Win** by Rick Muething KN6KB, is the original implentation of Ardop that runs natively only on Windows computers.  It is distributed by the Winlink Development Team as a component of [Winlink Express](https://winlink.org/WinlinkExpress).
 
-### [ardopc/piardopc/ARDOPC.exe](https://www.cantab.net/users/john.wiseman/Documents/ARDOPC.html)
+### [ardopc, piardopc, ARDOPC.exe](https://www.cantab.net/users/john.wiseman/Documents/ARDOPC.html)
 
 **ardopc**, **piardopc**, and **ARDOPC.exe** are each created from the ARDOPC code base developed by John Wiseman G8BPQ.  This is written in the C programming language to make it usable on multiple platforms including Windows, Linux, and microcontrollers such as Teensy.  This began as a translation of ARDOP_Win into C.
 
