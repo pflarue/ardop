@@ -6,7 +6,7 @@ See the [latest release](https://github.com/pflarue/ardop/releases/latest) page 
 
 Though improvements have been made to the documentation for users and developers of **ardopcf**, additional work is needed.  The free users subgroup of ardop.groups.io is a useful supplement to the information found here and on the pages linked below.  The archives of that group can be read by anyone.  Anyone with comments or questions about **ardopcf**, is encouraged to join and send a message to that group.  General comments and requests for assistance are best directed to that group.  In contrast, creating a new [Issue](https://github.com/pflarue/ardop/issues) here in the GitHub repository may be more appropriate to report a bug or suggest a change in the operation of **ardopcf**.
 
-## Addition Documentation:
+## Additional Documentation:
 
 * [USAGE_linux.md](docs/USAGE_linux.md) and [USAGE_windows.md](docs/USAGE_windows.md): Basic instructions to install, configure, and run **ardopcf**.  These are split into separate versions for Linux and Windows users in an effort to make them easier to understand and follow, even though it results in some repetition.
 * [Troubleshooting.md](docs/Troubleshooting.md): Some suggestions for anyone having difficulty getting **ardopcf** to work correctly.
