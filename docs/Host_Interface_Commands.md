@@ -1,44 +1,36 @@
 # TCP Host Interface Commands
 
+**Disclaimer**: The content of this documentation is DESCRIPTIVE of the current TCP host interface, not PRESCRIPTIVE - meaning that we went through and tried to understand what the commands do based on review of the source code and older (possibly out of date) documentation. This means that the behavior of some of these commands under certain situations may not be as expected, and some may cause a crash. Some commands are not fully understood, and some responses are not fully documented, but this documentation will be updated as they are experimented with or after further code review. Feel free to clone the respository and submit a PR or to open up an issue with what should be changed and why.
 
+## Use with the `--hostcommands` command line option
+
+The `-H` or `--hostcommands` option can be used to apply one or more semicolon separated host commands at startup.  The remainder of this document describes all of the available host commands.  The commands are applied in the order that they are written, but usually this doesn't matter.  Because most commands will include a command, a space, and a value, you usually need to put quotation marks around the commands string.  As an example, `--hostcommands "MYCALL AI7YN;DRIVELEVEL 90"` sets my callsign and sets the transmit drive level to 90%.
+
+Some command line options that were available before ardopcf v1.0.4.1.3 now require use of `--hostcommands` to produce the same result.  The following list includes host comands that can be used to replace obsolete command line arguments plus a few others that may be useful.  See the detailed descriptions of these commands later in this document for more information.
+
+* CONSOLELOG: Controls amount of data printed to the screen. 1-6. Lower values print more info. (replaces `-V` or `--verboseconsole`, but values are different)
+* DRIVELEVEL: Linearly scales the amplitude of the transmitted audio. 0-100.  Not setting this value is equivalent to setting it to 100.
+* EXTRADELAY: Increased delay in ms between RX and TX to allow for long delay paths (replaces `-e` or `--extradelay`)
+* LEADER: Sets leader length in ms. (replaces `-x` or `--leaderlength`)
+* LOGLEVEL: Controls amount of data written to debug log. 1-6. Lower values write more info to log. (replaces `-v` or `--verboselog`, but values are different)
+* MYCALL: Set callsign
+* PROTOCOLMODE: Sets the protocol mode.  ("PROTOCOLMODE RXO" replaces `-r` or `--recieveonly`)
+* TRAILER: Sets trailer length in ms. (replaces `-t` or `--trailerlength`)
+* TWOTONETEST: Transmit two-tone test signal for 5 seconds. ("TWOTONETEST;CLOSE" replaces `-n` or `--twotone`)
+
+
+## Use by host applications
 
 When writing host applications, commands are issued to the modem's TCP socket (default 8515). By default, ardopcf listens on 0.0.0.0 (all interfaces, meaning unless you set up a firewall, any computer on your network can access ardopcf's tcp interface)
 
 Commands sent to the ardopcf command socket can be upper or lowercase, but must be terminated with a `/r` (carriage return) `0x0d` ascii byte.
 
-For example, sending `BUFFER/r` to the command socket will return `BUFFER N/r` where N is the decimal length of any data currently loaded into ardopcf's buffer via its data socket.
-
-**Disclaimer**: The content of this documentation is DESCRIPTIVE of the current TCP host interface, not PRESCRIPTIVE - meaning that we went through and tried to understand what the commands do based on review of the source code and older (possibly out of date) documentation. This means that the behavior of some of these commands under certain situations may not be as expected, and some may cause a crash. Some commands are not fully understood, and some responses are not fully documented, but this documentation will be updated as they are experimented with or after further code review. Feel free to clone the respository and submit a PR or to open up an issue with what should be changed and why.
-
-### Interfacing Example
-
-In python3 to send a command, this can be done like this:
-```
-import socket
-sock_cmd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock_cmd.connect('localhost', 8515)
-
-def send_command(string: str):
-  string += '\r'
-  sock_cmd.sendall(string.encode()) # it will expect 'bytes'
-
-send_command(`BUFFER`) # this will store 'BUFFER n\r' in the socket when ardop responds
-```
-To simply read the command response buffer, it can be done like this:
-```
-def read_command_response() -> str:
-  line = b''
-  while True:
-    part = sock_cmd.recv(1)
-    if part != b"\r":
-        line+=part
-    elif part == b"\r":
-        break
-  return(line.decode())
-```
-Note that the above is the simpliest example, and this will block the main thread if there is no data to read from the socket. You can make this asyncronous via multiple methods, but what works reasonably well is running the function in its own thread, setting `sock_cmd.set_blocking('False')` and wrapping the socket reading loop with a try/except block (terminating on a threading.Event being false), continuing on a `BlockingIOError`. If you find a better way to do this, please let us know!
+For example, sending `BUFFER/r` to the command socket will return `BUFFER N/r` where N is the decimal length of any data currently loaded into ardopcf's transmit buffer via its data socket.
 
 
+### Usage Example
+
+[diagnostichost.py](../host/python/diagnostichost.py) provides an example of how the ardopcf host interface can be used from Python with both Windows and Linux.  This was developed as a diagnostic tool for use by ardopcf developers, not as a tool for actaully communicating data using ardopcf.  Documentation for [diagnostichost.py](../host/python/diagnostichost.py) is provided in [README.md](../host/python/README.md) as well as in comments within the python file.
 
 ## ARDOP Modes
 
@@ -46,20 +38,22 @@ Not all commands are for all modes. There are three main operating modes of ardo
 
 **ARQ** (Automatic Repeat reQuest)
 
-  This is the primary mode used for software such as PAT and Winlink Express. It will intiate a connection request, negotiate a bandwidth and data rate, and try to adapt to the band conditions. It will continue to try to send a payload until either station aborts, disconnects or a timeout occurs. Each station will have oppurtunity to send their data between each other.
-  A typical ARQ mode set of initialization commands may look like this:
+This is the primary mode used for software such as PAT and Winlink Express. It will intiate a connection request, negotiate a bandwidth and data rate, and try to adapt to the band conditions. It will continue to try to send a payload until either station aborts, disconnects or a timeout occurs. Each station will have oppurtunity to send their data between each other.
+
+A typical ARQ mode set of initialization commands may look like this:
 >`INITIALIZE`
 >`PROTOCOLMODE ARQ`
 >`ARQTIMEOUT 30`
 >`ARQBW 1000MAX`
 >`MYCALL K7CALL`
 >`GRIDSQUARE CN87`
-    
+
 
 **FEC** (Forrward Error Correction)
- 
-  This mode is used for software such as hamChat, ARIM, and gARIM. It is used to send connectionless frames containing any payload, without guarantee of delivery.
-  A typical FEC mode set of initialization commands may look like this:
+
+This mode is used for software such as hamChat, ARIM, and gARIM. It is used to send connectionless frames containing any payload, without guarantee of delivery.
+
+A typical FEC mode set of initialization commands may look like this:
 >`INITIALIZE`
 >`PROTOCOLMODE FEC`
 >`MYCALL K7OTR`
@@ -68,17 +62,17 @@ Not all commands are for all modes. There are three main operating modes of ardo
 >`FECREPEATS 0`
 >`FECMODE 4FSK.500.100S`
 
-**RXO** (Decode all frames with extra debug output)
-  This mode is mainly used for logging/debugging purposes. It will decode any heard frame.
-  (O as in Oscar, not 0 as in zero)
-  You may set this protocol mode via:
+**RXO** (Receive Only - Decode all frames with extra debug output)
+This mode is mainly used for logging/debugging purposes. It will attemtp to decode every heard frame and write a description of that frame to the debug log. (O as in Oscar, not 0 as in zero)
+
+You may set this protocol mode via:
 >`INITIALIZE`
 >`PROTOCOLMODE RXO`
 
 
 ## ARDOPCF Command List
 
-These are all commands that the host application can send to ardopcf, and what to expect in response. Other commands from ardopcf can be recieved at any time, and it is up to the host application to continuously read the command socket and deal with any other responses ardop may send. See "ARDOPCF Command Socket Messages" section below for anything ardopcf may send that is not directly queried.
+These are all commands that the host application can send to ardopcf, and what to expect in response. Other commands from ardopcf can be received at any time, and it is up to the host application to continuously read the command socket and deal with any other responses ardop may send. See "ARDOPCF Command Socket Messages" section below for anything ardopcf may send that is not directly queried.
 
 ##### ABORT (or DD)
 
@@ -91,6 +85,10 @@ This is a "dirty disconnect" from a current ARQ session. It will clear the curre
 
 #### ARQBW
 Sets the desired bandwith for an ARQ connection. If there is a mismatch in desired bandwith (both sides force different bandwidths) then the `CONREJBW` frame will be sent by the called station.
+
+This also sets the bandwidth considered by the Busy Detector.
+
+This also sets the bandwidth used by ARQCALL if CALLBW is UNDEFINED.
 
 Acceptible bandwidths are 200, 500, 1000, and 2000.
 Acceptible bandwith enforcement modes are MAX and FORCE.
@@ -106,19 +104,17 @@ If no arguments are specified, it will return the current ARQBW value.
 
 #### ARQCALL
 
-Needs developer review (needs more testing)
-
-Initiates an ARQ session by transmitting `CONREQ` frames with the bandwidth mode specified by `ARQBW`. Once the session is connected, any data loaded into the data buffer of either end will be transmitted in turn until the session is ended via disconnect, or an idle timeout occurs.
+Initiates an ARQ session by transmitting `CONREQ` frames with the bandwidth mode specified by `CALLBW`.  If `CALLBW` is `UNDEFINED`, then the bandwidth mode specified by `ARQBW` is used. Once the session is connected, any data loaded into the data buffer of either end will be transmitted in turn until the session is ended via disconnect, or an idle timeout occurs.
 
 
 Requires: `MYCALL` to be set and `PROTOCOLMODE` == `ARQ`
 
 - Mode: ARQ
-- Arguments: Target Callsign or `CQ`; Number of `CONREQ` frames to send, 2-15.
-- `ARQCALL callsign 2` returns ??
-
+- Arguments: Target Callsign ; Number of `CONREQ` frames to send, 2-15.
+- `ARQCALL callsign 2` returns `ARQCALL callsign 2`
 
 If a connection attempt fails: `STATUS CONNECT TO {callsign} FAILED!`
+or `STATUS: END ARQ CALL`
 
 
 #### ARQTIMEOUT
@@ -179,16 +175,16 @@ Selects the sensitivity of, or disables, busy channel detection.
 - Arguments: Integer 0-9, with 0 being disabled, 1 being most sensitive, and 9 being least sensitive.
 - `BUSYDET` returns `BUSYDET 5`
 - `BUSYDET 6` returns `BUSYDET now 6`
-  
+
 #### CALLBW
 
-Needs Developer review.
+Set a bandwidth value to be used for ARQCALL which, unless set to UNDEFINED, will override the value set with ARQBW.
 
 - Mode: ARQ
-- Arguments: Optional desired bandwith postfixed with MAX/FORCE.
+- Arguments: Optional UNDEFINED or desired bandwith postfixed with MAX/FORCE.
 - `CALLBW 500MAX` returns `CALLBW now 500MAX`
 - `CALLBW` returns `CALLBW 500MAX`
-  
+
 #### CAPTURE
 
 Returns the currently selected capture device. This is supposed to let the user change the audio source, but currently it does not seem to work as intended. Changing this does not change where audio is routed for decoding.
@@ -198,7 +194,7 @@ Returns the currently selected capture device. This is supposed to let the user 
 - `CAPTURE` returns `CAPTURE plughw:2,0`
 - `CAPTURE plughw:1,0` returns `CAPTURE now plughw:1,0`
 
-  
+
 #### CAPTUREDEVICES
 
 Returns the currently selected capture device. This is supposed to let the user change the audio source, but currently it does not seem to work as intended. Changing this does not change where audio is routed for decoding.
@@ -208,15 +204,15 @@ Returns the currently selected capture device. This is supposed to let the user 
 - `CAPTUREDEVICES` returns `CAPTUREDEVICES plughw:2,0`
 - `CAPTUREDEVICES plughw:1,0` returns `CAPTUREDEVICES now plughw:1,0`
 
-  
+
 #### CL
 
 Same as `PURGEBUFFER` but as a SCS/Pactor modem emulation adapter. To be removed.
 
 #### CLOSE
 
-Kills ardopcf properly.
-  
+Kills ardopcf properly.  A host program will not normally close ardopcf.  However, this command is useful in some testing scenarios.
+
 #### CMDTRACE
 
 For debugging, determines if command sent from the host are recorded in the logfile or not.
@@ -225,16 +221,16 @@ For debugging, determines if command sent from the host are recorded in the logf
 - Arguments: None, `TRUE` or `FALSE`
 - `CMDTRACE` returns `CMDTRACE TRUE`
 - `CMDTRACE FALSE` returns `CMDTRACE now FALSE`
-  
+
 #### CONSOLELOG
 
-Changes the console log level, the information printed to the terminal where ardopcf was invoked. The higher the loglevel, the more is logged to the console.
+Changes the console log level, the information printed to the terminal where ardopcf was invoked. The lower the loglevel, the more is logged to the console.  The parameters used for CONSOLELOG were changed in ardopcf v1.0.4.1.3 with the introduction of a new logging system.
 
 - Mode: ANY
-- Arguments: None, loglevel integer 0-8
+- Arguments: None, loglevel integer 0
 - `CONSOLELOG` returns `CONSOLELOG 6`
 - `CONSOLELOG 1` returns `CONSOLELOG 1`
-  
+
 #### CWID
 
 Send a morse code identifier of `MYCALL` after the `IDFRAME` frame is sent, if enabled.
@@ -243,9 +239,9 @@ Two 'truthy' settings:
 - `ONOFF` -Traditional On-Off keying morse. Maybe not compatible with some VOX settings.
 
 - Mode: ANY
-- Arguments: None, `TRUE` or `FALSE` or `ONOFF` 
+- Arguments: None, `TRUE` or `FALSE` or `ONOFF`
 - `CWID` returns `CWID FALSE`
-  
+
 #### DATATOSEND
 
 Same as the `BUFFER` command, except passing a `0` arguement will clear the current buffer.
@@ -253,7 +249,7 @@ Same as the `BUFFER` command, except passing a `0` arguement will clear the curr
 - Mode: ANY
 - Arguments: None, or `0`
 - `DATATOSEND` returns `DATATOSEND 0`
-  
+
 #### DEBUGLOG
 
 Enable or disable writing the debug log to disk.
@@ -270,16 +266,16 @@ If in a ARQ session, commands ardopcf to gracefully end the session and places t
 - Mode: ANY
 - Arguments: None
 - `DISCONNECT` when not in a session returns `DISCONNECT IGNORED`
-  
+
 #### DRIVELEVEL
 
-Sets the volume of the generated frame audio. Lowering this may help with overdriven audio.
+Linearly scales the amplitude of the transmitted audio.  When transmitting with a SSB radio, this can be used to adjust the RF output power.  Lower values may also be used in conjunction with or as an alternative to sound card and radio settings to avoid overdriving the audio to the radio.  Radios typically include an Automatic Level Control (ALC) feature to reduce the overdriven input audio before using it to modulate the RF signal.  This ALC feature usually distorts digital mode signals, making them more difficult to decode.  So, using DRIVELEVEL settings that prevent excessive ALC action can result in better performance.
 
 - Mode: ANY
 - Arguments: None, Integer 1 through 100
 - `DRIVELEVEL` returns `DRIVELEVEL 100`
 - `DRIVELEVEL 50` returns `DRIVELEVEL now 50`
-  
+
 #### ENABLEPINGACK
 
 If enabled, ardopcf returns a `DATAACK` frame to acknowledge the a `PING`
@@ -288,7 +284,7 @@ If enabled, ardopcf returns a `DATAACK` frame to acknowledge the a `PING`
 - Arguments: None, `TRUE` or `FALSE`
 - `ENABLEPINGACK` returns `ENABLEPINGACK TRUE`
 - `ENABLEPINGACK FALSE` returns `ENABLEPINGACK now FALSE`
-  
+
 #### EXTRADELAY
 
 Adds extra time in between reception and transmission for high-latency signal paths.
@@ -297,15 +293,16 @@ Adds extra time in between reception and transmission for high-latency signal pa
 - Arguments: Time in milliseconds, 0-100000+
 - `EXTRADELAY` returns `EXTRADELAY 0`
 - `EXTRADELAY 10` returns `EXTRADELAY now 10`
-  
+
 #### FASTSTART
 
-Needs developer review.
+Controls the first data frame type used in an ARQ session.  If TRUE, then a frame type of moderate speed and robustness relative to the negotiated session bandwidth will be tried first.  If FALSE, then the slowest and most robust frame type relative to the negotiated session bandwidth will be tried first.  Depending on the response received from the other station to this first data frame, ardopcf will adjust to try to use the frame type which provides the best performance for the observed band conditions.
 
 - Mode: ANY
-- Arguments: None
-- Returns: None
-  
+- Arguments: None, `TRUE` or `FALSE`
+- `FASTSTART` returns `FASTSTART TRUE`
+- `FASTSTART TRUE` returns `FASTSTART now TRUE`
+
 #### FECID
 
 Automatically transmits an ID frame with every FEC transmission.
@@ -314,14 +311,14 @@ Automatically transmits an ID frame with every FEC transmission.
 - Arguments: None, `TRUE` or `FALSE`
 - `FECID` returns `FECID FALSE`
 - `FECID TRUE` returns `FECID now TRUE`
-  
+
 #### FECMODE
 
 Sets the frame type for transmission of the next data buffer in FEC mode. See the frame documentation for more information on specific data frame types.
 
 - Mode: FEC
 - Arguments: None, or one of the following:
-  
+
 >`4FSK.200.50S`
 >`4PSK.200.100S`
 >`4PSK.200.100`
@@ -342,16 +339,22 @@ Sets the frame type for transmission of the next data buffer in FEC mode. See th
 >`4FSK.2000.600S`
 - `FECMODE` returns `FECMODE 4PSK.200.100`
 - `FECMODE 8PSK.1000.100` returns `FECMODE now 8PSK.1000.100`
-  
+
 #### FECREPEATS
 
-FEC mode relies on multiple repeated frames because there is no automatic request for missing data like in ARQ mode. Duplicate frames will be discarded, if a frame is repeated and decoded 3 times, the host will only get the data once.
+In addition to the Reed Solomon based error correction capability used in the encoding of all Ardop data frames, setting FECREPEATS to a value greater than 0 to send repeated copies of each sent FEC frame further increases the likelihood that a receiving station will be able to correctly decode the data frames transmitted.  Unlike ARQ mode, FEC mode lacks automatic feedback from the receiving station with which to determine whether or not repeated copies of the data frame must be sent.
+
+The Memory ARQ feature allows data retained from frames that could not be correctly decoded to be combined with data from additional copies of that same data frame to further increase the likelihood of accurate decoding with each repetition.  This feature allows FECREPEATS to significantly increase the success rate for decoding of data frame types that are only marginally usable under the existing conditions.
+
+It is often better to choose a slower but more robust FECMODE rather than increase FECREPEATS. However, increasing FECREPEATS is appropriate when single transmissions of very robust FECMODE frame types are unreliable.  Under deep fading conditions it may also be more effective to increase FECREPEATS rather than select a more robust FECMODE.
+
+When more than one copy of a data frame is received, the duplicates are discarded.
 
 - Mode: FEC
 - Arguments: None, or an integer 0 through 5
 - `FECREPEATS` returns `FECREPEATS 0`
 - `FECREPEATS 5` returns `FECREPEATS now 5`
-  
+
 #### FECSEND
 
 If there is data in the `BUFFER`, ardopcf will await for a clear channel and then transmit the selected `FECMODE` frame `FECREPEATS` amount of times. If there is no data in the buffer, it will wait for data to be loaded. You cannot query this to see if `FECSEND` is true or not. If sending many FEC frames, setting this to `FALSE` will stop transmission.
@@ -359,7 +362,7 @@ If there is data in the `BUFFER`, ardopcf will await for a clear channel and the
 - Mode: FEC
 - Arguments: `TRUE` or `FALSE`
 - `FECSEND TRUE` returns `FECSEND now TRUE`
-  
+
 #### FSKONLY
 
 Disables PSK and QAM modes for ARQ sessions?
@@ -368,7 +371,7 @@ Disables PSK and QAM modes for ARQ sessions?
 - Arguments: None, `TRUE` or `FALSE`
 - `FSKONLY` returns `FSKONLY FALSE`
 - `FSKONLY TRUE` returns `FSKONLY now TRUE`
-  
+
 #### GRIDSQUARE
 
 Sets gridsquare for inclusion in the `IDFRAME`
@@ -377,7 +380,7 @@ Sets gridsquare for inclusion in the `IDFRAME`
 - Arguments: None, or 4,6,8 character grid square
 - `GRIDSQUARE` returns `GRIDSQUARE CN88`
 - `GRIDSQUARE CN87` returns `GRIDSQUARE now CN87`
-  
+
 #### INITIALIZE
 
 Performs initialization of the modem. The first command that needs to be issued to the modem.
@@ -385,7 +388,18 @@ Performs initialization of the modem. The first command that needs to be issued 
 - Mode: ANY
 - Arguments: None
 - Returns: None
-  
+
+#### INPUTNOISE
+
+This command is NOT intended to be used or useful during normal operation of ardopcf.  Rather, it is useful for diagnostic purposes.
+
+This command adds Gausian white noise to all incoming audio, including audio from WAV files being decoded.  If the audio plus this noise exceeds the capacity of signed 16-bit integers used for raw audio samples, clipping will occur.  This added noise, with a standard deviation specified by the integer argument to this command, decreases the likelihood that the received frames will be successfully decoded.  As a diagnostic tool, this is useful to study how the demodulators and decoders behave under varying noise levels.
+
+- Mode: ANY
+- Arguments: None, integer >= 0
+- `INPUTNOISE` returns `INPUTNOISE 10000`
+- `INPUTNOISE 5000` returns `INPUTNOISE now 5000`
+
 #### LEADER
 
 Synchronization leader length in milliseconds, the longer this is the easier it is for the listener to decode the frame, but the more overhead there is. In ARQ mode this is automatically adjusted.
@@ -394,7 +408,7 @@ Synchronization leader length in milliseconds, the longer this is the easier it 
 - Arguments: None, integer 120-2500
 - `LEADER` returns `LEADER 120`
 - `LEADER 140` returns `LEADER now 140`
-  
+
 #### LISTEN
 
 When enabled, allows processing of any decodeded ARQ or PING frames addressed to `MYCALL` or `MYAUX`.
@@ -403,14 +417,14 @@ When enabled, allows processing of any decodeded ARQ or PING frames addressed to
 - Arguments: None, `TRUE` or `FALSE`
 - `LISTEN` returns `LISTEN TRUE`
 - `LISTEN FALSE` returns `LISTEN now FALSE`
-  
+
 #### LOGLEVEL
 
-Sets the loglevel for the debug log that is generated when the program is run. Loglevel 1 is for critical errors only, and loglevel 8 logs everything. Loglevel 8 can generate very large files.
+Sets the loglevel for the debug log that is generated when the program is run. Loglevel 6 is for serious errors only, and loglevel 1 is the most verbose. Loglevel 1 can generate very large files. The parameters used for LOGLEVEL were changed in ardopcf v1.0.4.1.3 with the introduction of a new logging system.
 
 - Mode: ANY
-- Arguments: None, integer between 0 and 8
-- `LOGLEVEL` returns `LOGLEVEL 7`
+- Arguments: None, integer between 1 and 6
+- `LOGLEVEL` returns `LOGLEVEL 6`
 - `LOGLEVEL 1` returns `LOGLEVEL now 1`
 
 #### MONITOR
@@ -429,12 +443,12 @@ Does this make that data avaliable to a host application? I think funcationality
 
 #### MYAUX
 
-Sets auxillary (tactical) callsigns that the modem will respond to in addition to `MYCALL`.
+Sets auxillary callsigns that the modem will respond to in addition to `MYCALL`.  Since these will be used to send legally required IDFrames, these must still be legally valid callsigns issued by the appropriate govenment agency.  So, tactical callsigns should not be used with `MYAUX`.  Rather, `MYAUX` should be used for a station that may operate under more than one callsign, such as when both a personal and a club callsign might be used by a station, or when multiple licensed operators are sharing the use of a station.
 
 - Mode: ANY
 - Arguments: None or CALLSIGN
-- `MYAUX` returns `MYAUX TACCAL` (or `MYAUX `+ empty string)
-- `MYAUX ABC123` returns `MYAUX now ABC123`
+- `MYAUX` returns `MYAUX K7CALL`
+- `MYAUX K7CALL` returns `MYAUX now K7CALL`
 
 
 #### MYCALL
@@ -443,7 +457,7 @@ Sets operator callsign, used in `IDFRAME` and `CONREQ` frames, and for engaging 
 
 - Mode: ANY
 - Arguments: None or CALLSIGN
-- `MYCALL` returns `MYCALL K7CALL` (or `MYCALL `+ empty string)
+- `MYCALL` returns `MYCALL K7CALL`
 - `MYCALL K7CALL` returns `MYCALL now K7CALL`
 
 #### PING
@@ -457,7 +471,7 @@ If the pinged station responds with a `PINGACK` frame, this station will stop pi
 
 - Mode: ANY
 - Arguments: Target Callsign ; Count (1-15)
-- `PING 12345 1` returns `PING 12345 1`
+- `PING K7CALL 1` returns `PING K7CALL 1`
 
 #### PLAYBACK
 
@@ -513,7 +527,7 @@ Send a CAT hex string to the connected radio.
 
 #### RADIOPTTOFF
 
-Sends predefined CAT PTT hex string to a radio. Possibly embedded device specific. 
+Sends predefined CAT PTT hex string to a radio. Possibly embedded device specific.
 
 - Mode: ANY
 - Arguments: UNK
@@ -521,12 +535,12 @@ Sends predefined CAT PTT hex string to a radio. Possibly embedded device specifi
 
 #### RADIOPTTON
 
-Sends predefined CAT PTT hex string to a radio. Possibly embedded device specific. 
+Sends predefined CAT PTT hex string to a radio. Possibly embedded device specific.
 
 - Mode: ANY
 - Arguments: UNK
 - Returns: UNK
-  
+
 #### RXLEVEL
 
 Embedded platform control of ADC input volume.
@@ -574,7 +588,9 @@ Valid states are:
 
 #### TRAILER
 
-How long after transmission does the PTT remain ON. Used for radios with processing delays, such as SDR based radios.
+Adds a single tone of the specified length (in milliseconds) at the ends of all transmitted frames.  This may be required to keep the PTT on (including while using VOX) with certain SDR based radios to accomodate processing delay.  For such radios, without this setting they may release the PTT before all of the the useful part of the frame has been transmitted.
+
+This is not required for most radios.
 
 - Mode: ANY
 - Arguments: Integer value between 0 and 200
@@ -592,7 +608,7 @@ How many hertz from center frequency (1500Hz) an incoming signal can be decoded.
 
 #### TWOTONETEST
 
-Transmits a pair of tones at the normal leader amplitude. May be used in adjusting drive level to the radio.
+Transmits pair of tones at the normal leader amplitude for five seconds. May be used in adjusting drive level to the radio.
 
 - Mode: ANY
 - Arguments: None
@@ -608,7 +624,7 @@ Embedded platform control of ADC output volume.
 
 #### USE600MODES
 
-Enables 600 baud rate frame types 4FSK.2000.600S and 4FSK.2000.600. For use on FM/2m. Use on HF bands constitute a data rate violation per FCC rules.
+Enables 600 baud rate frame types 4FSK.2000.600S and 4FSK.2000.600. For use on FM/2m.
 
 - Mode: ANY
 - Arguments: `TRUE` or `FALSE`
@@ -631,10 +647,10 @@ There are more than are listed here! If you find a different message, please let
 
 #### BUFFER
 
-The `BUFFER` message is recieved whenever data is added to the data buffer. It is a verification opportunity for the host to be sure that the data that was sent to ardopcf is the same length that it received.
+The `BUFFER` message is received whenever data has been added to the transmit data buffer.
 
-Example: sending to the ardopcf data port `<2 length bytes><mode>Hello` would return a `BUFFER 5` - the length of the acutal data.
-The `2 length bytes` is a big endian representation of the length of the data to load into the data buffer.
+Example: In FEC mode after sending some data to the data port, a host program should wait until after it receives a BUFFER response before sending `FECSEND` to the command port.  Otherwise, the `FECSEND` might be processed before the data is added to the transmit buffer, in which case the data won't be sent.
+
 The `mode` is either `FEC` or `ARQ`.
 
 
@@ -697,7 +713,7 @@ See `STATE` above for definitions.
 
 `caller` is the station that sent the ping.
 `target` is the station the caller tried to ping.
-`SNdB` is the signal-to-noise ratio of the recieved 
+`SNdB` is the signal-to-noise ratio of the received
 `Quality` is the frame decode quality rating, usualy 70-100
 
 If ardopcf has `ENABLEPINGBACK` set to `TRUE` and the target is this station, it will respond with `PINGACK`
@@ -751,7 +767,7 @@ Used to signal the host that a connect request to or from Remote Call sign was r
 
 #### REJECTEDBUSY
 
-`REJECTEDBUSY CALLSIGN` 
+`REJECTEDBUSY CALLSIGN`
 
 Used to signal the host that a connect request to/from Remote Call sign was rejected due to channel busy detection.
 
@@ -765,7 +781,7 @@ There are several status messages, here are some of them:
 
 `STATUS BREAK received from Protocol State IDLE, new state IRS`
 
-`STATUS BREAK received from Protocol State IDLE, new state IRS` 
+`STATUS BREAK received from Protocol State IDLE, new state IRS`
 
 `STATUS BREAK received from Protocol State ISS, new state IRS`
 
