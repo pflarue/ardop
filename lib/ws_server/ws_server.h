@@ -13,6 +13,7 @@ typedef void (*ws_vprintf_fcn)(const char*, va_list);
 int ws_set_max_clients(unsigned int max_clients);  // override max_clients=10
 int ws_set_port(int port);  // override default port=8088
 int ws_set_uri(char *uri);  // override default uri="/ws"
+void ws_set_retry_limit(int new_retry_limit);  // override retry_limit=10
 
 // ws_set_error() and ws_set_debug() may be used to provide
 // callback functions to redirect error and debug messages.

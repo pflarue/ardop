@@ -115,6 +115,16 @@ void WebguiInit() {
 	ws_set_port(wg_port);
 	ws_set_uri("/ws");
 	ws_set_close_notify(wg_reset_rdata);  // callback
+	if ((strcmp(PlaybackDevice, "NOSOUND") == 0)
+		&& (strcmp(CaptureDevice, "NOSOUND") == 0)
+	)
+		// Use of NOSOUND audio devices, which are typically used only in
+		// testing scenarios, eliminates the intentional delays created with
+		// various sleep functions.  This causes the main program loop to run
+		// very fast.  If the WebGui is used in such a case, then it may take
+		// a large number of retries to send a large data blocks such as the
+		// html and js files.
+		ws_set_retry_limit(5000);
 
 	// Use root uri "/" for the webgui.html that users are likely
 	// to manually enter into a web browser (with the specified port

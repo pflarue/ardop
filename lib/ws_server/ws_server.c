@@ -300,6 +300,18 @@ void b64(const unsigned char in[20], unsigned char out[29])
 	out[j] = 0x00;  // make out a null terminated string
 }
 
+// Set the maximum number of attempts to be made by retry_send_to_socket()
+// before giving up and closing the socket.  This may need to be increased from
+// the default value of 10 if ws_poll() is being called in a very fast loop.
+void ws_set_retry_limit(int new_retry_limit) {
+	if (new_retry_limit < 0)
+		retry_limit = 0;
+	else
+		retry_limit = new_retry_limit;
+	ws_debug("WS: retry_limit set to %d.", retry_limit);
+	return;
+}
+
 // Set the maximum number of clients that the WebSocket server will allow to
 // connect at any one time.
 // This is optional, but is ignored if used after ws_init()
