@@ -14,7 +14,7 @@ Some command line options that were available before ardopcf v1.0.4.1.3 now requ
 * LEADER: Sets leader length in ms. (replaces `-x` or `--leaderlength`)
 * LOGLEVEL: Controls amount of data written to debug log. 1-6. Lower values write more info to log. (replaces `-v` or `--verboselog`, but values are different)
 * MYCALL: Set callsign
-* PROTOCOLMODE: Sets the protocol mode.  ("PROTOCOLMODE RXO" replaces `-r` or `--recieveonly`)
+* PROTOCOLMODE: Sets the protocol mode.  ("PROTOCOLMODE RXO" replaces `-r` or `--receiveonly`)
 * TRAILER: Sets trailer length in ms. (replaces `-t` or `--trailerlength`)
 * TWOTONETEST: Transmit two-tone test signal for 5 seconds. ("TWOTONETEST;CLOSE" replaces `-n` or `--twotone`)
 
@@ -63,6 +63,7 @@ A typical FEC mode set of initialization commands may look like this:
 >`FECMODE 4FSK.500.100S`
 
 **RXO** (Receive Only - Decode all frames with extra debug output)
+
 This mode is mainly used for logging/debugging purposes. It will attemtp to decode every heard frame and write a description of that frame to the debug log. (O as in Oscar, not 0 as in zero)
 
 You may set this protocol mode via:
@@ -227,7 +228,7 @@ For debugging, determines if command sent from the host are recorded in the logf
 Changes the console log level, the information printed to the terminal where ardopcf was invoked. The lower the loglevel, the more is logged to the console.  The parameters used for CONSOLELOG were changed in ardopcf v1.0.4.1.3 with the introduction of a new logging system.
 
 - Mode: ANY
-- Arguments: None, loglevel integer 0
+- Arguments: None, loglevel integer 1-6
 - `CONSOLELOG` returns `CONSOLELOG 6`
 - `CONSOLELOG 1` returns `CONSOLELOG 1`
 
@@ -466,9 +467,6 @@ Encodes a 4FSK 200 Hz BW Ping frame ( ~ 1950 ms with default leader/trailer) wit
 
 If the pinged station responds with a `PINGACK` frame, this station will stop pinging.
 
-** this needs more research on how to use with a host.
-** Check function ProcessPingFrame in ARDOPC.c
-
 - Mode: ANY
 - Arguments: Target Callsign ; Count (1-15)
 - `PING K7CALL 1` returns `PING K7CALL 1`
@@ -608,7 +606,7 @@ How many hertz from center frequency (1500Hz) an incoming signal can be decoded.
 
 #### TWOTONETEST
 
-Transmits pair of tones at the normal leader amplitude for five seconds. May be used in adjusting drive level to the radio.
+Transmits a pair of tones at the normal leader amplitude for five seconds. May be used in adjusting drive level to the radio.
 
 - Mode: ANY
 - Arguments: None
