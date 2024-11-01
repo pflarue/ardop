@@ -1,5 +1,261 @@
 # Changelog
 
+### 2024.10.31: [ardopcf](https://github.com/pflarue/ardop) v1.0.4.1.3 from v1.0.4.1.2
+
+#### Improved documentation
+
+Several new documentation files are added.  While there is still a lot of room for improvement in this documentation, it is much more complete and better organized than it was before.
+
+Comments added to Makefile to help people build ardopcf from source.
+
+
+#### Changes to Command Line Options
+
+##### Eliminate several command line options
+
+The last release of ardopcf, v1.0.4.1.2, introduced the `--hostcommands` command line option, which allows any host command to be executed at startup from the command line. Several command line options which duplicated functionality that could be achieved with `--hostcommands` were marked as deprecated. When those deprecated command line options were used, the user was informed of an equivalent `--hostcommands` argument and was informed that the deprecated option would be removed in a future release of ardopcf.
+
+This change removes all obsolete command line options that are no longer needed because `--hostcommands` can achieve the same results.
+
+This may require many users to reconfigure the command used to start ardopcf.
+
+##### Complete rewrite of logging system
+
+The functions used to write the debug log and session log are completely rewritten.  While this was done primarily to improve stability and maintainability, it also introduces some changes to both command line options and settings that may be provided via host programs.
+
+The new `--nologfile` or `-m` command line option may be used to prevent the creation of log files.
+
+The values used with the `LOGLEVEL` and `CONSOLELOG` host commands are inverted.  These commands may be used by host programs or from the command line via the `--hostcommands` or `-H` options.  Prior to this change, the argument for these commands used to be an integer in the range of 0 to 8 where a high number meant more detailed logging.  Now the argument for these commands is **an integer in the range from 1 to 6 where a LOWER number means MORE DETAILED logging**.
+
+##### Handle multiple `--decodewav` options
+
+The `--decodewav` or `-d` command line option provides the name of a WAV file to be decoded by ardopcf rather than listening for input from a sound device.  This is useful for development/debugging purposes.  Previously, only a single WAV file could be decoded each time ardopcf was run.  Now, this command line option can be repeated up to five times with different WAV filenames, or repeated copies of the same filename, and ardopcf will attempt to decode them as if they were received one after annother, with brief periods of silence between them.
+
+This feature, along with the new INPUTNOISE host command, was important to the development and testing of the improved Memory ARQ feature and the changes to prevent discarding of FEC data frames of repeated frame type.
+
+
+#### Other User interface changes
+
+##### More widely usable binaries
+
+Due to an improved understanding of the limitations on portability of compiled binaries, current and future releases of ardopcf will be intended to be usable with a wider range of computer operating system versions. The remaining limitations will be more clearly included in the release announcements.
+
+##### Improved ID handling
+
+A few different bugs were found that resulted in ardopcf not always sending a station ID frame when it should have.  These are corrected for improved legal compliance.
+
+A side effect of these changes is that ardopcf will no longer transmit anything, including the 2-tone test signal, until the station ID has been set.  This is normally set by a host program such as Pat winlink or gARIM.  If you want to be able to send a 2-tone test signal for audio level adjustment or antenna tuning before starting the host program, you should set your callsign with the command line argument such as `--hostcommands "MYCALL AI7YN"`, but of course using your own callsign rather than AI7YN.
+
+##### Improved WebGui display
+
+Several changes are made to the data displayed by the WebGui.  These include displaying the Quality values encoded in ACK/NAK frames, displaying additional details about received Ping/PingAck frames, and dispaying (REPEATED TYPE) after frame types that are a repeat of the previously received data frame.  In ARQ sessions, receiving a repeated data frame type indicates that the sending station did not receive a DataACK.  In FEC mode it either indicates that the sending station is transmitting multiple copies for each data frame for improved robustness or that the second received FEC data frame is from a different station than the first.
+
+Each time the station transmits, the Spectrum plot is now cleared and a white line is added to the waterfall display. The cleared spectrum supplements the "PTT" indicator on the Webgui to make it more obvious when the system is transmitting. This may be useful in situations in which the user can see the Webgui screen, but cannot see or hear indications from the radio that it is transmitting. Adding a white line to the waterfall leaves a clear indication in that plot of the breaks between periods of received audio.
+
+##### Obey CW ID settings
+
+Previously, the setting provided via the host program indicating whether a CW/Morse Code version of a station ID should be transmitted each time an ID frame is transmitted was not always obeyed.
+
+This change ensures that this setting works as expected.
+
+##### Eliminate explicit handling of CQ
+
+While this doesn't appear to be in current usage (and maybe never was), ardopcf contained some code specific to sending a CQ connect request.  This code is removed.
+
+##### New INPUTNOISE host command
+
+Add the new INPUTNOISE host command which takes an integer argument. This argument sets the standard deviation of Gaussian white noise that is added to all incoming audio including audio from WAV files being decoded. If the incoming audio plus the noise exceeds the capacity of the signed 16-bit integers used for raw audio samples, then clipping will occur.
+
+This new command is not intended to be used or useful during normal operation of ardopcf. Rather, it is another feature which is useful for diagnostic purposes.
+
+#### Performance improvements
+
+##### Improve decoding of repeated data frames.
+
+Memory ARQ, as the term is used by ardopcf, refers to retaining data from a failed attempt to decode a data frame, and then using the combination of that retained data with data from a new resent copy of that same data frame to improve the likelihood of successfully decoding it.
+
+In ARQ protocol mode, data frames are resent whenever the sending stations fails to receive a DataACK from the receiving station.  In FEC protocol mode, data frames may be sent multiple times to increase robustness by using the the FECREPEATS host command.
+
+Previously this Memory ARQ was only partially implemented, and part of that implementation was broken.  Now, it is applied to all data frame types in ARQ, FEC, and RXO protocol modes.  This should significantly improve the likelihood of successfully decoding any data frame that is sent more than once.
+
+##### Don't discard FEC data due to repeated frame type
+
+Previously, if an FEC data frame was received that was of the same frame type as the last data frame, and that last data frame was successfully decoded, then the new frame was assumed to be a repeat and was discarded.  While this approach is acceptable during an ARQ session, it was inappropriate for FEC data, where new data may be received using the same frame type as the last frame.  This is most likely to occcur when receiving FEC data from more that one sending station.
+
+With this change, a received data frame is only discarded if its frame type and its content matches the last data frame received.  This should make multi-station FEC nets/conversations more usable.
+
+Unfortunately, this change, along with the full implementation of Memory ARQ introduces the possibility that data from failed attempts to decode different FEC data frames may be mistakenly combined and presented as data from a correctly decoded frame.  Features are included to reduce the likelihood of this occuring, but the possibility cannot be completely eliminated.  To further mitigate this deficiency, host level protocols can be implemented to detect such errors.  This may be appropriate when correctness of data reveived in FEC mode is very important.
+
+Received FEC data that cannot be correctly decoded is passed to the host program with a flag that marks it as containing errors.  The host program chooses whether or not to display this data to the user, and how to distinguish it from correctly received data.  This feature can be useful when it is better to see received data with a few errors than to not see the data at all.  This change also ensures that such data with errors is passed to the host program in a more timely manner than would have been done previously.
+
+##### Improve modulation of 16QAM.2000.100 data frames
+
+Previously a bug in the function that encodes PSK and QAM data frame types made 16QAM.2000.100 frames difficult to decode even under perfect noise free conditions.
+
+This change eliminates that bug, reducing the bit error rate while decoding these 16QAM.2000.100 data frames by about 30% under perfect noise free conditions.  As a result, these fastest but least robust data frames can now be reliably decoded under perfect conditions, and should be more likely to be useful under imperfect but still very good conditions.
+
+Fixing this bug may also result in slight improvements to usability of the 2kHz bandwidth PSK frame types as well as the other multi-carrier 16QAM frame types. However, these improvements are minor compared to the improvements to the 16QAM.2000.100 frames.
+
+This bug was fixed as a part of a reorganization of the functions that encode PSK/QAM data frames.  This change was intended to make these functions easier to understand and debug.
+
+##### Pad unfilled frames with zeros
+
+The Ardop spec (Appendix B, Definition of FrameData) requires that unfilled data frames be padded with zeros. This change undoes an earlier (mistaken) change that violated that requirement.  In some cases, restoring this use of zero padding may improve decoding performance.  It also opens up some opportunities for future optimization of decoding functions to make them more robust when unfilled data frames are received.
+
+##### Always apply Reed Solomon error correction
+
+Previously, rs_correct() was only used when the CRC check failed. During testing, a case was encountered in which the CRC check produced a false positive that would have been corrected by rs_correct(). This change prevents that from occurring again.
+
+##### SDFT: Don't adjust timing based on weak signals
+
+The optional Sliding DFT demodulator for 4FSK was written to greatly improve decode performance when the transmitting station is using a slightly incorrect symbol rate.  However, this was found to sometimes cause decreased performance under poor conditions when the symbol rate was correct.
+
+This change avoids adjusting timing while demodulating 4FSK signals when the requirement for such asjustments is less certain.
+
+
+#### Improvements to stability, reliability, and maintainability
+
+Some of these changes remove code that was not being used, tested, or updated as other changes to ardopcf were being made.  By removing unused code from the repository, it makes the remaining code easier to understand and easier to maintain.
+
+##### Introduce python based WAV testing
+
+A new test script is added to in the `test/python` subdirectory. See the README file in that directory for additional details.
+
+##### Reorganize repository layout
+
+Before this change, the directory structure of the ardopcf code respository matched what was used by ardopc.  This structure, including the use of the `ARDOPC` subdirectory no longer makes sense for ardopcf.  So, this change creates a new more appropriate directory structure to hold the various source code files.
+
+This restructuring also includes changes to the Makefile (now located in the top level directory) and to path references within various files.
+
+##### Avoid ambiguous else statements
+
+In a few place nested if/else blocks did not include brackets that would avoid ambiguity of which `if` an `else` was associated with.  Adding some additional brackets eliminiates this ambiguity.
+
+##### Define named values for all non-data frame types
+
+By using named values rather than integer frame type values in the source code, the code is easier to understand and debug.
+
+##### Avoid undefined behavior and related code errors/crashes
+
+As described in [Issue #37](https://github.com/pflarue/ardop/issues/37) ASAN and UBSAN options used when compiling ardopcf for testing purposes can help identify errors including those related to undefined behavior and invalid memory access.  Some such errors could cause ardopcf to crash unexpectedly.  These options are not used to build binaries for ardopcf releases because their use does impact performance.
+
+In addition to helping to identify bugs whose fixes are described elsewhere in this changelog, they also helped identify several other minor bugs not specifically mentioned.
+
+##### Introduce Cmocka test framework.
+
+Until now, all testing of ardopcf to confirm that it works as expected has been ad-hoc.  Use of the Cmocka test framework allows more focused testing to confirm that specific features/functions work as they should.  Some tests have already been implemented, and this testing has helped to identify bugs that were then fixed.  Over time, additional testing will be implemented.  This is expected to help increase the overall quality of the source code, and to improve stability and reliability.
+
+Compiling and running these tests requires installation of the cmocka library, but this is not required build and use ardopcf.
+
+Many other changes described in this changelog also include additional/changed test procedures.  These changes are usually not mentioned in this changelog.
+
+##### Rewrite callsign and location handling system
+
+The code that validates callsigns and grid square locations and converts these between human readable strings and the compressed formats used for sending them over the air is completely rewritten.  This code is now more reliable and consistent.
+
+##### More robust WebGui connection
+
+Minor changes are made to improve the communication between ardopcf and the WebGui.
+
+##### Finish removal of Packet mode
+
+Prior to release v1.0.4.1.2, support for Packet mode was discontinued.  However, much of the code used to implement this mode was not completely removed.  This change removes that remaining unused code.
+
+##### Remove support for Teensy and other microcontrollers
+
+Earlier versions of ardopc and ardopcf included code specifically intended to support running on microcontrollers including Teensy.
+
+In a message posted to the users group of ardop.groups.io on May 28, 2024, I announced my intention to discontinue support for Teensy and asked anyone who felt that this should not be discontinued to respond to that message. Lacking such responses, all support for Teensy and other microcontrollers is removed.
+
+##### Remove SCS Host Interface
+
+Earlier versions of ardopc and ardopcf included support for a serial host interface. This simulated an interface used by SCS Pactor modems, and was useful when ardopc was running on microcontrollers that did not support the primary TCP/IP host interface.
+
+It may have also been useful when Ardop was under development, since it allowed use with host programs that supported Pactor, but did not yet support Ardop directly.
+
+In a message posted to the users group of ardop.groups.io on May 28, 2024, I announced my intention to discontinue support for the this serial interface and asked anyone who felt that this should not be discontinued to respond to that message. Lacking such responses, support for a serial interface between ardopcf and host programs is removed.
+
+ardopcf still retains code used to communicate with radio hardware via (actual or simulated) serial interfaces. For some ardopcf configuration options, this code is used to key (PTT) the radio and may be used to send other control codes to the radio.
+
+##### Delete unused files
+
+Several obsolete files are removed from the code repository.
+
+Among the files deleted are several vcproj files as well as getopt.c and getopt.h. With the removal of these files, continued support for building ardopcf for Windows is more explicitly tied to the use of the MinGW-w64 system for GCC on 32 and 64 bit Windows.
+
+##### Remove unused functions and code fragments
+
+Before this change, the source files used to build ardopcf contained large amounts of unused source code. Much of this consisted of functions that were never referenced or execution branches whose conditions would never be met. Some of this code was intended to support transmit and receive of modulation types and baud rates incompatible with the v1 Ardop specification that ardopcf intends to maintain compatibility with.  Much of that code is removed.
+
+##### Restore CalcTemplates.c
+
+ardopcf (and ardopc before it) uses precalculated waveform sample values from ardopSampleArrays.c as the basis for data sent to the soundcard to transmit. CalcTemplates.c is intended to contain the source code that generated ardopSampleArrays.c. However, CalcTemplates.c had not been maintained and was not fully functional.
+
+This change restores CalcTemplates.c so that it is now capable of producing newArdopSampleArrays.c containing data nearly identical to the existing ardopSampleArrays.c. The format is close, but not exactly the same. The data values are within +/- 2 (out of +/- 32k). By writing to a different file, the results can be compared before deciding whether or not to replace ardopSampleArrays.c with newArdopSampleArrays.c. Running CalcTemplates also prints some data comparing the new values to those found in ardopSamplesArrays.c. This is intended to help the developers to be confident that no unintended changes are being made.
+
+The resulting newArdopSampleArrays.c is intended to be a temporary file that is either used to replace ardopSampleArrays.c or is deleted. It should not be included in the git repository. Therefore .gitignore is updated to exclude both this file and CalcTemplates, the compiled executable file. Instructions for building CalcTemplates with a single call to gcc is provided as a comment near the top of CalcTemplates.c.
+
+Inspection of CalcTemplates.c allows the developers to see and understand the form of what is being transmitted much more easily than looking at the large arrays of numbers in ardopSampleArrays.c.
+
+##### Whitespace cleanup
+
+This change mostly cleans up a lot of whitespace issues in the repository. Included in the change is converting all line endings to Unix style.
+
+As a result, this change affects a large percentage of the ardopcf code.  So, included with this highly disruptive change is also some manual cleanup. The manual changes also mostly affects whitespace, but some other stylistic changes are also included.
+
+A .gitattributes file is added to the repository. This should help ensure that new line-endings problems are not introduced.
+
+All developers are now strongly encouraged to avoid whitespace "errors" in their pull requests so that these don't need to be cleaned up before merging. These include whitespace at the ends of lines, spaces where tabs are expected, and blank lines that contain spaces and/or tabs.
+
+##### Improve Linux signal handler safety
+
+Make improvements to the handling of signals including CTRL-C that allows a user to terminate ardopcf.
+
+This change only affects Linux systems.
+
+##### Permit cross-compiling
+
+Modify Makefile so as to facilitate cross compiling Windows binaries from Linux using MinGW.  This allows Linux developers who do not also have a Windows computer, to identify whether the changes they are making to ardopcf are incompatible with Windows.
+
+The ability to cross comile for windows can be a useful tool for this, but it will not allow all changes that introduce problems for Windows users to be identified.  Building and testing on Window computers is still required.
+
+Because testing of ardopcf on Windows computers will continue to use Windows binaries compiled on windows, rather than the results from cross compiling, the reliability of cross compiled binaries is less certain.
+
+##### Fix unmatched va_start()/va_end()
+
+Eliminate unmatched va_start()/va_end() in code for WebGui.  This avoids possible memory leaks.
+
+##### Create new command line diagnostic host program
+
+A new python based command line host program, diagnostichost.py, was developed to help understand and fix the problems with Memory ARQ and FEC protocol mode.
+
+Like many ardopcf features, this tool is not intended to be useful for typical users of ardopcf. Rather, it is a tool that is useful to me, and that I think may be useful to others who are interested in working on ardopcf or a derivative of it, or who are interested in exploring how it works. So, I am including it in this repository.
+
+For more details, see the [README](host/python/README.md) file provided for this host program.
+
+##### Write command line to log file
+
+When people need help with ardopcf, it is often useful to share a log file.  Including the full command line string used when ardopcf was started can assist the person trying to offer help.
+
+##### New ardopcf.c and main()
+
+This is a minor change to the structure of the source code.
+
+##### Simplified handling of WebGui related files
+
+Changed the location and handling the html and js source files used to implement the WebGui.  Also modified Makefile to eliminate temporary files created during the build process.  This prevents unnecessary files from being included in the ardopcf code repository and simplifies the build process.
+
+##### Minor logging changes
+
+Several changes are made which allow addditional details to be written to the log file or make log messages easier to understand.
+
+##### Allow WebGui to display constellation data from log file.
+
+In WebGui developer mode, constellation data that was written to a debug file (verbose level only) can be plotted by pasting it into the input box.  This can be useful during debugging since the graphical display of this constellation data is much easier to interpret than the printed values.
+
+##### Bump product version from 1.0.4.1.2 to 1.0.4.1.3
+
+
 ### 2024.05.30: [ardopcf](https://github.com/pflarue/ardop) v1.0.4.1.2 from v1.0.4.1.1
 
 ##### DEPRECATE several command line options, replace with `--hostcommands`
