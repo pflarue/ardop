@@ -49,13 +49,6 @@ cd ardop
 git checkout develop
 
 # 3. Build ardopcf.
-# If you are building from the master branch, you must change to the ARDOPC directory
-# where the Makefile is located.  The develop branch has moved the Makefile to the
-# repository's top level directory so that this is not required.  (It also eliminated
-# the ARDOPC subdirectory)
-cd ARDOPC
-ls Makefile
-
 # If the following produces one or more errors, then something went wrong that needs
 # to be resolved.  If it produces only warnings, then the excutable file named ardopcf
 # is produced.  Future updates to ardopcf will hopefully reduce the number of warnings.
@@ -125,10 +118,10 @@ To use this MinGW system, it is necessary to add the `bin` directory within the 
 ### Build ardopcf
 
 1. Open a Windows Command Prompt.  On Windows 11, this can be done by pressing the Windows Start button and typing 'Command Prompt' into the search bar and pressing Enter.  On older versions of Windows it is probably available in the Windows System folder after pressing the Windows Start button.
-2. Use `cd` to navigate to the `ardop-master\ARDOPC` (or `ardop-develop`) directory that was created when you downloaded the source code.  Use `dir` to confirm that you are in the correct directory by verifying that `Makefile` is located there.  For example
+2. Use `cd` to navigate to the `ardop-master` (or `ardop-develop`) directory that was created when you downloaded the source code.  Use `dir` to confirm that you are in the correct directory by verifying that `Makefile` is located there.  For example
 
 ```
-cd /D C:\Users\<USERNAME>\ardop-master\ARDOPC
+cd /D C:\Users\<USERNAME>\ardop-master
 dir Makefile
 ```
 
