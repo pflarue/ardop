@@ -516,6 +516,8 @@ int platform_main(int argc, char * argv[])
 							PTTBAUD = atoi(Baud);
 					}
 					if (useHamLib == 0)
+						// PTTMode defaults to PTTRTS, but may have been set to
+						// PTTDTR in processargs();
 						hPTTDevice = OpenCOMPort(PTTPort, PTTBAUD, FALSE, FALSE, FALSE, 0);
 				}
 			}

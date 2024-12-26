@@ -131,6 +131,8 @@ char HelpScreen[] =
 	"-m or --nologfile                    Don't write log files. Use console output only.\n"
 	"-c device or --cat device            Device to use for CAT Control\n"
 	"-p device or --ptt device            Device to use for PTT control using RTS\n"
+	// RTS:device is also permitted, but is equivalent to just device
+	"                                     or DTR:device to use DTR for PTT instead of RTS\n"
 	// TODO: Verify that this actually works with a CM108-like device for PTT
 	"                                     or VID:PID of CM108-like Device to use for PTT\n"
 	"-g [Pin]                             GPIO pin to use for PTT (ARM Only)\n"
@@ -151,7 +153,7 @@ char HelpScreen[] =
 	"                                       DO NOT use -A option except for testing/debugging,\n"
 	"                                       or if ardopcf fails to run and suggests trying this.\n"
 	"\n"
-	" CAT and RTS PTT can share the same port.\n"
+	" CAT and RTS/DTR PTT can share the same port.\n"
 	" See the ardop documentation for more information on cat and ptt options\n"
 	"  including when you need to use -k and -u\n\n";
 
@@ -281,6 +283,13 @@ void processargs(int argc, char * argv[])
 
 		case 'p':
 			strcpy(PTTPort, optarg);
+			if (strstr(PTTPort, "RTS:") == PTTPort && strlen(PTTPort) > 4) {
+				PTTMode = PTTRTS;  // This is also the default w/o a prefix
+				strcpy(PTTPort, optarg + 4);
+			} else if (strstr(PTTPort, "DTR:") == PTTPort && strlen(PTTPort) > 4) {
+				PTTMode = PTTDTR;
+				strcpy(PTTPort, optarg + 4);
+			}
 			break;
 
 		case 'c':
