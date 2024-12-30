@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <string.h>
 
 #include "common/log.h"
 
@@ -33,6 +34,54 @@ int ReadCOMBlock(HANDLE fd, char * Block, int MaxLength)
 	return Length;
 }
 
+void CloseCOMPort(HANDLE fd)
+{
+	close(fd);
+}
+
+void COMSetDTR(HANDLE fd)
+{
+	int status;
+
+	if (ioctl(fd, TIOCMGET, &status) == -1)
+		ZF_LOGE("ARDOP COMSetDTR TIOCMGET: %s", strerror(errno));
+	status |= TIOCM_DTR;
+	if (ioctl(fd, TIOCMSET, &status) == -1)
+		ZF_LOGE("ARDOP COMSetDTR TIOCMSET: %s", strerror(errno));
+}
+
+void COMClearDTR(HANDLE fd)
+{
+	int status;
+
+	if (ioctl(fd, TIOCMGET, &status) == -1)
+		ZF_LOGE("ARDOP COMClearDTR TIOCMGET: %s", strerror(errno));
+	status &= ~TIOCM_DTR;
+	if (ioctl(fd, TIOCMSET, &status) == -1)
+		ZF_LOGE("ARDOP COMClearDTR TIOCMSET: %s", strerror(errno));
+}
+
+void COMSetRTS(HANDLE fd)
+{
+	int status;
+
+	if (ioctl(fd, TIOCMGET, &status) == -1)
+		ZF_LOGE("ARDOP COMSetRTS TIOCMGET: %s", strerror(errno));
+	status |= TIOCM_RTS;
+	if (ioctl(fd, TIOCMSET, &status) == -1)
+		ZF_LOGE("ARDOP COMSetRTS TIOCMSET: %s", strerror(errno));
+}
+
+void COMClearRTS(HANDLE fd)
+{
+	int status;
+
+	if (ioctl(fd, TIOCMGET, &status) == -1)
+		ZF_LOGE("ARDOP COMClearRTS TIOCMGET: %s", strerror(errno));
+	status &= ~TIOCM_RTS;
+	if (ioctl(fd, TIOCMSET, &status) == -1)
+		ZF_LOGE("ARDOP COMClearRTS TIOCMSET: %s", strerror(errno));
+}
 
 static struct speed_struct
 {
@@ -65,9 +114,6 @@ HANDLE OpenCOMPort(void * Port, int speed, int SetDTR, int SetRTS, int Quiet, in
 	struct termios term;
 	struct speed_struct *s;
 
-	// As Serial ports under linux can have all sorts of odd names, the code assumes that
-	// they are symlinked to a com1-com255 in the BPQ Directory (normally the one it is started from
-
 	if ((fd = open(Port, O_RDWR | O_NDELAY)) == -1)
 	{
 		ZF_LOGE("Com Open failed: %s could not be opened", (const char*)Port);
@@ -82,29 +128,39 @@ HANDLE OpenCOMPort(void * Port, int speed, int SetDTR, int SetRTS, int Quiet, in
 
 	if (s->user_speed == -1)
 	{
-		fprintf(stderr, "tty_speed: invalid speed %d", speed);
+		ZF_LOGE("Invalid baud rate (%i) specified for com port (%s).", speed, Port);
 		return 0;
 	}
 
 	if (tcgetattr(fd, &term) == -1)
 	{
-		perror("tty_speed: tcgetattr");
+		ZF_LOGE("ERROR: Unable to get attributes of %s.", Port);
 		return 0;
 	}
 
-		cfmakeraw(&term);
+	cfmakeraw(&term);
 	cfsetispeed(&term, s->termios_speed);
 	cfsetospeed(&term, s->termios_speed);
 
 	if (tcsetattr(fd, TCSANOW, &term) == -1)
 	{
-		perror("tty_speed: tcsetattr");
+		ZF_LOGE("Error setting baud rate for %s to %i.", Port, speed);
 		return 0;
 	}
 
 	ioctl(fd, FIONBIO, &param);
 
-	ZF_LOGI("LinBPQ Port %s fd %d", (const char*)Port, fd);
+	if (SetRTS)
+		COMSetRTS(fd);
+	else
+		COMClearRTS(fd);
+
+	if (SetDTR)
+		COMSetDTR(fd);
+	else
+		COMClearDTR(fd);
+
+	ZF_LOGI("Port %s opened as fd %d", (const char*)Port, fd);
 
 	return fd;
 }
@@ -136,49 +192,4 @@ int WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite)
 		ToSend -= ret;
 	}
 	return 1;
-}
-
-void CloseCOMPort(HANDLE fd)
-{
-	close(fd);
-}
-
-void COMSetDTR(HANDLE fd)
-{
-	int status;
-
-	ioctl(fd, TIOCMGET, &status);
-	status |= TIOCM_DTR;
-	ioctl(fd, TIOCMSET, &status);
-}
-
-void COMClearDTR(HANDLE fd)
-{
-	int status;
-
-	ioctl(fd, TIOCMGET, &status);
-	status &= ~TIOCM_DTR;
-	ioctl(fd, TIOCMSET, &status);
-}
-
-void COMSetRTS(HANDLE fd)
-{
-	int status;
-
-	if (ioctl(fd, TIOCMGET, &status) == -1)
-		perror("ARDOP PTT TIOCMGET");
-	status |= TIOCM_RTS;
-	if (ioctl(fd, TIOCMSET, &status) == -1)
-		perror("ARDOP PTT TIOCMSET");
-}
-
-void COMClearRTS(HANDLE fd)
-{
-	int status;
-
-	if (ioctl(fd, TIOCMGET, &status) == -1)
-		perror("ARDOP PTT TIOCMGET");
-	status &= ~TIOCM_RTS;
-	if (ioctl(fd, TIOCMSET, &status) == -1)
-		perror("ARDOP PTT TIOCMSET");
 }

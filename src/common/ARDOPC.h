@@ -117,6 +117,13 @@ typedef unsigned char UCHAR;
 #define TRAFFICLED 3
 #define PKTLED 4
 
+// MAXCATLEN is the maximum length of CAT command for PTT On/Off and RADIOHEX
+// host command.
+// The string provided with the -k, --keystring, -u, --unkeystring command line
+// option or with the RADIOPTTON or RADIOPTTOFF host commands may be twice this
+// number of characters since two hex characters are used to define each CAT
+// command byte.
+#define MAXCATLEN 64
 BOOL KeyPTT(BOOL State);
 
 UCHAR FrameCode(char * strFrameName);
@@ -186,8 +193,6 @@ void Abort();
 void SetLED(int LED, int State);
 VOID ClearBusy();
 VOID CloseCOMPort(HANDLE fd);
-VOID COMClearRTS(HANDLE fd);
-VOID COMClearDTR(HANDLE fd);
 
 // #ifdef WIN32
 void ProcessNewSamples(short * Samples, int nSamples);
