@@ -3,9 +3,15 @@
 
 #include "common/ARDOPC.h"
 #include "common/ardopcommon.h"
+#include "common/wav.h"
 
 BOOL blnHostRDY = FALSE;
 extern int intFECFramesSent;
+
+extern BOOL WriteRxWav;  // Record RX controlled by Command line/TX/Timer
+extern BOOL HWriteRxWav;  // Record RX controlled by host command RECRX
+extern struct WavFile *rxwf;  // For recording of RX audio
+void StartRxWav();
 
 void SendData();
 BOOL CheckForDisconnect();
@@ -134,8 +140,8 @@ char strFault[100] = "";
  *   failure and returns false.
  *
  * This method returns true if the client has successfully provided
- * a new Value to set. If there is no update to the Value, returns
- * false.
+ * a new Value to set (even if it duplicates the existing value). If there is no
+ * update to the Value, returns false.
  */
 bool DoTrueFalseCmd(char * strCMD, char * ptrParams, BOOL * Value)
 {
@@ -159,6 +165,7 @@ bool DoTrueFalseCmd(char * strCMD, char * ptrParams, BOOL * Value)
 	}
 	snprintf(cmdReply, sizeof(cmdReply), "%s now %s", strCMD, (*Value) ? "TRUE" : "FALSE");
 	SendReplyToHost(cmdReply);
+	ZF_LOGD("%s now %s", strCMD, (*Value) ? "TRUE" : "FALSE");
 	return true;
 }
 
@@ -1564,6 +1571,45 @@ void ProcessCommandFromHost(char * strCMD)
 			InputNoiseStdDev = atoi(ptrParams);
 			sprintf(cmdReply, "%s now %hd", strCMD, InputNoiseStdDev);
 			SendReplyToHost(cmdReply);
+		}
+		goto cmddone;
+	}
+
+	// Start/Stop recording of RX audio to a WAV file.
+	// Use TRUE to start, use FALSE to stop, or provide no argument to query.
+	//
+	// Writing of audio data to the WAV file is paused while transmitting, but
+	// it resumes automatically upon switching from transmit to receive,
+	// continuing to write to the same WAV file.
+	//
+	// This command will fail if Ardop is currently recording receive audio due
+	// to use of the -w or --writewav command line option.  Similarly, while
+	// RECRX is TRUE, the -w or --writewav command line option is temporarily
+	// disabled (but such recording may begin at the end of the next TX after
+	// RECRX is set to FALSE).
+	//
+	// Do nothing if argument is TRUE when RECRX is already TRUE, or argument is
+	// FALSE when RECRX is already FALSE.
+	if (strcmp(strCMD, "RECRX") == 0)
+	{
+		if (rxwf != NULL && !HWriteRxWav) {
+			// Currently recording due to -w or --writewav
+			snprintf(strFault, sizeof(strFault),
+				"RECRX IGNORED while recording due to -w or --writewav.");
+			goto cmddone;
+		}
+		DoTrueFalseCmd(strCMD, ptrParams, &HWriteRxWav);  // Also sends reply
+		if (HWriteRxWav && rxwf == NULL) {
+			StartRxWav();
+		} else if (rxwf != NULL && !HWriteRxWav) {
+			// This is same condition that was checked before updating
+			// HWriteRxWav.  If true then, it indicated that recording due
+			// to -w or --writewav was active, so nothing was done.  If true
+			// here (and not there), it indicates that recording due to
+			// RECRX is active, but that RECRX FALSE has just been received.
+			// So, stop recording.
+			CloseWav(rxwf);
+			rxwf = NULL;
 		}
 		goto cmddone;
 	}
