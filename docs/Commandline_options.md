@@ -1,5 +1,7 @@
 # ARDOPCF Command Line Options
 
+The following is a summary of all of the available command line options.  Additional details about how to use ardopcf, including what command line arguments to use can be found in [USAGE_linux.md](USAGE_linux.md) and [USAGE_windows.md](USAGE_windows.md).
+
 ## 1. Usage
 
 ardopcf &lt;host-tcp-port&gt; [ &lt;audio-capture-device&gt; &lt;audio-playback-device&gt; ]
@@ -48,10 +50,10 @@ All command line options are listed in the following sections. If the option has
 | short option | long option | parameter | description |
 |----|----|----|----|
 | **-c** | **&#8209;&#8209;cat** | &lt;serial&#8209;port&gt;[:&lt;baudrate&gt;] | serial port to send CAT commands to the radio, e.g. _-c COM9:38400_ |
-| **-p** | **&#8209;&#8209;ptt** | &lt;serial&#8209;port&gt; | serial device to activate radio PTT using RTS signal. May be the same device as CAT. |
+| **-p** | **&#8209;&#8209;ptt** | [DTR:]&lt;serial&#8209;port&gt; | serial device to activate radio PTT using RTS or DTR signal.  RTS is used by default, but the DTR: prefix specifies use of DTR rather than RTS.  May be the same device as CAT. |
 | **-g** | | [&lt;pin&#8209;number&gt;] | ARM CPU GPIO pin used as PTT. Must be integer. If empty (no pin value), 17 will be used as default.  If a negative pin number is given, such as -17, then the corresponding positive value will be used, but the PTT signal will be inverted.   Applies only to ARM devices . |
 | **-k**| **&#8209;&#8209;keystring** |  &lt;hex&#8209;string&gt; | CAT command to switch radio to transmit mode. E.g. for Kenwood, Elecraft, QDX, QMX, TX-500 the command is "TX;", the actual command line option will be _-k 54583B_.  This is used with the **-c** or **&#8209;&#8209;cat** option and is NOT needed when the **-p** or **&#8209;&#8209;ptt** option is used. |
-| **-u** | **&#8209;&#8209;unkeystring** | &lt;hex&#8209;string&gt; | CAT command to switch radio to receive mode. E.g. for Kenwood, Elecraft, QDX, QMX, TX-500 the command is "RX;", the actual command line option will be _-k 52583B_.  This is used with the **-c** or **&#8209;&#8209;cat** option and is NOT needed when the **-p** or **&#8209;&#8209;ptt** option is used.  |
+| **-u** | **&#8209;&#8209;unkeystring** | &lt;hex&#8209;string&gt; | CAT command to switch radio to receive mode. E.g. for Kenwood, Elecraft, QDX, QMX, TX-500 the command is "RX;", the actual command line option will be _-u 52583B_.  This is used with the **-c** or **&#8209;&#8209;cat** option and is NOT needed when the **-p** or **&#8209;&#8209;ptt** option is used.  |
 
 *Note: Dial frequency and other CAT control functions are not provided by ardopcf.  However, if a CAT port is specified then the RADIOHEX host command can be used (by a host program or with --hostcommands at startup) to pass an arbitrary string of bytes to the radio.  Since these strings are radio specific, they are not commonly used.*
 
