@@ -1,6 +1,7 @@
 // ARDOP TNC Host Interface using TCP
 //
 
+#include <stdbool.h>
 #ifdef WIN32
 #define _CRT_SECURE_NO_DEPRECATE
 #include <windows.h>
@@ -40,7 +41,9 @@ int _memicmp(unsigned char *a, unsigned char *b, int n);
 
 #define MAX_PENDING_CONNECTS 4
 
+#include "common/os_util.h"
 #include "common/ARDOPC.h"
+#include "common/ptt.h"  // PTT and CAT
 
 #define GetBuff() _GetBuff(__FILE__, __LINE__)
 #define ReleaseBuffer(s) _ReleaseBuffer(s, __FILE__, __LINE__)
@@ -54,16 +57,16 @@ VOID * _GetBuff(char * File, int Line);
 int C_Q_COUNT(VOID *Q);
 
 void ProcessCommandFromHost(char * strCMD);
-BOOL checkcrc16(unsigned char * Data, unsigned short length);
-int ReadCOMBlockEx(HANDLE fd, char * Block, int MaxLength, BOOL * Error);
+bool checkcrc16(unsigned char * Data, unsigned short length);
 VOID ProcessPacketBytes(UCHAR * RXBuffer, int Read);
-int ReadCOMBlock(HANDLE fd, char * Block, int MaxLength );
+int bytes2hex(char *outputStr, size_t count, unsigned char *data, size_t datalen, bool spaces);
+unsigned char *utf8_check(unsigned char *s, size_t slen);
 
-extern int port;
+extern int host_port;
 
-extern BOOL NeedID;  // SENDID Command Flag
-extern BOOL NeedCWID;  // SENDCWID Command Flag
-extern BOOL NeedTwoToneTest;
+extern bool NeedID;  // SENDID Command Flag
+extern bool NeedCWID;  // SENDCWID Command Flag
+extern bool NeedTwoToneTest;
 
 SOCKET TCPControlSock = 0, TCPDataSock = 0;
 SOCKET ListenSock = 0, DataListenSock = 0;
@@ -76,8 +79,8 @@ extern int SpectrumActive;  // Spectrum display turned on
 
 struct sockaddr_in GUIHost;
 
-BOOL CONNECTED = FALSE;
-BOOL DATACONNECTED = FALSE;
+bool CONNECTED = false;
+bool DATACONNECTED = false;
 
 // Host to TNC RX Buffer
 
@@ -183,7 +186,7 @@ void TCPSendReplyToHost(char * strText)
 
 FILE *FEClogfile = NULL;
 
-BOOL LogFEC = TRUE;
+bool LogFEC = true;
 
 void WriteFECLog(UCHAR * Msg, int Len)
 {
@@ -279,7 +282,7 @@ VOID ARDOPProcessCommand(UCHAR * Buffer, int MsgLen)
 	ProcessCommandFromHost(Buffer);
 }
 
-BOOL InReceiveProcess = FALSE;  // Flag to stop reentry
+bool InReceiveProcess = false;  // Flag to stop reentry
 
 
 void ProcessReceivedControl()
@@ -293,7 +296,7 @@ void ProcessReceivedControl()
 	if (InReceiveProcess)
 		return;
 
-	// This is the command port, which only listens on port 8515 or otherwise specified
+	// This is the command host_port, which only listens on port 8515 or otherwise specified
 	// as a command line arguemnt. It is used for all commands to the TNC, such as
 	// setting parameters.
 
@@ -309,7 +312,7 @@ void ProcessReceivedControl()
 		closesocket(TCPControlSock);
 		TCPControlSock = 0;
 
-		CONNECTED = FALSE;
+		CONNECTED = false;
 		LostHost();
 
 		return;
@@ -340,7 +343,7 @@ loop:
 	// which is the end of that message, and the next byte, regardless of wherever it is, will
 	// always be 1. Maybe this is a holdover of processing DATA messages, which may be split over packets,
 	// but I am not sure. Would be cool to have someone look into this to see if the if is even required in
-	// the control port processing. All commands are short anyway.
+	// the control host_port processing. All commands are short anyway.
 	if ((ptr2 - ptr) == 1)
 	{
 		// Usual Case - single meg in buffer
@@ -351,9 +354,9 @@ loop:
 		// so reset InputLen Here
 
 		InputLen=0;
-		InReceiveProcess = TRUE;
+		InReceiveProcess = true;
 		ARDOPProcessCommand(ARDOPBuffer, MsgLen);
-		InReceiveProcess = FALSE;
+		InReceiveProcess = false;
 		return;
 	}
 	else
@@ -369,14 +372,14 @@ loop:
 		memmove(ARDOPBuffer, ptr + 1, InputLen-MsgLen);
 		InputLen -= MsgLen;
 
-		InReceiveProcess = TRUE;
+		InReceiveProcess = true;
 		ARDOPProcessCommand(Buffer, MsgLen);
-		InReceiveProcess = FALSE;
+		InReceiveProcess = false;
 
 		if (InputLen < 0)
 		{
 			InputLen = 0;
-			InReceiveProcess = FALSE;
+			InReceiveProcess = false;
 			return;
 		}
 		goto loop;
@@ -404,7 +407,7 @@ void ProcessReceivedData()
 	if (InReceiveProcess)
 		return;
 
-	// This is the data port, which only listens on port 8516 (8515+1) or otherwise specified (+1)
+	// This is the data_port, which only listens on port 8516 (8515+1) or otherwise specified (host_port + 1)
 	// as a command line arguemnt. It is used for all data sent to the TNC, such as
 	// for ARQ or FEC.
 
@@ -423,7 +426,7 @@ void ProcessReceivedData()
 		closesocket(TCPDataSock);
 		TCPDataSock = 0;
 
-		DATACONNECTED = FALSE;
+		DATACONNECTED = false;
 		LostHost();
 		return;
 	}
@@ -463,9 +466,9 @@ loop:
 	if (DataInputLen > 0)
 		memmove(ARDOPDataBuffer, &ARDOPDataBuffer[MsgLen],  DataInputLen);
 
-	InReceiveProcess = TRUE;
+	InReceiveProcess = true;
 	AddDataToDataToSend(Buffer, DataLen);
-	InReceiveProcess = FALSE;
+	InReceiveProcess = false;
 
 	// See if anything else in buffer
 
@@ -482,7 +485,7 @@ loop:
 
 SOCKET OpenSocket4(int port)
 {
-	// This is very standard socket opening code for TCP, and is used for both the command and data ports.
+	// This is very standard socket opening code for TCP, and is used for both the command host_port and data_port.
 	struct sockaddr_in  local_sin;  // Local socket - internet style
 	struct sockaddr_in * psin;
 	SOCKET sock = 0;
@@ -511,13 +514,13 @@ SOCKET OpenSocket4(int port)
 			ZF_LOGI("bind(sock) failed port %d Error %d", port, WSAGetLastError());
 
 			closesocket(sock);
-			return FALSE;
+			return false;
 		}
 
 		if (listen( sock, MAX_PENDING_CONNECTS ) < 0)
 		{
 			ZF_LOGI("listen(sock) failed port %d Error %d", port, WSAGetLastError());
-			return FALSE;
+			return false;
 		}
 		ioctl(sock, FIONBIO, &param);
 	}
@@ -528,7 +531,7 @@ SOCKET OpenSocket4(int port)
 SOCKET OpenUDPSocket(int port)
 {
 	// This is very standard socket opening code for UDP.
-	// This is used mostly for a GUI interface, I believe specifically for the waterfall display.
+	// This is used mostly for the legacy GUI interface (not WebGUI).
 	struct sockaddr_in  local_sin;  // Local socket - internet style
 	struct sockaddr_in * psin;
 	SOCKET sock = 0;
@@ -556,7 +559,7 @@ SOCKET OpenUDPSocket(int port)
 		{
 			ZF_LOGI("bind(sock) failed port %d Error %d", port, WSAGetLastError());
 			closesocket(sock);
-			return FALSE;
+			return false;
 		}
 		ioctl(sock, FIONBIO, &param);
 	}
@@ -566,7 +569,7 @@ SOCKET OpenUDPSocket(int port)
 // As far as I can tell, this is no longer used. Its code is commented out.
 VOID InitQueue();
 
-BOOL TCPHostInit()
+bool TCPHostInit()
 {
 #ifdef WIN32
 	WSADATA WsaData;  // receives data from WSAStartup
@@ -574,20 +577,19 @@ BOOL TCPHostInit()
 	WSAStartup(MAKEWORD(2, 0), &WsaData);
 #endif
 
-	ZF_LOGI("%s listening on port %d", ProductName, port);
+	ZF_LOGI("%s listening for host connection on host_port %d", ProductName, host_port);
 //	InitQueue();
 
 	// Here is where our listening ports for commands and data are opened.
-	ListenSock = OpenSocket4(port);
-	DataListenSock = OpenSocket4(port + 1);
+	ListenSock = OpenSocket4(host_port);
+	DataListenSock = OpenSocket4(host_port + 1);
 
-	GUISock = OpenUDPSocket(port);
+	GUISock = OpenUDPSocket(host_port);
 
 	return ListenSock;
 }
 
-void TCPHostPoll()
-{
+void TCPHostPoll() {
 	// Check for incoming connect or data
 
 	fd_set readfs;
@@ -598,39 +600,35 @@ void TCPHostPoll()
 	struct sockaddr_in sin;
 	u_long param=1;
 
-	// Check for Rig control data
-
-	if (hCATDevice && CONNECTED)
-	{
-		UCHAR RigBlock[256];
-		int Len;
-
-		Len = ReadCOMBlock(hCATDevice, RigBlock, 256);
-
-		if (Len && EnableHostCATRX)
-		{
-			UCHAR * ptr = RigBlock;
-			char RigCommand[1024] = "RADIOHEX ";
-			char * ptr2 = &RigCommand[9] ;
-			int i, j;
-
-			while (Len--)
-			{
-				i = *(ptr++);
-				j = i >>4;
-				j += '0';  // ascii
-				if (j > '9')
-					j += 7;
-				*(ptr2++) = j;
-
-				j = i & 0xf;
-				j += '0';  // ascii
-				if (j > '9')
-					j += 7;
-				*(ptr2++) = j;
+	// Check for data from Rig CAT control
+	const char radiohex[] = "RADIOHEX ";
+	unsigned char data[500];
+	char Mess[2 * sizeof(data) + sizeof(radiohex) + 1];
+	int bytesread = 0;
+	// readCAT() reads from CAT device and/or TCP CAT address.
+	// If both are in use and have data to read, it is necessary
+	// to call readCAT() twice to get data from both.  So, do
+	// the following twice.
+	for (int i = 0; i < 2; ++i) {
+		// read 1 less byte than will fit in data so that if it is
+		// valid UTF-8, then there is room to add a terminating null
+		// to make it a string.
+		bytesread = readCAT(data, sizeof(data) - 1);
+		if (bytesread < 0) {
+			ZF_LOGE("Error reading from CAT device or TCP CAT");
+			return;
+		}
+		if (bytesread > 0) {
+			snprintf(Mess, sizeof(Mess), radiohex);
+			bytes2hex(Mess + strlen(Mess), sizeof(Mess) - strlen(Mess),
+				data, bytesread, false);
+			ZF_LOGV("Hex data from CAT device or TCP CAT: %s", Mess + strlen(radiohex));
+			if (utf8_check(data, bytesread) == NULL) {
+				data[bytesread] = 0x00;  // make it a null terminated string.
+				ZF_LOGV("As UTF8 text: %s", data);
 			}
-			*(ptr2) = 0;
-			SendCommandToHost(RigCommand);
+			if (rxCAT())
+				SendCommandToHost(Mess);
 		}
 	}
 
@@ -647,11 +645,10 @@ void TCPHostPoll()
 
 	ret = select(ListenSock + 1, &readfs, NULL, NULL, &timeout);
 
-	if (ret == -1)
-	{
+	if (ret == -1) {
 		ret = WSAGetLastError();
-		ZF_LOGD("%d ", ret);
-		perror("listen select");
+		ZF_LOGD("WSAGetLastError() returned %d ", ret);
+		ZF_LOGE("listen select: %s", strerror(errno));
 	}
 	else
 	{
@@ -669,7 +666,7 @@ void TCPHostPoll()
 				ZF_LOGI("Host Control Session Connected");
 
 				ioctl(TCPControlSock, FIONBIO, &param);
-				CONNECTED = TRUE;
+				CONNECTED = true;
 //				SendCommandToHost("RDY");
 			}
 		}
@@ -690,8 +687,8 @@ void TCPHostPoll()
 	if (ret == -1)
 	{
 		ret = WSAGetLastError();
-		ZF_LOGD("%d ", ret);
-		perror("data listen select");
+		ZF_LOGD("WSAGetLastError() returned %d ", ret);
+		ZF_LOGE("data listen select: %s", strerror(errno));
 	}
 	else
 	{
@@ -709,7 +706,7 @@ void TCPHostPoll()
 				ZF_LOGI("Host Data Session Connected");
 
 				ioctl(TCPDataSock, FIONBIO, &param);
-				DATACONNECTED = TRUE;
+				DATACONNECTED = true;
 			}
 		}
 	}
@@ -750,7 +747,7 @@ NoARDOPTCP:
 Lost:
 				ZF_LOGD("TCP Control Connection lost");
 
-				CONNECTED = FALSE;
+				CONNECTED = false;
 
 				closesocket(TCPControlSock);
 				TCPControlSock= 0;
@@ -792,7 +789,7 @@ Lost:
 	DCLost:
 				ZF_LOGD("TCP Data Connection lost");
 
-				DATACONNECTED = FALSE;
+				DATACONNECTED = false;
 
 				closesocket(TCPControlSock);
 				TCPDataSock= 0;
@@ -801,8 +798,9 @@ Lost:
 		}
 	}
 
-	// the GUI code seems to mostly be for the waterfall display, because
-	// actual terminal control is done via the command port, and data is sent via the data port.
+	// The legacy GUI code (Not WebGui) provides a waterfall and other info.
+	// Terminal control is done via the command host_port, and data is sent via
+	// the data_port.
 	if (GUISock)
 	{
 		// Look for datagram from GUI Client
@@ -820,12 +818,12 @@ Lost:
 			GUIMsg[Len] = 0;
 			LastGUITime = Now;
 
-			if (GUIActive == FALSE)
+			if (GUIActive == false)
 			{
 				char Addr[32];
 				Format_Addr(&GUIHost, Addr);
 				ZF_LOGD("GUI Connected from Address %s", Addr);
-				GUIActive = TRUE;
+				GUIActive = true;
 			}
 
 			if (strcmp(GUIMsg, "Waterfall") == 0)
@@ -846,17 +844,17 @@ Lost:
 			else if (strcmp(GUIMsg, "SENDID") == 0)
 			{
 				if (stationid_ok(&Callsign) && ProtocolState == DISC)
-					NeedID = TRUE;  // Send from background
+					NeedID = true;  // Send from background
 			}
 			else if (strcmp(GUIMsg, "TWOTONETEST") == 0)
 			{
 				if (stationid_ok(&Callsign) && ProtocolState == DISC)
-					NeedTwoToneTest = TRUE;  // Send from background
+					NeedTwoToneTest = true;  // Send from background
 			}
 			else if (stationid_ok(&Callsign) && strcmp(GUIMsg, "SENDCWID") == 0)
 			{
 				if (ProtocolState == DISC)
-					NeedCWID = TRUE;  // Send from background
+					NeedCWID = true;  // Send from background
 			}
 		}
 		else
@@ -866,7 +864,7 @@ Lost:
 				if (GUIActive)
 					ZF_LOGD("GUI Connection lost");
 
-				GUIActive = FALSE;
+				GUIActive = false;
 			}
 		}
 	}
@@ -1037,7 +1035,7 @@ int SendtoGUI(char Type, unsigned char * Msg, int Len)
 	// If we do not plan to support an official GUI, this code can be removed.
 	unsigned char GUIMsg[16384];
 
-	if (GUIActive == FALSE)
+	if (GUIActive == false)
 		return 0;
 
 	if (Len > 16000)

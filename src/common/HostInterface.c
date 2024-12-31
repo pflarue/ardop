@@ -1,40 +1,45 @@
 // ARDOP TNC Host Interface
 //
 
+#include <stdbool.h>
+
+#include "linux/ALSA.h"
 #include "common/ARDOPC.h"
 #include "common/ardopcommon.h"
 #include "common/wav.h"
+#include "common/ptt.h"  // PTT and CAT
 
-BOOL blnHostRDY = FALSE;
+bool blnHostRDY = false;
 extern int intFECFramesSent;
 
-extern BOOL WriteRxWav;  // Record RX controlled by Command line/TX/Timer
-extern BOOL HWriteRxWav;  // Record RX controlled by host command RECRX
+extern char CaptureDevice[80];
+extern char PlaybackDevice[80];
+
+extern bool WriteRxWav;  // Record RX controlled by Command line/TX/Timer
+extern bool HWriteRxWav;  // Record RX controlled by host command RECRX
 extern struct WavFile *rxwf;  // For recording of RX audio
 void StartRxWav();
 
 void SendData();
-BOOL CheckForDisconnect();
+bool CheckForDisconnect();
 int Encode4FSKControl(UCHAR bytFrameType, UCHAR bytSessionID, UCHAR * bytreturn);
 int ComputeInterFrameInterval(int intRequestedIntervalMS);
-HANDLE OpenCOMPort(VOID * pPort, int speed, BOOL SetDTR, BOOL SetRTS, BOOL Quiet, int Stopbits);
-BOOL WriteCOMBlock(HANDLE fd, char * Block, int BytesToWrite);
 void SetupGPIOPTT();
 void setProtocolMode(char* strMode);
 
 void Break();
 int txframe(char * frameParams);
-unsigned char parseCatStr(char *hexstr, unsigned char *cmd, bool logerrors, char *descstr);
+unsigned char parseCatStr(char *hexstr, unsigned char *cmd, char *descstr);
 int bytes2hex(char *outputStr, size_t count, unsigned char *data, size_t datalen, bool spaces);
 
-extern BOOL NeedID;  // SENDID Command Flag
-extern BOOL NeedConReq;  // ARQCALL Command Flag
-extern BOOL NeedPing;
-extern BOOL PingCount;
+extern bool NeedID;  // SENDID Command Flag
+extern bool NeedConReq;  // ARQCALL Command Flag
+extern bool NeedPing;
+extern bool PingCount;
 extern StationId ConnectToCall;
 extern enum _ARQBandwidth CallBandwidth;
 extern int extraDelay ;  // Used for long delay paths eg Satellite
-extern BOOL WG_DevMode;
+extern bool WG_DevMode;
 extern int intARQDefaultDlyMs;
 
 unsigned char *utf8_check(unsigned char *s, size_t slen);
@@ -45,7 +50,7 @@ int wg_send_hostdatab(int cnum, char *prefix, unsigned char *data, int datalen);
 int wg_send_hostdatat(int cnum, char *prefix, unsigned char *data, int datalen);int wg_send_drivelevel(int cnum);
 int wg_send_wavrx(int cnum, bool isRecording);
 
-extern BOOL NeedTwoToneTest;
+extern bool NeedTwoToneTest;
 extern short InputNoiseStdDev;
 
 #ifndef WIN32
@@ -59,7 +64,7 @@ char * strupr(char* s)
 	if (s == 0)
 		return 0;
 
-	while (*p = toupper( *p ))
+	while ((*p = toupper( *p )))
 		p++;
 	return s;
 }
@@ -116,7 +121,7 @@ void AddDataToDataToSend(UCHAR * bytNewData, int Len)
 
 	FreeSemaphore();
 
-	SetLED(TRAFFICLED, TRUE);
+	SetLED(TRAFFICLED, true);
 
 	snprintf(HostCmd, sizeof(HostCmd), "BUFFER %d", bytDataToSendLength);
 	QueueCommandToHost(HostCmd);
@@ -125,7 +130,7 @@ void AddDataToDataToSend(UCHAR * bytNewData, int Len)
 char strFault[100] = "";
 
 /*
- * Evaluates command with TRUE/FALSE argument
+ * Evaluates command with TRUE/false argument
  *
  * At the input, Value must be set to the current setting for
  * the option named in strCMD.
@@ -144,7 +149,7 @@ char strFault[100] = "";
  * a new Value to set (even if it duplicates the existing value). If there is no
  * update to the Value, returns false.
  */
-bool DoTrueFalseCmd(char * strCMD, char * ptrParams, BOOL * Value)
+bool DoTrueFalseCmd(char * strCMD, char * ptrParams, bool * Value)
 {
 	char cmdReply[128];
 
@@ -156,9 +161,9 @@ bool DoTrueFalseCmd(char * strCMD, char * ptrParams, BOOL * Value)
 	}
 
 	if (strcmp(ptrParams, "TRUE") == 0)
-		*Value = TRUE;
+		*Value = true;
 	else if (strcmp(ptrParams, "FALSE") == 0)
-		*Value = FALSE;
+		*Value = false;
 	else
 	{
 		snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
@@ -263,8 +268,8 @@ void ProcessCommandFromHost(char * strCMD)
 
 	if (strlen(strCMD) >= sizeof(cmdCopy)) {
 		ZF_LOGE(
-			"Host command too long to process (%lu).  Ignoring. '%.40s...'",
-			strlen(strCMD), strCMD);
+			"Host command too long to process (%u).  Ignoring. '%.40s...'",
+			(unsigned int) strlen(strCMD), strCMD);
 		return;
 	}
 
@@ -337,7 +342,7 @@ void ProcessCommandFromHost(char * strCMD)
 		switch (ProtocolMode) {
 			case ARQ:
 				ARQConReqRepeats = (int)nattempts;
-				NeedConReq = TRUE;
+				NeedConReq = true;
 				SendReplyToHost(cmdCopy);
 				break;
 			case FEC:
@@ -482,7 +487,11 @@ void ProcessCommandFromHost(char * strCMD)
 
 	if (strcmp(strCMD, "CAPTUREDEVICES") == 0)
 	{
-		sprintf(cmdReply, "%s %s", strCMD, CaptureDevices);
+		snprintf(cmdReply, sizeof(cmdReply), "%s ", strCMD);
+		for (int i; i < CaptureDevicesCount; ++i)
+			snprintf(cmdReply + strlen(cmdReply),
+				sizeof(cmdReply) - strlen(cmdReply),
+				"%s", CaptureDevices[i]);
 		SendReplyToHost(cmdReply);
 		goto cmddone;
 	}
@@ -496,7 +505,7 @@ void ProcessCommandFromHost(char * strCMD)
 
 	if (strcmp(strCMD, "CLOSE") == 0)
 	{
-		blnClosing = TRUE;
+		blnClosing = true;
 		goto cmddone;
 	}
 
@@ -566,15 +575,15 @@ void ProcessCommandFromHost(char * strCMD)
 
 		if (strcmp(ptrParams, "TRUE") == 0)
 		{
-			wantCWID = TRUE;
-			CWOnOff = FALSE;
+			wantCWID = true;
+			CWOnOff = false;
 		}
 		else if (strcmp(ptrParams, "FALSE") == 0)
-			wantCWID = FALSE;
+			wantCWID = false;
 		else if (strcmp(ptrParams, "ONOFF") == 0)
 		{
-			wantCWID = TRUE;
-			CWOnOff = TRUE;
+			wantCWID = true;
+			CWOnOff = true;
 		}
 		else
 		{
@@ -624,7 +633,7 @@ void ProcessCommandFromHost(char * strCMD)
 
 	if (strcmp(strCMD, "DEBUGLOG") == 0)
 	{
-		BOOL enable_files = ardop_log_is_enabled_files();
+		bool enable_files = ardop_log_is_enabled_files();
 		if (DoTrueFalseCmd(strCMD, ptrParams, &enable_files)) {
 			ardop_log_enable_files((bool)enable_files);
 		}
@@ -635,7 +644,7 @@ void ProcessCommandFromHost(char * strCMD)
 	{
 		if (ProtocolState == IDLE || ProtocolState == IRS || ProtocolState == ISS || ProtocolState == IRStoISS)
 		{
-			blnARQDisconnect = TRUE;
+			blnARQDisconnect = true;
 			SendReplyToHost("DISCONNECT NOW TRUE");
 		}
 		else
@@ -802,7 +811,7 @@ void ProcessCommandFromHost(char * strCMD)
 		}
 		else if (strcmp(ptrParams, "FALSE") == 0)
 		{
-			blnAbort = TRUE;
+			blnAbort = true;
 			SendReplyToHost("FECSEND now FALSE");
 		}
 		else
@@ -842,10 +851,10 @@ void ProcessCommandFromHost(char * strCMD)
 
 	if (strcmp(strCMD, "INITIALIZE") == 0)
 	{
-		blnInitializing = TRUE;
+		blnInitializing = true;
 		ClearDataToSend();
-		blnHostRDY = TRUE;
-		blnInitializing = FALSE;
+		blnHostRDY = true;
+		blnInitializing = false;
 
 		SendReplyToHost("INITIALIZE");
 		goto cmddone;
@@ -951,7 +960,8 @@ void ProcessCommandFromHost(char * strCMD)
 		);
 
 		if (e) {
-			snprintf(strFault, sizeof(strFault), "Syntax Err: at callsign %lu: %s", AuxCallsLength, stationid_strerror(e));
+			snprintf(strFault, sizeof(strFault), "Syntax Err: at callsign %u: %s",
+				(unsigned int) AuxCallsLength, stationid_strerror(e));
 			/* The TNC protocol requires that invalid input
 			 * completely clears the MYAUX array */
 			AuxCallsLength = 0;
@@ -1028,7 +1038,7 @@ void ProcessCommandFromHost(char * strCMD)
 		}
 
 		PingCount = (int)nattempts;
-		NeedPing = TRUE;  // request ping from background
+		NeedPing = true;  // request ping from background
 		SendReplyToHost(cmdCopy);
 		goto cmddone;
 	}
@@ -1051,7 +1061,11 @@ void ProcessCommandFromHost(char * strCMD)
 
 	if (strcmp(strCMD, "PLAYBACKDEVICES") == 0)
 	{
-		sprintf(cmdReply, "%s %s", strCMD, PlaybackDevices);
+		snprintf(cmdReply, sizeof(cmdReply), "%s ", strCMD);
+		for (int i; i < PlaybackDevicesCount; ++i)
+			snprintf(cmdReply + strlen(cmdReply),
+				sizeof(cmdReply) - strlen(cmdReply),
+				"%s", PlaybackDevices[i]);
 		SendReplyToHost(cmdReply);
 		goto cmddone;
 	}
@@ -1112,12 +1126,12 @@ void ProcessCommandFromHost(char * strCMD)
 				objMain.SetNewRadio()
 				objMain.objRadio.InitRadioPorts()
 			End If
-			RCB.RadioControl = CBool(strParameters)
+			RCB.RadioControl = Cbool(strParameters)
 		ElseIf strParameters = "FALSE" Then
 			If Not IsNothing(objMain.objRadio) Then
 				objMain.objRadio = Nothing
 			End If
-			RCB.RadioControl = CBool(strParameters)
+			RCB.RadioControl = Cbool(strParameters)
 		Else
 			strFault = "Syntax Err:" & strCMD
 		End If
@@ -1139,26 +1153,14 @@ void ProcessCommandFromHost(char * strCMD)
 	if (strcmp(strCMD, "RADIOHEX") == 0) {
 		// Parameter is a hex string representing a radio specific command to
 		// be immediately sent to the radio.
-		unsigned char cmd[MAXCATLEN];
-		unsigned int cmdlen = 0;
-
 		if (ptrParams == NULL) {
 			snprintf(strFault, sizeof(strFault), "RADIOHEX command string missing");
 			goto cmddone;
 		}
-		if (hCATDevice == 0) {
-			snprintf(strFault, sizeof(strFault), "RADIOHEX not usable because CAT port not set");
+		if (sendCAThex(ptrParams) == -1) {
+			snprintf(strFault, sizeof(strFault), "RADIOHEX %s failed.", ptrParams);
 			goto cmddone;
 		}
-
-		cmdlen = parseCatStr(ptrParams, cmd, true, "RADIOHEX host command");
-		if (cmdlen == 0) {
-			// parseCatStr() already wrote an error message to log.
-			snprintf(strFault, sizeof(strFault), "RADIOHEX command string is invalid.");
-			goto cmddone;
-		}
-		WriteCOMBlock(hCATDevice, cmd, cmdlen);
-		EnableHostCATRX = TRUE;
 		sprintf(cmdReply, "%s %s", strCMD, ptrParams);
 		SendReplyToHost(cmdReply);
 		goto cmddone;
@@ -1178,7 +1180,7 @@ void ProcessCommandFromHost(char * strCMD)
 		If ptrSpace = -1 Then
 			SendReplyToHost(strCommand & " " & RCB.InternalSoundCard)
 		ElseIf strParameters = "TRUE" Or strParameters = "FALSE" Then
-			RCB.InternalSoundCard = CBool(strParameters)
+			RCB.InternalSoundCard = Cbool(strParameters)
 		Else
 			strFault = "Syntax Err:" & strCMD
 		End If
@@ -1186,7 +1188,7 @@ void ProcessCommandFromHost(char * strCMD)
 		If ptrSpace = -1 Then
 			SendReplyToHost(strCommand & " " & objMain.RadioMenu.Enabled.ToString)
 		ElseIf strParameters = "TRUE" Or strParameters = "FALSE" Then
-			objMain.RadioMenu.Enabled = CBool(strParameters)
+			objMain.RadioMenu.Enabled = Cbool(strParameters)
 		Else
 			strFault = "Syntax Err:" & strCMD
 		End If
@@ -1232,7 +1234,7 @@ void ProcessCommandFromHost(char * strCMD)
 		If ptrSpace = -1 Then
 			SendReplyToHost(strCommand & " " & RCB.PTTDTR.ToString)
 		ElseIf strParameters = "TRUE" Or strParameters = "FALSE" Then
-			RCB.PTTDTR = CBool(strParameters)
+			RCB.PTTDTR = Cbool(strParameters)
 			objMain.objRadio.InitRadioPorts()
 		Else
 			strFault = "Syntax Err:" & strCMD
@@ -1241,7 +1243,7 @@ void ProcessCommandFromHost(char * strCMD)
 		If ptrSpace = -1 Then
 			SendReplyToHost(strCommand & " " & RCB.PTTRTS.ToString)
 		ElseIf strParameters = "TRUE" Or strParameters = "FALSE" Then
-			RCB.PTTRTS = CBool(strParameters)
+			RCB.PTTRTS = Cbool(strParameters)
 			objMain.objRadio.InitRadioPorts()
 		Else
 			strFault = "Syntax Err:" & strCMD
@@ -1252,55 +1254,30 @@ void ProcessCommandFromHost(char * strCMD)
 
 	if (strcmp(strCMD, "RADIOPTTOFF") == 0) {
 		// Parameter is a hex string representing the radio specific command to
-		// be sent to the radio to transition from TX to RX
-		unsigned char tmpcmd[MAXCATLEN];
-		unsigned int tmpcmdlen = 0;
-
+		// be sent to the radio to transition from TX to RX.  The special value
+		// of NONE may be used discard an existing value.
 		if (ptrParams == NULL) {
-			char hexstr[MAXCATLEN * 2];
-			if (PTTOffCmdLen == 0) {
+			char hexstr[MAXCATLEN * 2 + 1];
+			get_ptt_off_cmd_hex(hexstr, sizeof(hexstr));
+			if (strlen(hexstr) == 0) {
 				sprintf(cmdReply, "%s VALUE NOT SET", strCMD);
 				SendReplyToHost(cmdReply);
 				goto cmddone;
 			}
-			bytes2hex(hexstr, sizeof(hexstr), PTTOffCmd, PTTOffCmdLen, false);
 			sprintf(cmdReply, "%s %s", strCMD, hexstr);
 			SendReplyToHost(cmdReply);
 			goto cmddone;
 		}
-		if (hPTTDevice != 0) {
-			snprintf(strFault, sizeof(strFault),
-				"RADIOPTTOFF not usable because RTS/DTR PTT is being used");
+		if (strcmp(ptrParams, "NONE") == 0) {
+			set_ptt_off_cmd("", "RADIOPTTOFF host command");
+			sprintf(cmdReply, "%s now %s", strCMD, ptrParams);
+			SendReplyToHost(cmdReply);
 			goto cmddone;
 		}
-		if (hCATDevice == 0) {
-			snprintf(strFault, sizeof(strFault),
-				"RADIOPTTOFF not usable because CAT port not set");
-			goto cmddone;
-		}
-		// Initially parse into tmpcmd so that, if this is not a valid hex
-		// string, the existing value in PTTOffCmd is unchanged.
-		tmpcmdlen = parseCatStr(ptrParams, tmpcmd, true, "RADIOPTTOFF host command");
-		if (tmpcmdlen == 0) {
+		if (set_ptt_off_cmd(ptrParams, "RADIOPTTOFF host command") == -1) {
 			snprintf(strFault, sizeof(strFault),
 				"RADIOPTTOFF command string is invalid.");
 			goto cmddone;
-		}
-		memcpy(PTTOffCmd, tmpcmd, tmpcmdlen);
-		PTTOffCmdLen = tmpcmdlen;
-		if (PTTOnCmdLen > 0) {
-			// A CAT port is open and A PTT On cmd is already set, so Ardop can
-			// use CAT for PTT control.  So, verify that PTTMode and
-			// RadioControl are set to that they will be used.  If CAT control
-			// of PTT was already being used, then this does nothing.
-			PTTMode = PTTCI_V;
-			RadioControl = TRUE;
-			ZF_LOGI("CAT PTT Off Command set to \"%s\".", ptrParams);
-		} else {
-			ZF_LOGI(
-				"CAT PTT Off Command set to \"%s\", but PTT On Command must"
-				" also be set before they will be used for PTT control.",
-				ptrParams);
 		}
 		sprintf(cmdReply, "%s now %s", strCMD, ptrParams);
 		SendReplyToHost(cmdReply);
@@ -1309,55 +1286,30 @@ void ProcessCommandFromHost(char * strCMD)
 
 	if (strcmp(strCMD, "RADIOPTTON") == 0) {
 		// Parameter is a hex string representing the radio specific command to
-		// be sent to the radio to transition from RX to TX
-		unsigned char tmpcmd[MAXCATLEN];
-		unsigned int tmpcmdlen = 0;
-
+		// be sent to the radio to transition from RX to TX.  The special value
+		// of NONE may be used discard an existing value.
 		if (ptrParams == NULL) {
-			char hexstr[MAXCATLEN * 2];
-			if (PTTOnCmdLen == 0) {
+			char hexstr[MAXCATLEN * 2 + 1];
+			get_ptt_on_cmd_hex(hexstr, sizeof(hexstr));
+			if (strlen(hexstr) == 0) {
 				sprintf(cmdReply, "%s VALUE NOT SET", strCMD);
 				SendReplyToHost(cmdReply);
 				goto cmddone;
 			}
-			bytes2hex(hexstr, sizeof(hexstr), PTTOnCmd, PTTOnCmdLen, false);
 			sprintf(cmdReply, "%s %s", strCMD, hexstr);
 			SendReplyToHost(cmdReply);
 			goto cmddone;
 		}
-		if (hPTTDevice != 0) {
-			snprintf(strFault, sizeof(strFault),
-				"RADIOPTTON not usable because RTS/DTR PTT is being used");
+		if (strcmp(ptrParams, "NONE") == 0) {
+			set_ptt_on_cmd("", "RADIOPTTON host command");
+			sprintf(cmdReply, "%s now %s", strCMD, ptrParams);
+			SendReplyToHost(cmdReply);
 			goto cmddone;
 		}
-		if (hCATDevice == 0) {
-			snprintf(strFault, sizeof(strFault),
-				"RADIOPTTON not usable because CAT port not set");
-			goto cmddone;
-		}
-		// Initially parse into tmpcmd so that, if this is not a valid hex
-		// string, the existing value in PTTOnCmd is unchanged.
-		tmpcmdlen = parseCatStr(ptrParams, tmpcmd, true, "RADIOPTTON host command");
-		if (tmpcmdlen == 0) {
+		if (set_ptt_on_cmd(ptrParams, "RADIOPTTON host command") == -1) {
 			snprintf(strFault, sizeof(strFault),
 				"RADIOPTTON command string is invalid.");
 			goto cmddone;
-		}
-		memcpy(PTTOnCmd, tmpcmd, tmpcmdlen);
-		PTTOnCmdLen = tmpcmdlen;
-		if (PTTOffCmdLen > 0) {
-			// A CAT port is open and A PTT Off cmd is already set, so Ardop can
-			// use CAT for PTT control.  So, verify that PTTMode and
-			// RadioControl are set to that they will be used.  If CAT control
-			// of PTT was already being used, then this does nothing.
-			PTTMode = PTTCI_V;
-			RadioControl = TRUE;
-			ZF_LOGI("CAT PTT On Command set to \"%s\".", ptrParams);
-		} else {
-			ZF_LOGI(
-				"CAT PTT On Command set to \"%s\", but PTT Off Command must"
-				" also be set before they will be used for PTT control.",
-				ptrParams);
 		}
 		sprintf(cmdReply, "%s now %s", strCMD, ptrParams);
 		SendReplyToHost(cmdReply);
@@ -1369,7 +1321,7 @@ void ProcessCommandFromHost(char * strCMD)
 	if (strcmp(strCMD, "SENDID") == 0)
 	{
 		// Previously this check to ensure that MYCALL is set was handled in
-		// the response to seting NeedID=TRUE.  Adding this test here helps
+		// the response to seting NeedID=true.  Adding this test here helps
 		// provide a consistent fault message for any attempt to initiate
 		// transmitting without first setting MYCALL.
 		if (!stationid_ok(&Callsign)) {
@@ -1379,7 +1331,7 @@ void ProcessCommandFromHost(char * strCMD)
 
 		if (ProtocolState == DISC)
 		{
-			NeedID = TRUE;  // Send from background
+			NeedID = true;  // Send from background
 			SendReplyToHost(strCMD);
 		}
 		else
@@ -1393,7 +1345,7 @@ void ProcessCommandFromHost(char * strCMD)
 		If ptrSpace = -1 Then
 			SendReplyToHost(strCommand & " " & objMain.SetupMenu.Enabled.ToString)
 		ElseIf strParameters = "TRUE" Or strParameters = "FALSE" Then
-			objMain.SetupMenu.Enabled = CBool(strParameters)
+			objMain.SetupMenu.Enabled = Cbool(strParameters)
 		Else
 			strFault = "Syntax Err:" & strCMD
 		End If
@@ -1478,7 +1430,7 @@ void ProcessCommandFromHost(char * strCMD)
 
 		if (ProtocolState == DISC)
 		{
-			NeedTwoToneTest = TRUE;  // Send from background
+			NeedTwoToneTest = true;  // Send from background
 			SendReplyToHost(strCMD);
 		}
 		else

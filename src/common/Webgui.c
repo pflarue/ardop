@@ -19,15 +19,17 @@
 #define WG_SSIZE 10000  // maximum length of messages sent to Webgui clients
 #define MAX_AVGLEN 10  // maximum supported length of FFT averaging
 
+extern char CaptureDevice[80];
+extern char PlaybackDevice[80];
 extern int wg_port;  // Port number of WebGui.  If 0, no WebGui
 extern char webgui_html[];
 extern char webgui_js[];
-extern BOOL blnBusyStatus;
-extern BOOL blnARQConnected;
-extern BOOL blnPending;
-extern BOOL NeedTwoToneTest;
-extern BOOL NeedID;
-extern BOOL WG_DevMode;
+extern bool blnBusyStatus;
+extern bool blnARQConnected;
+extern bool blnPending;
+extern bool NeedTwoToneTest;
+extern bool NeedID;
+extern bool WG_DevMode;
 extern StationId Callsign;
 extern StationId ARQStationRemote;  // current connection remote callsign
 extern float wS1;
@@ -128,7 +130,7 @@ void WebguiInit() {
 		ws_set_retry_limit(5000);
 
 	// Use root uri "/" for the webgui.html that users are likely
-	// to manually enter into a web browser (with the specified port
+	// to manually enter into a web browser (with the specified wg_port
 	// number)
 	// These resources are included into the executable as literal strings
 	// so that ardopcf can be run without explicit installation that would
@@ -148,7 +150,7 @@ void WebguiInit() {
 	} else {
 		WebguiActive = true;
 		WebGuiNumConnected = 0;
-		ZF_LOGI("Webgui available at port %d.", wg_port);
+		ZF_LOGI("Webgui available at wg_port %d.", wg_port);
 	}
 }
 

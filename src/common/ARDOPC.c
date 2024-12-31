@@ -29,6 +29,8 @@ const char ProductName[] = "ardopcf";
 #define closesocket close
 #endif
 
+#include "common/os_util.h"
+#include "linux/ALSA.h"
 #include "common/ARDOPC.h"
 #include "common/Locator.h"
 #include "common/StationId.h"
@@ -46,21 +48,21 @@ int bytDataToSendLength = 0;
  */
 extern StationId LastDecodedStationCaller;
 extern StationId LastDecodedStationTarget;
+extern unsigned char CurrentLevel;
 
 void GetTwoToneLeaderWithSync(int intSymLen);
 bool SendID(const StationId * id, char * reason);
 void PollReceivedSamples();
 void CheckTimers();
-BOOL GetNextARQFrame();
-BOOL TCPHostInit();
-BOOL SerialHostInit();
+bool GetNextARQFrame();
+bool TCPHostInit();
+bool SerialHostInit();
 void SerialHostPoll();
 void TCPHostPoll();
-BOOL MainPoll();
-void PlatformSleep();
+bool MainPoll();
 const char* PlatformSignalAbbreviation(int signal);
-BOOL BusyDetect2(float * dblMag, int intStart, int intStop);
-BOOL IsPingToMe(const StationId* caller, const StationId* target);
+bool BusyDetect2(float * dblMag, int intStart, int intStop);
+bool IsPingToMe(const StationId* caller, const StationId* target);
 
 void ResetMemoryARQ();
 
@@ -83,18 +85,18 @@ extern struct WavFile *txwff;  // For recording of filtered TX audio
 
 Locator GridSquare;
 StationId Callsign;
-BOOL wantCWID = FALSE;
-BOOL CWOnOff = FALSE;
-BOOL NeedID = FALSE;  // SENDID Command Flag
-BOOL NeedCWID = FALSE;  // SENDCWID Command Flag
-BOOL NeedConReq = FALSE;  // ARQCALL Command Flag
-BOOL NeedPing = FALSE;  // PING Command Flag
-BOOL NeedTwoToneTest = FALSE;
+bool wantCWID = false;
+bool CWOnOff = false;
+bool NeedID = false;  // SENDID Command Flag
+bool NeedCWID = false;  // SENDCWID Command Flag
+bool NeedConReq = false;  // ARQCALL Command Flag
+bool NeedPing = false;  // PING Command Flag
+bool NeedTwoToneTest = false;
 enum _ARQBandwidth CallBandwidth = UNDEFINED;
 int PingCount;
 
-BOOL blnPINGrepeating = False;
-BOOL blnFramePending = False;  // Cancels last repeat
+bool blnPINGrepeating = false;
+bool blnFramePending = false;  // Cancels last repeat
 int intPINGRepeats = 0;
 
 int WaterfallActive = 1;  // Waterfall display on
@@ -108,44 +110,22 @@ int extraDelay = 0;  // Used for long delay paths eg Satellite
 unsigned int ARQTimeout = 120;
 int TuningRange = 100;
 int ARQConReqRepeats = 5;
-BOOL CommandTrace = TRUE;
+bool CommandTrace = true;
 int DriveLevel = 100;
 char strFECMode[16] = "4FSK.500.100";
 int FECRepeats = 0;
-BOOL FECId = FALSE;
+bool FECId = false;
 int Squelch = 5;
 int BusyDet = 5;
 enum _ARQBandwidth ARQBandwidth = B2000MAX;
 char HostPort[80] = "";
-int port = 8515;
-BOOL RadioControl = FALSE;
-BOOL SlowCPU = FALSE;
-BOOL AccumulateStats = TRUE;
-BOOL Use600Modes = FALSE;
-BOOL FSKOnly = FALSE;
-BOOL fastStart = TRUE;
-BOOL EnablePingAck = TRUE;
-
-BOOL gotGPIO = FALSE;
-BOOL useGPIO = FALSE;
-
-int pttGPIOPin = -1;
-BOOL pttGPIOInvert = FALSE;
-
-HANDLE hCATDevice = 0;
-char CATPort[80] = "";  // Port for CAT.
-int CATBAUD = 19200;
-int EnableHostCATRX = FALSE;  // Set when host sends RADIOHEX command
-
-HANDLE hPTTDevice = 0;
-char PTTPort[80] = "";  // Port for Hardware PTT - may be same as control port.
-int PTTBAUD = 19200;
-
-UCHAR PTTOnCmd[MAXCATLEN];
-UCHAR PTTOnCmdLen = 0;
-
-UCHAR PTTOffCmd[MAXCATLEN];
-UCHAR PTTOffCmdLen = 0;
+int host_port = 8515;
+bool SlowCPU = false;
+bool AccumulateStats = true;
+bool Use600Modes = false;
+bool FSKOnly = false;
+bool fastStart = true;
+bool EnablePingAck = true;
 
 // Stats
 
@@ -167,14 +147,12 @@ int stcLastPingintRcvdSN;
 int stcLastPingintQuality;
 time_t stcLastPingdttTimeReceived;
 
-BOOL blnInitializing = FALSE;
+bool blnInitializing = false;
 
-BOOL blnLastPTT = FALSE;
+bool PlayComplete = false;
 
-BOOL PlayComplete = FALSE;
-
-BOOL blnBusyStatus = FALSE;
-BOOL newStatus;
+bool blnBusyStatus = false;
+bool newStatus;
 
 unsigned int tmrSendTimeout;
 
@@ -192,28 +170,28 @@ const char ARDOPStates[8][9] = {
 
 struct SEM Semaphore = {0, 0, 0, 0};
 
-BOOL SoundIsPlaying = FALSE;
-BOOL Capturing = TRUE;
+bool SoundIsPlaying = false;
+bool Capturing = true;
 
 int DecodeCompleteTime;
 
-BOOL blnAbort = FALSE;
+bool blnAbort = false;
 int intRepeatCount;
-BOOL blnARQDisconnect = FALSE;
+bool blnARQDisconnect = false;
 
 int dttLastPINGSent;
 
 unsigned int LastIDFrameTime = 0;
 enum _ProtocolMode ProtocolMode = FEC;
 
-extern BOOL blnEnbARQRpt;
-extern BOOL blnDISCRepeating;
+extern bool blnEnbARQRpt;
+extern bool blnDISCRepeating;
 extern StationId ARQStationRemote;  // current connection remote callsign
 extern StationId ARQStationLocal;   // current connection local callsign
 extern StationId ARQStationFinalId; // post-session local IDF to send
 extern int dttTimeoutTrip;
 extern int intFrameRepeatInterval;
-extern BOOL blnPending;
+extern bool blnPending;
 extern unsigned int tmrIRSPendingTimeout;
 extern unsigned int tmrFinalID;
 extern unsigned int tmrPollOBQueue;
@@ -224,9 +202,9 @@ int intRepeatCnt;
 
 extern SOCKET TCPControlSock, TCPDataSock;
 
-BOOL blnClosing = FALSE;
+bool blnClosing = false;
 int closedByPosixSignal = 0;
-BOOL blnCodecStarted = FALSE;
+bool blnCodecStarted = false;
 
 unsigned int dttNextPlay = 0;
 
@@ -278,7 +256,7 @@ int bytValidFrameTypesLengthISS = sizeof(bytValidFrameTypesISS);
 int bytValidFrameTypesLengthALL = sizeof(bytValidFrameTypesALL);
 int bytValidFrameTypesLength;
 
-BOOL blnTimeoutTriggered = FALSE;
+bool blnTimeoutTriggered = false;
 
 //	We can't keep the audio samples for retry, but we can keep the
 //	encoded data
@@ -586,31 +564,29 @@ void FreeSemaphore()
 
 // Function polled by Main polling loop to see if time to play next wave stream
 
-BOOL GetNextFrame()
+bool GetNextFrame()
 {
-	// returning TRUE sets frame pending in Main
+	// returning true sets frame pending in Main
 
 	if (ProtocolMode == FEC || ProtocolState == FECSend)
 	{
 		if (ProtocolState == FECSend || ProtocolState == FECRcv || ProtocolState == DISC)
 			return GetNextFECFrame();
 		else
-			return FALSE;
+			return false;
 	}
 	if (ProtocolMode == ARQ)
 //		if (ARQState == None)
-//			return FALSE;
+//			return false;
 //		else
 			return GetNextARQFrame();
 
-	return FALSE;
+	return false;
 }
 
 #ifdef WIN32
 
 extern LARGE_INTEGER Frequency;
-extern LARGE_INTEGER StartTicks;
-extern LARGE_INTEGER NewTicks;
 
 #endif
 
@@ -663,7 +639,7 @@ void ardopmain()
 	gettimeofday(&t1, NULL);
 	srand(t1.tv_usec + t1.tv_sec);
 
-	blnTimeoutTriggered = FALSE;
+	blnTimeoutTriggered = false;
 	SetARDOPProtocolState(DISC);
 
 	if (!InitSound())
@@ -700,7 +676,11 @@ void ardopmain()
 			TCPHostPoll();
 			MainPoll();
 		}
-		PlatformSleep(10);
+		if (PKTLEDTimer && Now > PKTLEDTimer) {
+			PKTLEDTimer = 0;
+			SetLED(PKTLED, 0);  // turn off packet rxed led
+		}
+		Sleep(10);  // ms
 	}
 
 	if (closedByPosixSignal) {
@@ -759,11 +739,11 @@ const char * shortName(UCHAR bytID)
 
 // Function to look up frame info from bytFrameType
 
-BOOL FrameInfo(UCHAR bytFrameType, int * blnOdd, int * intNumCar, char * strMod,
+bool FrameInfo(UCHAR bytFrameType, bool * blnOdd, int * intNumCar, char * strMod,
 	int * intBaud, int * intDataLen, int * intRSLen, UCHAR * bytQualThres, char * strType)
 {
 	// Used to "lookup" all parameters by frame Type.
-	// returns TRUE if all fields updated otherwise FALSE (improper bytFrameType)
+	// returns true if all fields updated otherwise false (improper bytFrameType)
 
 	// 1 Carrier 4FSK control frames
 
@@ -1096,7 +1076,7 @@ BOOL FrameInfo(UCHAR bytFrameType, int * blnOdd, int * intNumCar, char * strMod,
 
 		default:
 			ZF_LOGE("No data for frame type = 0x%02hhx", bytFrameType);
-			return FALSE;
+			return false;
 		}
 	}
 
@@ -1108,7 +1088,7 @@ BOOL FrameInfo(UCHAR bytFrameType, int * blnOdd, int * intNumCar, char * strMod,
 		else
 			strcpy(strType,strFrameType[bytFrameType]);
 
-	return TRUE;
+	return true;
 }
 
 int MaxErrors = 0;
@@ -1121,7 +1101,7 @@ int Corrected[256];
 extern int tt;  // number of errors that can be corrected
 extern int kk;  // Info Symbols
 
-BOOL blnErrorsCorrected;
+bool blnErrorsCorrected;
 
 
 // Function to encode data for all PSK frame types
@@ -1146,10 +1126,10 @@ int EncodePSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 	int intNumCar, intBaud, intDataLen, intRSLen, bytDataToSendLengthPtr, intEncodedDataPtr;
 
 	int intCarDataCnt, intStartIndex;
-	BOOL blnOdd;
+	bool blnOdd;
 	char strType[18];
 	char strMod[16];
-	BOOL blnFrameTypeOK;
+	bool blnFrameTypeOK;
 	UCHAR bytQualThresh;
 	int i;
 	UCHAR * bytToRS = &bytEncodedBytes[2];
@@ -1239,10 +1219,10 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 	int intNumCar, intBaud, intDataLen, intRSLen, bytDataToSendLengthPtr, intEncodedDataPtr;
 
 	int intCarDataCnt, intStartIndex;
-	BOOL blnOdd;
+	bool blnOdd;
 	char strType[18];
 	char strMod[16];
-	BOOL blnFrameTypeOK;
+	bool blnFrameTypeOK;
 	UCHAR bytQualThresh;
 	int i;
 	UCHAR * bytToRS = &bytEncodedBytes[2];
@@ -1754,9 +1734,9 @@ void GenCRC16FrameType(char * Data, int Length, UCHAR bytFrameType)
 
 // Function to compute a 16 bit CRC value and check it against the last 2 bytes of Data (the CRC) XORing LS byte with bytFrameType..
 
-BOOL  CheckCRC16FrameType(unsigned char * Data, int Length, UCHAR bytFrameType)
+bool  CheckCRC16FrameType(unsigned char * Data, int Length, UCHAR bytFrameType)
 {
-	// returns TRUE if CRC matches, else FALSE
+	// returns true if CRC matches, else false
 	// For  CRC-16-CCITT =    x^16 + x^12 +x^5 + 1  intPoly = 1021 Init FFFF
 	// intSeed is the seed value for the shift register and must be in the range 0-0xFFFF
 
@@ -1766,9 +1746,9 @@ BOOL  CheckCRC16FrameType(unsigned char * Data, int Length, UCHAR bytFrameType)
 
 	if ((CRC >> 8) == Data[Length])
 		if (((CRC & 0xFF) ^ bytFrameType) == Data[Length + 1])
-			return TRUE;
+			return true;
 
-	return FALSE;
+	return false;
 }
 
 // Function to get intDataLen bytes from outbound queue (bytDataToSend)
@@ -1779,7 +1759,7 @@ void ClearDataToSend()
 	bytDataToSendLength = 0;
 	FreeSemaphore();
 
-	SetLED(TRAFFICLED, FALSE);
+	SetLED(TRAFFICLED, false);
 	QueueCommandToHost("BUFFER 0");
 }
 
@@ -1811,7 +1791,7 @@ void RemoveDataFromQueue(int Len)
 	FreeSemaphore();
 
 	if (bytDataToSendLength == 0)
-		SetLED(TRAFFICLED, FALSE);
+		SetLED(TRAFFICLED, false);
 
 	snprintf(HostCmd, sizeof(HostCmd), "BUFFER %d", bytDataToSendLength);
 	QueueCommandToHost(HostCmd);
@@ -1829,7 +1809,7 @@ void CheckTimers()
 
 		if (GetNextFrame())
 		{
-			// I think this only returns TRUE if we have to repeat the last
+			// I think this only returns true if we have to repeat the last
 
 			//	Repeat mechanism for normal repeated FEC or ARQ frames
 
@@ -1839,7 +1819,7 @@ void CheckTimers()
 		else
 			// I think this means we have exceeded retries or had an abort
 
-			blnEnbARQRpt = FALSE;
+			blnEnbARQRpt = false;
 	}
 
 
@@ -1873,7 +1853,7 @@ void CheckTimers()
 
 		snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ Timeout from Protocol State:  %s", ARDOPStates[ProtocolState]);
 		QueueCommandToHost(HostCmd);
-		blnEnbARQRpt = FALSE;
+		blnEnbARQRpt = false;
 		// Thread.Sleep(2000)
 		ClearDataToSend();
 
@@ -1891,10 +1871,10 @@ void CheckTimers()
 		// Clear the mnuBusy status on the main form
 		// Dim stcStatus As Status = Nothing
 		// stcStatus.ControlName = "mnuBusy"
-		// stcStatus.Text = "FALSE"
+		// stcStatus.Text = "false"
 		// queTNCStatus.Enqueue(stcStatus)
 
-		blnTimeoutTriggered = FALSE;  // prevents a retrigger
+		blnTimeoutTriggered = false;  // prevents a retrigger
 	}
 
 	// Elapsed Subroutine for Pending timeout
@@ -1912,15 +1892,15 @@ void CheckTimers()
 
 		QueueCommandToHost(HostCmd);
 
-		blnEnbARQRpt = FALSE;
+		blnEnbARQRpt = false;
 		ProtocolState = DISC;
-		blnPending = FALSE;
+		blnPending = false;
 		InitializeConnection();	 // reset all Connection data
 
 		// Clear the mnuBusy status on the main form
 		// Dim stcStatus As Status = Nothing
 		// stcStatus.ControlName = "mnuBusy"
-		// stcStatus.Text = "FALSE"
+		// stcStatus.Text = "false"
 		// queTNCStatus.Enqueue(stcStatus)
 	}
 
@@ -1949,8 +1929,8 @@ void CheckTimers()
 	if (NeedID)
 	{
 		// This occurs from SENDID Host command, from Gui, and from StartFEC()
-		// with blnSendID=true (due to FECSEND TRUE host command after FECID
-		// TRUE HOST COMMAND)
+		// with blnSendID=true (due to FECSEND true host command after FECID
+		// true HOST COMMAND)
 		SendID(NULL, "Host/User requested");
 		NeedID = 0;
 	}
@@ -1997,9 +1977,9 @@ void CheckTimers()
 	}
 }
 
-// Main polling Function returns True or FALSE if closing
+// Main polling Function returns true or false if closing
 
-BOOL MainPoll() {
+bool MainPoll() {
 	// Checks to see if frame ready for playing
 
 	if (!SoundIsPlaying && !blnEnbARQRpt && !blnDISCRepeating)  // Idle (check playing in case we call from txSleep())
@@ -2012,9 +1992,9 @@ BOOL MainPoll() {
 	}
 
 	if	(blnClosing)  // Check for closing
-		return FALSE;
+		return false;
 
-	return TRUE;
+	return true;
 }
 
 int dttLastBusy;
@@ -2031,7 +2011,6 @@ int ExtractARQBandwidth()
 // Subroutine to update the Busy detector when not displaying Spectrum or Waterfall (graphics disabled)
 
 int LastBusyCheck = 0;
-extern UCHAR CurrentLevel;
 
 #ifdef PLOTSPECTRUM
 float dblMagSpectrum[206];
@@ -2065,7 +2044,7 @@ void UpdateBusyDetector(short * bytNewSamples)
 	UCHAR Waterfall[256];  // Colour index values to send to GUI
 	int clrTLC = Lime;  // Default Bandwidth lines on waterfall
 
-	static BOOL blnLastBusyStatus;
+	static bool blnLastBusyStatus;
 
 	float dblMagAvg = 0;
 	int intTuneLineLow, intTuneLineHi, intDelta;
@@ -2099,7 +2078,7 @@ void UpdateBusyDetector(short * bytNewSamples)
 		windowedSamples[1024 - i] = bytNewSamples[1024 - i]*bhWindow[i];
 	}
 
-	FourierTransform(1024, windowedSamples, &dblReF[0], &dblImF[0], FALSE);
+	FourierTransform(1024, windowedSamples, &dblReF[0], &dblImF[0], false);
 
 	for (i = 0; i < 206; i++)
 	{
@@ -2128,8 +2107,8 @@ void UpdateBusyDetector(short * bytNewSamples)
 
 		if (blnBusyStatus && !blnLastBusyStatus)
 		{
-			QueueCommandToHost("BUSY TRUE");
-			newStatus = TRUE;  // report to PTC
+			QueueCommandToHost("BUSY true");
+			newStatus = true;  // report to PTC
 
 			if (!WaterfallActive && !SpectrumActive)
 			{
@@ -2140,14 +2119,14 @@ void UpdateBusyDetector(short * bytNewSamples)
 			}
 			wg_send_busy(0, true);
 		}
-		// stcStatus.Text = "True"
+		// stcStatus.Text = "true"
 		// queTNCStatus.Enqueue(stcStatus)
-		// Debug.WriteLine("BUSY TRUE @ " & Format(DateTime.UtcNow, "HH:mm:ss"))
+		// Debug.WriteLine("BUSY true @ " & Format(DateTime.UtcNow, "HH:mm:ss"))
 
 		else if (blnLastBusyStatus && !blnBusyStatus)
 		{
 			QueueCommandToHost("BUSY FALSE");
-			newStatus = TRUE;  // report to PTC
+			newStatus = true;  // report to PTC
 
 			if (!WaterfallActive && !SpectrumActive)
 			{
@@ -2158,9 +2137,9 @@ void UpdateBusyDetector(short * bytNewSamples)
 			}
 			wg_send_busy(0, false);
 		}
-		// stcStatus.Text = "False"
+		// stcStatus.Text = "false"
 		// queTNCStatus.Enqueue(stcStatus)
-		// Debug.WriteLine("BUSY FALSE @ " & Format(DateTime.UtcNow, "HH:mm:ss"))
+		// Debug.WriteLine("BUSY false @ " & Format(DateTime.UtcNow, "HH:mm:ss"))
 
 		blnLastBusyStatus = blnBusyStatus;
 
@@ -2266,15 +2245,15 @@ void SendPING(const StationId* mycall, const StationId* target, int intRpt)
 	//	Set all flags before playing, as the End TX is called before we return here
 
 	intFrameRepeatInterval = 2000;  // ms Finn reported 7/4/2015 that 1600 was too short ...need further evaluation but temporarily moved to 2000 ms
-	blnEnbARQRpt = TRUE;
+	blnEnbARQRpt = true;
 
 	Mod4FSKDataAndPlay(PING, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 
-	blnAbort = False;
+	blnAbort = false;
 	dttTimeoutTrip = Now;
 	intRepeatCount = 1;
 	intPINGRepeats = intRpt;
-	blnPINGrepeating = True;
+	blnPINGrepeating = true;
 	dttLastPINGSent = Now;
 
 	ZF_LOGD("[SendPING] MYCALL= %s TARGET=%s  Repeat=%d", mycall->str, target->str, intRpt);

@@ -5,7 +5,11 @@
 #include <windows.h>
 #endif
 
+#include <stdbool.h>
+
+#include "common/os_util.h"
 #include "common/ARDOPC.h"
+#include "common/wav.h"
 #include "common/Locator.h"
 #include "common/RXO.h"
 #include "common/sdft.h"
@@ -30,6 +34,7 @@
 
 extern unsigned int PKTLEDTimer;
 
+int add_noise(short *samples, unsigned int nSamples, short stddev);
 void SendFrametoHost(unsigned char *data, unsigned dlen);
 
 void clearDisplay();
@@ -40,14 +45,20 @@ void DrawAxes(int Qual, char * Mode);
 void PassFECErrDataToHost();
 
 extern int lastmax, lastmin;  // Sample Levels
+extern short InputNoiseStdDev;
+unsigned char CurrentLevel = 0;  // Peak from current samples
+extern bool WriteRxWav;  // Record RX controlled by Command line/TX/Timer
+extern bool HWriteRxWav;  // Record RX controlled by host command RECRX
+extern unsigned int rxwf_EndNow;
+extern struct WavFile *rxwf;  // For recording of RX audio
 
-BOOL blnLeaderFound = FALSE;
+bool blnLeaderFound = false;
 
 int intLeaderRcvdMs = 1000;  // Leader length??
 
 extern int intLastRcvdFrameQuality;
 extern UCHAR bytLastReceivedDataFrameType;
-extern BOOL blnBREAKCmd;
+extern bool blnBREAKCmd;
 extern UCHAR bytLastACKedDataFrameType;
 extern int intARQDefaultDlyMs;
 extern unsigned int tmrFinalID;
@@ -56,10 +67,12 @@ void DrawDecode(char * Decode);
 int wg_send_rxframet(int cnum, unsigned char state, const char *frame);
 int wg_send_quality(int cnum, unsigned char quality,
 	unsigned int totalRSErrors, unsigned int maxRSErrors);
+int wg_send_currentlevel(int cnum, unsigned char level);
+int wg_send_wavrx(int cnum, bool isRecording);
 
-extern BOOL UseSDFT;
+extern bool UseSDFT;
 int Corrections = 0;
-void Demod1Car4FSK_SDFT(int Start, BOOL blnGetFrameType);
+void Demod1Car4FSK_SDFT(int Start, bool blnGetFrameType);
 
 short intPriorMixedSamples[120];  // a buffer of 120 samples to hold the prior samples used in the filter
 int	intPriorMixedSamplesLength = 120;  // size of Prior sample buffer
@@ -91,7 +104,7 @@ int DataRate = 0;  // For SCS Reporting
 int intDataPtr;
 int intSampPerSym;
 int intDataBytesPerCar;
-BOOL blnOdd;
+bool blnOdd;
 char strType[18] = "";
 char strMod[16] = "";
 UCHAR bytMinQualThresh;
@@ -217,9 +230,9 @@ int charIndex = 0;  // Index into received chars
 
 int SymbolsLeft;  // number still to decode
 
-BOOL PSKInitDone = FALSE;
+bool PSKInitDone = false;
 
-BOOL blnSymbolSyncFound, blnFrameSyncFound;
+bool blnSymbolSyncFound, blnFrameSyncFound;
 
 extern UCHAR bytLastARQSessionID;
 extern UCHAR bytCurrentFrameType;
@@ -237,10 +250,10 @@ int dttLastLeaderDetect;
 
 extern int intRmtLeaderMeasure;
 
-extern BOOL blnARQConnected;
+extern bool blnARQConnected;
 
 
-extern BOOL blnPending;
+extern bool blnPending;
 extern UCHAR bytPendingSessionID;
 extern UCHAR bytSessionID;
 
@@ -249,8 +262,6 @@ int dttStartRmtLeaderMeasure;
 
 StationId LastDecodedStationCaller;  // most recent frame sender
 StationId LastDecodedStationTarget;  // most recent frame recipient
-
-int GotBitSyncTicks;
 
 int intARQRTmeasuredMs;
 
@@ -271,9 +282,9 @@ int intSNdB = 0;
 int intQuality = 0;
 
 
-BOOL Acquire2ToneLeaderSymbolFraming();
-BOOL SearchFor2ToneLeader3(short * intNewSamples, int Length, float * dblOffsetHz, int * intSN);
-BOOL AcquireFrameSyncRSB();
+bool Acquire2ToneLeaderSymbolFraming();
+bool SearchFor2ToneLeader3(short * intNewSamples, int Length, float * dblOffsetHz, int * intSN);
+bool AcquireFrameSyncRSB();
 int Acquire4FSKFrameType();
 
 void DemodulateFrame(int intFrameType);
@@ -282,14 +293,14 @@ VOID Track1Car4FSK(short * intSamples, int * intPtr, int intSampPerSymbol, float
 VOID Decode1CarPSK(UCHAR * Decoded, int Carrier);
 VOID Decode1Car4FSK(UCHAR * Decoded, int *Magnitudes, int MagsLength);
 int EnvelopeCorrelator();
-BOOL DecodeFrame(int intFrameType, uint8_t bytData[MAX_DATA_LENGTH]);
+bool DecodeFrame(int intFrameType, uint8_t bytData[MAX_DATA_LENGTH]);
 
 void Update4FSKConstellation(int * intToneMags, int * intQuality);
 void ProcessPingFrame(char * bytData);
 int Compute4FSKSN();
 
 void DemodPSK();
-BOOL DemodQAM();
+bool DemodQAM();
 void SaveFSKSamples(int Part, int *Magnitudes, int Length);
 
 void ResetMemoryARQ() {
@@ -338,30 +349,30 @@ void MemarqUpdated() {
 
 // Function to determine if frame type is short control frame
 
-BOOL IsShortControlFrame(UCHAR bytType)
+bool IsShortControlFrame(UCHAR bytType)
 {
 	if (bytType <= DataNAKmax)
-		return TRUE;  // NAK
+		return true;  // NAK
 	if (bytType == BREAK || bytType == IDLEFRAME || bytType == DISCFRAME || bytType == END || bytType == ConRejBusy || bytType == ConRejBW)
-		return TRUE;  // BREAK, IDLE, DISC, END, ConRejBusy, ConRejBW
+		return true;  // BREAK, IDLE, DISC, END, ConRejBusy, ConRejBW
 	if (bytType >= DataACKmin)
-		return TRUE;  // ACK
-	return FALSE;
+		return true;  // ACK
+	return false;
 }
 
 // Function to determine if it is a data frame (Even OR Odd)
 
-BOOL IsDataFrame(UCHAR intFrameType)
+bool IsDataFrame(UCHAR intFrameType)
 {
 	const char * String = Name(intFrameType);
 
 	if (String == NULL || String[0] == 0)
-		return FALSE;
+		return false;
 
 	if (strstr(String, ".E") || strstr(String, ".O"))
-		return TRUE;
+		return true;
 
-	return FALSE;
+	return false;
 }
 
 // Function to clear all mixed samples
@@ -510,7 +521,7 @@ void FSMixFilter2000Hz(short * intMixedSamples, int intMixedSamplesLength)
 
 // Function to apply 75Hz filter used in Envelope correlator
 
-void Filter75Hz(short * intFilterOut, BOOL blnInitialise, int intSamplesToFilter)
+void Filter75Hz(short * intFilterOut, bool blnInitialise, int intSamplesToFilter)
 {
 	// assumes sample rate of 12000
 	// implements  3 50 Hz wide sections   (~75 Hz wide @ - 30dB centered on 1500 Hz)
@@ -611,9 +622,9 @@ void MixNCOFilter(short * intNewSamples, int Length, float dblOffsetHz)
 	}
 
 	// showed no significant difference if the 2000 Hz filer used for all bandwidths.
-//	printtick("Start Filter");
+//	ZF_LOGD("Start Filter");
 	FSMixFilter2000Hz(intMixedSamples, intMixedSamplesLength);  // filter through the FS filter (required to reject image from Local oscillator)
-//	printtick("Done Filter");
+//	ZF_LOGD("Done Filter");
 
 	// save for analysys
 
@@ -722,7 +733,7 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 	}
 
 	// An earlier version did CheckCRC16FrameType() here, before rs_correct.
-	// While unlikely, a case was encountered in which this returned True, even
+	// While unlikely, a case was encountered in which this returned true, even
 	// though bytRawData was corrupted.  However, rs_correct() was able to
 	// successfully correct it.  So, always do rs_correct() before
 	// CheckCRC16FrameType().  The increased computational burden is relatively
@@ -734,7 +745,7 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 
 		memcpy(bytCorrectedData, &bytRawData[1], bytRawData[0]);
 		ZF_LOGD("[CorrectRawDataWithRS] OK (%d bytes) without RS", intDataLen);
-		CarrierOk[Carrier] = TRUE;
+		CarrierOk[Carrier] = true;
 		MemarqUpdated();
 		return bytRawData[0];
 	}
@@ -783,7 +794,7 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 		totalRSErrors += NErrors;
 
 		memcpy(bytCorrectedData, &bytRawData[1], bytRawData[0]);
-		CarrierOk[Carrier] = TRUE;
+		CarrierOk[Carrier] = true;
 		MemarqUpdated();
 		return bytRawData[0];
 	}
@@ -807,9 +818,84 @@ short intPSKPhase_1[8], intPSKPhase_0[8];
 short intCP[8];  // Cyclic prefix offset
 float dblFreqBin[8];
 
-void ProcessNewSamples(short * Samples, int nSamples)
-{
-	BOOL blnFrameDecodedOK = FALSE;
+// This handles adding of InputNoise, updates CurrentLevel for logging and Guis,
+// and writes received audio to a WAV file when needed.
+void PreprocessNewSamples(short * Samples, int nSamples) {
+	// For level display we want a fairly rapid level average but only want to report
+	// to log every 10 secs or so
+	short * ptr = Samples;
+
+	static int min = 0;
+	static int max = 0;
+	static int lastlevelreport = 0;
+	static int lastlevelGUI = 0;
+
+	if (add_noise(Samples, nSamples, InputNoiseStdDev) > 0) {
+		// add_noise() resulted in clipping, so no need to search for min, max.
+		max = 32767;
+		min = -32768;
+	} else {
+		for (int i = 0; i < nSamples; i++) {
+			if (*(ptr) < min)
+				min = *ptr;
+			else if (*(ptr) > max)
+				max = *ptr;
+			ptr++;
+		}
+	}
+
+	CurrentLevel = ((max - min) * 75) /32768;  // Scale to 150 max
+	wg_send_currentlevel(0, CurrentLevel);
+
+	if ((Now - lastlevelGUI) > 2000) {  // 2 Secs
+		if (WaterfallActive == 0 && SpectrumActive == 0)  // Don't need to send as included in Waterfall Line
+			SendtoGUI('L', &CurrentLevel, 1);  // Signal Level
+		lastlevelGUI = Now;
+
+		if ((Now - lastlevelreport) > 10000) {  // 10 Secs
+			lastlevelreport = Now;
+			// Report input peaks to host and log if CONSOLELOG is ZF_LOG_DEBUG (2)
+			// or ZF_LOG_VERBOSE (1) or if close to clipping
+			// TODO: Are these good conditions for logging (and sending to host) Input Peaks values?
+			// Conditions were changed with the introduction of ZF_LOG, but are now restored.
+			if (max >= 32000 || ardop_log_get_level_console() <= ZF_LOG_DEBUG) {
+				char HostCmd[64] = "";
+				snprintf(HostCmd, sizeof(HostCmd), "INPUTPEAKS %d %d", min, max);
+				SendCommandToHostQuiet(HostCmd);
+				ZF_LOGD("Input peaks = %d, %d", min, max);
+				// A user with the default of CONSOLELOG = ZF_LOG_INFO will see
+				// this message if they are close to clipping
+				if (ardop_log_get_level_console() > ZF_LOG_DEBUG) {
+					ZF_LOGI(
+						"Your input signal is probably clipping. If you see"
+						" this message repeated in the next 20-30 seconds,"
+						" Turn down your RX input until this message stops"
+						" repeating."
+					);
+				}
+			}
+		}
+		min = max = 0;  // Every 2 secs
+	}
+
+	if (rxwf != NULL) {
+		// There is an open Wav file recording.
+		// Either close it or write samples to it.
+		if (rxwf_EndNow < Now && !HWriteRxWav) {
+			// timer to close WAV file has expired (not used with HWriteRxWav)
+			CloseWav(rxwf);
+			rxwf = NULL;
+			wg_send_wavrx(0, false);  // update "RECORDING RX" indicator on WebGui
+		}
+		else
+			WriteWav(Samples, nSamples, rxwf);
+	}
+}
+
+void ProcessNewSamples(short * Samples, int nSamples) {
+	bool blnFrameDecodedOK = false;
+
+	PreprocessNewSamples(Samples, nSamples);
 
 	// Reset Memory ARQ values if they have become stale.
 	// This is done here rather than only when a new frame is detected so that
@@ -852,14 +938,14 @@ void ProcessNewSamples(short * Samples, int nSamples)
 	{
 		// Search for leader as long as 960 samples (8 symbols) available
 
-//		printtick("Start Leader Search");
+//		ZF_LOGD("Start Leader Search");
 
 		if (nSamples >= 1200)
 		{
-//			printtick("Start Busy");
+//			ZF_LOGD("Start Busy");
 //			if (State == SearchingForLeader)
 //				UpdateBusyDetector(Samples);
-//			printtick("Done Busy");
+//			ZF_LOGD("Done Busy");
 
 			if (ProtocolState == FECSend)
 					return;
@@ -904,7 +990,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			memmove(rawSamples, Samples, nSamples * 2);
 			rawSamplesLength = nSamples;
 
-//			printtick("End Leader Search");
+//			ZF_LOGD("End Leader Search");
 
 			return;
 		}
@@ -917,12 +1003,12 @@ void ProcessNewSamples(short * Samples, int nSamples)
 
 	// I'm going to filter all samples into intFilteredMixedSamples.
 
-//	printtick("Start Mix");
+//	ZF_LOGD("Start Mix");
 
 	MixNCOFilter(Samples, nSamples, dblOffsetHz);  // Mix and filter new samples (Mixing consumes all intRcvdSamples)
 	nSamples = 0;  // all used
 
-//	printtick("Done Mix Samples");
+//	ZF_LOGD("Done Mix Samples");
 
 	// Acquire Symbol Sync
 
@@ -940,7 +1026,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 				State = SearchingForLeader;
 				return;
 			}
-//			printtick("Got Sym Sync");
+//			ZF_LOGD("Got Sym Sync");
 		}
 	}
 
@@ -956,7 +1042,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 
 			// Have frame Sync. Remove used samples from buffer
 
-//			printtick("Got Frame Sync");
+//			ZF_LOGD("Got Frame Sync");
 
 		}
 
@@ -980,7 +1066,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			DiscardOldSamples();
 			ClearAllMixedSamples();
 			State = SearchingForLeader;
-//			printtick("frame sync timeout");
+//			ZF_LOGD("frame sync timeout");
 		}
 		intToneMagsIndex = 0;
 	}
@@ -988,20 +1074,20 @@ void ProcessNewSamples(short * Samples, int nSamples)
 	// Acquire Frame Type
 	if (State == AcquireFrameType)
 	{
-//		printtick("getting frame type");
+//		ZF_LOGD("getting frame type");
 
 		intFrameType = Acquire4FSKFrameType();
 		if (intFrameType == -2)
 		{
 //			sprintf(Msg, "not enough %d %d", intFilteredMixedSamplesLength, intMFSReadPtr);
-//			printtick(Msg);
+//			ZF_LOGD(Msg);
 			return;  // insufficient samples
 		}
 		// Reset sdft in case frame data is 4FSK with baud rate different from the
 		// 50 baud used for the frame type.  Alternatively, this could be done only
 		// for specified frame types, which would be slightly more efficient when
 		// processing frames with 50 baud 4FSK frame data.
-		blnSdftInitialized = FALSE;
+		blnSdftInitialized = false;
 
 		if (intFrameType == -1)  // poor decode quality (large decode distance)
 		{
@@ -1022,7 +1108,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			// We've used intMFSReadPtr samples, so remove from Buffer
 
 //			sprintf(Msg, "Got Frame Type %x", intFrameType);
-//			printtick(Msg);
+//			ZF_LOGD(Msg);
 
 			intFilteredMixedSamplesLength -= intMFSReadPtr;
 
@@ -1038,7 +1124,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 
 			if (!FrameInfo(intFrameType, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType))
 			{
-				printtick("bad frame type");
+				ZF_LOGD("bad frame type");
 				State = SearchingForLeader;
 				ClearAllMixedSamples();
 				DiscardOldSamples();
@@ -1074,13 +1160,13 @@ void ProcessNewSamples(short * Samples, int nSamples)
 					txSleep(250);
 
 					ZF_LOGI("[ARDOPprotocol.ProcessNewSamples] ProtocolState=IRStoISS, substate = %s ACK received. Cease BREAKS, NewProtocolState=ISS, substate ISSData", ARQSubStates[ARQState]);
-					blnEnbARQRpt = FALSE;  // stop the BREAK repeats
+					blnEnbARQRpt = false;  // stop the BREAK repeats
 					intLastARQDataFrameToHost = -1;  // initialize to illegal value to capture first new ISS frame and pass to host
 
 					if (bytCurrentFrameType == 0)  // hasn't been initialized yet
 					{
 						ZF_LOGI("[ARDOPprotocol.ProcessNewSamples, ProtocolState=IRStoISS, Initializing GetNextFrameData");
-						GetNextFrameData(&intShiftUpDn, 0, "", TRUE);  // just sets the initial data, frame type, and sets intShiftUpDn= 0
+						GetNextFrameData(&intShiftUpDn, 0, "", true);  // just sets the initial data, frame type, and sets intShiftUpDn= 0
 					}
 
 					SetARDOPProtocolState(ISS);
@@ -1095,7 +1181,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 				DiscardOldSamples();
 				ClearAllMixedSamples();
 				State = SearchingForLeader;
-				blnFrameDecodedOK = TRUE;
+				blnFrameDecodedOK = true;
 				ZF_LOGI("[DecodeFrame] Frame: %s ", Name(intFrameType));
 
 				DecodeCompleteTime = Now;
@@ -1204,9 +1290,9 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			return;
 
 		//	We have the whole frame, so process it
-		blnSdftInitialized = FALSE;
+		blnSdftInitialized = false;
 
-//		printtick("got whole frame");
+//		ZF_LOGD("got whole frame");
 
 		if (strncmp (Name(intFrameType), "4FSK.200.50S", 12) == 0 && UseSDFT)
 		{
@@ -1240,11 +1326,11 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			intFrameRepeatInterval = ComputeInterFrameInterval(1000 + rand() % 2000);
 			SetARDOPProtocolState(IRStoISS);  // (ONLY IRS State where repeats are used)
 			SendCommandToHost("STATUS QUEUE BREAK new Protocol State IRStoISS");
-			blnEnbARQRpt = TRUE;  // setup for repeats until changeover
+			blnEnbARQRpt = true;  // setup for repeats until changeover
 			ZF_LOGD("[ARDOPprotocol.ProcessNewSamples] %d bytes to send in ProtocolState: %s: Send BREAK,  New state=IRStoISS (Rule 3.3)",
 					bytDataToSendLength,  ARDOPStates[ProtocolState]);
 			ZF_LOGD("[ARDOPprotocol.ProcessNewSamples] Skip Data Decoding when blnBREAKCmd and ProtcolState=IRS");
-			blnBREAKCmd = FALSE;
+			blnBREAKCmd = false;
 			if ((EncLen = Encode4FSKControl(BREAK, bytSessionID, bytEncodedBytes)) <= 0) {
 				ZF_LOGE("ERROR: In ProcessNewSamples() Invalid EncLen (%d).", EncLen);
 				goto skipDecode;
@@ -1261,7 +1347,7 @@ void ProcessNewSamples(short * Samples, int nSamples)
 
 			ZF_LOGD("[ARDOPprotocol.ProcessNewSamples] Skip Data Decoding when ProtcolState=IRStoISS, Answer with BREAK");
 			intFrameRepeatInterval = ComputeInterFrameInterval(1000 + rand() % 2000);
-			blnEnbARQRpt = TRUE;  // setup for repeats until changeover
+			blnEnbARQRpt = true;  // setup for repeats until changeover
 			if ((EncLen = Encode4FSKControl(BREAK, bytSessionID, bytEncodedBytes)) <= 0) {
 				ZF_LOGE("ERROR: In ProcessNewSamples() Invalid EncLen (%d).", EncLen);
 				goto skipDecode;
@@ -1275,13 +1361,13 @@ void ProcessNewSamples(short * Samples, int nSamples)
 			// In this state transition to ISS if  ACK frame
 
 			ZF_LOGD("[ARDOPprotocol.ProcessNewSamples] ProtocolState=IRStoISS, substate = %s ACK received. Cease BREAKS, NewProtocolState=ISS, substate ISSData", ARQSubStates[ARQState]);
-			blnEnbARQRpt = FALSE;  // stop the BREAK repeats
+			blnEnbARQRpt = false;  // stop the BREAK repeats
 			intLastARQDataFrameToHost = -1;  // initialize to illegal value to capture first new ISS frame and pass to host
 
 			if (bytCurrentFrameType == 0)  // hasn't been initialized yet
 			{
 				ZF_LOGD("[ARDOPprotocol.ProcessNewSamples, ProtocolState=IRStoISS, Initializing GetNextFrameData");
-				GetNextFrameData(&intShiftUpDn, 0, "", TRUE);  // just sets the initial data, frame type, and sets intShiftUpDn= 0
+				GetNextFrameData(&intShiftUpDn, 0, "", true);  // just sets the initial data, frame type, and sets intShiftUpDn= 0
 			}
 
 			SetARDOPProtocolState(ISS);
@@ -1316,7 +1402,7 @@ ProcessFrame:
 
 			if (IsDataFrame(intFrameType))
 			{
-				SetLED(PKTLED, TRUE);  // Flash LED
+				SetLED(PKTLED, true);  // Flash LED
 				PKTLEDTimer = Now + 400;  // For 400 Ms
 			}
 
@@ -1337,7 +1423,7 @@ ProcessFrame:
 					ZF_LOGD("[ARDOPprotocol.ProcessNewSamples]  DISC frame received in ProtocolMode FEC, Send END with SessionID= %XX", bytLastARQSessionID);
 
 					tmrFinalID = Now + 3000;
-					blnEnbARQRpt = FALSE;
+					blnEnbARQRpt = false;
 
 					if ((EncLen = Encode4FSKControl(END, bytLastARQSessionID, bytEncodedBytes)) <= 0) {
 						ZF_LOGE("ERROR: In ProcessNewSamples() Invalid EncLen (%d).", EncLen);
@@ -1350,7 +1436,7 @@ ProcessFrame:
 			}
 			else if (ProtocolMode == RXO)
 			{
-				ProcessRXOFrame(intFrameType, frameLen, bytData, TRUE);
+				ProcessRXOFrame(intFrameType, frameLen, bytData, true);
 			}
 			else if (ProtocolMode == ARQ)
 			{
@@ -1400,7 +1486,7 @@ ProcessFrame:
 			}
 			else if (ProtocolMode == RXO)
 			{
-				ProcessRXOFrame(intFrameType, frameLen, bytData, FALSE);
+				ProcessRXOFrame(intFrameType, frameLen, bytData, false);
 			}
 			else if (ProtocolMode == ARQ)
 			{
@@ -1601,7 +1687,7 @@ float SpectralPeakLocator(float XkM1Re, float XkM1Im, float XkRe, float XkIm, fl
 
 float dblPriorFineOffset = 1000.0f;
 
-BOOL SearchFor2ToneLeader3(short * intNewSamples, int Length, float * dblOffsetHz, int * intSN)
+bool SearchFor2ToneLeader3(short * intNewSamples, int Length, float * dblOffsetHz, int * intSN)
 {
 	// This version uses 10Hz bin spacing. Hamming window on Goertzel, and simple spectral peak interpolator
 	// It requires about 50% more CPU time when running but produces more sensive leader detection and more accurate tuning
@@ -1628,7 +1714,7 @@ BOOL SearchFor2ToneLeader3(short * intNewSamples, int Length, float * dblOffsetH
 	float dblTrialOffset, dblPowerEarly, dblSNdBPwrEarly;
 
 	if ((Length) < 1200)
-		return FALSE;  // ensure there are at least 1200 samples (5 symbols of 240 samples)
+		return false;  // ensure there are at least 1200 samples (5 symbols of 240 samples)
 
 	if ((Now - dttLastGoodFrameTypeDecode > 20000) && TuningRange > 0)
 	{
@@ -1696,7 +1782,7 @@ BOOL SearchFor2ToneLeader3(short * intNewSamples, int Length, float * dblOffsetH
 			if (intInterpCnt == 0)
 			{
 				dblPriorFineOffset = 1000.0f;
-				return FALSE;
+				return false;
 			}
 			else
 			{
@@ -1707,7 +1793,7 @@ BOOL SearchFor2ToneLeader3(short * intNewSamples, int Length, float * dblOffsetH
 		else
 		{
 			dblPriorFineOffset = 1000.0f;
-			return FALSE;
+			return false;
 		}
 	}
 
@@ -1722,7 +1808,7 @@ BOOL SearchFor2ToneLeader3(short * intNewSamples, int Length, float * dblOffsetH
 	if (fabsf(dblTrialOffset) > TuningRange && TuningRange > 0)
 	{
 		dblPriorFineOffset = 1000.0f;
-		return False;
+		return false;
 	}
 
 	dblLeftCar = 147.5f + dblTrialOffset / 10.0f;  // the nominal positions of the two tone carriers based on the last computerd dblOffsetHz
@@ -1845,7 +1931,7 @@ BOOL SearchFor2ToneLeader3(short * intNewSamples, int Length, float * dblOffsetH
 				// don't advance the pointer here
 
 				dblPriorFineOffset = 1000.0f;
-				return TRUE;
+				return true;
 			}
 			else
 				dblPriorFineOffset = *dblOffsetHz;
@@ -1853,13 +1939,13 @@ BOOL SearchFor2ToneLeader3(short * intNewSamples, int Length, float * dblOffsetH
 			// always use 1 symbol inc when looking for next minimal offset
 		}
 	}
-	return FALSE;
+	return false;
 }
 
 
 // Function to look at the 2 tone leader and establishes the Symbol framing using envelope search and minimal phase error.
 
-BOOL Acquire2ToneLeaderSymbolFraming()
+bool Acquire2ToneLeaderSymbolFraming()
 {
 	float dblCarPh;
 	float dblReal, dblImag;
@@ -1875,7 +1961,7 @@ BOOL Acquire2ToneLeaderSymbolFraming()
 	// Use Phase of 1500 Hz leader  to establish symbol framing. Nominal phase is 0 or 180 degrees
 
 	if ((intFilteredMixedSamplesLength - intLocalPtr) < 860)
-		return FALSE;  // not enough
+		return false;  // not enough
 
 	intLocalPtr = intMFSReadPtr + EnvelopeCorrelator();  // should position the pointer at the symbol boundary
 
@@ -1909,7 +1995,7 @@ BOOL Acquire2ToneLeaderSymbolFraming()
 
 	// strDecodeCapture &= "Framing; iAtMinErr=" & intIatMinErr.ToString & ", Ptr=" & intMFSReadPtr.ToString & ", MinAbsPhErr=" & Format(dblMinAbsPhErr, "#.00") & ": "
 
-	return TRUE;
+	return true;
 }
 
 // Function to establish symbol sync
@@ -1930,7 +2016,7 @@ int EnvelopeCorrelator()
 	if (intFilteredMixedSamplesLength < intMFSReadPtr + 720)
 		return -1;
 
-	Filter75Hz(int75HzFiltered, TRUE, 720);  // This filter appears to help reduce avg decode distance (10 frames) by about 14%-19% at WGN-5 May 3, 2015
+	Filter75Hz(int75HzFiltered, true, 720);  // This filter appears to help reduce avg decode distance (10 frames) by about 14%-19% at WGN-5 May 3, 2015
 
 	for (j = 0; j < 360; j++)  // Over 1.5 symbols
 	{
@@ -1968,7 +2054,7 @@ int EnvelopeCorrelator()
 
 // Function to acquire the Frame Sync for all Frames
 
-BOOL AcquireFrameSyncRSB()
+bool AcquireFrameSyncRSB()
 {
 	// Two improvements could be incorporated into this function:
 	//    1) Provide symbol tracking until the frame sync is found (small corrections should be less than 1 sample per 4 symbols ~2000 ppm)
@@ -1990,7 +2076,7 @@ BOOL AcquireFrameSyncRSB()
 	int i;
 
 	if (intAvailableSymbols < 3)
-		return FALSE;  // must have at least 360 samples to search
+		return false;  // must have at least 360 samples to search
 
 	// Calculate the Phase for the First symbol
 
@@ -2032,7 +2118,7 @@ BOOL AcquireFrameSyncRSB()
 
 			// strDecodeCapture &= "Sync; Phase1>2=" & Format(dblPhaseDiff12, "0.00") & " Phase2>3=" & Format(dblPhaseDiff23, "0.00") & ": "
 
-			return TRUE;  // pointer is pointing to first 4FSK data symbol. (first symbol of frame type)
+			return true;  // pointer is pointing to first 4FSK data symbol. (first symbol of frame type)
 		}
 		else
 		{
@@ -2043,12 +2129,12 @@ BOOL AcquireFrameSyncRSB()
 	}
 
 	intMFSReadPtr = intLocalPtr - 480;  // back up 2 symbols for next attempt (Current Sym2 will become new Sym1)
-	return FALSE;
+	return false;
 }
 
 // Function to Demod FrameType4FSK
 
-BOOL DemodFrameType4FSK(int intPtr, short * intSamples, int * intToneMags)
+bool DemodFrameType4FSK(int intPtr, short * intSamples, int * intToneMags)
 {
 	float dblReal, dblImag;
 	int i;
@@ -2056,15 +2142,15 @@ BOOL DemodFrameType4FSK(int intPtr, short * intSamples, int * intToneMags)
 	UCHAR bytSym;
 
 	if ((intFilteredMixedSamplesLength - intPtr) < 2400)
-		return FALSE;
+		return false;
 
 	intToneMagsLength = 10;
 
 	if (UseSDFT)
 	{
 		intSampPerSym = 240;  // 50 baud 4FSK frame type
-		Demod1Car4FSK_SDFT(intPtr, TRUE);
-		return TRUE;
+		Demod1Car4FSK_SDFT(intPtr, true);
+		return true;
 	}
 
 	for (i = 0; i < 10; i++)
@@ -2094,7 +2180,7 @@ BOOL DemodFrameType4FSK(int intPtr, short * intSamples, int * intToneMags)
 		ZF_LOGV("FrameType_bytSym : %d(%d %03.0f/%03.0f/%03.0f/%03.0f)", bytSym, intMagSum, 100.0*intToneMags[4 * i]/intMagSum, 100.0*intToneMags[1 + 4 * i]/intMagSum, 100.0*intToneMags[2 + 4 * i]/intMagSum, 100.0*intToneMags[3 + 4 * i]/intMagSum);
 	}
 
-	return TRUE;
+	return true;
 }
 
 // Function to compute the "distance" from a specific bytFrame Xored by bytID using 1 symbol parity
@@ -2428,7 +2514,7 @@ int Acquire4FSKFrameType()
 
 // Is called repeatedly to decode multitone modes
 
-BOOL Demod1Car4FSK()
+bool Demod1Car4FSK()
 {
 	// obsolete versions of this code accommodated multiple 4FSK carriers
 	int Start = 0;
@@ -2457,7 +2543,7 @@ BOOL Demod1Car4FSK()
 				memmove(intFilteredMixedSamples,
 					&intFilteredMixedSamples[Start], intFilteredMixedSamplesLength * 2);
 
-			return FALSE;  // Wait for more samples
+			return false;  // Wait for more samples
 		}
 
 		if (UseSDFT)
@@ -2465,7 +2551,7 @@ BOOL Demod1Car4FSK()
 			// Only do Demod1Car4FSK_SDFT() if carrier has not been successfully demodulated
 			//
 			if (!CarrierOk[0]) {
-				Demod1Car4FSK_SDFT(Start, FALSE);
+				Demod1Car4FSK_SDFT(Start, false);
 			}
 			else if (SymbolsLeft == 1)
 			{
@@ -2476,7 +2562,7 @@ BOOL Demod1Car4FSK()
 		else
 		{
 			// obsolete versions of this code accommodated inNumCar > 1
-			if (CarrierOk[0] == FALSE)  // Don't redo if already decoded
+			if (CarrierOk[0] == false)  // Don't redo if already decoded
 				Demod1Car4FSKChar(Start, bytFrameData1);
 		}
 		charIndex++;  // Index into received chars
@@ -2494,18 +2580,18 @@ BOOL Demod1Car4FSK()
 			State = SearchingForLeader;
 		}
 	}
-	return TRUE;
+	return true;
 }
 
 short intSdftSamples[5 * MAXDFTLEN / 2];
 const short intHalfDftlenZeros[MAXDFTLEN / 2];
 // Function to demodulate one carrier for all low baud rate 4FSK frame types using SDFT
-void Demod1Car4FSK_SDFT(int Start, BOOL blnGetFrameType)
+void Demod1Car4FSK_SDFT(int Start, bool blnGetFrameType)
 {
 	/*
 	Demodulate the 4FSK symbols from intFilteredMixedSample around center freqency
 	defined by (global) intCenterFreq.  Populate intToneMags[] and, if blnGetFrameType
-	is FALSE, also populate bytFrameData.
+	is false, also populate bytFrameData.
 
 	Start, an index into intFilteredMixedSAmples, points to the first sample of the
 	first symbol to be decoded.
@@ -2738,7 +2824,7 @@ void Demod1Car4FSKChar(int Start, UCHAR * Decoded)
 
 void Demod1Car4FSK600Char(int Start, UCHAR * Decoded);
 
-BOOL Demod1Car4FSK600()
+bool Demod1Car4FSK600()
 {
 	int Start = 0;
 
@@ -2766,7 +2852,7 @@ BOOL Demod1Car4FSK600()
 				memmove(intFilteredMixedSamples,
 					&intFilteredMixedSamples[Start], intFilteredMixedSamplesLength * 2);
 
-			return FALSE;
+			return false;
 		}
 
 		// Since "carriers" are sequential (rather than simultaneous on adjacent
@@ -2790,7 +2876,7 @@ BOOL Demod1Car4FSK600()
 			State = SearchingForLeader;
 		}
 	}
-	return TRUE;
+	return true;
 }
 
 void Demod1Car4FSK600Char(int Start, UCHAR * Decoded)
@@ -2854,9 +2940,9 @@ void Demod1Car4FSK600Char(int Start, UCHAR * Decoded)
 
 extern int intBW;
 
-BOOL Decode4FSKConReq(StationId* caller, StationId* target)
+bool Decode4FSKConReq(StationId* caller, StationId* target)
 {
-	BOOL FrameOK;
+	bool FrameOK;
 	stationid_init(caller);
 	stationid_init(target);
 
@@ -2865,7 +2951,7 @@ BOOL Decode4FSKConReq(StationId* caller, StationId* target)
 	// Try correcting with RS Parity
 	int NErrors = rs_correct(bytFrameData1, 16, 4, true, false);
 
-	FrameOK = TRUE;
+	FrameOK = true;
 	if (NErrors > 0) {
 		// Unfortunately, Reed Solomon correction will sometimes return a
 		// non-negative result indicating that the data is OK when it is not.
@@ -2882,19 +2968,19 @@ BOOL Decode4FSKConReq(StationId* caller, StationId* target)
 		ZF_LOGD("CONREQ Frame Corrected by RS");
 	} else if (NErrors < 0) {
 		ZF_LOGD("CONREQ Still bad after RS");
-		FrameOK = FALSE;
+		FrameOK = false;
 	}
 
 	station_id_err ec = stationid_from_bytes(&bytFrameData1[0], caller);
 	if (ec) {
 		ZF_LOGD_MEM(&bytFrameData1[0], PACKED6_SIZE, "Failed to decode ConReq frame calling station ID: %s, bytes: ", stationid_strerror(ec));
-		FrameOK = FALSE;
+		FrameOK = false;
 	}
 
 	station_id_err et = stationid_from_bytes(&bytFrameData1[PACKED6_SIZE], target);
 	if (et) {
 		ZF_LOGD_MEM(&bytFrameData1[PACKED6_SIZE], PACKED6_SIZE, "Failed to decode ConReq frame target station ID: %s, bytes: ", stationid_strerror(et));
-		FrameOK = FALSE;
+		FrameOK = false;
 	}
 
 	// Recheck the returned data by reencoding
@@ -2973,14 +3059,14 @@ int Compute4FSKSN()
 
 // Function to Demodulate and Decode 1 carrier 4FSK 50 baud Ping frame
 
-BOOL Decode4FSKPing(StationId* caller, StationId* target)
+bool Decode4FSKPing(StationId* caller, StationId* target)
 {
 	stationid_init(caller);
 	stationid_init(target);
-	BOOL FrameOK;
+	bool FrameOK;
 
 	int NErrors = rs_correct(bytFrameData1, 16, 4, true, false);
-	FrameOK = TRUE;
+	FrameOK = true;
 
 	if (NErrors > 0)
 	{
@@ -2999,29 +3085,29 @@ BOOL Decode4FSKPing(StationId* caller, StationId* target)
 		ZF_LOGD("PING Frame Corrected by RS");
 	} else if (NErrors < 0) {
 		ZF_LOGD("PING Still bad after RS");
-		FrameOK = FALSE;
+		FrameOK = false;
 	}
 
 	station_id_err ec = stationid_from_bytes(&bytFrameData1[0], caller);
 	if (ec) {
 		ZF_LOGD_MEM(&bytFrameData1[0], PACKED6_SIZE, "Failed to decode Ping frame calling station ID: %s, bytes: ", stationid_strerror(ec));
-		FrameOK = FALSE;
+		FrameOK = false;
 	}
 
 	station_id_err et = stationid_from_bytes(&bytFrameData1[PACKED6_SIZE], target);
 	if (et) {
 		ZF_LOGD_MEM(&bytFrameData1[PACKED6_SIZE], PACKED6_SIZE, "Failed to decode Ping frame target station ID: %s, bytes: ", stationid_strerror(et));
-		FrameOK = FALSE;
+		FrameOK = false;
 	}
 
 
-	if (FrameOK == FALSE)
+	if (FrameOK == false)
 	{
 		bytData[0] = '\0';
 		stationid_init(caller);
 		stationid_init(target);
 		SendCommandToHost("CANCELPENDING");
-		return FALSE;
+		return false;
 	}
 
 	snprintf(bytData, sizeof(bytData), "%s %s", caller->str, target->str);
@@ -3045,18 +3131,18 @@ BOOL Decode4FSKPing(StationId* caller, StationId* target)
 		stcLastPingintRcvdSN = intSNdB;
 		stcLastPingintQuality = intLastRcvdFrameQuality;
 
-		return TRUE;
+		return true;
 	}
 	else
 		SendCommandToHost("CANCELPENDING");
 
-	return FALSE;
+	return false;
 }
 
 
 // Function to Decode 1 carrier 4FSK 50 baud Connect Ack with timing
 
-BOOL Decode4FSKConACK(UCHAR bytFrameType, int * intTiming)
+bool Decode4FSKConACK(UCHAR bytFrameType, int * intTiming)
 {
 	int Timing = 0;
 
@@ -3081,18 +3167,18 @@ BOOL Decode4FSKConACK(UCHAR bytFrameType, int * intTiming)
 
 		// intTestFrameCorrectCnt++;
 		bytLastReceivedDataFrameType = 0;  // initialize the LastFrameType to an illegal Data frame
-		return TRUE;
+		return true;
 	}
 
 	if (AccumulateStats)
 		intFailedFSKFrameDataDecodes++;
 
-	return FALSE;
+	return false;
 }
 
 
 // Function  Decode 1 carrier 4FSK 50 baud PingACK with S:N and Quality
-BOOL Decode4FSKPingACK(UCHAR bytFrameType, int * intSNdB, int * intQuality)
+bool Decode4FSKPingACK(UCHAR bytFrameType, int * intSNdB, int * intQuality)
 {
 	int Ack = -1;
 
@@ -3115,23 +3201,23 @@ BOOL Decode4FSKPingACK(UCHAR bytFrameType, int * intSNdB, int * intQuality)
 		else
 			ZF_LOGD("[DemodDecode4FSKPingACK]  S:N= %d dB Quality=%d",  *intSNdB, *intQuality);
 
-		blnPINGrepeating = False;
-		blnFramePending = False;	// Cancels last repeat
-		return TRUE;
+		blnPINGrepeating = false;
+		blnFramePending = false;	// Cancels last repeat
+		return true;
 	}
 	else {
 		*intSNdB = -1;
 		*intQuality = -1;
 		ZF_LOGD("[DemodDecode4FSKPingACK]  Unable to decode S:N and Quality.");
 	}
-	return FALSE;
+	return false;
 }
 
 
-BOOL Decode4FSKID(UCHAR bytFrameType, StationId* sender, Locator* grid)
+bool Decode4FSKID(UCHAR bytFrameType, StationId* sender, Locator* grid)
 {
 	UCHAR bytCall[COMP_SIZE];
-	BOOL FrameOK;
+	bool FrameOK;
 	unsigned char * p = bytFrameData1;
 	stationid_init(sender);
 	locator_init(grid);
@@ -3141,7 +3227,7 @@ BOOL Decode4FSKID(UCHAR bytFrameType, StationId* sender, Locator* grid)
 		p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15]);
 
 	int NErrors = rs_correct(bytFrameData1, 16, 4, true, false);
-	FrameOK = TRUE;
+	FrameOK = true;
 
 	if (NErrors > 0)
 	{
@@ -3160,13 +3246,13 @@ BOOL Decode4FSKID(UCHAR bytFrameType, StationId* sender, Locator* grid)
 		ZF_LOGD("ID Frame Corrected by RS");
 	} else if (NErrors < 0) {
 		ZF_LOGD("ID Still bad after RS");
-		FrameOK = FALSE;
+		FrameOK = false;
 	}
 
 	station_id_err es = stationid_from_bytes(&bytFrameData1[0], sender);
 	if (es) {
 		ZF_LOGD_MEM(&bytFrameData1[0], PACKED6_SIZE, "Failed to decode ID Frame station ID: %s, bytes: ", stationid_strerror(es));
-		FrameOK = FALSE;
+		FrameOK = false;
 	}
 
 	locator_err e = locator_from_bytes(&bytFrameData1[COMP_SIZE], grid);
@@ -3337,18 +3423,18 @@ void DemodulateFrame(int intFrameType)
 
 // Function to Strip quality from ACK/NAK frame types
 
-BOOL DecodeACKNAK(int intFrameType, int *  intQuality)
+bool DecodeACKNAK(int intFrameType, int *  intQuality)
 {
 	*intQuality = 38 + (2 * (intFrameType & 0x1F));  // mask off lower 5 bits  // Range of 38 to 100 in steps of 2
-	return TRUE;
+	return true;
 }
 
 
 
 
-BOOL DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
+bool DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 {
-	BOOL blnDecodeOK = FALSE;
+	bool blnDecodeOK = false;
 	stationid_init(&LastDecodedStationCaller);
 	stationid_init(&LastDecodedStationTarget);
 	Locator gridSQ;
@@ -3384,7 +3470,7 @@ BOOL DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 	}
 	else if (IsShortControlFrame(intFrameType))  // Short Control Frames
 	{
-		blnDecodeOK = TRUE;
+		blnDecodeOK = true;
 		DrawRXFrame(1, Name(intFrameType));
 		wg_send_rxframet(0, 1, Name(intFrameType));
 
@@ -3514,7 +3600,7 @@ BOOL DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 		case 0x75:
 
 			if (memcmp(CarrierOk, Good, intNumCar) == 0)
-				blnDecodeOK = TRUE;
+				blnDecodeOK = true;
 
 			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
@@ -3588,7 +3674,7 @@ BOOL DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 		case 0x53:
 
 			if (CarrierOk[0] && CarrierOk[1])
-				blnDecodeOK = TRUE;
+				blnDecodeOK = true;
 
 			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
@@ -3605,7 +3691,7 @@ BOOL DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 		case 0x63:
 
 			if (memcmp(CarrierOk, Good, intNumCar) == 0)
-				blnDecodeOK = TRUE;
+				blnDecodeOK = true;
 
 			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
@@ -3622,7 +3708,7 @@ BOOL DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 		case 0x73:
 
 			if (memcmp(CarrierOk, Good, intNumCar) == 0)
-				blnDecodeOK = TRUE;
+				blnDecodeOK = true;
 
 			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
@@ -3695,7 +3781,7 @@ BOOL DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 			}
 
 			if (memcmp(CarrierOk, Good, 3) == 0)
-				blnDecodeOK = TRUE;
+				blnDecodeOK = true;
 
 			if (blnDecodeOK) {
 				DrawRXFrame(1, Name(intFrameType));
@@ -3918,7 +4004,7 @@ void Update4FSKConstellation(int * intToneMags, int * intQuality)
 
 // Function to Update the PhaseConstellation
 
-int UpdatePhaseConstellation(short * intPhases, short * intMag, char * strMod, BOOL blnQAM)
+int UpdatePhaseConstellation(short * intPhases, short * intMag, char * strMod, bool blnQAM)
 {
 	// Function to update bmpConstellation plot for PSK modes...
 	// Skip plotting and calculations of intPSKPhase(0) as this is a reference phase (9/30/2014)
@@ -4225,7 +4311,7 @@ VOID Decode1CarPSK(UCHAR * Decoded, int Carrier)
 
 //	Function to compute PSK symbol tracking (all PSK modes, used for single or multiple carrier modes)
 
-int Track1CarPSK(int intCarFreq, char * strPSKMod, float dblUnfilteredPhase, BOOL blnInit)
+int Track1CarPSK(int intCarFreq, char * strPSKMod, float dblUnfilteredPhase, bool blnInit)
 {
 	// This routine initializes and tracks the phase offset per symbol and adjust intPtr +/-1 when the offset creeps to a threshold value.
 	// adjusts (by Ref) intPtr 0, -1 or +1 based on a filtering of phase offset.
@@ -4513,7 +4599,7 @@ VOID InitDemodPSK()
 	float dblPhase, dblReal, dblImag;
 
 	intPSKMode = strMod[0] - '0';
-	PSKInitDone = TRUE;
+	PSKInitDone = true;
 	intPhasesLen = 0;
 
 	if (intPSKMode == 8)
@@ -4559,7 +4645,7 @@ VOID InitDemodPSK()
 			GoertzelRealImag(intFilteredMixedSamples, intCP[i], intNforGoertzel[i], dblFreqBin[i], &dblReal, &dblImag);
 
 		dblPhase = atan2f(dblImag, dblReal);
-		Track1CarPSK(intCarFreq, strMod, dblPhase, TRUE);
+		Track1CarPSK(intCarFreq, strMod, dblPhase, true);
 		intPSKPhase_1[i] = 1000 * dblPhase;
 
 		// Set initial mag from Reference Phase (which should be full power)
@@ -4706,7 +4792,7 @@ void DemodPSK()
 		}
 
 		// Rick uses the last carier for Quality
-		intLastRcvdFrameQuality = UpdatePhaseConstellation(&intPhases[intNumCar - 1][0], &intMags[intNumCar - 1][0], strMod, FALSE);
+		intLastRcvdFrameQuality = UpdatePhaseConstellation(&intPhases[intNumCar - 1][0], &intMags[intNumCar - 1][0], strMod, false);
 
 		Decode1CarPSK(bytFrameData1, 0);
 		frameLen = CorrectRawDataWithRS(bytFrameData1, bytData, intDataLen, intRSLen, intFrameType, 0);
@@ -4757,7 +4843,7 @@ void DemodPSK()
 		{
 			// We've retryed to decode - see if ok now
 
-			int OKNow = TRUE;
+			int OKNow = true;
 
 			ZF_LOGD("DemodPSK retry RS on MEM ARQ Corrected frames");
 			frameLen = 0;
@@ -4766,7 +4852,7 @@ void DemodPSK()
 			{
 				frameLen += CorrectRawDataWithRS(bytFrameData[Carrier], &bytData[frameLen], intDataLen, intRSLen, intFrameType, Carrier);
 				if (CarrierOk[Carrier] == 0)
-					OKNow = FALSE;
+					OKNow = false;
 			}
 
 			if (OKNow && AccumulateStats)
@@ -4819,7 +4905,7 @@ int Demod1CarPSKChar(int Start, int Carrier)
 /*
 		if (Carrier == 0)
 		{
-			Corrections = Track1CarPSK(intCarFreq, strMod, atan2f(dblImag, dblReal), FALSE);
+			Corrections = Track1CarPSK(intCarFreq, strMod, atan2f(dblImag, dblReal), false);
 
 			if (Corrections != 0)
 			{
@@ -4856,7 +4942,7 @@ VOID InitDemodQAM()
 	dblPhaseInc = 2 * M_PI * 1000 / 8;
 	intPhasesLen = 0;
 
-	PSKInitDone = TRUE;
+	PSKInitDone = true;
 
 	intSampPerSym = 120;
 
@@ -4883,7 +4969,7 @@ VOID InitDemodQAM()
 		intCarMagThreshold[i] = sqrtf(powf(dblReal, 2) + powf(dblImag, 2));
 		intCarMagThreshold[i] *= 0.75;
 
-		Track1CarPSK(intCarFreq, strMod, dblPhase, TRUE);
+		Track1CarPSK(intCarFreq, strMod, dblPhase, true);
 		intPSKPhase_1[i] = 1000 * dblPhase;
 		intCarFreq -= 200;  // Step through each carrier Highest to lowest which is equivalent to lowest to highest before RSB mixing.
 	}
@@ -5031,7 +5117,7 @@ void SaveFSKSamples(int Part, int *Magnitudes, int Length) {
 	MemarqUpdated();
 }
 
-BOOL DemodQAM()
+bool DemodQAM()
 {
 	int Used = 0;
 	int Start = 0;
@@ -5054,13 +5140,13 @@ BOOL DemodQAM()
 				memmove(intFilteredMixedSamples,
 					&intFilteredMixedSamples[Start], intFilteredMixedSamplesLength * 2);
 
-			return FALSE;
+			return false;
 		}
 
 		if (PSKInitDone == 0)  // First time through
 		{
 			if (intFilteredMixedSamplesLength < 9 * intSampPerSym + 10)
-				return FALSE;  // Wait for at least 2 chars worth
+				return false;  // Wait for at least 2 chars worth
 
 			InitDemodQAM();
 			intFilteredMixedSamplesLength -= intSampPerSym;
@@ -5143,7 +5229,7 @@ BOOL DemodQAM()
 //				CorrectPhaseForTuningOffset(&intPhases[7][0], intPhasesLen, strMod);
 			}
 
-			intLastRcvdFrameQuality = UpdatePhaseConstellation(&intPhases[intNumCar - 1][0], &intMags[intNumCar - 1][0], strMod, TRUE);
+			intLastRcvdFrameQuality = UpdatePhaseConstellation(&intPhases[intNumCar - 1][0], &intMags[intNumCar - 1][0], strMod, true);
 
 			Decode1CarQAM(bytFrameData1, 0);
 			frameLen = CorrectRawDataWithRS(bytFrameData1, bytData, intDataLen, intRSLen, intFrameType, 0);
@@ -5198,7 +5284,7 @@ BOOL DemodQAM()
 			{
 				// We've retryed to decode - see if ok now
 
-				int OKNow = TRUE;
+				int OKNow = true;
 
 				ZF_LOGD("DemodQAM retry RS on MEM ARQ Corrected frames");
 				frameLen = 0;
@@ -5207,7 +5293,7 @@ BOOL DemodQAM()
 				{
 					frameLen += CorrectRawDataWithRS(bytFrameData[Carrier], &bytData[frameLen], intDataLen, intRSLen, intFrameType, Carrier);
 					if (CarrierOk[Carrier] == 0)
-						OKNow = FALSE;
+						OKNow = false;
 				}
 
 				if (OKNow && AccumulateStats)
@@ -5221,7 +5307,7 @@ BOOL DemodQAM()
 			State = SearchingForLeader;
 		}
 	}
-	return TRUE;
+	return true;
 }
 
 int Demod1CarQAMChar(int Start, int Carrier)
@@ -5258,7 +5344,7 @@ int Demod1CarQAMChar(int Start, int Carrier)
 /*
 		if (Carrier == 0)
 		{
-			Corrections = Track1CarPSK(intCarFreq, strMod, atan2f(dblImag, dblReal), FALSE);
+			Corrections = Track1CarPSK(intCarFreq, strMod, atan2f(dblImag, dblReal), false);
 
 			if (Corrections != 0)
 			{

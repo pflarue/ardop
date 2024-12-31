@@ -5,8 +5,12 @@
 #include <windows.h>
 #endif
 
+#include <stdbool.h>
+
+#include "os_util.h"
 #include "common/ARDOPC.h"
 #include "common/wav.h"
+#include "common/ptt.h"
 
 // pttOnTime is used both as a reference for how long audio has been playing
 // and as an indication of whether or not any transmissions have been made
@@ -23,7 +27,7 @@ FILE * fp1;
 
 extern short Dummy;
 extern int DriveLevel;
-extern BOOL WriteTxWav;
+extern bool WriteTxWav;
 extern unsigned int LastIDFrameTime;
 
 int wg_send_txframet(int cnum, const char *frame);
@@ -122,7 +126,7 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 	// the 16 bit samples and send to sound interface
 
 	int intNumCar, intBaud, intDataLen, intRSLen, intDataPtr, intSampPerSym, intDataBytesPerCar;
-	BOOL blnOdd;
+	bool blnOdd;
 
 	int intSample;
 
@@ -266,7 +270,7 @@ void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len,
 	// the 16 bit samples and send to sound interface
 
 	int intNumCar, intBaud, intDataLen, intRSLen, intDataPtr, intSampPerSym, intDataBytesPerCar;
-	BOOL blnOdd;
+	bool blnOdd;
 
 	short intSample;
 
@@ -471,7 +475,7 @@ void PlayPSKSymbols(unsigned char Symbols[8][462], int intNumCars, int SymbolCou
 void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen)
 {
 	int intNumCar, intBaud, intDataLen, intRSLen, intDataPtr;
-	BOOL blnOdd;
+	bool blnOdd;
 
 	char strType[18] = "";
 	char strMod[16] = "";
@@ -612,7 +616,7 @@ void RemodulateLastFrame()
 {
 	int intNumCar, intBaud, intDataLen, intRSLen;
 	UCHAR bytMinQualThresh;
-	BOOL blnOdd;
+	bool blnOdd;
 
 	char strType[18] = "";
 	char strMod[16] = "";
@@ -668,7 +672,7 @@ extern unsigned short buffer[2][1200];
 
 unsigned short * DMABuffer;
 
-unsigned short * SendtoCard(unsigned short * buf, int n);
+unsigned short * SendtoCard(int n);
 unsigned short * SoundInit();
 
 // initFilter is called to set up each packet. It selects filter width
@@ -690,14 +694,14 @@ void initFilter(int Width, int Centre)
 
 	DMABuffer = SoundInit();
 
-	KeyPTT(TRUE);
+	KeyPTT(true);
 	pttOnTime = Now;
 	if (LastIDFrameTime == 0)
 		// This is the first transmission since the last IDFrame.  Schedule the
 		// next IDFrame to be sent in about 10 minutes unless one is sent sooner.
 		LastIDFrameTime = pttOnTime - 1;
 
-	SoundIsPlaying = TRUE;
+	SoundIsPlaying = true;
 	StopCapture();
 
 	Last120Get = 0;
@@ -900,7 +904,7 @@ void SampleSink(short Sample)
 		{
 			// send this buffer to sound interface
 
-			DMABuffer = SendtoCard(DMABuffer, SendSize);
+			DMABuffer = SendtoCard(SendSize);
 			Number = 0;
 		}
 	}

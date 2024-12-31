@@ -63,9 +63,9 @@ typedef struct ArdopLogFile {
 	const char* extension;
 
 	/**
-	 * @brief TCP control port (permits concurrent ARDOP instances)
+	 * @brief TCP control host port (permits concurrent ARDOP instances)
 	 */
-	uint16_t port;
+	uint16_t port;  // ardopcf host port
 
 	/**
 	 * @brief UNIX time the file was opened, in seconds
@@ -95,7 +95,7 @@ typedef struct ArdopLogFile {
  *            This buffer must have a lifetime that exceeds
  *            `logfile` (preferably `static`).
  *
- * @param[in] port TCP control port. This permits multiple
+ * @param[in] port TCP control host port. This permits multiple
  *            concurrent instances of ARDOP. If zero, no log
  *            file can be opened.
  *
@@ -107,7 +107,7 @@ void ardop_logfile_init(
 	const char* logdir,
 	const char* stem,
 	const char* extension,
-	const uint16_t port
+	const uint16_t port  // ardopcf host port
 );
 
 /**

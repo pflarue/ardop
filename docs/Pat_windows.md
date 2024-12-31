@@ -2,7 +2,7 @@
 
 [Pat](https://getpat.io) is a [Winlink](https://winlink.org) client program that can be used to send and recieve email messages using amateur radio, including when Internet and Cell service is not available. [ardopcf](https://github.com/pflarue/ardop) is one of several programs that Pat can use to connect to a radio.  This page provides instructions specific to setting up Pat to use with **ardopcf** on a Windows computer.
 
-Other related pages provide instructions on configuring and running [ardopcf for Windows](USAGE_windows.md), and configuring and running [Hamlib/rigctld for Windows](Hamlib_Windows11.md) (which Pat can use to control your radio).
+Other related pages provide instructions on configuring and running [ardopcf for Windows](USAGE_windows.md), and configuring and running [Hamlib/rigctld for Windows](Hamlib_Windows11.md) (which Pat and/or **ardopcf** can use to control your radio).
 
 Using Pat and Ardop may seem complex and confusing.  If you need additional help, there are some users groups where you can ask for help:
 
@@ -67,7 +67,7 @@ Here is the portion of my config.json that configures Pat to use Hamlib (rigctld
         "address": "localhost:4532",
         "network": "tcp"
     }
-  }
+  },
 ```
 
 The name "G90" is arbitrary, but will be used again in the "ardop" portion of the configuration.  I could just as easily called it "my-rig".  What kind of radio you have is defined in the Hamlib/rigctld setup, not here.  The address "localhost:4532" has two parts.  The part before the colon is the IP address of the machine where rigctld.exe is running.  'localhost' means that it is the same computer where Pat is running, and is equivalent to '127.0.0.1'.  If it is on a different machine, you would use the IP address of that machine: probably something like '192.168.100.103' or '10.0.0.5'.  The part after the colon is the TCP port number, which is set with the `-t` or `--port` option of rigcrld.  The value for "network" will usually (always?) be "tcp".
@@ -101,13 +101,21 @@ Setting "ptt_control" to true tells Pat to handle PTT on and off (using Hamlib).
 
 As legally required, every 10 minutes during a long Ardop connection, and at the end of a winlink session, ardop will automatically send an IDFrame.  An IDFrame includes your callsign and location.  If "cwid_enabled" is true, then it will follow each IDFrame with a CW/Morse code version of your callsign.  By my reading of FCC rules, sending a CW ID is not required, though others may disagree.  So, I leave "cwid_enabled" as false.  If the amateur radio rules of your country require ID in CW, or if choose to ID in CW for any other reason, you may set "cwid_enabled" to true.
 
-If I do not want Pat to do CAT ccontrol or handle PTT, then I congfigure **ardopcf** to handle PTT itself, I manually tune the radio to the correct frequency, and I change the following two lines in the "ardop" section of my Pat configuration file:
+If I do not want Pat to do CAT control or handle PTT, then I congfigure **ardopcf** to handle PTT itself, I manually tune the radio to the correct frequency, and I change the following two lines in the "ardop" section of my Pat configuration file:
 ```
     "rig": "",
     "ptt_ctrl": false,
 ```
 
 If "ptt_ctrl" is true, but a valid "rig" is not defined, then Pat will produce an error like "unable to set PTT rig '': not defined or not loaded."  As mentioned above, if Pat cannot connect to a rig defined in "hamlib_rigs" it will also produce an error.
+
+It is also possible to configure PAT to do CAT control to set the radio frequency, but to not provide PTT control.  In this case change the following two lines in the "ardop" section of the Pat configuration file to:
+```
+    "rig": "G90",
+    "ptt_ctrl": false,
+```
+
+Since **ardopcf** now has the ability to do PTT control via Hamlib/rigctld, it is possible Pat to do frequency control and **ardopcf** to do PTT control, both using the same rigctld instance and TCP port.
 
 9. The settings configured in the last few steps are sufficient to connect to another station using Ardop if you initiate the connection.  If you also want your station to listen for other stations calling it (for a Peer-to-Peer Winlink connection), you also must add "ardop" to the "listen" setting.  This is right before "hamlib_rigs" in the configuration file, and looks like:
 

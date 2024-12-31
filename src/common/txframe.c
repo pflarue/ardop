@@ -7,6 +7,7 @@
 ///////////////////////////////////////////////////////////////
 
 #include <ctype.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -17,7 +18,7 @@
 extern int intLastRcvdFrameQuality;  // defined in ARDOPC.c
 
 extern UCHAR bytSessionID;  // defined in ARQ.c
-extern BOOL blnEnbARQRpt;  // defined in ARQ.c
+extern bool blnEnbARQRpt;  // defined in ARQ.c
 extern int intLeaderRcvdMs;  // defined and updated in SoundInput.c. ref in ARQ.c
 
 int parse_params(char *paramstr, char *parsed[10]) {
@@ -84,6 +85,10 @@ int bytes2hex(char *outputStr, size_t count, unsigned char *data, size_t datalen
 		outputStr[0] = 0x00;
 		return 0;
 	}
+	if (datalen == 0) {
+		outputStr[0] = 0x00;
+		return 0;
+	}
 	char formatstr[] = " %02X";
 	if (!spaces)
 		strcpy(formatstr, "%02X");  // no space
@@ -105,7 +110,7 @@ int txframe(char * frameParams) {
 		// no frame type
 		return (1);
 
-	blnEnbARQRpt = FALSE;
+	blnEnbARQRpt = false;
 	// Any param equal to "_" means use the value of the corrsponding global
 	// Any missing param are equivalent to "_"
 
@@ -524,6 +529,7 @@ int txframe(char * frameParams) {
 				|| strcmp(params[1], strFrameType[frametype]) != 0
 			)
 				continue;
+			bool dummybool;
 			unsigned char dummyuchar;
 			int dummyint;
 			int numcar;
@@ -533,7 +539,7 @@ int txframe(char * frameParams) {
 			unsigned int maxlen;
 			unsigned char data[1024];
 			char debugmsg[2100];
-			if (!FrameInfo(frametype, &dummyint, &numcar, modulation, &dummyint, &datalen, &dummyint, &dummyuchar, frname)) {
+			if (!FrameInfo(frametype, &dummybool, &numcar, modulation, &dummyint, &datalen, &dummyint, &dummyuchar, frname)) {
 				ZF_LOGW("TXFRAME %s (FrameInfo) Unknown frame type.", params[1]);
 				return (1);
 			}

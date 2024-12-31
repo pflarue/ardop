@@ -29,10 +29,6 @@ extern const char ProductVersion[];
 
 void txSleep(int mS);
 
-unsigned int getTicks();
-
-#define Now getTicks()
-
 #include <time.h>
 
 #include <stdio.h>
@@ -90,7 +86,6 @@ unsigned int getTicks();
 
 #endif
 
-typedef int BOOL;
 typedef unsigned char UCHAR;
 
 #define VOID void
@@ -100,21 +95,14 @@ typedef void *HANDLE;
 #define HANDLE int
 #endif
 
-#define FALSE 0
-#define TRUE 1
-
-#define False 0
-#define True 1
-
 #define ISSLED 1
 #define IRSLED 2
 #define TRAFFICLED 3
 #define PKTLED 4
 
-BOOL KeyPTT(BOOL State);
 
 UCHAR FrameCode(char * strFrameName);
-BOOL FrameInfo(UCHAR bytFrameType, int * blnOdd, int * intNumCar, char * strMod,
+bool FrameInfo(UCHAR bytFrameType, bool * blnOdd, int * intNumCar, char * strMod,
 int * intBaud, int * intDataLen, int * intRSLen, UCHAR * bytQualThres, char * strType);
 
 void ClearDataToSend();
@@ -123,12 +111,12 @@ int EncodePSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 int EncodeDATAACK(int intQuality, UCHAR bytSessionID, UCHAR * bytreturn);
 int EncodeDATANAK(int intQuality , UCHAR bytSessionID, UCHAR * bytreturn);
 void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);
-BOOL IsDataFrame(UCHAR intFrameType);
+bool IsDataFrame(UCHAR intFrameType);
 void StartCodec(char * strFault);
 void StopCodec(char * strFault);
-BOOL SendARQConnectRequest(const StationId* mycall, const StationId* target);
+bool SendARQConnectRequest(const StationId* mycall, const StationId* target);
 void AddDataToDataToSend(UCHAR * bytNewData, int Len);
-BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL blnSendID);
+bool StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, bool blnSendID);
 bool SendID(const StationId * id, char * reason);
 // void SetARDOPProtocolState(int value);
 unsigned int GenCRC16(unsigned char * Data, unsigned short length);
@@ -138,7 +126,7 @@ void SendCommandToHostQuiet(char * Cmd);
 void TCPSendCommandToHostQuiet(char * Cmd);
 void UpdateBusyDetector(short * bytNewSamples);
 void SetARDOPProtocolState(int value);
-BOOL BusyDetect3(float * dblMag, int intStart, int intStop);
+bool BusyDetect3(float * dblMag, int intStart, int intStop);
 
 void displayState(const char * State);
 void displayCall(int dirn, const char * call);
@@ -146,25 +134,24 @@ void displayCall(int dirn, const char * call);
 void SampleSink(short Sample);
 void SoundFlush();
 void StopCapture();
-void StartCapture();
 void DiscardOldSamples();
 void ClearAllMixedSamples();
 
 void SetFilter(void * Filter());
 
 void AddTrailer();
-void CWID(char * strID, short * intSamples, BOOL blnPlay);
+void CWID(char * strID, short * intSamples, bool blnPlay);
 void sendCWID(const StationId * id);
 UCHAR ComputeTypeParity(UCHAR bytFrameType);
 void GenCRC16FrameType(char * Data, int Length, UCHAR bytFrameType);
-BOOL CheckCRC16FrameType(unsigned char * Data, int Length, UCHAR bytFrameType);
+bool CheckCRC16FrameType(unsigned char * Data, int Length, UCHAR bytFrameType);
 char * strlop(char * buf, char delim);
 void QueueCommandToHost(char * Cmd);
 void TCPQueueCommandToHost(char * Cmd);
 void SendReplyToHost(char * strText);
 void TCPSendReplyToHost(char * strText);
 void LogStats();
-int GetNextFrameData(int * intUpDn, UCHAR * bytFrameTypeToSend, UCHAR * strMod, BOOL blnInitialize);
+int GetNextFrameData(int * intUpDn, UCHAR * bytFrameTypeToSend, UCHAR * strMod, bool blnInitialize);
 void SendData();
 int ComputeInterFrameInterval(int intRequestedIntervalMS);
 int Encode4FSKControl(UCHAR bytFrameType, UCHAR bytSessionID, UCHAR * bytreturn);
@@ -173,28 +160,25 @@ void SaveQueueOnBreak();
 void Abort();
 void SetLED(int LED, int State);
 VOID ClearBusy();
-VOID CloseCOMPort(HANDLE fd);
-void CM108_set_ptt(int PTTState);
 
 // #ifdef WIN32
 void ProcessNewSamples(short * Samples, int nSamples);
 void ardopmain();
-BOOL GetNextFECFrame();
+bool GetNextFECFrame();
 void GenerateFSKTemplates();
-void printtick(char * msg);
 void InitValidFrameTypes();
 void setProtocolMode(char* strMode);
 // #endif
 
 extern void Generate50BaudTwoToneLeaderTemplate();
-extern BOOL blnDISCRepeating;
+extern bool blnDISCRepeating;
 
 int RSEncode(UCHAR * bytToRS, UCHAR * bytRSEncoded, int MaxErr, int Len);
-BOOL RSDecode(UCHAR * bytRcv, int Length, int CheckLen, BOOL * blnRSOK);
+bool RSDecode(UCHAR * bytRcv, int Length, int CheckLen, bool * blnRSOK);
 
-void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDecodedOK);
+void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, bool blnFrameDecodedOK);
 void ProcessUnconnectedConReqFrame(int intFrameType, UCHAR * bytData);
-void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, BOOL blnFrameDecodedOK);
+void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool blnFrameDecodedOK);
 void InitializeConnection();
 
 void AddTagToDataAndSendToHost(UCHAR * Msg, char * Type, int Len);
@@ -207,11 +191,10 @@ void GetSemaphore();
 void FreeSemaphore();
 const char * Name(UCHAR bytID);
 const char * shortName(UCHAR bytID);
-int InitSound();
+bool InitSound();
 void initFilter(int Width, int centerFreq);
 void FourierTransform(int NumSamples, float * RealIn, float * RealOut, float * ImagOut, int InverseTransform);
 VOID LostHost();
-int ReadCOMBlock(HANDLE fd, char * Block, int MaxLength);
 VOID ProcessDEDModeFrame(UCHAR * rxbuffer, unsigned int Length);
 
 int SendtoGUI(char Type, unsigned char * Msg, int Len);
@@ -326,101 +309,62 @@ extern struct SEM Semaphore;
 // Config Params
 extern Locator GridSquare;
 extern StationId Callsign;
-extern BOOL wantCWID;
-extern BOOL CWOnOff;
+extern bool wantCWID;
+extern bool CWOnOff;
 extern int LeaderLength;
 extern int TrailerLength;
 extern unsigned int ARQTimeout;
 extern int TuningRange;
 extern int ARQConReqRepeats;
-extern BOOL CommandTrace;
+extern bool CommandTrace;
 extern char strFECMode[];
-extern char CaptureDevice[];
-extern char PlaybackDevice[];
-extern int port;
+extern int host_port;
 extern char HostPort[80];
-extern BOOL RadioControl;
-extern BOOL SlowCPU;
-extern BOOL AccumulateStats;
-extern BOOL Use600Modes;
-extern BOOL FSKOnly;
-extern BOOL fastStart;
-extern BOOL EnablePingAck;
+extern bool SlowCPU;
+extern bool AccumulateStats;
+extern bool Use600Modes;
+extern bool FSKOnly;
+extern bool fastStart;
+extern bool EnablePingAck;
 
 extern int dttLastPINGSent;
 
-extern BOOL blnPINGrepeating;
-extern BOOL blnFramePending;
+extern bool blnPINGrepeating;
+extern bool blnFramePending;
 extern int intPINGRepeats;
-
-extern BOOL gotGPIO;
-extern BOOL useGPIO;
-
-extern int pttGPIOPin;
-extern BOOL pttGPIOInvert;
-
-extern HANDLE hCATDevice;  // port for Rig Control
-extern char CATPort[80];
-extern int CATBAUD;
-extern int EnableHostCATRX;
-
-extern HANDLE hPTTDevice;  // port for PTT
-extern char PTTPort[80];  // Port for Hardware PTT - may be same as control port.
-extern int PTTBAUD;
-
-#define PTTRTS 1
-#define PTTDTR 2
-#define PTTCI_V 4
-#define PTTCM108 8
-#define PTTHAMLIB 16
-
-extern UCHAR PTTOnCmd[];
-extern UCHAR PTTOnCmdLen;
-
-extern UCHAR PTTOffCmd[];
-extern UCHAR PTTOffCmdLen;
-
-extern int PTTMode;  // PTT Control Flags.
-
-
-
-
-extern char * CaptureDevices;
-extern char * PlaybackDevices;
 
 extern int dttCodecStarted;
 extern int dttStartRTMeasure;
 
 extern int intCalcLeader;  // the computed leader to use based on the reported Leader Length
 
-extern BOOL Capturing;
-extern BOOL SoundIsPlaying;
-extern int blnLastPTT;
-extern BOOL blnAbort;
-extern BOOL blnClosing;
+extern bool Capturing;
+extern bool SoundIsPlaying;
+extern bool blnAbort;
+extern bool blnClosing;
 extern int closedByPosixSignal;
-extern BOOL blnCodecStarted;
-extern BOOL blnInitializing;
-extern BOOL blnARQDisconnect;
+extern bool blnCodecStarted;
+extern bool blnInitializing;
+extern bool blnARQDisconnect;
 extern int DriveLevel;
 extern int FECRepeats;
-extern BOOL FECId;
+extern bool FECId;
 extern int Squelch;
 extern int BusyDet;
-extern BOOL blnEnbARQRpt;
+extern bool blnEnbARQRpt;
 extern unsigned int dttNextPlay;
 
 extern UCHAR bytDataToSend[];
 extern int bytDataToSendLength;
 
-extern BOOL blnListen;
-extern BOOL Monitor;
-extern BOOL AutoBreak;
-extern BOOL BusyBlock;
+extern bool blnListen;
+extern bool Monitor;
+extern bool AutoBreak;
+extern bool BusyBlock;
 
 extern int DecodeCompleteTime;
 
-extern BOOL AccumulateStats;
+extern bool AccumulateStats;
 
 extern int EncLen;
 
@@ -430,16 +374,16 @@ extern int bytValidFrameTypesLength;
 extern int bytValidFrameTypesLengthALL;
 extern int bytValidFrameTypesLengthISS;
 
-extern BOOL blnTimeoutTriggered;
+extern bool blnTimeoutTriggered;
 extern int intFrameRepeatInterval;
-extern BOOL PlayComplete;
+extern bool PlayComplete;
 
 extern const UCHAR bytValidFrameTypesALL[];
 extern const UCHAR bytValidFrameTypesISS[];
 extern const UCHAR * bytValidFrameTypes;
 
 
-extern BOOL newStatus;
+extern bool newStatus;
 
 // RS Variables
 

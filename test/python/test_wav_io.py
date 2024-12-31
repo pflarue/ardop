@@ -97,7 +97,10 @@ def test_contol_wav_io(verbose=1):
                         # When sdftstr is "", the standard demodulators
                         # are used.  When it is "--sdft", the
                         # experimental SDFT demodulator is used.
-                        sdftstr,
+                        # To prevent the empty string "" from being interpreted
+                        # as an invalid host port, use "-y".  This left channel
+                        # TX option has no effect when used with --decodewav.
+                        sdftstr if sdftstr else "-y",
                         # CONSOLELOG 2 ensures that [DecodeFrame] and
                         # [Frame Type Decode Fail] are written to stdout as well
                         # as the hex representation of the decoded data.
@@ -293,7 +296,11 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                                 # experimental SDFT demodulator is used for 4FSK
                                 # frame types, as well as for demodulating the
                                 # frame type header for all data frames.
-                                sdftstr,
+                                # To prevent the empty string "" from being
+                                # interpreted as an invalid host port, use "-y".
+                                # This left channel TX option has no effect when
+                                # used with --decodewav.
+                                sdftstr if sdftstr else "-y",
                                 "--hostcommands",
                                 # CONSOLELOG 1 ensures that
                                 # [DecodeFrame] and [Frame Type Decode Fail],
