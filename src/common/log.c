@@ -1,5 +1,6 @@
 #include "common/log.h"
 
+#include <assert.h>
 #include <string.h>
 #include <sys/time.h>
 
@@ -7,6 +8,8 @@
 #include <windows.h>
 #else
 #include <unistd.h>
+#include <syslog.h>
+#define LOG_OUTPUT_SYSLOG
 #endif
 
 #include "common/log_file.h"
@@ -69,6 +72,11 @@ static int ArdopLogVerbosityFile = ZF_LOG_DEBUG;
 static bool ArdopLogFileEnabled = false;
 
 /*
+ * True if console logs use syslog (Linux only)
+ */
+static bool ArdopLogConsoleSyslog = false;
+
+/*
  * Log output directory (may be empty)
  *
  * If empty, logs are output to the working directory
@@ -110,6 +118,31 @@ static ArdopLogFile* ALL_LOG_FILES[] = {
 	&SessionLog
 };
 
+#ifdef LOG_OUTPUT_SYSLOG
+/* Map zf_log level to syslog */
+static int log_level_syslog(const int lvl)
+{
+	switch (lvl)
+	{
+	case ZF_LOG_VERBOSE:
+		return LOG_DEBUG;
+	case ZF_LOG_DEBUG:
+		return LOG_DEBUG;
+	case ZF_LOG_INFO:
+		return LOG_INFO;
+	case ZF_LOG_WARN:
+		return LOG_WARNING;
+	case ZF_LOG_ERROR:
+		return LOG_ERR;
+	case ZF_LOG_FATAL:
+		return LOG_CRIT;
+	default:
+		assert(!"unreachable");
+		return LOG_CRIT;
+	}
+}
+#endif
+
 static void log_callback_discard(const zf_log_message* _msg, void* _param) {}
 
 static void log_callback(const zf_log_message* msg, void* param) {
@@ -130,6 +163,14 @@ static void log_callback(const zf_log_message* msg, void* param) {
 		DWORD written;
 		WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), msg->msg_b,
 			(DWORD)(msg->p - msg->msg_b + EOL_SZ), &written, 0);
+#elif defined(LOG_OUTPUT_SYSLOG)
+		if (ArdopLogConsoleSyslog) {
+			syslog(log_level_syslog(msg->lvl), "%.*s", (int)(msg->p - msg->msg_b), msg->msg_b);
+		} else {
+			/* write() is atomic for buffers less than or equal to PIPE_BUF. */
+			RETVAL_UNUSED(write(STDOUT_FILENO, msg->msg_b,
+				(size_t)(msg->p - msg->msg_b) + EOL_SZ));
+		}
 #else
 		/* write() is atomic for buffers less than or equal to PIPE_BUF. */
 		RETVAL_UNUSED(write(STDOUT_FILENO, msg->msg_b,
@@ -156,17 +197,21 @@ static void log_callback(const zf_log_message* msg, void* param) {
 	}
 }
 
-void ardop_log_start(const bool enable_files) {
+void ardop_log_start(const bool enable_files, const bool syslog) {
 	zf_log_set_output_v(ZF_LOG_PUT_STD, NULL, log_callback);
-	ardop_log_enable_files(enable_files);
+	ardop_log_enable_files_and_console(enable_files, syslog);
 }
 
 void ardop_log_stop() {
-	ardop_log_enable_files(false);
+	ardop_log_enable_files_and_console(false, false);
 	zf_log_set_output_v(ZF_LOG_PUT_STD, NULL, log_callback_discard);
 }
 
 void ardop_log_enable_files(const bool file_output) {
+	ardop_log_enable_files_and_console(file_output, ArdopLogConsoleSyslog);
+}
+
+void ardop_log_enable_files_and_console(const bool file_output, const bool syslog) {
 	// Close all log files
 	// They are reopened on the next loggable message
 	for (size_t i = 0; i < sizeof(ALL_LOG_FILES) / sizeof(ALL_LOG_FILES[0]); ++i) {
@@ -174,6 +219,18 @@ void ardop_log_enable_files(const bool file_output) {
 	}
 
 	ArdopLogFileEnabled = file_output;
+
+#ifdef LOG_OUTPUT_SYSLOG
+	if (ArdopLogConsoleSyslog) {
+		closelog();
+	}
+
+	ArdopLogConsoleSyslog = syslog;
+
+	if (ArdopLogConsoleSyslog) {
+		openlog(NULL, LOG_CONS | LOG_PID, LOG_USER);
+	}
+#endif
 }
 
 bool ardop_log_is_enabled_files() {

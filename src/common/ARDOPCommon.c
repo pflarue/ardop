@@ -21,6 +21,7 @@
 #define SOCKET int
 #define closesocket close
 #define HANDLE int
+#define LOG_OUTPUT_SYSLOG
 #endif
 
 #include <stdbool.h>
@@ -98,6 +99,9 @@ static struct option long_options[] =
 	{"logdir",  required_argument, 0 , 'l'},
 	{"hostcommands",  required_argument, 0 , 'H'},
 	{"nologfile",  no_argument, 0 , 'm'},
+#ifdef LOG_OUTPUT_SYSLOG
+	{"syslog",  no_argument, 0 , 'S'},
+#endif
 	{"ptt",  required_argument, 0 , 'p'},
 	{"cat",  required_argument, 0 , 'c'},
 	{"keystring",  required_argument, 0 , 'k'},
@@ -129,6 +133,9 @@ char HelpScreen[] =
 	"                                       provided by obsolete command line options available\n"
 	"                                       from earlier versions of ardopcf and ardopc.\n"
 	"-m or --nologfile                    Don't write log files. Use console output only.\n"
+#ifdef LOG_OUTPUT_SYSLOG
+	"-S or --syslog                       Send console log to syslog instead.\n"
+#endif
 	"-c device or --cat device            Device to use for CAT Control\n"
 	"-p device or --ptt device            Device to use for PTT control using RTS\n"
 	// RTS:device is also permitted, but is equivalent to just device
@@ -168,6 +175,7 @@ void processargs(int argc, char * argv[])
 	UCHAR * ptr2;
 	int c;
 	bool enable_log_files = true;
+	bool enable_syslog = false;
 	unsigned int WavFileCount = 0;
 
 	while (1)
@@ -213,6 +221,12 @@ void processargs(int argc, char * argv[])
 		case 'm':
 			enable_log_files = false;
 			break;
+
+#ifdef LOG_OUTPUT_SYSLOG
+		case 'S':
+			enable_syslog = true;
+			break;
+#endif
 
 		case 'g':
 			if (optarg)
@@ -421,7 +435,7 @@ void processargs(int argc, char * argv[])
 	ardop_log_set_port(host_port);
 
 	// begin logging
-	ardop_log_start(enable_log_files);
+	ardop_log_start(enable_log_files, enable_syslog);
 }
 
 extern enum _ARDOPState ProtocolState;

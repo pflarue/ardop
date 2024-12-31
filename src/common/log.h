@@ -76,13 +76,15 @@
  *
  * @param[in] enable_files  If true, enable the debug log and
  *            the stats log files.
+ * @param[in] syslog Use syslog instead of the console. Only
+ *            supported on Linux; silently ignored elsewhere.
  *
  * @see ardop_log_set_directory()
  * @see ardop_log_set_port()
  * @see ardop_log_set_level_console()
  * @see ardop_log_set_level_file()
  */
-void ardop_log_start(const bool enable_files);
+void ardop_log_start(const bool enable_files, const bool syslog);
 
 /**
  * @brief Stop logging
@@ -103,11 +105,36 @@ void ardop_log_stop();
  * @see ardop_log_start
  * @see ardop_log_set_level_file
  * @see ardop_log_set_directory
+ * @see ardop_log_enable_files_and_console
  *
  * @note This method has no effect unless logging has been
  * started with \ref ardop_log_start().
  */
 void ardop_log_enable_files(const bool file_output);
+
+/**
+ * @brief Enable or disable logging to files and console
+ *
+ * Closes all log files. If `file_output` is true, file logs
+ * are enabled. Logs will be (re)opened when the next log
+ * message is received. If `syslog` is true, logs are sent
+ * to syslog instead of the console.
+ *
+ * @param[in] file_output   True to enable log files
+ * @param[in] syslog Use syslog instead of the console. Only
+ *            supported on Linux; silently ignored elsewhere.
+ *
+ * @see ardop_log_start
+ * @see ardop_log_set_level_file
+ * @see ardop_log_set_directory
+ *
+ * @note This method has no effect unless logging has been
+ * started with \ref ardop_log_start().
+ */
+void ardop_log_enable_files_and_console(
+	const bool file_output,
+	const bool syslog
+);
 
 /**
  * @brief True if file logging is enabled

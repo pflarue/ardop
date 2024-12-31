@@ -74,5 +74,6 @@ All command line options are listed in the following sections. If the option has
 | short option | long option | parameter | description |
 |----|----|----|----|
 | **-m** | **&#8209;&#8209;nologfile** | _none_ | Don't write log files. Use console output only. |
+| **-S** | **&#8209;&#8209;syslog** | _none_ | Send console logs to syslog instead of stderr. Useful mainly for systemd services or daemons. Use the `CONSOLELOG` host command to control the verbosity of syslog messages. Combine with **&#8209;&#8209;nologfile** to use syslog/journald only. (Linux only) |
 | **-l** | **&#8209;&#8209;logdir** | &lt;pathname&gt; | The absolute or relative path where log files and WAV files are written.  Without this option, these files are written to the start directory. |
 | **-G** | **&#8209;&#8209;webgui** | &lt;TCP port&gt; | TCP port to access web GUI. By convention it is number of the host TCP port minus one, so usually 8514.  If a negative TCP port number is given, such as -8514, then the corresponding positive number is used, but the web GUI is opened in developer mode. Developer mode allows arbitrary host commands to be entered from within the web GUI. This is not intended for normal use, but is a useful tool for debugging purposes. |
