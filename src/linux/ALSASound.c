@@ -1564,7 +1564,7 @@ int SoundCardRead(short * input, unsigned int nSamples)
 
 		for (n = start; n < (ret * 2); n+=2)  // return alternate
 		{
-			input[n] = samples[n];
+			*(input++) = samples[n];
 		}
 	}
 	return ret;
