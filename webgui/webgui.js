@@ -414,6 +414,8 @@ window.addEventListener("load", function(evt) {
 		// "S|" no additional data: ISS true
 		// "s|" no additional data: ISS false
 		// "t|" followed by a string: Protocol State
+		// "W|" no additional data: Recording RX true
+		// "w|" no additional data: Recording RX false
 		// 0x817C followed by one additional byte interpreted as an unsigned
 		//   char in the range of 0 to 150: Set CurrentLevel
 		// 0x8A7C
@@ -737,6 +739,20 @@ window.addEventListener("load", function(evt) {
 					document.getElementById("state").innerHTML = state;
 					break;
 				}
+				case "W":
+					// Recording RX WAV true
+					// This may be due to RECRX host command or from use of
+					// -w or --writewav command line option (triggered after TX)
+					document.getElementById("recordingrx").classList.remove("hidden");
+					break;
+				case "w": {
+					// Recording RX WAV false
+					// This may be due to RECRX host command or end of timer
+					// for recording started due to -w or --writewav command
+					// line option.
+					document.getElementById("recordingrx").classList.add("hidden");
+					break;
+				}
 				case "\x81": {
 					// CurrentLevel update
 					// linear fraction of recieved fullscale audio scale
@@ -909,6 +925,16 @@ window.addEventListener("load", function(evt) {
 		// cursor movement keys (to allow keyboard scrolling).
 		if (evt.keyCode < 33 || evt.keyCode > 40)
 			evt.preventDefault();
+	};
+
+	document.getElementById("recrx").onclick = function() {
+		if (document.getElementById("recrx").innerHTML == "Start RX Recording") {
+			send_msg(encoder.encode("H~RECRX TRUE"), 12);
+			document.getElementById("recrx").innerHTML = "Stop RX Recording";
+		} else {
+			send_msg(encoder.encode("H~RECRX FALSE"), 13);
+			document.getElementById("recrx").innerHTML = "Start RX Recording";
+		}
 	};
 
 	document.getElementById("hostcommand").onkeydown = function(evt) {

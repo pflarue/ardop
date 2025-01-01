@@ -65,7 +65,7 @@ All command line options are listed in the following sections. If the option has
 | **-R** | | _none_ | use only right audio channel for RX. |
 | **-y** |  | _none_ | use only left audio channel for TX. |
 | **-z** | | _none_ | use only left audio channel for TX. |
-| **-w** | **&#8209;&#8209;writewav** |  _none_  | Write WAV files of received audio for debugging. |
+| **-w** | **&#8209;&#8209;writewav** |  _none_  | Write WAV files of received audio for debugging.  (The RECRX host command and a button in the the developer mode version of the WebGui can also be used to start/stop recording of received audio to a WAV file independent this command line option.) |
 | **-T** | **&#8209;&#8209;writetxwav** |  _none_  | Write sent WAV files of received audio for debugging. |
 | **-d** | **&#8209;&#8209;decodewav** |  &lt;pathname&gt;  | Decode the supplied WAV file instead of the input audio.  This option can be repeated up to five times to provide up to five WAV files to be decoded as if they were received in the order provided with a brief period of silence between them. |
 | **-s** | **&#8209;&#8209;sfdt** |  _none_  | Use alternative Sliding DFT based 4FSK decoder. |
@@ -78,4 +78,4 @@ All command line options are listed in the following sections. If the option has
 | **-m** | **&#8209;&#8209;nologfile** | _none_ | Don't write log files. Use console output only. |
 | **-S** | **&#8209;&#8209;syslog** | _none_ | Send console logs to syslog instead of stderr. Useful mainly for systemd services or daemons. Use the `CONSOLELOG` host command to control the verbosity of syslog messages. Combine with **&#8209;&#8209;nologfile** to use syslog/journald only. (Linux only) |
 | **-l** | **&#8209;&#8209;logdir** | &lt;pathname&gt; | The absolute or relative path where log files and WAV files are written.  Without this option, these files are written to the start directory. |
-| **-G** | **&#8209;&#8209;webgui** | &lt;TCP port&gt; | TCP port to access web GUI. By convention it is number of the host TCP port minus one, so usually 8514.  If a negative TCP port number is given, such as -8514, then the corresponding positive number is used, but the web GUI is opened in developer mode. Developer mode allows arbitrary host commands to be entered from within the web GUI. This is not intended for normal use, but is a useful tool for debugging purposes. |
+| **-G** | **&#8209;&#8209;webgui** | &lt;TCP port&gt; | TCP port to access WebGui. By convention it is the number of the host TCP port minus one, so usually 8514.  If a negative TCP port number is given, such as -8514, then the corresponding positive number is used, but the WebGui is opened in developer mode. Developer mode allows arbitrary host commands to be entered from within the WebGui, writes additional details in the WebGui Log display, and provides a button to start/stop recording of RX audio to a WAV file. This is not intended for normal use, but is a useful tool for debugging purposes. |

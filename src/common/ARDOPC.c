@@ -69,6 +69,7 @@ void WebguiPoll();
 int wg_send_fftdata(float *mags, int magsLen);
 int wg_send_busy(int cnum, bool isBusy);
 int wg_send_protocolmode(int cnum);
+int wg_send_wavrx(int cnum, bool isRecording);
 extern int WebGuiNumConnected;
 extern char HostCommands[2048];
 void ProcessCommandFromHost(char * strCMD);
@@ -713,6 +714,7 @@ void ardopmain()
 	if (rxwf != NULL) {
 		CloseWav(rxwf);
 		rxwf = NULL;
+		wg_send_wavrx(0, false);  // update "RECORDING RX" indicator on WebGui
 	}
 	if (txwff != NULL) {
 		CloseWav(txwff);

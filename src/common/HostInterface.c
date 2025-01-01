@@ -43,6 +43,7 @@ int wg_send_bandwidth(int cnum);
 int wg_send_hostmsg(int cnum, char msgtype, char *strText);
 int wg_send_hostdatab(int cnum, char *prefix, unsigned char *data, int datalen);
 int wg_send_hostdatat(int cnum, char *prefix, unsigned char *data, int datalen);int wg_send_drivelevel(int cnum);
+int wg_send_wavrx(int cnum, bool isRecording);
 
 extern BOOL NeedTwoToneTest;
 extern short InputNoiseStdDev;
@@ -1600,7 +1601,7 @@ void ProcessCommandFromHost(char * strCMD)
 		}
 		DoTrueFalseCmd(strCMD, ptrParams, &HWriteRxWav);  // Also sends reply
 		if (HWriteRxWav && rxwf == NULL) {
-			StartRxWav();
+			StartRxWav();  // This also updates WebGui
 		} else if (rxwf != NULL && !HWriteRxWav) {
 			// This is same condition that was checked before updating
 			// HWriteRxWav.  If true then, it indicated that recording due
@@ -1610,6 +1611,7 @@ void ProcessCommandFromHost(char * strCMD)
 			// So, stop recording.
 			CloseWav(rxwf);
 			rxwf = NULL;
+			wg_send_wavrx(0, false);  // update "RECORDING RX" indicator on WebGui
 		}
 		goto cmddone;
 	}

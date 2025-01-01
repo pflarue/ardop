@@ -120,6 +120,7 @@ void WebguiPoll();
 int wg_send_currentlevel(int cnum, unsigned char level);
 int wg_send_pttled(int cnum, bool isOn);
 int wg_send_pixels(int cnum, unsigned char *data, size_t datalen);
+int wg_send_wavrx(int cnum, bool isRecording);
 
 int Ticks;
 
@@ -215,6 +216,7 @@ void StartRxWav()
 	}
 
 	rxwf = OpenWavW(rxwf_pathname);
+	wg_send_wavrx(0, true);  // update "RECORDING RX" indicator on WebGui
 	if (!HWriteRxWav) {
 		// A timer is not used with HWriteRxWav, so no need to extend.
 		extendRxwf();
@@ -816,6 +818,7 @@ void PollReceivedSamples()
 				// timer to close WAV file has expired (not used with HWriteRxWav)
 				CloseWav(rxwf);
 				rxwf = NULL;
+				wg_send_wavrx(0, false);  // update "RECORDING RX" indicator on WebGui
 			}
 			else
 				WriteWav(&inbuffer[inIndex][0], inheader[inIndex].dwBytesRecorded/2, rxwf);

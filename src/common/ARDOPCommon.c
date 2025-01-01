@@ -450,7 +450,13 @@ void processargs(int argc, char * argv[])
 	}
 
 	if (wg_port < 0) {
-		// This is an "undocumented" feature that may be discontinued in future releases
+		// This enables the WebGui DevMode.  In DevMode, it is possible to send
+		// raw host commands to ardopcf from the WebGui, and additional details
+		// are written to the WebGui Log display.  DevMode also includes a
+		// button to start/stop recording RX audio to a WAV file.  This is
+		// also possible by using the RECRX host command, but the button allows
+		// this to be done more quickly.  The WebGui DevMode is not intended for
+		// normal use, but is a useful tool for debugging purposes.
 		wg_port = -wg_port;
 		WG_DevMode = TRUE;
 	}

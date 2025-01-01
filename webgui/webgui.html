@@ -7,7 +7,7 @@
 		<style type="text/css">
 			#spectrum {vertical-align: bottom;}
 			#busy {background-color: gold;}
-			#ptt {background-color: red;}
+			#ptt, #recordingrx {background-color: red;}
 			#iss, #irs {background-color: lime;}
 			#lostcon {background-color: hotpink;}
 			#rcvoverflow {background-color: hotpink;}
@@ -44,6 +44,7 @@
 		<div>
 			<span id="ptt" class="hidden">&nbsp;PTT&nbsp;</span>
 			<span id="busy" class="hidden">Channel Busy</span>
+			<span id="recordingrx" class="hidden">RECORDING RX</span>
 		</div>
 		<div>
 			<span id="mycall">(MYCALL NOT SET)</span>
@@ -134,8 +135,14 @@
 				<dt>'IDLE'</dt><dd>idle</dd>
 			</dl>
 			</p><p>
-			The next blank line will show <b>'PTT'</b> when transmitting and <b>'Channel Busy'</b> when
-			the busy detector detects a signal within Ardop's current bandwidth settings.
+			The next blank line will show <b>'PTT'</b> when transmitting, <b>'Channel Busy'</b>
+			when the busy detector detects a signal within Ardop's current bandwidth settings,
+			and <b>RECORDING RX</b> when ardopcf is writing a WAV file containing the received
+			audio.  Such recording happens after transmitting when the -w or --writewav command
+			line option is used, as well as in response to the RECRX host command.  No data is
+			written to this WAV file while transmitting, but this indicator remains on while
+			transmitting since writing of data automatically resumes at the end of the
+			transmission.
 			</p><p>
 			The next line shows the value of <b>MYCALL</b> and the callsign of the station you
 			are connected to or sending Connection Requests (ConReq) to.  MYCALL is
@@ -336,6 +343,7 @@
 			</p>
 		</div>
 		<div id="devmode" class="dnone">
+			<button id="recrx">Start RX Recording</button><br />
 			Host Command: <input type="text"  id="hostcommand"></input>
 		</div>
 	</body>
