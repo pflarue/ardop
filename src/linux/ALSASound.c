@@ -427,12 +427,18 @@ int platform_main(int argc, char * argv[])
 		if (Baud)
 			CATBAUD = atoi(Baud);
 
-		hCATDevice = OpenCOMPort(CATPort, CATBAUD, FALSE, FALSE, FALSE, 0);
-
+		if ((hCATDevice = OpenCOMPort(
+			CATPort, CATBAUD, FALSE, FALSE, FALSE, 0)) == 0)
+		{
+			// OpenCOMPort() already wrote an error message to the log.
+			return -1;
+		}
 	}
 
 	if (PTTPort[0])
 	{
+		// If PTTPort was specied with DTR: or RTS: prefix, this has already
+		// been removed and PTTMode set appropriately.
 		int fd;
 
 		if (strstr(PTTPort, "hidraw"))
@@ -515,10 +521,16 @@ int platform_main(int argc, char * argv[])
 						else
 							PTTBAUD = atoi(Baud);
 					}
-					if (useHamLib == 0)
+					if (useHamLib == 0) {
 						// PTTMode defaults to PTTRTS, but may have been set to
 						// PTTDTR in processargs();
-						hPTTDevice = OpenCOMPort(PTTPort, PTTBAUD, FALSE, FALSE, FALSE, 0);
+						if ((hPTTDevice = OpenCOMPort(
+							PTTPort, PTTBAUD, FALSE, FALSE, FALSE, 0)) == 0)
+						{
+							// OpenCOMPort() already wrote an error message to the log.
+							return -1;
+						}
+					}
 				}
 			}
 		}
@@ -527,34 +539,37 @@ int platform_main(int argc, char * argv[])
 	if (hCATDevice)
 	{
 		ZF_LOGI("CAT Control on port %s", CATPort);
-		COMSetRTS(hPTTDevice);
-		COMSetDTR(hPTTDevice);
-		if (PTTOffCmdLen)
-		{
+		// ARDOPC and older versions of ardopcf also did
+		// COMSetRTS(hPTTDevice) and COMSetDTR(hPTTDevice) here which would
+		// briefly key the PTT if PTTPort was also set.  The PTT was cleared
+		// a moment later in the "if (hPTTDevice)" block where the
+		// COMClearRTS(hPTTDevice) and COMClearDTR(hPTTDevice) were called.
+		//
+		// COMSetDTR(hPTTDevice);
+		// COMSetRTS(hPTTDevice);
+
+		// If PTT Port was also set, then PTTMode is PTTRTS or PTTDTR and CAT
+		// commands will not be used for PTT control
+		if (PTTMode == PTTCI_V && PTTOnCmdLen && PTTOffCmdLen) {
 			ZF_LOGI("PTT using CAT Port: %s", CATPort);
 			RadioControl = TRUE;
-		}
-	}
-	else
-	{
-		// Warn of -u and -k defined but no CAT Port
-
-		if (PTTOffCmdLen)
-		{
-			ZF_LOGW("Warning PTT Off string defined but no CAT port");
 		}
 	}
 
 	if (hPTTDevice)
 	{
-		ZF_LOGI("Using RTS on port %s for PTT", PTTPort);
-		COMClearRTS(hPTTDevice);
-		COMClearDTR(hPTTDevice);
+		if (PTTMode & PTTDTR) {
+			COMClearDTR(hPTTDevice);
+			ZF_LOGI("Using DTR on port %s for PTT", PTTPort);
+		} else {
+			COMClearRTS(hPTTDevice);
+			ZF_LOGI("Using RTS on port %s for PTT", PTTPort);
+		}
 		RadioControl = TRUE;
 	}
 
 
-	ZF_LOGI("ARDOPC listening on port %d", port);
+	ZF_LOGI("ARDOPC listening for host connection on port %d", port);
 
 	// Get Time Reference
 
@@ -1913,24 +1928,24 @@ VOID RadioPTT(int PTTState)
 	else
 #endif
 	{
-		if (PTTMode & PTTRTS)
+		if (PTTMode & PTTRTS) {
 			if (PTTState)
 				COMSetRTS(hPTTDevice);
 			else
 				COMClearRTS(hPTTDevice);
-
-		if (PTTMode & PTTDTR)
+		}
+		if (PTTMode & PTTDTR) {
 			if (PTTState)
 				COMSetDTR(hPTTDevice);
 			else
 				COMClearDTR(hPTTDevice);
-
-		if (PTTMode & PTTCI_V)
+		}
+		if (PTTMode & PTTCI_V) {
 			if (PTTState)
 				WriteCOMBlock(hCATDevice, PTTOnCmd, PTTOnCmdLen);
 			else
 				WriteCOMBlock(hCATDevice, PTTOffCmd, PTTOffCmdLen);
-
+		}
 		if (PTTMode & PTTCM108)
 			CM108_set_ptt(PTTState);
 	}
@@ -1947,14 +1962,14 @@ BOOL KeyPTT(BOOL blnPTT)
 	if (blnLastPTT &&  !blnPTT)
 		dttStartRTMeasure = Now;  // start a measurement on release of PTT.
 
-	if (!RadioControl)
+	if (!RadioControl) {
 		if (blnPTT)
 			SendCommandToHostQuiet("PTT TRUE");
 		else
 			SendCommandToHostQuiet("PTT FALSE");
-
-	else
+	} else {
 		RadioPTT(blnPTT);
+	}
 
 	ZF_LOGD("[Main.KeyPTT]  PTT-%s", BoolString[blnPTT]);
 

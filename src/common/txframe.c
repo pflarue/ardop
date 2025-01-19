@@ -50,7 +50,7 @@ int parse_params(char *paramstr, char *parsed[10]) {
 // return 0 on success, 1 on failure
 // len is the number of bytes to return which required
 // 2*len hex digits.
-int hex2int(char *ptr, unsigned int len, unsigned char *output) {
+int hex2bytes(char *ptr, unsigned int len, unsigned char *output) {
 	unsigned char half;
 	for (unsigned int i = 0; i < len; i++) {
 		output[i] = 0;
@@ -68,6 +68,32 @@ int hex2int(char *ptr, unsigned int len, unsigned char *output) {
 		}
 	}
 	return (0);
+}
+
+// Write an uppercase hexidecimal representation of data to outputStr, creating
+// a null terminated string (unless count = 0).  datalen is length of data.
+// count is the maximum length of outputStr including the terminating NULL.  If
+// spaces is true, then add a space between bytes.  If count is too small to
+// write all of data, write as much as will fit.
+// Return the length of outputStr (excluding the terminating null), or -1 if
+// count == 0 so that outputStr could not even be set to a zero length string.
+int bytes2hex(char *outputStr, size_t count, unsigned char *data, size_t datalen, bool spaces) {
+	if (count < 3) {
+		if (count == 0)
+			return -1;
+		outputStr[0] = 0x00;
+		return 0;
+	}
+	char formatstr[] = " %02X";
+	if (!spaces)
+		strcpy(formatstr, "%02X");  // no space
+	sprintf(outputStr, "%02X", data[0]);
+	for (unsigned int i=1; i<datalen; i++) {
+		if (strlen(outputStr) + (strlen(formatstr) - 1) >= count)
+			return strlen(outputStr);
+		sprintf(outputStr + strlen(outputStr), formatstr, data[i]);
+	}
+	return strlen(outputStr);
 }
 
 // return 0 on success, 1 on failure
@@ -539,7 +565,7 @@ int txframe(char * frameParams) {
 							params[1], strlen(params[2]) / 2 - maxlen, maxlen);
 						datalen = maxlen;
 					}
-					if (hex2int(params[2], datalen, data) == 1) {
+					if (hex2bytes(params[2], datalen, data) == 1) {
 						ZF_LOGW("TXFRAME %s error parsing hex data.", params[1]);
 						return (1);
 					}

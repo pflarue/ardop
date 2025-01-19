@@ -18,6 +18,8 @@ void setProtocolMode(char* strMode);
 
 void Break();
 int txframe(char * frameParams);
+unsigned char parseCatStr(char *hexstr, unsigned char *cmd, bool logerrors, char *descstr);
+int bytes2hex(char *outputStr, size_t count, unsigned char *data, size_t datalen, bool spaces);
 
 extern BOOL NeedID;  // SENDID Command Flag
 extern BOOL NeedConReq;  // ARQCALL Command Flag
@@ -1126,37 +1128,31 @@ void ProcessCommandFromHost(char * strCMD)
 		goto cmddone;
 	}
 
-	if (strcmp(strCMD, "RADIOHEX") == 0)
-	{
-		// Parameter is block to send to radio, in hex
+	if (strcmp(strCMD, "RADIOHEX") == 0) {
+		// Parameter is a hex string representing a radio specific command to
+		// be immediately sent to the radio.
+		unsigned char cmd[MAXCATLEN];
+		unsigned int cmdlen = 0;
 
-		char c;
-		int val;
-		char * ptr1 = ptrParams;
-		char * ptr2 = ptrParams;
-
-		if (ptrParams == NULL)
-		{
+		if (ptrParams == NULL) {
 			snprintf(strFault, sizeof(strFault), "RADIOHEX command string missing");
 			goto cmddone;
 		}
-		if (hCATDevice)
-		{
-			while (c = *(ptr1++))
-			{
-				val = c - 0x30;
-				if (val > 15)
-					val -= 7;
-				val <<= 4;
-				c = *(ptr1++) - 0x30;
-				if (c > 15)
-					c -= 7;
-				val |= c;
-				*(ptr2++) = val;
-			}
-			WriteCOMBlock(hCATDevice, ptrParams, ptr2 - ptrParams);
-			EnableHostCATRX = TRUE;
+		if (hCATDevice == 0) {
+			snprintf(strFault, sizeof(strFault), "RADIOHEX not usable because CAT port not set");
+			goto cmddone;
 		}
+
+		cmdlen = parseCatStr(ptrParams, cmd, true, "RADIOHEX host command");
+		if (cmdlen == 0) {
+			// parseCatStr() already wrote an error message to log.
+			snprintf(strFault, sizeof(strFault), "RADIOHEX command string is invalid.");
+			goto cmddone;
+		}
+		WriteCOMBlock(hCATDevice, cmd, cmdlen);
+		EnableHostCATRX = TRUE;
+		sprintf(cmdReply, "%s %s", strCMD, ptrParams);
+		SendReplyToHost(cmdReply);
 		goto cmddone;
 	}
 
@@ -1246,85 +1242,116 @@ void ProcessCommandFromHost(char * strCMD)
 */
 
 
-	if (strcmp(strCMD, "RADIOPTTOFF") == 0)
-	{
-		// Parameter is block to send to radio to disable PTT, in hex
+	if (strcmp(strCMD, "RADIOPTTOFF") == 0) {
+		// Parameter is a hex string representing the radio specific command to
+		// be sent to the radio to transition from TX to RX
+		unsigned char tmpcmd[MAXCATLEN];
+		unsigned int tmpcmdlen = 0;
 
-		char c;
-		int val;
-		UCHAR * ptr1 = ptrParams;
-		UCHAR * ptr2 = PTTOffCmd;
-
-		if (ptrParams == NULL)
-		{
-			snprintf(strFault, sizeof(strFault), "RADIOPTTOFF command string missing");
+		if (ptrParams == NULL) {
+			char hexstr[MAXCATLEN * 2];
+			if (PTTOffCmdLen == 0) {
+				sprintf(cmdReply, "%s VALUE NOT SET", strCMD);
+				SendReplyToHost(cmdReply);
+				goto cmddone;
+			}
+			bytes2hex(hexstr, sizeof(hexstr), PTTOffCmd, PTTOffCmdLen, false);
+			sprintf(cmdReply, "%s %s", strCMD, hexstr);
+			SendReplyToHost(cmdReply);
 			goto cmddone;
 		}
-
-		if (hCATDevice == 0)
-		{
-			snprintf(strFault, sizeof(strFault), "RADIOPTTOFF command CAT Port not defined");
+		if (hPTTDevice != 0) {
+			snprintf(strFault, sizeof(strFault),
+				"RADIOPTTOFF not usable because RTS/DTR PTT is being used");
 			goto cmddone;
 		}
-
-		while (c = *(ptr1++))
-		{
-			val = c - 0x30;
-			if (val > 15)
-				val -= 7;
-			val <<= 4;
-			c = *(ptr1++) - 0x30;
-			if (c > 15)
-				c -= 7;
-			val |= c;
-			*(ptr2++) = val;
+		if (hCATDevice == 0) {
+			snprintf(strFault, sizeof(strFault),
+				"RADIOPTTOFF not usable because CAT port not set");
+			goto cmddone;
 		}
-		PTTOffCmdLen = ptr2 - PTTOffCmd;
-		PTTMode = PTTCI_V;
-		RadioControl = TRUE;
-
-		sprintf(cmdReply, "CAT PTT Off Command Defined");
+		// Initially parse into tmpcmd so that, if this is not a valid hex
+		// string, the existing value in PTTOffCmd is unchanged.
+		tmpcmdlen = parseCatStr(ptrParams, tmpcmd, true, "RADIOPTTOFF host command");
+		if (tmpcmdlen == 0) {
+			snprintf(strFault, sizeof(strFault),
+				"RADIOPTTOFF command string is invalid.");
+			goto cmddone;
+		}
+		memcpy(PTTOffCmd, tmpcmd, tmpcmdlen);
+		PTTOffCmdLen = tmpcmdlen;
+		if (PTTOnCmdLen > 0) {
+			// A CAT port is open and A PTT On cmd is already set, so Ardop can
+			// use CAT for PTT control.  So, verify that PTTMode and
+			// RadioControl are set to that they will be used.  If CAT control
+			// of PTT was already being used, then this does nothing.
+			PTTMode = PTTCI_V;
+			RadioControl = TRUE;
+			ZF_LOGI("CAT PTT Off Command set to \"%s\".", ptrParams);
+		} else {
+			ZF_LOGI(
+				"CAT PTT Off Command set to \"%s\", but PTT On Command must"
+				" also be set before they will be used for PTT control.",
+				ptrParams);
+		}
+		sprintf(cmdReply, "%s now %s", strCMD, ptrParams);
 		SendReplyToHost(cmdReply);
 		goto cmddone;
 	}
 
-	if (strcmp(strCMD, "RADIOPTTON") == 0)
-	{
-		// Parameter is block to send to radio to enable PTT, in hex
+	if (strcmp(strCMD, "RADIOPTTON") == 0) {
+		// Parameter is a hex string representing the radio specific command to
+		// be sent to the radio to transition from RX to TX
+		unsigned char tmpcmd[MAXCATLEN];
+		unsigned int tmpcmdlen = 0;
 
-		char c;
-		int val;
-		char * ptr1 = ptrParams;
-		UCHAR * ptr2 = PTTOnCmd;
-
-		if (ptrParams == NULL)
-		{
-			snprintf(strFault, sizeof(strFault), "RADIOPTTON command string missing");
+		if (ptrParams == NULL) {
+			char hexstr[MAXCATLEN * 2];
+			if (PTTOnCmdLen == 0) {
+				sprintf(cmdReply, "%s VALUE NOT SET", strCMD);
+				SendReplyToHost(cmdReply);
+				goto cmddone;
+			}
+			bytes2hex(hexstr, sizeof(hexstr), PTTOnCmd, PTTOnCmdLen, false);
+			sprintf(cmdReply, "%s %s", strCMD, hexstr);
+			SendReplyToHost(cmdReply);
 			goto cmddone;
 		}
-
-		if (hCATDevice == 0)
-		{
-			snprintf(strFault, sizeof(strFault), "RADIOPTTON command CAT Port not defined");
+		if (hPTTDevice != 0) {
+			snprintf(strFault, sizeof(strFault),
+				"RADIOPTTON not usable because RTS/DTR PTT is being used");
 			goto cmddone;
 		}
-
-		while (c = *(ptr1++))
-		{
-			val = c - 0x30;
-			if (val > 15)
-				val -= 7;
-			val <<= 4;
-			c = *(ptr1++) - 0x30;
-			if (c > 15)
-				c -= 7;
-			val |= c;
-			*(ptr2++) = val;
+		if (hCATDevice == 0) {
+			snprintf(strFault, sizeof(strFault),
+				"RADIOPTTON not usable because CAT port not set");
+			goto cmddone;
 		}
-
-		PTTOnCmdLen = ptr2 - PTTOnCmd;
-
-		sprintf(cmdReply, "CAT PTT On Command Defined");
+		// Initially parse into tmpcmd so that, if this is not a valid hex
+		// string, the existing value in PTTOnCmd is unchanged.
+		tmpcmdlen = parseCatStr(ptrParams, tmpcmd, true, "RADIOPTTON host command");
+		if (tmpcmdlen == 0) {
+			snprintf(strFault, sizeof(strFault),
+				"RADIOPTTON command string is invalid.");
+			goto cmddone;
+		}
+		memcpy(PTTOnCmd, tmpcmd, tmpcmdlen);
+		PTTOnCmdLen = tmpcmdlen;
+		if (PTTOffCmdLen > 0) {
+			// A CAT port is open and A PTT Off cmd is already set, so Ardop can
+			// use CAT for PTT control.  So, verify that PTTMode and
+			// RadioControl are set to that they will be used.  If CAT control
+			// of PTT was already being used, then this does nothing.
+			PTTMode = PTTCI_V;
+			RadioControl = TRUE;
+			ZF_LOGI("CAT PTT On Command set to \"%s\".", ptrParams);
+		} else {
+			ZF_LOGI(
+				"CAT PTT On Command set to \"%s\", but PTT Off Command must"
+				" also be set before they will be used for PTT control.",
+				ptrParams);
+		}
+		sprintf(cmdReply, "%s now %s", strCMD, ptrParams);
 		SendReplyToHost(cmdReply);
 		goto cmddone;
 	}

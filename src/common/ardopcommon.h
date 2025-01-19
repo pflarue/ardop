@@ -174,8 +174,6 @@ void Abort();
 void SetLED(int LED, int State);
 VOID ClearBusy();
 VOID CloseCOMPort(HANDLE fd);
-VOID COMClearRTS(HANDLE fd);
-VOID COMClearDTR(HANDLE fd);
 void CM108_set_ptt(int PTTState);
 
 // #ifdef WIN32
@@ -517,13 +515,6 @@ extern int extraDelay;
 // Has to follow enum defs
 
 int EncodeARQConRequest(const StationId* mycall, const StationId* target, enum _ARQBandwidth ARQBandwidth, UCHAR* bytReturn);
-
-
-#define PTTRTS 1
-#define PTTDTR 2
-#define PTTCI_V 4
-#define PTTCM108 8
-#define PTTHAMLIB 16
 
 #endif
 

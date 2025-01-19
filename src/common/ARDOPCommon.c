@@ -44,19 +44,10 @@ extern int useGPIO;
 extern int pttGPIOPin;
 extern int pttGPIOInvert;
 
-extern HANDLE hCATDevice;  // port for Rig Control
-extern char CATPort[80];
-extern int CATBAUD;
-extern int EnableHostCATRX;
-
-extern HANDLE hPTTDevice;  // port for PTT
-extern char PTTPort[80];  // Port for Hardware PTT - may be same as control port.
-extern int PTTBAUD;
-
-extern unsigned char PTTOnCmd[];
+extern unsigned char PTTOnCmd[MAXCATLEN];
 extern unsigned char PTTOnCmdLen;
 
-extern unsigned char PTTOffCmd[];
+extern unsigned char PTTOffCmd[MAXCATLEN];
 extern unsigned char PTTOffCmdLen;
 
 extern int PTTMode;  // PTT Control Flags.
@@ -66,6 +57,7 @@ extern char PlaybackDevice[80];
 
 extern short InputNoiseStdDev;
 int add_noise(short *samples, unsigned int nSamples, short stddev);
+int hex2bytes(char *ptr, unsigned int len, unsigned char *output);
 
 int	intARQDefaultDlyMs = 240;
 int wg_port = 0;  // If not changed from 0, do not use WebGui
@@ -161,8 +153,64 @@ char HelpScreen[] =
 	"                                       or if ardopcf fails to run and suggests trying this.\n"
 	"\n"
 	" CAT and RTS/DTR PTT can share the same port.\n"
-	" See the ardop documentation for more information on cat and ptt options\n"
-	"  including when you need to use -k and -u\n\n";
+	" If both CAT and RTS/DTR PTT ports are set, then the RTS/DTR PTT port is used for\n"
+	" PTT control, and the -k, --keystring, -u, and --unkeystring values are ignored.\n"
+	" See the ardopcf documentation for command line options at\n"
+	" https://github.com/pflarue/ardop/blob/master/docs/Commandline_options.md\n"
+	" for more information, especially for cat and ptt options.\n\n";
+
+// Parse the hex string provided to set PTTOnCmd or PTTOffCmd from a command
+// line option or host command.
+//
+// If logerrors is true and an error occurs, then the error will be written to
+// the log, as is appropriate when processing host commands.  Otherwise, it will
+// be printed, as is appropriate when processing command line arguments before
+// the log directory and log levels are set.
+//
+// descstr describes the source of hexstr and is only used if an error must be
+// printed/logged.
+//
+// Return the length of the cmd, or 0 if an error occured
+unsigned char parseCatStr(char *hexstr, unsigned char *cmd, bool logerrors, char *descstr) {
+	if (strlen(hexstr) > 2 * MAXCATLEN) {
+		char formatstr[] =
+			"ERROR: Hex string for %s may not exceed %i characters (to describe"
+			" a %i byte key sequence).  The provided string, \"%s\" has a"
+			" length of %i characters.%s";
+		if (logerrors) {
+			ZF_LOGE(formatstr, descstr, 2 * MAXCATLEN, MAXCATLEN, hexstr, strlen(hexstr), "");
+		} else {
+			printf(formatstr, descstr, 2 * MAXCATLEN, MAXCATLEN, hexstr, strlen(hexstr), "\n");
+		}
+		return 0;
+	}
+
+	if (strlen(hexstr) % 2 != 0) {
+		char formatstr[] =
+			"ERROR: Hex string for %s must contain an even number of"
+			" hexidecimal [0-9A-F] characters, but \"%s\" has an odd number"
+			" (%i).%s";
+		if (logerrors) {
+			ZF_LOGE(formatstr, descstr, hexstr, strlen(hexstr), "");
+		} else {
+			printf(formatstr, descstr, hexstr, strlen(hexstr), "\n");
+		}
+		return 0;
+	}
+
+	if (hex2bytes(hexstr, strlen(hexstr) / 2, cmd) != 0) {
+		char formatstr[] =
+			"ERROR: Invalid string for %s.  Expected a hexidecimal string with"
+			" an even number of [0-9A-F] characters but found \"%s\".%s";
+		if (logerrors) {
+			ZF_LOGE(formatstr, descstr, hexstr, "");
+		} else {
+			printf(formatstr, descstr, hexstr, "\n");
+		}
+		return 0;
+	}
+	return strlen(hexstr) / 2;
+}
 
 void processargs(int argc, char * argv[])
 {
@@ -171,8 +219,6 @@ void processargs(int argc, char * argv[])
 	// to the console.
 
 	int val;
-	UCHAR * ptr1;
-	UCHAR * ptr2;
 	int c;
 	bool enable_log_files = true;
 	bool enable_syslog = false;
@@ -236,71 +282,31 @@ void processargs(int argc, char * argv[])
 			break;
 
 		case 'k':
-
-			ptr1 = optarg;
-			ptr2 = PTTOnCmd;
-			if (ptr1 == NULL)
-
-			{
-				printf("RADIOPTTON command string missing\n");
-				break;
+			PTTOnCmdLen = parseCatStr(optarg, PTTOnCmd, false, "-k or --keystring option");
+			if (PTTOnCmdLen == 0) {
+				// An error occured in parseCatStr, and an appropriate error
+				// msg has already been printed.
+				exit(1);
 			}
-
-			while (c = *(ptr1++))
-			{
-				val = c - 0x30;
-				if (val > 15)
-					val -= 7;
-				val <<= 4;
-				c = *(ptr1++) - 0x30;
-				if (c > 15)
-					c -= 7;
-				val |= c;
-				*(ptr2++) = val;
-			}
-
-			PTTOnCmdLen = ptr2 - PTTOnCmd;
-			PTTMode = PTTCI_V;
-
 			printf ("PTTOnString %s len %d\n", optarg, PTTOnCmdLen);
 			break;
 
 		case 'u':
-
-			ptr1 = optarg;
-			ptr2 = PTTOffCmd;
-
-			if (ptr1 == NULL)
-			{
-				printf("RADIOPTTOFF command string missing\n");
-				break;
+			PTTOffCmdLen = parseCatStr(optarg, PTTOffCmd, false, "-u or --unkeystring option");
+			if (PTTOffCmdLen == 0) {
+				// An error occured in parseCatStr, and an appropriate error
+				// msg has already been printed.
+				exit(1);
 			}
-
-			while (c = *(ptr1++))
-			{
-				val = c - 0x30;
-				if (val > 15)
-					val -= 7;
-				val <<= 4;
-				c = *(ptr1++) - 0x30;
-				if (c > 15)
-					c -= 7;
-				val |= c;
-				*(ptr2++) = val;
-			}
-
-			PTTOffCmdLen = ptr2 - PTTOffCmd;
-			PTTMode = PTTCI_V;
-
 			printf ("PTTOffString %s len %d\n", optarg, PTTOffCmdLen);
 			break;
 
 		case 'p':
 			strcpy(PTTPort, optarg);
-			if (strstr(PTTPort, "RTS:") == PTTPort && strlen(PTTPort) > 4) {
+			if (strncmp(PTTPort, "RTS:", 4) == 0 && strlen(PTTPort) > 4) {
 				PTTMode = PTTRTS;  // This is also the default w/o a prefix
 				strcpy(PTTPort, optarg + 4);
-			} else if (strstr(PTTPort, "DTR:") == PTTPort && strlen(PTTPort) > 4) {
+			} else if (strncmp(PTTPort, "DTR:", 4) == 0 && strlen(PTTPort) > 4) {
 				PTTMode = PTTDTR;
 				strcpy(PTTPort, optarg + 4);
 			}
@@ -311,15 +317,11 @@ void processargs(int argc, char * argv[])
 			break;
 
 		case 'L':
-//			UseLeftTX = UseLeftRX = 1;
-//			UseRightTX = UseRightRX = 0;
 			UseLeftRX = 1;
 			UseRightRX = 0;
 			break;
 
 		case 'R':
-//			UseLeftTX = UseLeftRX = 0;
-//			UseRightTX = UseRightRX = 1;
 			UseLeftRX = 0;
 			UseRightRX = 1;
 			break;
@@ -364,14 +366,68 @@ void processargs(int argc, char * argv[])
 			break;
 
 		case '?':
-			// getopt_long already printed an error message.
-			break;
+			// An invalid argument was encountered.  getopt_long() already
+			// printed an error message.
+			exit(1);
 
 		default:
-			abort();
+			exit(1);
 		}
 	}
 
+	// If PTTPort is set, then -k and -u will not be used, so the following
+	// checks can be skipped.
+	if (PTTPort[0] == 0x00) {
+		// Verify that the use of -k, -u, and -c are consistent.
+		if (CATPort[0] == 0x00 && PTTOnCmdLen > 0)
+		{
+			printf(
+				"ERROR: CAT string for PTT ON was set with -k or --keystring,"
+				" but no CAT port was set with -c or --cat.\n");
+			exit(1);
+
+		}
+		if (CATPort[0] == 0x00 && PTTOffCmdLen > 0)
+		{
+			printf(
+				"ERROR: CAT string for PTT OFF was set with -u or"
+				" --unkeystring, but no CAT port was set with -c or --cat.\n");
+			exit(1);
+		}
+		if (PTTOnCmdLen > 0 && PTTOffCmdLen == 0) {
+			printf(
+				"ERROR: CAT string for PTT ON was set with -k or --keystring,"
+				" but no CAT string for PTT OFF was set with -u or"
+				" --unkeystring.  Either both or neither of these options must"
+				" be provided..\n");
+			exit(1);
+		}
+		if (PTTOnCmdLen == 0 && PTTOffCmdLen > 0) {
+			printf(
+				"ERROR: CAT string for PTT OFF was set with -u or"
+				" --unkeystring, but no CAT string for PTT ON was set with -k"
+				" or --keystring.  Either both or neither of these options must"
+				" be provided..\n");
+			exit(1);
+		}
+		if (CATPort[0] != 0x00 && PTTOnCmdLen == 0) {
+			printf(
+				"WARNING: CAT port was set with -c or --cat, but CAT strings"
+				" for PTT ON and PTT OFF were not set with -k or --keystring"
+				" and -u or --unkeystring (and PTT port was not set with -p or"
+				" --ptt).  So, CAT commands may be issued with the RADIOHEX"
+				" host command, but neither CAT nor RTS/DTR will be used by"
+				" ardopcf for PTT control.  This will work if the host program"
+				" (such as Pat) is set to handle PTT control (or if the radio"
+				" is set to use VOX, which may be less reliable).  The CAT"
+				" commands for PTT can also be set via the RADIOPTTOFF and"
+				" RADIOPTTON host commands.  If these are both set, then CAT"
+				" PTT control will be used.\n");
+		}
+		if (CATPort[0] != 0x00 && PTTOnCmdLen > 0 && PTTOffCmdLen > 0) {
+			PTTMode = PTTCI_V;  // use CAT for PTT
+		}
+	}
 
 	if (argc > optind)
 	{
@@ -389,7 +445,7 @@ void processargs(int argc, char * argv[])
 		printf("%s Version %s\n", ProductName, ProductVersion);
 		printf("Only three positional parameters allowed\n");
 		printf ("%s", HelpScreen);
-		exit(0);
+		exit(1);
 	}
 
 	if (wg_port < 0) {
@@ -401,21 +457,21 @@ void processargs(int argc, char * argv[])
 		printf(
 			"WebGui port (%d) may not be the same as host port (%s)",
 			wg_port, HostPort);
-		exit(0);
+		exit(1);
 	}
 	else if (HostPort[0] != 0x00 && wg_port == atoi(HostPort) + 1) {
 		printf(
 			"WebGui port (%d) may not be one greater than host port (%s)"
 			" since that is used as the host data port.",
 			wg_port, HostPort);
-		exit(0);
+		exit(1);
 	}
 	else if (wg_port == 8515) {
 		printf(
 			"WebGui port (%d) may not be equal to the default host port (8515)"
 			" when an alternative host port is not specified.",
 			wg_port);
-		exit(0);
+		exit(1);
 	}
 	else if (wg_port == 8516) {
 		printf(
@@ -423,7 +479,7 @@ void processargs(int argc, char * argv[])
 			" host port (8515 + 1 = 8516) when an alternative host port is not"
 			" specified since that is used as the host data port.",
 			wg_port);
-		exit(0);
+		exit(1);
 	}
 
 	// log files use the host port number to permit multiple

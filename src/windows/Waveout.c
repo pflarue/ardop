@@ -77,7 +77,15 @@ int PlayBackIndex = -1;
 char CaptureNames[16][MAXPNAMELEN + 2]= {""};
 char PlaybackNames[16][MAXPNAMELEN + 2]= {""};
 
-WAVEFORMATEX wfx = { WAVE_FORMAT_PCM, 1, 12000, 12000, 2, 16, 0 };
+WAVEFORMATEX wfx = {
+	WAVE_FORMAT_PCM,  // wFormatTag (Format type)
+	1,  // nChannels
+	12000,  // nSamplesPerSec
+	24000,  // nAvgBytesPerSec (nSamplesPerSec * nBlockAlign)
+	2,  // nBlockAlign (nChannels * wBitsPerSample / 8)
+	16,  // wBitsPerSample
+	0  // cbSize (extra format info.  0 for WAVE_FORMAT_PCM)
+};
 
 HWAVEOUT hWaveOut = 0;
 HWAVEIN hWaveIn = 0;
@@ -390,6 +398,9 @@ int platform_main(int argc, char * argv[])
 
 	if (PTTPort[0])
 	{
+		// If PTTPort was specified with DTR: or RTS: prefix, this has already
+		// been removed and PTTMode set appropriately.
+
 		// Can be port{:speed] for serial, a vid/pid pair or a device UID for CM108 or IPADDR:PORT for Hamlib
 
 		if (_memicmp(PTTPort, "0x", 2) == 0 ||  _memicmp(PTTPort, "\\\\", 2) == 0)
@@ -422,10 +433,16 @@ int platform_main(int argc, char * argv[])
 				else
 					PTTBAUD = atoi(Baud);
 			}
-			if (useHamLib == 0)
+			if (useHamLib == 0) {
 				// PTTMode defaults to PTTRTS, but may have been set to
 				// PTTDTR in processargs();
-				hPTTDevice = OpenCOMPort(PTTPort, PTTBAUD, FALSE, FALSE, FALSE, 0);
+				if ((hPTTDevice = OpenCOMPort(
+					PTTPort, PTTBAUD, FALSE, FALSE, FALSE, 0)) == 0)
+				{
+					// OpenCOMPort() already wrote an error message to the log.
+					return -1;
+				}
+			}
 		}
 	}
 
@@ -441,34 +458,44 @@ int platform_main(int argc, char * argv[])
 		{
 			if (Baud)
 			CATBAUD = atoi(Baud);
-			hCATDevice = OpenCOMPort(CATPort, CATBAUD, FALSE, FALSE, FALSE, 0);
+			if ((hCATDevice = OpenCOMPort(
+				CATPort, CATBAUD, FALSE, FALSE, FALSE, 0)) == 0)
+			{
+				// OpenCOMPort() already wrote an error message to the log.
+				return -1;
+			}
 		}
 	}
 
 	if (hCATDevice)
 	{
 		ZF_LOGI("CAT Control on port %s", CATPort);
-		COMSetRTS(hPTTDevice);
-		COMSetDTR(hPTTDevice);
-		if (PTTOffCmdLen)
-		{
-			ZF_LOGI("PTT using CAT Port", CATPort);
+		// ARDOPC and older versions of ardopcf also did
+		// COMSetRTS(hPTTDevice) and COMSetDTR(hPTTDevice) here which would
+		// briefly key the PTT if PTTPort was also set.  The PTT was cleared
+		// a moment later in the "if (hPTTDevice)" block where the
+		// COMClearRTS(hPTTDevice) and COMClearDTR(hPTTDevice) were called.
+		//
+		// COMSetDTR(hPTTDevice);
+		// COMSetRTS(hPTTDevice);
+
+		// If PTT Port was also set, then PTTMode is PTTRTS or PTTDTR and CAT
+		// commands will not be used for PTT control
+		if (PTTMode == PTTCI_V && PTTOnCmdLen && PTTOffCmdLen) {
+			ZF_LOGI("PTT using CAT Port: %s", CATPort);
 			RadioControl = TRUE;
 		}
-	}
-	else
-	{
-		// Warn of -u and -k defined but no CAT Port
-
-		if (PTTOffCmdLen)
-			ZF_LOGW("Warning PTT Off string defined but no CAT port", CATPort);
 	}
 
 	if (hPTTDevice)
 	{
-		ZF_LOGI("Using RTS on port %s for PTT", PTTPort);
-		COMClearRTS(hPTTDevice);
-		COMClearDTR(hPTTDevice);
+		if (PTTMode & PTTDTR) {
+			COMClearDTR(hPTTDevice);
+			ZF_LOGI("Using DTR on port %s for PTT", PTTPort);
+		} else {
+			COMClearRTS(hPTTDevice);
+			ZF_LOGI("Using RTS on port %s for PTT", PTTPort);
+		}
 		RadioControl = TRUE;
 	}
 
@@ -566,7 +593,7 @@ short * SendtoCard(unsigned short * buf, int n)
 
 void GetSoundDevices()
 {
-	int i;
+	unsigned int i;
 
 	ZF_LOGI("Capture Devices");
 
@@ -577,13 +604,12 @@ void GetSoundDevices()
 
 	for (i = 0; i < CaptureCount; i++)
 	{
-		waveInOpen(&hWaveIn, i, &wfx, 0, 0, CALLBACK_NULL);  // WAVE_MAPPER
-		waveInGetDevCaps((UINT_PTR)hWaveIn, &pwic, sizeof(WAVEINCAPS));
+		waveInGetDevCaps(i, &pwic, sizeof(WAVEINCAPS));
 
 		if (CaptureDevices)
 			strcat(CaptureDevices, ",");
 		strcat(CaptureDevices, pwic.szPname);
-		ZF_LOGI("%d %s", i, pwic.szPname);
+		ZF_LOGI("%i %s %i-channel", i, pwic.szPname, pwic.wChannels);
 		memcpy(&CaptureNames[i][0], pwic.szPname, MAXPNAMELEN);
 		_strupr(&CaptureNames[i][0]);
 	}
@@ -597,13 +623,12 @@ void GetSoundDevices()
 
 	for (i = 0; i < PlaybackCount; i++)
 	{
-		waveOutOpen(&hWaveOut, i, &wfx, 0, 0, CALLBACK_NULL);  // WAVE_MAPPER
-		waveOutGetDevCaps((UINT_PTR)hWaveOut, &pwoc, sizeof(WAVEOUTCAPS));
+		waveOutGetDevCaps(i, &pwoc, sizeof(WAVEOUTCAPS));
 
 		if (PlaybackDevices[0])
 			strcat(PlaybackDevices, ",");
 		strcat(PlaybackDevices, pwoc.szPname);
-		ZF_LOGI("%i %s", i, pwoc.szPname);
+		ZF_LOGI("%i %s %i-channel", i, pwoc.szPname, pwoc.wChannels);
 		memcpy(&PlaybackNames[i][0], pwoc.szPname, MAXPNAMELEN);
 		_strupr(&PlaybackNames[i][0]);
 		waveOutClose(hWaveOut);
@@ -647,10 +672,10 @@ int InitSound(BOOL Report)
 
 	ret = waveOutOpen(&hWaveOut, PlayBackIndex, &wfx, 0, 0, CALLBACK_NULL);  // WAVE_MAPPER
 
-	if (ret)
+	if (ret) {
 		ZF_LOGF("Failed to open WaveOut Device %s Error %d", PlaybackDevice, ret);
-	else
-	{
+		return FALSE;
+	} else {
 		ret = waveOutGetDevCaps((UINT_PTR)hWaveOut, &pwoc, sizeof(WAVEOUTCAPS));
 		if (Report)
 			ZF_LOGI("Opened WaveOut Device %s", pwoc.szPname);
@@ -682,10 +707,10 @@ int InitSound(BOOL Report)
 	}
 
 	ret = waveInOpen(&hWaveIn, CaptureIndex, &wfx, 0, 0, CALLBACK_NULL);  // WAVE_MAPPER
-	if (ret)
+	if (ret) {
 		ZF_LOGF("Failed to open WaveIn Device %s Error %d", CaptureDevice, ret);
-	else
-	{
+		return FALSE;
+	} else {
 		ret = waveInGetDevCaps((UINT_PTR)hWaveIn, &pwic, sizeof(WAVEINCAPS));
 		if (Report)
 			ZF_LOGI("Opened WaveIn Device %s", pwic.szPname);
@@ -918,23 +943,26 @@ void StopCodec(char * strFault)
 
 VOID RadioPTT(BOOL PTTState)
 {
-	if (PTTMode & PTTRTS)
+	if (PTTMode & PTTRTS) {
 		if (PTTState)
 			COMSetRTS(hPTTDevice);
 		else
 			COMClearRTS(hPTTDevice);
+	}
 
-	if (PTTMode & PTTDTR)
+	if (PTTMode & PTTDTR) {
 		if (PTTState)
 			COMSetDTR(hPTTDevice);
 		else
 			COMClearDTR(hPTTDevice);
+	}
 
-	if (PTTMode & PTTCI_V)
+	if (PTTMode & PTTCI_V) {
 		if (PTTState)
 			WriteCOMBlock(hCATDevice, PTTOnCmd, PTTOnCmdLen);
 		else
 			WriteCOMBlock(hCATDevice, PTTOffCmd, PTTOffCmdLen);
+	}
 
 	if (PTTMode & PTTCM108)
 		CM108_set_ptt(PTTState);
@@ -1062,12 +1090,9 @@ HANDLE OpenCOMPort(VOID * pPort, int speed, BOOL SetDTR, BOOL SetRTS, BOOL Quiet
 		if (Quiet == 0)
 		{
 			if (atoi(pPort) != 0)
-				sprintf(buf," COM%d could not be opened \r\n ", atoi(pPort));
+				ZF_LOGE("COM%d could not be opened \r\n ", atoi(pPort));
 			else
-				sprintf(buf," %s could not be opened \r\n ", pPort);
-
-//			WritetoConsoleLocal(buf);
-			OutputDebugString(buf);
+				ZF_LOGE("%s could not be opened \r\n ", pPort);
 		}
 		return (FALSE);
 	}
@@ -1127,20 +1152,23 @@ HANDLE OpenCOMPort(VOID * pPort, int speed, BOOL SetDTR, BOOL SetRTS, BOOL Quiet
 
 	if (fRetVal)
 	{
-		if (SetDTR)
-			EscapeCommFunction(fd, SETDTR);
 		if (SetRTS)
-			EscapeCommFunction(fd, SETRTS);
+			COMSetRTS(fd);
+		else
+			COMClearRTS(fd);
+
+		if (SetDTR)
+			COMSetDTR(fd);
+		else
+			COMClearDTR(fd);
 	}
 	else
 	{
 		if (atoi(pPort) != 0)
-			sprintf(buf,"COM%d Setup Failed %d ", atoi(pPort), GetLastError());
+			ZF_LOGE("COM%d Setup Failed %d ", atoi(pPort), GetLastError());
 		else
-			sprintf(buf,"%s Setup Failed %d ", pPort, GetLastError());
+			ZF_LOGE("%s Setup Failed %d ", pPort, GetLastError());
 
-		printf(buf);
-		OutputDebugString(buf);
 		CloseHandle(fd);
 		return 0;
 	}

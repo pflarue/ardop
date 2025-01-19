@@ -33,6 +33,7 @@ extern StationId ARQStationRemote;  // current connection remote callsign
 extern float wS1;
 int ExtractARQBandwidth();
 void ProcessCommandFromHost(char * strCMD);
+int bytes2hex(char *outputStr, size_t count, unsigned char *data, size_t datalen, bool spaces);
 
 bool WebguiActive = false;
 int WebGuiNumConnected = 0;
@@ -189,25 +190,6 @@ int decodeUvint(struct wg_receive_data *rdata) {
 		}
 	}
 }
-
-// Write an uppercase space separated hexidecimal representation of
-// data to outputStr, creating a null terminated string.  datalen is
-// length of data.  count is the maximum length of outputStr including
-// the terminating NULL.  If count is too small to write all of data,
-// write as much as will fit.
-// Return outputStr.
-char* toHex(char *outputStr, size_t count, unsigned char *data, size_t datalen) {
-	outputStr[0] = 0x00;  // create a zero length NULL terminated string;
-	count -= 1;  // for the NULL
-	for (unsigned int i=0; i<datalen; i++) {
-		if (count < 3)
-			return outputStr;
-		sprintf(outputStr, "%02X ", data[i]);
-		count -=3;
-	}
-	return outputStr;
-}
-
 
 // Two protocol layers are defined for messages to Webgui clients.
 // The lower level protocol prefaces each message with a variable
@@ -865,8 +847,9 @@ void WebguiPoll() {
 			else
 				// This message should be printed as a string of hex values.
 				ZF_LOGD("message (hex): %s...",
-					toHex(errstr, sizeof(errstr),
-					(unsigned char*)(rdata->buf + rdata->offset), (size_t)(msglen)));
+					bytes2hex(errstr, sizeof(errstr),
+					(unsigned char*)(rdata->buf + rdata->offset),
+					(size_t)(msglen), true));
 			break;
 		}
 		rdata->offset += msglen;

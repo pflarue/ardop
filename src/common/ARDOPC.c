@@ -134,10 +134,10 @@ HANDLE hPTTDevice = 0;
 char PTTPort[80] = "";  // Port for Hardware PTT - may be same as control port.
 int PTTBAUD = 19200;
 
-UCHAR PTTOnCmd[64];
+UCHAR PTTOnCmd[MAXCATLEN];
 UCHAR PTTOnCmdLen = 0;
 
-UCHAR PTTOffCmd[64];
+UCHAR PTTOffCmd[MAXCATLEN];
 UCHAR PTTOffCmdLen = 0;
 
 // Stats

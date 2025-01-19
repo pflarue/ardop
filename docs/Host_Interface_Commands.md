@@ -517,27 +517,86 @@ Currently only used for setting GUI Freq field
 
 #### RADIOHEX
 
-Send a CAT hex string to the connected radio.
+Immediately send a radio specific CAT command, defined by a hex string, to the
+connected radio.
 
 - Mode: ANY
-- Arguments: None
-- Returns: None
+- Arguments: Hex string
+- `RADIOHEX` Returns `FAULT RADIOHEX command string missing`
+- `RADIOHEX XXX` Returns `FAULT RADIOHEX not usable because CAT port not set` if
+a CAT port was not set with the -c or --cat command line option.
+- `RADIOHEX XXX` Returns `FAULT RADIOHEX command string is invalid.` if XXX is
+not a valid hex string.
+- `RADIOHEX XXX` Returns `RADIOHEX XXX` and sends the command to the radio if
+XXX is a valid hex string.
 
 #### RADIOPTTOFF
 
-Sends predefined CAT PTT hex string to a radio. Possibly embedded device specific.
+If either a RTS/DTR PTT Port was set with the -p or --ptt command line option,
+or if no CAT Port was set with the -c or --cat command line option, then this
+host command will fail unless it has no argument.
+
+Gets or Sets the radio specific hex string that can be sent to the radio as a
+CAT command to switch from transmit to receive (PTT Off).  With a hex string
+argument, this is equivalent to the -u or --unkeystring command line option.
+
+If a CAT PTT Off string was previously set and is being used for PTT control,
+then a new valid string will immediately replace it and be used for future
+transitions from transmit to receive.  If no corresponding CAT PTT On command
+has been set (PTT is currently not controlled by Ardop), then a new valid string
+will not be used immediately.  In that case, it will not be used until a CAT PTT
+On command is also set with RADIOPTTON.
 
 - Mode: ANY
-- Arguments: UNK
-- Returns: UNK
+- Arguments: None or Hex string
+- `RADIOPTTOFF` Returns `RADIOPTTOFF VALUE NOT SET` if no PTT Off CAT string is
+already defined.
+- `RADIOPTTOFF` Returns `RADIOPTTOFF XXX` where XXX is the hex string of the
+current CAT PTT Off command.
+- `RADIOPTTOFF XXX` Returns `FAULT RADIOPTTOFF not usable because RTS/DTR PTT is
+being used` if a PTT Port was set with the -p or --ptt command line option.
+- `RADIOPTTOFF XXX` Returns `FAULT RADIOPTTOFF not usable because CAT port not
+set` if a CAT port was not set with the -c or --cat command line option.
+- `RADIOPTTOFF XXX` Returns `FAULT RADIOPTTOFF command string is invalid.` if
+XXX is not a valid hex string.  When this occurs, the previously defined CAT PTT
+Off command, if one was set, remains unchanged.
+- `RADIOPTTOFF XXX` Returns `RADIOPTTOFF now XXX`, where XXX is a valid hex
+string.  As described above, this does not necessarily indicate that Ardop will
+begin using CAT PTT control if it was not already doing so.
 
 #### RADIOPTTON
 
-Sends predefined CAT PTT hex string to a radio. Possibly embedded device specific.
+If either a RTS/DTR PTT Port was set with the -p or --ptt command line option,
+or if no CAT Port was set with the -c or --cat command line option, then this
+host command will fail unless it has no argument.
+
+Gets or Sets the radio specific hex string that can be sent to the radio as a
+CAT command to switch from receive to transmit (PTT On).  With a hex string
+argument, this is equivalent to the -k or --keystring command line option.
+
+If a CAT PTT On string was previously set and is being used for PTT control,
+then a new valid string will immediately replace it and be used for future
+transitions from receive to transmit.  If no corresponding CAT PTT Off command
+has been set (PTT is currently not controlled by Ardop), then a new valid string
+will not be used immediately.  In that case, it will not be used until a CAT PTT
+Off command is also set with RADIOPTTOFF.
 
 - Mode: ANY
-- Arguments: UNK
-- Returns: UNK
+- Arguments: None or Hex string
+- `RADIOPTTON` Returns `RADIOPTTON VALUE NOT SET` if no PTT On CAT string is
+already defined.
+- `RADIOPTTON` Returns `RADIOPTTON XXX` where XXX is the hex string of the
+current CAT PTT On command.
+- `RADIOPTTON XXX` Returns `FAULT RADIOPTTON not usable because RTS/DTR PTT is
+being used` if a PTT Port was set with the -p or --ptt command line option.
+- `RADIOPTTON XXX` Returns `FAULT RADIOPTTON not usable because CAT port not
+set` if a CAT port was not set with the -c or --cat command line option.
+- `RADIOPTTON XXX` Returns `FAULT RADIOPTTON command string is invalid.` if XXX
+is not a valid hex string.  When this occurs, the previously defined CAT PTT On
+command, if one was set, remains unchanged.
+- `RADIOPTTON XXX` Returns `RADIOPTTON now XXX`, where XXX is a valid hex
+string.  As described above, this does not necessarily indicate that Ardop will
+begin using CAT PTT control if it was not already doing so.
 
 #### RXLEVEL
 
