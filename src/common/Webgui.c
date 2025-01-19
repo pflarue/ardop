@@ -247,6 +247,8 @@ int decodeUvint(struct wg_receive_data *rdata) {
 // "S|" no additional data: ISS true
 // "s|" no additional data: ISS false
 // "t|" followed by a string: Protocol State
+// "W|" no additional data: Recording RX true
+// "w|" no additional data: Recording RX false
 // 0x817C followed by one additional byte interpreted as an unsigned
 //   char in the range of 0 to 150: Set CurrentLevel
 // 0x8A7C
@@ -514,6 +516,13 @@ int wg_send_busy(int cnum, bool isBusy) {
 		return wg_send_msg(cnum, "B|", 2);
 	else
 		return wg_send_msg(cnum, "b|", 2);
+}
+
+int wg_send_wavrx(int cnum, bool isRecording) {
+	if (isRecording)
+		return wg_send_msg(cnum, "W|", 2);
+	else
+		return wg_send_msg(cnum, "w|", 2);
 }
 
 int wg_send_pixels(int cnum, unsigned char *data, size_t datalen) {

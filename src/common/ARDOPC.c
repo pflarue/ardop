@@ -32,6 +32,7 @@ const char ProductName[] = "ardopcf";
 #include "common/ARDOPC.h"
 #include "common/Locator.h"
 #include "common/StationId.h"
+#include "common/wav.h"
 #include "rockliff/rrs.h"
 
 UCHAR bytDataToSend[DATABUFFERSIZE];
@@ -68,9 +69,15 @@ void WebguiPoll();
 int wg_send_fftdata(float *mags, int magsLen);
 int wg_send_busy(int cnum, bool isBusy);
 int wg_send_protocolmode(int cnum);
+int wg_send_wavrx(int cnum, bool isRecording);
 extern int WebGuiNumConnected;
 extern char HostCommands[2048];
 void ProcessCommandFromHost(char * strCMD);
+
+extern struct WavFile *rxwf;  // For recording of RX audio
+extern struct WavFile *txwff;  // For recording of filtered TX audio
+// writing unfiltered tx audio to WAV disabled
+// extern struct WavFile *txwfu = NULL;  // For recording of unfiltered TX audio
 
 // Config parameters
 
@@ -702,6 +709,22 @@ void ardopmain()
 			PlatformSignalAbbreviation(closedByPosixSignal)
 		);
 	}
+
+	// If currently recording a WAV file, close it
+	if (rxwf != NULL) {
+		CloseWav(rxwf);
+		rxwf = NULL;
+		wg_send_wavrx(0, false);  // update "RECORDING RX" indicator on WebGui
+	}
+	if (txwff != NULL) {
+		CloseWav(txwff);
+		txwff = NULL;
+	}
+	// writing unfiltered tx audio to WAV disabled
+	//if (txwuf != NULL) {
+	//	CloseWav(txwff);
+	//	txwff = NULL;
+	//}
 
 	closesocket(TCPControlSock);
 	closesocket(TCPDataSock);

@@ -598,6 +598,35 @@ command, if one was set, remains unchanged.
 string.  As described above, this does not necessarily indicate that Ardop will
 begin using CAT PTT control if it was not already doing so.
 
+#### RECRX
+
+Start (with `RECRX TRUE`) or Stop (with `RECRX FALSE`) recording of received
+audio to a WAV file.  Like those created with the -w or --writewav command line
+options, WAV files are named according to the UTC date and time they are
+started, and are located in the same directory as the debug log file.  The WAV
+files are single channel, 16-bit, 12 kHz sample rate, and thus are suitable to
+be read and decoded by ardopcf with the -d or --decodewav command line option.
+
+`RECRX TRUE` while RECRX is already TRUE or `RECRX FALSE` while RECRX is already
+FALSE is permitted and does nothing.
+
+This command is not intended to be used or useful during normal operation of
+ardopcf.  Rather, it is useful for diagnostic purposes.
+
+- Mode: ANY
+- Arguments: None or `TRUE` or `FALSE`
+- `REXRX` returns `RECRX TRUE` or `RECRX FALSE`
+- `RECRX TRUE` returns `RECRX now TRUE`
+- `RECRX FALSE` returns `RECRX now FALSE`
+- `RECRX Something else` returns `FAULT Syntax Err: RECRX Something else`
+- BUT: If Ardop is currently recording received audio due to the use of the -w
+or --writewav command line options, this command fails and sends
+`FAULT RECRX IGNORED while recording due to -w or --writewav.` to the host.
+Similarly, while RECRX is TRUE, the -w and --writewav command line option is
+temporarily disabled.  Recording due to -w and --writewav may start at the end
+of the next transmission after RECRX is set to FALSE.
+
+
 #### RXLEVEL
 
 Embedded platform control of ADC input volume.

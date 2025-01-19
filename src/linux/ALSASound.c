@@ -49,6 +49,7 @@ VOID processargs(int argc, char * argv[]);
 int wg_send_currentlevel(int cnum, unsigned char level);
 int wg_send_pttled(int cnum, bool isOn);
 int wg_send_pixels(int cnum, unsigned char *data, size_t datalen);
+int wg_send_wavrx(int cnum, bool isRecording);
 void WebguiPoll();
 
 int add_noise(short *samples, unsigned int nSamples, short stddev);
@@ -70,8 +71,9 @@ BOOL UseRightRX = TRUE;
 BOOL UseLeftTX = TRUE;
 BOOL UseRightTX = TRUE;
 
-extern BOOL WriteRxWav;
-extern BOOL WriteTxWav;
+extern BOOL WriteTxWav;  // Record TX
+extern BOOL WriteRxWav;  // Record RX controlled by Command line/TX/Timer
+extern BOOL HWriteRxWav;  // Record RX controlled by host command RECRX
 extern BOOL FixTiming;
 extern char DecodeWav[5][256];
 extern int WavNow;  // Time since start of WAV file being decoded
@@ -113,10 +115,10 @@ snd_pcm_sframes_t MaxAvail;
 
 #include <stdarg.h>
 
-struct WavFile *rxwf = NULL;
-struct WavFile *txwff = NULL;
+struct WavFile *rxwf = NULL;  // For recording of RX audio
+struct WavFile *txwff = NULL;  // For recording of filtered TX audio
 // writing unfiltered tx audio to WAV disabled
-// struct WavFile *txwfu = NULL;
+// struct WavFile *txwfu = NULL;  // For recording of unfiltered TX audio
 #define RXWFTAILMS 10000;  // 10 seconds
 unsigned int rxwf_EndNow = 0;
 
@@ -129,7 +131,8 @@ void StartRxWav()
 {
 	// Open a new WAV file if not already recording.
 	// If already recording, then just extend the time before
-	// recording will end.
+	// recording will end.  Do nothing if already recording due
+	// to HWriteRxWav, which does not use a timer.
 	//
 	// Wav files will use a filename that includes port, UTC date,
 	// and UTC time, similar to log files but with added time to
@@ -148,8 +151,10 @@ void StartRxWav()
 
 	if (rxwf != NULL)
 	{
-		// Already recording, so just extend recording time.
-		extendRxwf();
+		if (!HWriteRxWav) {
+			// Already recording, so just extend recording time.
+			extendRxwf();
+		}  // else do nothing for HWriteRxWav, which does not use a timer
 		return;
 	}
 	struct tm * tm;
@@ -185,7 +190,11 @@ void StartRxWav()
 		return;
 	}
 	rxwf = OpenWavW(rxwf_pathname);
-	extendRxwf();
+	wg_send_wavrx(0, true);  // update "RECORDING RX" indicator on WebGui
+	if (!HWriteRxWav) {
+		// A timer is not used with HWriteRxWav, so no need to extend.
+		extendRxwf();
+	}
 }
 
 // writing unfiltered tx audio to WAV disabled.  Only filtered
@@ -1740,10 +1749,12 @@ void PollReceivedSamples()
 		{
 			// There is an open Wav file recording.
 			// Either close it or write samples to it.
-			if (rxwf_EndNow < Now)
+			if (rxwf_EndNow < Now && !HWriteRxWav)
 			{
+				// timer to close WAV file has expired (not used with HWriteRxWav)
 				CloseWav(rxwf);
 				rxwf = NULL;
+				wg_send_wavrx(0, false);  // update "RECORDING RX" indicator on WebGui
 			}
 			else
 				WriteWav(&inbuffer[0][0], ReceiveSize, rxwf);
@@ -1914,9 +1925,11 @@ void SoundFlush()
 		OpenSoundCapture(SavedCaptureDevice, SavedCaptureRate, strFault);
 	StartCapture();
 
-	if (WriteRxWav)
-		// Start recording if not already recording, else to extend the recording time.
+	if (WriteRxWav && !HWriteRxWav) {
+		// Start recording if not already recording, else extend the recording time.
+		// Note that this is disabled if HWriteRxWav is true.
 		StartRxWav();
+	}
 	return;
 }
 
