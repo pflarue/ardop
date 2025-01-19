@@ -1,11 +1,9 @@
-//
-// Code Common to all versions of ARDOP.
-//
-
 // definition of ProductVersion moved to version.h
 // This simplifies test builds with using local version numbers independent
 //   of version numbers pushed to git repository.
+#include "os_util.h"
 #include "common/version.h"
+#include "common/ptt.h"
 
 #ifdef WIN32
 #define _CRT_SECURE_NO_DEPRECATE
@@ -38,35 +36,35 @@
 
 void ProcessCommandFromHost(char * strCMD);
 
-extern int gotGPIO;
-extern int useGPIO;
-
-extern int pttGPIOPin;
-extern int pttGPIOInvert;
-
-extern unsigned char PTTOnCmd[MAXCATLEN];
-extern unsigned char PTTOnCmdLen;
-
-extern unsigned char PTTOffCmd[MAXCATLEN];
-extern unsigned char PTTOffCmdLen;
-
-extern int PTTMode;  // PTT Control Flags.
 extern char HostPort[80];
-extern char CaptureDevice[80];
-extern char PlaybackDevice[80];
+extern int host_port;
+char CaptureDevice[80] = "";  // If not specified, becomes default of "0"
+char PlaybackDevice[80] = "";  // If not specified, becomes default of "0"
 
-extern short InputNoiseStdDev;
+struct WavFile *rxwf = NULL;  // For recording of RX audio
+struct WavFile *txwff = NULL;  // For recording of filtered TX audio
+// writing unfiltered tx audio to WAV disabled
+// struct WavFile *txwfu = NULL;  // For recording of unfiltered TX audio
+
+#define RXWFTAILMS 10000  // 10 seconds
+unsigned int rxwf_EndNow = 0;
+
+short InputNoiseStdDev = 0;
 int add_noise(short *samples, unsigned int nSamples, short stddev);
-int hex2bytes(char *ptr, unsigned int len, unsigned char *output);
+int wg_send_wavrx(int cnum, bool isRecording);
+int wg_send_pixels(int cnum, unsigned char *data, size_t datalen);
+VOID TCPHostPoll();
+void WebguiPoll();
+
 
 int	intARQDefaultDlyMs = 240;
 int wg_port = 0;  // If not changed from 0, do not use WebGui
-BOOL HWriteRxWav = FALSE;  // Record RX controlled by host command RECRX
-BOOL WriteRxWav = FALSE;  // Record RX controlled by Command line/TX/Timer
-BOOL WriteTxWav = FALSE;  // Record TX
-BOOL UseSDFT = FALSE;
-BOOL FixTiming = TRUE;
-BOOL WG_DevMode = FALSE;
+bool HWriteRxWav = false;  // Record RX controlled by host command RECRX
+bool WriteRxWav = false;  // Record RX controlled by Command line/TX/Timer
+bool WriteTxWav = false;  // Record TX
+bool UseSDFT = false;
+bool FixTiming = true;
+bool WG_DevMode = false;
 // the --decodewav option can be repeated to provide the pathnames of multiple
 // WAV files to be decoded.  If more are given than DecodeWav can hold, then the
 // remainder is ignored.
@@ -76,16 +74,216 @@ char DecodeWav[5][256] = {"", "", "", "", ""};
 // startup of ardopcf as if they were issued by a connected host program
 char HostCommands[3000] = "";
 
-int PTTMode = PTTRTS;  // PTT Control Flags.
+bool UseLeftRX = true;
+bool UseRightRX = true;
 
-struct sockaddr HamlibAddr;  // Dest for above
-int useHamLib = 0;
+bool UseLeftTX = true;
+bool UseRightTX = true;
 
-extern BOOL UseLeftRX;
-extern BOOL UseRightRX;
 
-extern BOOL UseLeftTX;
-extern BOOL UseRightTX;
+// called while waiting for next TX buffer or to delay response.
+// Run background processes
+void txSleep(int mS) {
+	TCPHostPoll();
+	WebguiPoll();
+
+	if (PKTLEDTimer && Now > PKTLEDTimer) {
+		PKTLEDTimer = 0;
+		SetLED(PKTLED, 0);  // turn off packet rxed led
+	}
+
+	if (strcmp(PlaybackDevice, "NOSOUND") != 0)
+		Sleep(mS);
+}
+
+void extendRxwf() {
+	rxwf_EndNow = Now + RXWFTAILMS;
+}
+
+void StartRxWav() {
+	// Open a new WAV file if not already recording.
+	// If already recording, then just extend the time before
+	// recording will end.  Do nothing if already recording due
+	// to HWriteRxWav, which does not use a timer.
+	//
+	// Wav files will use a filename that includes host port, UTC date,
+	// and UTC time, similar to log files but with added time to
+	// the nearest second.  Like Log files, these Wav files will be
+	// written to the Log directory if defined, else to the current
+	// directory
+	//
+	// As currently implemented, the wav file written contains only
+	// received audio.  Since nothing is written for the time while
+	// transmitting, and thus not receiving, this recording is not
+	// time continuous.  Thus, the filename indicates the time that
+	// the recording was started, but the times of the received
+	// transmissions, other than the first one, are not indicated.
+	// The size should be 100 larger than the size of ArdopLogDir in log.c so
+	// that a WAV pathname in the directory from ardop_log_get_directory()
+	// will always fit.
+	char rxwf_pathname[612];
+	int pnlen;
+	char timestr[16];  // 15 char time string plus terminating NULL
+	get_utctimestr(timestr);
+
+	if (rxwf != NULL) {
+		if (!HWriteRxWav) {
+			// Already recording, so just extend recording time.
+			extendRxwf();
+		}  // else do nothing for HWriteRxWav, which does not use a timer
+		return;
+	}
+	if (ardop_log_get_directory()[0])
+		pnlen = snprintf(rxwf_pathname, sizeof(rxwf_pathname),
+			"%s/ARDOP_rxaudio_%d_%15s.wav",
+			ardop_log_get_directory(), host_port, timestr);
+	else
+		pnlen = snprintf(rxwf_pathname, sizeof(rxwf_pathname),
+			"ARDOP_rxaudio_%d_%15s.wav", host_port, timestr);
+	if (pnlen == -1 || pnlen > (int) sizeof(rxwf_pathname)) {
+		ZF_LOGE("Unable to write WAV file, invalid pathname. Logpath may be"
+			" too long.");
+		WriteRxWav = false;
+		return;
+	}
+	rxwf = OpenWavW(rxwf_pathname);
+	wg_send_wavrx(0, true);  // update "RECORDING RX" indicator on WebGui
+	if (!HWriteRxWav) {
+		// A timer is not used with HWriteRxWav, so no need to extend.
+		extendRxwf();
+	}
+}
+
+// writing unfiltered tx audio to WAV disabled.  Only filtered
+// tx audio will be written.  However, the code for unfiltered
+// audio is left in place but commented out so that it can eaily
+// be restored if desired.
+void StartTxWav() {
+	// Open two new WAV files for filtered and unfiltered Tx audio.
+	//
+	// Wav files will use a filename that includes host port, UTC date,
+	// and UTC time, similar to log files but with added time to
+	// the nearest second.  Like Log files, these Wav files will be
+	// written to the Log directory if defined, else to the current
+	// directory
+	// The size should be 100 larger than the size of ArdopLogDir in log.c so
+	// that a WAV pathname in the directory from ardop_log_get_directory()
+	// will always fit.
+	char txwff_pathname[612];
+	// char txwfu_pathname[612];
+	int pnflen;
+	// int pnulen;
+	char timestr[16];  // 15 char time string plus terminating NULL
+	get_utctimestr(timestr);
+
+	if (ardop_log_get_directory()[0])
+		pnflen = snprintf(txwff_pathname, sizeof(txwff_pathname),
+			"%s/ARDOP_txfaudio_%d_%15s.wav",
+			ardop_log_get_directory(), host_port, timestr);
+	else
+		pnflen = snprintf(txwff_pathname, sizeof(txwff_pathname),
+			"ARDOP_txfaudio_%d_%15s.wav", host_port, timestr);
+	if (pnflen == -1 || pnflen > (int) sizeof(txwff_pathname)) {
+		ZF_LOGE("Unable to write WAV file, invalid pathname. Logpath may be"
+			" too long.");
+		WriteTxWav = false;
+		return;
+	}
+	// if (pnulen == -1 || pnulen > (int) sizeof(txwfu_pathname)) {
+		// ZF_LOGE("Unable to write WAV file, invalid pathname. Logpath may be"
+		//	" too long.");
+		// WriteTxWav = false;
+		// return;
+	// }
+	txwff = OpenWavW(txwff_pathname);
+	// txwfu = OpenWavW(txwfu_pathname);
+}
+
+char Leds[8]= {0};
+unsigned int PKTLEDTimer = 0;
+
+void SetLED(int LED, int State) {
+	// If GUI active send state
+
+	Leds[LED] = State;
+	SendtoGUI('D', Leds, 8);
+}
+
+void DrawTXMode(const char * Mode) {
+	unsigned char Msg[64];
+	strcpy(Msg, Mode);
+	SendtoGUI('T', Msg, strlen(Msg) + 1);  // TX Frame
+}
+
+void DrawTXFrame(const char * Frame) {
+	unsigned char Msg[64];
+	strcpy(Msg, Frame);
+	SendtoGUI('T', Msg, strlen(Msg) + 1);  // TX Frame
+}
+
+void DrawRXFrame(int State, const char * Frame) {
+	unsigned char Msg[64];
+
+	Msg[0] = State;  // Pending/Good/Bad
+	strcpy(&Msg[1], Frame);
+	SendtoGUI('R', Msg, strlen(Frame) + 1);  // RX Frame
+}
+// mySetPixel() uses 3 bytes from Pixels per call.  So it must be 3 times the
+// size of the larger of inPhases[0] or intToneMags/4. (intToneMags/4 is larger)
+UCHAR Pixels[9108];
+UCHAR * pixelPointer = Pixels;
+
+
+// This data may be copied and pasted from the debug log file into the
+// "Host Command" input box in the WebGui in developer mode to reproduce
+// the constellation plot.
+void LogConstellation() {
+	char Msg[10000] = "CPLOT ";
+	for (int i = 0; i < pixelPointer - Pixels; i++)
+		snprintf(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg), "%02X", Pixels[i]);
+	ZF_LOGV("%s", Msg);
+}
+
+
+void mySetPixel(unsigned char x, unsigned char y, unsigned int Colour) {
+	// Used on Windows for constellation. Save points and send to GUI at end
+	static bool overflowed = false;
+	if ((pixelPointer + 2 - Pixels) > (long int) sizeof(Pixels)) {
+		// Pixels should be large enough, but in case it isn't this avoids
+		// writing beyond the end.
+		if (!overflowed)
+			ZF_LOGW("WARNING: Memory overflow averted in mySetPixel.  This"
+				" warning is only logged once.");
+		overflowed = true;  // Prevent repeated logging of this warning
+		return;
+	}
+
+	*(pixelPointer++) = x;
+	*(pixelPointer++) = y;
+	*(pixelPointer++) = Colour;
+}
+void clearDisplay() {
+	// Reset pixel pointer
+
+	pixelPointer = Pixels;
+
+}
+void updateDisplay() {
+//	 SendtoGUI('C', Pixels, pixelPointer - Pixels);
+}
+void DrawAxes(int Qual, char * Mode) {
+	UCHAR Msg[80];
+	SendtoGUI('C', Pixels, pixelPointer - Pixels);
+	wg_send_pixels(0, Pixels, pixelPointer - Pixels);
+	LogConstellation();
+	pixelPointer = Pixels;
+
+	sprintf(Msg, "%s Quality: %d", Mode, Qual);
+	SendtoGUI('Q', Msg, strlen(Msg) + 1);
+}
+void DrawDecode(char * Decode) {
+}
+
 
 static struct option long_options[] =
 {
@@ -111,39 +309,58 @@ static struct option long_options[] =
 
 char HelpScreen[] =
 	"Usage:\n"
-	"%s port [capturedevice playbackdevice] [Options]\n"
-	"defaults are port = 8515, capture device ARDOP playback device ARDOP\n"
-	"If you need to specify capture and playback devices you must specify port\n"
+	"%s [Options] host_port [CaptureDevice] [PlaybackDevice]\n"
+	"defaults are host_port=8515, CaptureDevice=0, and PlaybackDevice=0\n"
+	"Capture and Playback devices may be set either with positional parameters (which\n"
+	"requires also setting host_port), or using the -i and -o options.\n"
 	"\n"
-	"port is TCP Command Port Number.  Data port number is automatically 1 higher.\n"
+	"host_port is host interface TCP Port Number.  data_port is automatically 1 higher.\n"
 	"\n"
 	"Optional Paramters\n"
 	"-h or --help                         Display this help screen.\n"
+	"-i CaptureDevice                     Set CaptureDevice (alternative to positional parameters)\n"
+	"-o PlaybackDevice                    Set PlaybackDevice (alternative to positional parameters)\n"
 	"-l path or --logdir path             Path for log files\n"
 	"-H string or --hostcommands string   String of semicolon separated host commands to apply\n"
-	"                                       to ardopcf during startup, as if they had come from\n"
-	"                                       a connected host.  This provides some capabilities\n"
-	"                                       provided by obsolete command line options available\n"
-	"                                       from earlier versions of ardopcf and ardopc.\n"
+	"                                       in the order provided to ardopcf during startup, as\n"
+	"                                       if they had come from a connected host.  This\n"
+	"                                       provides some capabilities provided by obsolete\n"
+	"                                       command line options used by earlier versions of\n"
+	"                                       ardopcf and ardopc.\n"
 	"-m or --nologfile                    Don't write log files. Use console output only.\n"
 #ifdef LOG_OUTPUT_SYSLOG
 	"-S or --syslog                       Send console log to syslog instead.\n"
 #endif
 	"-c device or --cat device            Device to use for CAT Control\n"
+	"                                     or TCP:port to use a TCP CAT port on the local machine\n"
+	"                                     or TCP:ddd.ddd.ddd.ddd:port to use a TCP CAT port on a\n"
+	"                                     networked machine."
 	"-p device or --ptt device            Device to use for PTT control using RTS\n"
 	// RTS:device is also permitted, but is equivalent to just device
-	"                                     or DTR:device to use DTR for PTT instead of RTS\n"
-	// TODO: Verify that this actually works with a CM108-like device for PTT
-	"                                     or VID:PID of CM108-like Device to use for PTT\n"
-	"-g [Pin]                             GPIO pin to use for PTT (ARM Only)\n"
-	"                                     Default 17. use -Pin to invert PTT state\n"
+	"                                     or DTR:device to use DTR for PTT instead of RTS,\n"
+#ifdef WIN32
+	// For Windows, use VID:PID for CM108 devices, though use of device name is also accepted.
+	"                                     or CM108:VID:PID of CM108-like Device to use for PTT.\n"
+	"                                     Using CM108:? displays a list of VID:PID values for attached\n"
+	"                                     devices known to be CM108 compatible for PTT control.\n"
+#else
+	// For Linux, CM108 devices like /dev/hidraw0 are used.
+	"                                     or CM108:device of CM108-like device to use for PTT\n"
+#endif
+	"                                     Using RIGCTLD as the --ptt device is equivalent to\n"
+	"                                     -c TCP:4532 -k 5420310A -u 5420300A to use hamlib/rigctld\n"
+	"                                     running on its default TCP port 4532 for PTT.\n"
+#ifdef __ARM_ARCH
+	"-g Pin                               GPIO pin to use for PTT (ARM Only)\n"
+	"                                     Use -Pin to invert PTT state\n"
+#endif
 	"-k string or --keystring string      String (In HEX) to send to the radio to key PTT\n"
 	"-u string or --unkeystring string    String (In HEX) to send to the radio to unkey PTT\n"
 	"-L use Left Channel of Soundcard for receive in stereo mode\n"
 	"-R use Right Channel of Soundcard for receive in stereo mode\n"
 	"-y use Left Channel of Soundcard for transmit in stereo mode\n"
 	"-z use Right Channel of Soundcard for transmit in stereo mode\n"
-	"-G port or --webgui port             Enable WebGui and specify port number.\n"
+	"-G wg_port or --webgui wg_port       Enable WebGui and specify wg_port number.\n"
 	"-w or --writewav                     Write WAV files of received audio for debugging.\n"
 	"-T or --writetxwav                   Write WAV files of sent audio for debugging.\n"
 	"-d pathname or --decodewav pathname  Pathname of WAV file to decode instead of listening.\n"
@@ -154,299 +371,402 @@ char HelpScreen[] =
 	"                                       or if ardopcf fails to run and suggests trying this.\n"
 	"\n"
 	" CAT and RTS/DTR PTT can share the same port.\n"
-	" If both CAT and RTS/DTR PTT ports are set, then the RTS/DTR PTT port is used for\n"
-	" PTT control, and the -k, --keystring, -u, and --unkeystring values are ignored.\n"
 	" See the ardopcf documentation for command line options at\n"
 	" https://github.com/pflarue/ardop/blob/master/docs/Commandline_options.md\n"
 	" for more information, especially for cat and ptt options.\n\n";
 
-// Parse the hex string provided to set PTTOnCmd or PTTOffCmd from a command
-// line option or host command.
-//
-// If logerrors is true and an error occurs, then the error will be written to
-// the log, as is appropriate when processing host commands.  Otherwise, it will
-// be printed, as is appropriate when processing command line arguments before
-// the log directory and log levels are set.
-//
-// descstr describes the source of hexstr and is only used if an error must be
-// printed/logged.
-//
-// Return the length of the cmd, or 0 if an error occured
-unsigned char parseCatStr(char *hexstr, unsigned char *cmd, bool logerrors, char *descstr) {
-	if (strlen(hexstr) > 2 * MAXCATLEN) {
-		char formatstr[] =
-			"ERROR: Hex string for %s may not exceed %i characters (to describe"
-			" a %i byte key sequence).  The provided string, \"%s\" has a"
-			" length of %i characters.%s";
-		if (logerrors) {
-			ZF_LOGE(formatstr, descstr, 2 * MAXCATLEN, MAXCATLEN, hexstr, strlen(hexstr), "");
-		} else {
-			printf(formatstr, descstr, 2 * MAXCATLEN, MAXCATLEN, hexstr, strlen(hexstr), "\n");
-		}
-		return 0;
-	}
+static const char *startstrings[] = {
+	// [0] requires ProductName, ProductVersion.
+	"%s Version %s (https://www.github.com/pflarue/ardop)",
+	"Copyright (c) 2014-2025 Rick Muething, John Wiseman, Peter LaRue",
+	"See https://github.com/pflarue/ardop/blob/master/LICENSE for licence"
+	" details including\n information about authors of external libraries"
+	" used and their licenses."};
+static const int nstartstrings = 3;
+static char cmdstr[3000] = "";
 
-	if (strlen(hexstr) % 2 != 0) {
-		char formatstr[] =
-			"ERROR: Hex string for %s must contain an even number of"
-			" hexidecimal [0-9A-F] characters, but \"%s\" has an odd number"
-			" (%i).%s";
-		if (logerrors) {
-			ZF_LOGE(formatstr, descstr, hexstr, strlen(hexstr), "");
-		} else {
-			printf(formatstr, descstr, hexstr, strlen(hexstr), "\n");
-		}
-		return 0;
-	}
-
-	if (hex2bytes(hexstr, strlen(hexstr) / 2, cmd) != 0) {
-		char formatstr[] =
-			"ERROR: Invalid string for %s.  Expected a hexidecimal string with"
-			" an even number of [0-9A-F] characters but found \"%s\".%s";
-		if (logerrors) {
-			ZF_LOGE(formatstr, descstr, hexstr, "");
-		} else {
-			printf(formatstr, descstr, hexstr, "\n");
-		}
-		return 0;
-	}
-	return strlen(hexstr) / 2;
+static void logstart(bool enable_log_files, bool enable_syslog, char *err) {
+	ardop_log_start(enable_log_files, enable_syslog);
+	// Always begin log with startstrings and cmdstr
+	ZF_LOGI(startstrings[0], ProductName, ProductVersion);
+	for (int j = 1; j < nstartstrings; ++j)
+		ZF_LOGI("%s", startstrings[j]);
+	ZF_LOGD("Command line: %s", cmdstr);
+	if (err[0] != 0x00)
+		ZF_LOGE("%s", err);  // Not an empty string
 }
 
-void processargs(int argc, char * argv[])
-{
-	// Since the log directory and log levels have not yet been set, don't
-	// write to the log in this function.  Instead, print warnings and errors
-	// to the console.
-
-	int val;
+// Return 0 for success, < 0 for failure, and > 1 for success but program should
+// exit anyways.
+// With the exception of the -h (help) option, all generated warnings and error
+// messages are routed through ZF_LOG so that they may go to console (or syslog)
+// and/or a log file.  If LOGFILE and/or CONSOLELOG are the first elements of a
+// --hostcommands or -H option, these are parsed before writing anything to the
+// log.
+int processargs(int argc, char * argv[]) {
 	int c;
 	bool enable_log_files = true;
 	bool enable_syslog = false;
+	char deferredErr[ZF_LOG_BUF_SZ - 80] = "";  // If set, log this error and exit.
 	unsigned int WavFileCount = 0;
 
-	while (1)
-	{
-		int option_index = 0;
+	cmdstr[0] = 0x00;  // reset to a zero length str
+	for (int i = 0; i < argc; ++i) {
+		if ((int)(sizeof(cmdstr) - strlen(cmdstr))
+			<= snprintf(
+				cmdstr + strlen(cmdstr),
+				sizeof(cmdstr) - strlen(cmdstr),
+				"%s ",
+				argv[i])
+		) {
+			// cmdstr insufficient to hold full command string for logging.
+			// So, put "..." at the end to indicate that it is incomplete.
+			sprintf(cmdstr + sizeof(cmdstr) - 4, "...");
+			break;
+		}
+	}
 
-		c = getopt_long(argc, argv, "l:H:mc:p:g::k:u:G:hLRyzwTd:sA", long_options, &option_index);
+	// Starting optstring with : prevents getopt_long() from printing errors
+	char optstring[64] = ":i:o:l:H:mc:p:k:u:G:hLRyzwTd:sA";
+#ifdef LOG_OUTPUT_SYSLOG
+	// -S is only a valid option on Linux systems
+	snprintf(optstring + strlen(optstring), sizeof(optstring), "S");
+#endif
+#ifdef __ARM_ARCH
+	// -g <pin> is only a valid option on ARM systems
+	snprintf(optstring + strlen(optstring), sizeof(optstring), "g:");
+#endif
 
+	// To allow logging while evaluating the command line arguments in
+	// accordance with those command line arguments which set logging
+	// parameters, parse only logging related options first.  Then start and
+	// configure the logging system before parsing the remaining options.
+	for (int i = 1; i < argc; ++i) {
+		// These options do not generate any errors.
+		if (strcmp(argv[i], "--nologfile") == 0 || strcmp(argv[i], "-m") == 0)
+			enable_log_files = false;
+#ifdef LOG_OUTPUT_SYSLOG
+		if (strcmp(argv[i], "--syslog") == 0 || strcmp(argv[i], "-S") == 0)
+			enable_syslog = true;
+#endif
+		if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
+			// help screen and exit.
+			// Do not start logging.  Instead, print the start strings and
+			printf(startstrings[0], ProductName, ProductVersion);
+			for (int i = 1; i < nstartstrings; ++i) {
+				printf("%s%s\n", i == 1 ? "\n" : "", startstrings[i]);
+			}
+			printf("Command line: %s", cmdstr);
+			printf(HelpScreen, ProductName);
+			return 1;  // Exit immediately, but without indicating an error.
+		}
+	}
+
+	// The first non-positional parameter is the host port, which is used as part
+	// of the filename for the log file
+	while (true) {
+		c = getopt_long(argc, argv, optstring, long_options, NULL);
+		if (c == -1)
+			break; // end of non-positional parameters, or an error occured
+	}
+	if (argc > optind) {
+		if ((host_port = atoi(argv[optind])) <= 0) {
+			// An invalid host_port was specified.  So, for error logging
+			// purposes, use the default of 8515.  If no other errors are
+			// enountered first, this will produce an error after all
+			// non-positional parameters are parsed.
+			host_port = 8515;
+		}
+	}
+	ardop_log_set_port(host_port);
+
+	for (int i = 1; i < argc; ++i) {
+		if (strcmp(argv[i], "--logdir") != 0 && strcmp(argv[i], "-l") != 0)
+			continue;
+		// If an error occurs here, store it as deferrredErr and then
+		// proceed to parse --hostcommands for logging related commands.
+		// Once logging is started (using the default log directory), this
+		// error will be logged, and then the program will exit.
+		if (i == argc - 1) {
+			snprintf(deferredErr, sizeof(deferredErr),
+				"ERROR: --logdir (or -l) requires an argument, but none was"
+				"provided");
+			break;
+		}
+		if (!ardop_log_set_directory(argv[i + 1])) {
+			snprintf(deferredErr, sizeof(deferredErr),
+				"ERROR: --logdir (or -l) argument too long: \"%s\"",
+				argv[i + 1]);
+			break;
+		}
+	}
+
+	for (int i = 1; i < argc; ++i) {
+		if (strcmp(argv[i], "--hostcommands") != 0 && strcmp(argv[i], "-H") != 0)
+			continue;
+		if (i == argc - 1) {
+			logstart(enable_log_files, enable_syslog, deferredErr);
+			ZF_LOGE("ERROR: --hostcommands (or -H) requires an argument, but"
+				" none was provided");
+			return (-1);
+		}
+		if (strlen(argv[i + 1]) >= sizeof(HostCommands)) {
+			logstart(enable_log_files, enable_syslog, deferredErr);
+			ZF_LOGE("ERROR: --hostcommands (or -H) argument too long: \"%s\"",
+				argv[i + 1]);
+			return (-1);
+		}
+		// The commands in the argument to -H or --hostcommands are mostly
+		// handled after the the startup process is finished.  However, if
+		// this argument starts with LOGLEVEL and/or CONSOLELOG, handle them
+		// here before logging is started
+		strcpy(HostCommands, argv[i + 1]);
+		char *nextHC = HostCommands;
+		char *logcmds[] = {"LOGLEVEL", "CONSOLELOG"};
+		while (nextHC[0] != 0x00) {
+			for (int i = 0; i < 2; ++i) {
+				if (strncasecmp(nextHC, logcmds[i], strlen(logcmds[i])) != 0)
+					continue;
+				nextHC += strlen(logcmds[i]);
+				if (nextHC[0] != ' ') {
+					// Missing space between command and argument
+					logstart(enable_log_files, enable_syslog, deferredErr);
+					ZF_LOGE("ERROR: Missing space after %s in HostCommands: \"%s\"",
+						logcmds[i], HostCommands);
+					return (-1);
+				}
+				nextHC++;
+				long lv = strtol(nextHC, &nextHC, 10);
+				if (nextHC[0] != 0x00 && nextHC[0] != ';') {
+					// Argument contains something extra after integer.
+					logstart(enable_log_files, enable_syslog, deferredErr);
+					ZF_LOGE("ERROR: Invalid argument to HostCommands: \"%s\"",
+						HostCommands);
+					return (-1);
+				} else if (nextHC[0] == ';')
+					nextHC++;
+				if (lv < ZF_LOG_VERBOSE || lv > ZF_LOG_FATAL) {
+					logstart(enable_log_files, enable_syslog, deferredErr);
+					ZF_LOGE("ERROR: Invalid argument to %s in HostCommands: %li",
+						logcmds[i], lv);
+					return (-1);
+				}
+				if (i == 0)
+					ardop_log_set_level_file((int) lv);
+				else
+					ardop_log_set_level_console((int) lv);
+				break;
+			}
+			if (nextHC == HostCommands) {
+				// No log command found.  Break to defer processing of any
+				// remaining host commands, including log commands later in the
+				// string.
+				break;
+			} else {
+				// Discard processed log command, and continue to next command
+				memmove(HostCommands, nextHC, strlen(nextHC) + 1);
+				nextHC = HostCommands;  // reseet nextHC
+			}
+		}
+	}
+	// begin logging.
+	// If -m or --nologfile was specified, this will only log to the console.
+	// If -S or --syslog was specified (Linux only), the console log will be
+	// written to syslog instead.
+	// if -l or --logdir was specified, the log file will be written in the
+	// specified directory, else it will be written in the current directory.
+	// Log filename includes the host_port number to allow multiple instances
+	// running on different host ports to each create their own log file.
+	logstart(enable_log_files, enable_syslog, deferredErr);
+	if (deferredErr[0] != 0x00)
+		return (-1);
+
+	// Now consider all other command line options.  Logging related options
+	// already handled will be ignored.
+	optind = 1;  // This resets getopt_long() to start at the beginning
+	while (true) {
+		c = getopt_long(argc, argv, optstring, long_options, NULL);
 
 		// Check for end of operation or error
 		if (c == -1)
 			break;
 
 		// Handle options
-		switch (c)
-		{
-		case 'h':
-
-			printf("%s Version %s (https://www.github.com/pflarue/ardop)\n", ProductName, ProductVersion);
-			printf("Copyright (c) 2014-2024 Rick Muething, John Wiseman, Peter LaRue\n");
-			printf(
-				"See https://github.com/pflarue/ardop/blob/master/LICENSE for licence details including\n"
-				"  information about authors of external libraries used and their licenses.\n"
-			);
-			printf(HelpScreen, ProductName);
-			exit (0);
-
-		case 'H':
-			if (strlen(optarg) >= sizeof(HostCommands)) {
-				printf("ERROR: --hostcommands (or -H) argument too long.  Ignoring this parameter.\n");
-				break;
-			}
-			strcpy(HostCommands, optarg);
-			break;
-
-		case 'l':
-			if (!ardop_log_set_directory(optarg)) {
-				printf("ERROR: Unable to set log directory. Log files will not be written. The --logdir may be too long.");
-				exit(1);
-			}
-			break;
-
-		case 'm':
-			enable_log_files = false;
-			break;
-
+		switch (c) {
+			case 'm':
 #ifdef LOG_OUTPUT_SYSLOG
-		case 'S':
-			enable_syslog = true;
-			break;
+			case 'S':
+#endif
+			case 'h':
+			case 'l':
+			case 'H':
+				break;  // These options were already handled.
+
+			case 'i':
+				strcpy(CaptureDevice, optarg);
+				break;
+
+			case 'o':
+				strcpy(PlaybackDevice, optarg);
+				break;
+
+#ifdef __ARM_ARCH
+			// Previously, this took an optional argument, and defaulted to a
+			// value of 18 without an argument.  However, due to limitations of
+			// getopt_long(), this required a different syntax than the other
+			// options to speccify a value.  So, now a value must be specified.
+			case 'g':
+				if (set_GPIOpin(atoi(optarg)) == -1) // -ve is acceptable
+					return (-1);
+				break;
 #endif
 
-		case 'g':
-			if (optarg)
-				pttGPIOPin = atoi(optarg);
-			else
-				pttGPIOPin = 17;
-			break;
+			case 'k':
+				if (set_ptt_on_cmd(optarg,
+					"command line option --keystring or -k") == -1
+				)
+					return (-1);
+				break;
 
-		case 'k':
-			PTTOnCmdLen = parseCatStr(optarg, PTTOnCmd, false, "-k or --keystring option");
-			if (PTTOnCmdLen == 0) {
-				// An error occured in parseCatStr, and an appropriate error
-				// msg has already been printed.
-				exit(1);
-			}
-			printf ("PTTOnString %s len %d\n", optarg, PTTOnCmdLen);
-			break;
+			case 'u':
+				if (set_ptt_off_cmd(optarg,
+					"command line option --unkeystring or -u") == -1
+				)
+					return (-1);
+				break;
 
-		case 'u':
-			PTTOffCmdLen = parseCatStr(optarg, PTTOffCmd, false, "-u or --unkeystring option");
-			if (PTTOffCmdLen == 0) {
-				// An error occured in parseCatStr, and an appropriate error
-				// msg has already been printed.
-				exit(1);
-			}
-			printf ("PTTOffString %s len %d\n", optarg, PTTOffCmdLen);
-			break;
+			case 'p':
+				if (parse_pttstr(optarg) == -1)
+					return (-1);
+				break;
 
-		case 'p':
-			strcpy(PTTPort, optarg);
-			if (strncmp(PTTPort, "RTS:", 4) == 0 && strlen(PTTPort) > 4) {
-				PTTMode = PTTRTS;  // This is also the default w/o a prefix
-				strcpy(PTTPort, optarg + 4);
-			} else if (strncmp(PTTPort, "DTR:", 4) == 0 && strlen(PTTPort) > 4) {
-				PTTMode = PTTDTR;
-				strcpy(PTTPort, optarg + 4);
-			}
-			break;
+			case 'c':
+				if (parse_catstr(optarg) == -1)
+					return (-1);
+				break;
 
-		case 'c':
-			strcpy(CATPort, optarg);
-			break;
+			case 'L':
+				if (UseRightRX && !UseLeftRX) {
+					ZF_LOGE("ERROR: Invalid use of both -R and -L");
+					return (-1);
+				}
+				UseLeftRX = true;
+				UseRightRX = false;
+				break;
 
-		case 'L':
-			UseLeftRX = 1;
-			UseRightRX = 0;
-			break;
+			case 'R':
+				if (UseLeftRX && !UseRightRX) {
+					ZF_LOGE("ERROR: Invalid use of both -L and -R");
+					return (-1);
+				}
+				UseLeftRX = false;
+				UseRightRX = true;
+				break;
 
-		case 'R':
-			UseLeftRX = 0;
-			UseRightRX = 1;
-			break;
+			case 'y':
+				if (UseRightTX && !UseLeftTX) {
+					ZF_LOGE("ERROR: Invalid use of both -z and -y");
+					return (-1);
+				}
+				UseLeftTX = true;
+				UseRightTX = false;
+				break;
 
-		case 'y':
-			UseLeftTX = 1;
-			UseRightTX = 0;
-			break;
+			case 'z':
+				if (UseLeftTX && !UseRightTX) {
+					ZF_LOGE("ERROR: Invalid use of both -y and -z");
+					return (-1);
+				}
+				UseLeftTX = false;
+				UseRightTX = true;
+				break;
 
-		case 'z':
-			UseLeftTX = 0;
-			UseRightTX = 1;
-			break;
+			case 'G':
+				wg_port = atoi(optarg);
+				if (wg_port == 0) {
+					ZF_LOGE("ERROR: Invalid argument to --webgui (or -G)"
+						" (expecting non-zero integer): \"%s\"",
+						optarg);
+					return (-1);
+				}
+				break;
 
-		case 'G':
-			wg_port = atoi(optarg);
-			break;
+			case 'w':
+				WriteRxWav = true;
+				break;
 
-		case 'w':
-			WriteRxWav = TRUE;
-			break;
+			case 'T':
+				WriteTxWav = true;
+				break;
 
-		case 'T':
-			WriteTxWav = TRUE;
-			break;
+			case 'd':
+				if (WavFileCount < sizeof(DecodeWav) / sizeof(DecodeWav[0]))
+					strcpy(DecodeWav[WavFileCount++], optarg);
+				else {
+					ZF_LOGE("ERROR: Too many WAV files specified with"
+						" --decodewav (or -d).  A maximum of %u may be"
+						" provided",
+						(int) (sizeof(DecodeWav) / sizeof(DecodeWav[0])));
+					return (-1);
+				}
+				break;
 
-		case 'd':
-			if (WavFileCount < sizeof(DecodeWav) / sizeof(DecodeWav[0]))
-				strcpy(DecodeWav[WavFileCount++], optarg);
-			else
-				printf(
-					"Too many WAV files specified with -d/--decodewav.  %s will"
-					" not be used.\n", optarg);
-			break;
+			case 's':
+				UseSDFT = true;
+				break;
 
-		case 's':
-			UseSDFT = TRUE;
-			break;
+			case 'A':
+				FixTiming = false;
+				break;
 
-		case 'A':
-			FixTiming = FALSE;
-			break;
+			case ':':
+				ZF_LOGE("ERROR: Missing argument for -%c.", optopt);
+				return (-1);
 
-		case '?':
-			// An invalid argument was encountered.  getopt_long() already
-			// printed an error message.
-			exit(1);
+			case '?':
+				ZF_LOGE("ERROR: Unknown option -%c.", optopt);
+				if (optopt == '1') {
+					ZF_LOGE("If you intended to use \"-1\" as an alias for"
+						" \"NOSOUND\" as a positional parameter to specify an"
+						" audio device, this is not supported.  You may use"
+						" \"NOSOUND\" as a positional parameter, but \"-1\" is"
+						" only valid as an argument to the -i or -o options.");
+				}
 
-		default:
-			exit(1);
+				return (-1);
 		}
 	}
 
-	// If PTTPort is set, then -k and -u will not be used, so the following
-	// checks can be skipped.
-	if (PTTPort[0] == 0x00) {
-		// Verify that the use of -k, -u, and -c are consistent.
-		if (CATPort[0] == 0x00 && PTTOnCmdLen > 0)
-		{
-			printf(
-				"ERROR: CAT string for PTT ON was set with -k or --keystring,"
-				" but no CAT port was set with -c or --cat.\n");
-			exit(1);
-
-		}
-		if (CATPort[0] == 0x00 && PTTOffCmdLen > 0)
-		{
-			printf(
-				"ERROR: CAT string for PTT OFF was set with -u or"
-				" --unkeystring, but no CAT port was set with -c or --cat.\n");
-			exit(1);
-		}
-		if (PTTOnCmdLen > 0 && PTTOffCmdLen == 0) {
-			printf(
-				"ERROR: CAT string for PTT ON was set with -k or --keystring,"
-				" but no CAT string for PTT OFF was set with -u or"
-				" --unkeystring.  Either both or neither of these options must"
-				" be provided..\n");
-			exit(1);
-		}
-		if (PTTOnCmdLen == 0 && PTTOffCmdLen > 0) {
-			printf(
-				"ERROR: CAT string for PTT OFF was set with -u or"
-				" --unkeystring, but no CAT string for PTT ON was set with -k"
-				" or --keystring.  Either both or neither of these options must"
-				" be provided..\n");
-			exit(1);
-		}
-		if (CATPort[0] != 0x00 && PTTOnCmdLen == 0) {
-			printf(
-				"WARNING: CAT port was set with -c or --cat, but CAT strings"
-				" for PTT ON and PTT OFF were not set with -k or --keystring"
-				" and -u or --unkeystring (and PTT port was not set with -p or"
-				" --ptt).  So, CAT commands may be issued with the RADIOHEX"
-				" host command, but neither CAT nor RTS/DTR will be used by"
-				" ardopcf for PTT control.  This will work if the host program"
-				" (such as Pat) is set to handle PTT control (or if the radio"
-				" is set to use VOX, which may be less reliable).  The CAT"
-				" commands for PTT can also be set via the RADIOPTTOFF and"
-				" RADIOPTTON host commands.  If these are both set, then CAT"
-				" PTT control will be used.\n");
-		}
-		if (CATPort[0] != 0x00 && PTTOnCmdLen > 0 && PTTOffCmdLen > 0) {
-			PTTMode = PTTCI_V;  // use CAT for PTT
-		}
+	// parse positional parameters
+	if (argc > optind + 3) {
+		ZF_LOGE("ERROR: More than three positional parameters (those that do"
+			" not begin with - or --) were provided.  Review your command line"
+			" for typos or use -h for help.");
+		return (-1);
 	}
 
-	if (argc > optind)
-	{
+	if (argc > optind) {
 		strcpy(HostPort, argv[optind]);
+		if ((host_port = atoi(HostPort)) <= 0) {
+			ZF_LOGE("ERROR: Invalid Host Port (expecting positive integer):"
+				" \"%s\"", HostPort);
+			return (-1);
+		}
 	}
 
-	if (argc > optind + 2)
-	{
+	if (argc > optind + 1) {
+		if (CaptureDevice[0] != 0x00)
+			ZF_LOGW("WARNING: CaptureDevice is set to %s with positional"
+			" parameter.  So, '-i %s' is ignored.",
+			argv[optind + 1], CaptureDevice);
 		strcpy(CaptureDevice, argv[optind + 1]);
-		strcpy(PlaybackDevice, argv[optind + 2]);
 	}
-
-	if (argc > optind + 3)
-	{
-		printf("%s Version %s\n", ProductName, ProductVersion);
-		printf("Only three positional parameters allowed\n");
-		printf ("%s", HelpScreen);
-		exit(1);
+	if (argc > optind + 2) {
+		if (PlaybackDevice[0] != 0x00)
+			ZF_LOGW("WARNING: PlaybackDevice is set to %s with positional"
+			" parameter.  So, '-o %s' is ignored.",
+			argv[optind + 2], PlaybackDevice);
+		strcpy(PlaybackDevice, argv[optind + 2]);
 	}
 
 	if (wg_port < 0) {
@@ -458,52 +778,45 @@ void processargs(int argc, char * argv[])
 		// this to be done more quickly.  The WebGui DevMode is not intended for
 		// normal use, but is a useful tool for debugging purposes.
 		wg_port = -wg_port;
-		WG_DevMode = TRUE;
+		WG_DevMode = true;
 	}
-	if (HostPort[0] != 0x00 && wg_port == atoi(HostPort)) {
-		printf(
-			"WebGui port (%d) may not be the same as host port (%s)",
-			wg_port, HostPort);
-		exit(1);
+	if (wg_port == host_port) {
+		ZF_LOGE("WebGui wg_port (%d) may not be the same as host_port (%d)",
+			wg_port, host_port);
+		return (-1);
 	}
-	else if (HostPort[0] != 0x00 && wg_port == atoi(HostPort) + 1) {
-		printf(
-			"WebGui port (%d) may not be one greater than host port (%s)"
-			" since that is used as the host data port.",
-			wg_port, HostPort);
-		exit(1);
-	}
-	else if (wg_port == 8515) {
-		printf(
-			"WebGui port (%d) may not be equal to the default host port (8515)"
-			" when an alternative host port is not specified.",
-			wg_port);
-		exit(1);
-	}
-	else if (wg_port == 8516) {
-		printf(
-			"WebGui port (%d) may not be equal to one greater than the default"
-			" host port (8515 + 1 = 8516) when an alternative host port is not"
-			" specified since that is used as the host data port.",
-			wg_port);
-		exit(1);
+	if (wg_port == host_port + 1) {
+		ZF_LOGE("WebGui wg_port (%d) may not be one greater than host_port (%d)"
+			" since that is used as the host data_port.",
+			wg_port, host_port);
+		return (-1);
 	}
 
-	// log files use the host port number to permit multiple
-	// concurrent instances
-	uint16_t host_port = atoi(HostPort);
-	if (! host_port) {
-		host_port = 8515;
-	}
-	ardop_log_set_port(host_port);
+	if (CaptureDevice[0] == 0x00) {
+		ZF_LOGI("No audio input device was specified, so using default of 0.");
+		strcpy(CaptureDevice, "0");
+	} else if (strcmp(CaptureDevice, "-1") == 0)
+		snprintf(CaptureDevice, sizeof(CaptureDevice), "NOSOUND");
+	if (strcmp(CaptureDevice, "NOSOUND") == 0)
+		ZF_LOGI("Using NOSOUND for audio input.  This is only"
+		" useful for testing/diagnostic purposes.");
 
-	// begin logging
-	ardop_log_start(enable_log_files, enable_syslog);
+	if (PlaybackDevice[0] == 0x00) {
+		ZF_LOGI("No audio output device was specified, so using default of 0.");
+		strcpy(PlaybackDevice, "0");
+	} else if (strcmp(PlaybackDevice, "-1") == 0)
+		snprintf(PlaybackDevice, sizeof(PlaybackDevice), "NOSOUND");
+	if (strcmp(PlaybackDevice, "NOSOUND") == 0)
+		ZF_LOGI("Using NOSOUND for audio output.  This is only"
+		" useful for testing/diagnostic purposes.");
+
+	return 0;
 }
+
 
 extern enum _ARDOPState ProtocolState;
 
-extern int blnARQDisconnect;
+extern bool blnARQDisconnect;
 
 void ClosePacketSessions();
 
@@ -534,10 +847,10 @@ void displayCall(int dirn, const char * Call)
 
 // When decoding WAV files, WavNow will be set to the offset from the
 // start of that file to the end of the data about to be passed to
-// ProcessNewSamples() in ms.  Thus, it serves as a proxy for Now()
+// ProcessNewSamples() in ms.  Thus, it serves as a proxy for Now
 // which is otherwise based on clock time.  This substitution occurs
-// in getTicks() in ALSASound.c or Waveout.c.  It is also used to indicate
-// time offsets in the log file.
+// in getNow() in os_util.c.  It is also used to indicate time offsets
+// in the log file.
 int WavNow = 0;
 
 int decode_wav()
@@ -641,8 +954,7 @@ int decode_wav()
 			if (add_noise(samples, blocksize, InputNoiseStdDev) > 0 && !warnedClipping) {
 				// The warning normally logged when audio is too loud does not
 				// appear when using decode_wav().  So, add it here.
-				ZF_LOGI(
-					"WARNING: In decode_wav(), samples are clipped after adding"
+				ZF_LOGI("WARNING: In decode_wav(), samples are clipped after adding"
 					" noise because they exceeded the range of a 16-bit integer.");
 				warnedClipping = true;
 			}
@@ -667,8 +979,7 @@ int decode_wav()
 		if (add_noise(samples, blocksize, InputNoiseStdDev) > 0 && !warnedClipping) {
 			// The warning normally logged when audio is too loud does not
 			// appear when using decode_wav().  So, add it here.
-			ZF_LOGI(
-				"WARNING: In decode_wav(), samples are clipped after adding"
+			ZF_LOGI("WARNING: In decode_wav(), samples are clipped after adding"
 				" noise because they exceeded the range of a 16-bit integer.");
 			warnedClipping = true;
 		}
@@ -691,7 +1002,7 @@ int decode_wav()
 		// decoded portions from different copies can also be combined.  Thus,
 		// decoding results may improve with repetition.
 		memset(samples, 0, sizeof(samples));
-		for (int i=0; i<20; i++) {
+		for (int i=0; i<20; ++i) {
 			WavNow += blocksize * 1000 / 12000;
 			if ((Now - NowOffset) % 100 == 0)  // time stamp at 100 ms intervals
 				ZF_LOGV("Added silence/noise: %.3f sec (%.3f)", (Now - NowOffset)/1000.0, Now/1000.0);
@@ -699,7 +1010,7 @@ int decode_wav()
 			ProcessNewSamples(samples, blocksize);
 		}
 		ZF_LOGD("Done decoding %s.", DecodeWav[WavFileCount]);
-		WavFileCount ++;
+		WavFileCount++;
 		if (WavFileCount == sizeof(DecodeWav) / sizeof(DecodeWav[0])
 			|| DecodeWav[WavFileCount][0] == 0x00
 		)

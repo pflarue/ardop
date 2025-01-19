@@ -9,6 +9,9 @@
 
 #include "common/ardopcommon.h"
 
+// Testing of processargs() from ARDOPCommon.c is in the separate file
+// test_ARDOPCommon_processargs.c.
+
 /* test callsign round-trip through the protocol */
 static void test_try_parse_long(void** state)
 {

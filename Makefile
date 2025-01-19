@@ -44,7 +44,6 @@
 # list all object files and their directories
 # keep sorted by filename
 OBJS = \
-	lib/rawhid/rawhid.o \
 	lib/rockliff/rrs.o \
 	lib/ws_server/ws_server.o \
 	src/common/ARDOPC.o \
@@ -71,16 +70,17 @@ OBJS = \
 	src/common/gen-webgui.js.o \
 	src/common/Webgui.o \
 	src/common/noise.o \
+	src/common/ptt.o \
 
 # Linux-only object files
 OBJS_LIN = \
-	src/linux/ALSASound.o \
-	src/linux/LinSerial.o \
+	src/linux/ALSA.o \
+	src/linux/os_util.o \
 
 # Windows-only object files
 OBJS_WIN = \
-	src/windows/Waveout.o \
-	lib/hid/hid.o \
+	src/windows/Waveform.o \
+	src/windows/os_util.o \
 
 # user-facing executables, like ardopcf
 OBJS_EXE = \
@@ -94,6 +94,7 @@ TESTS = \
 	test/ardop/test_log \
 	test/ardop/test_Packed6 \
 	test/ardop/test_StationId \
+	test/ardop/test_ARDOPCommon_processargs \
 
 # unit test common code
 TEST_OBJS_COMMON = \
@@ -125,7 +126,7 @@ WIN32 ?= $(filter $(OS),Windows_NT)
 
 ifneq ($(WIN32),)
 OBJS += $(OBJS_WIN)
-LDLIBS += -lwsock32 -lwinmm -lsetupapi -lws2_32
+LDLIBS += -lwsock32 -lwinmm -lsetupapi -lws2_32 -lhid
 else
 OBJS += $(OBJS_LIN)
 LDLIBS += -lrt -lasound
@@ -189,6 +190,10 @@ test/ardop/test_log: OBJS := \
 	src/common/log_file.o \
 	src/common/log.o
 test/ardop/test_log: WRAP := fopen fclose fwrite fflush freopen
+test/ardop/test_ARDOPCommon_processargs: WRAP := \
+	printf puts ardop_log_start \
+	OpenCOMPort COMSetDTR COMClearDTR COMSetRTS COMClearRTS \
+	tcpconnect OpenCM108
 
 -include *.d
 

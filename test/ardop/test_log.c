@@ -27,7 +27,7 @@ FILE* __wrap_fopen(
 	// The following works on both Linux and Windows.
 	// Without first casting to size_t, it works but gives a warning when
 	// compiling for 32-bit Windows.
-	return (FILE*) ((size_t) mock_type(int));
+	return (FILE*) ((size_t) mock());
 };
 
 FILE* __wrap_freopen(
@@ -39,7 +39,7 @@ FILE* __wrap_freopen(
 	// The following works on both Linux and Windows.
 	// Without first casting to size_t, it works but gives a warning when
 	// compiling for 32-bit Windows.
-	return (FILE*) ((size_t) mock_type(int));
+	return (FILE*) ((size_t) mock());
 };
 
 int __wrap_fclose(FILE* handle) {

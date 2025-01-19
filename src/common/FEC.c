@@ -1,15 +1,19 @@
 //	ARDOP Modem Decode Sound Samples
 
-#include "common/ARDOPC.h"
+#include <stdbool.h>
 
-extern BOOL blnAbort;
+#include "common/os_util.h"
+#include "common/ARDOPC.h"
+#include "common/ptt.h"
+
+extern bool blnAbort;
 
 int intFECFramesSent;
 int FECRepeatsSent;
 
 UCHAR bytFrameType;
-BOOL blnSendIDFrame;
-extern BOOL NeedID;  // SENDID Command Flag
+bool blnSendIDFrame;
+extern bool NeedID;  // SENDID Command Flag
 extern int intRepeatCount;
 
 extern int intLastFrameIDToHost;
@@ -27,7 +31,7 @@ extern int intSampleLen;
 extern int intDataPtr;
 extern int intSampPerSym;
 extern int intDataBytesPerCar;
-extern BOOL blnOdd;
+extern bool blnOdd;
 extern char strType[18];
 extern char strMod[16];
 extern UCHAR bytMinQualThresh;
@@ -42,16 +46,16 @@ extern int intCalcLeader;  // the computed leader to use based on the reported L
 void ResetMemoryARQ();
 
 // Function to start sending FEC data
-BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL blnSendID)
+bool StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, bool blnSendID)
 {
 	// Previously this function included a check to ensure that Callsign
 	// was set and valid.  This check is now done in ProcessCommandFromHost().
 	// Moving the check there helps provide a consistent fault message for
 	// any host command that attempts to initiate transmitting without first
 	// setting Callsign.
-	// Return True if OK false if problem
+	// Return true if OK false if problem
 
-	BOOL blnModeOK = FALSE;
+	bool blnModeOK = false;
 	int i;
 
 	FECRepeats = intRepeats;
@@ -61,7 +65,7 @@ BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL
 		AddDataToDataToSend(bytData, Len);  // add new data to queue
 
 		ZF_LOGD("[ARDOPprotocol.StartFEC] %d bytes received while in FECSend state...append to data to send.", Len);
-		return TRUE;
+		return true;
 	}
 
 	// Check to see that there is data in the buffer.
@@ -69,7 +73,7 @@ BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL
 	if (Len == 0 && bytDataToSendLength == 0)
 	{
 		ZF_LOGD("[ARDOPprotocol.StartFEC] No data to send!");
-		return FALSE;
+		return false;
 	}
 
 	// Check intRepeates
@@ -77,7 +81,7 @@ BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL
 	if (intRepeats < 0 || intRepeats > 5)
 	{
 		// Logs.Exception("[ARDOPprotocol.StartFEC] Repeats out of range: " & intRepeats.ToString)
-		return FALSE;
+		return false;
 	}
 
 	// Check to see that strDataMode is correct
@@ -91,22 +95,22 @@ BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL
 				// error that would otherwise occur when StartFEC() is called
 				// with strDataMode=strFECMode.
 				strcpy(strFECMode, strDataMode);
-			blnModeOK = TRUE;
+			blnModeOK = true;
 			break;
 		}
 	}
 
-	if (blnModeOK == FALSE)
+	if (blnModeOK == false)
 	{
 		// Logs.Exception("[ARDOPprotocol.StartFEC] Illegal FEC mode: " & strDataMode)
-		return FALSE;
+		return false;
 	}
 
 	// While objMain.SoundIsPlaying
 	//  Thread.Sleep(100)
 	// End While
 
-	blnAbort = FALSE;
+	blnAbort = false;
 
 	intFrameRepeatInterval = 400;  // should be a safe number for FEC...perhaps could be shortened down to 200 -300 ms
 
@@ -118,7 +122,7 @@ BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL
 
 	if (blnSendID)
 	{
-		NeedID = TRUE;
+		NeedID = true;
 	}
 	else
 	{
@@ -148,16 +152,16 @@ BOOL StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, BOOL
 		intFECFramesSent = 1
 */
 	}
-	return TRUE;
+	return true;
 }
 
 // Function to get the next FEC data frame
 
-BOOL GetNextFECFrame()
+bool GetNextFECFrame()
 {
 	int Len;
 	int intNumCar, intBaud, intDataLen, intRSLen;
-	BOOL blnOdd;
+	bool blnOdd;
 	char strType[18] = "";
 	char strMod[16] = "";
 
@@ -166,10 +170,10 @@ BOOL GetNextFECFrame()
 		ClearDataToSend();
 
 		ZF_LOGD("[GetNextFECFrame] FECAbort. Going to DISC state");
-		KeyPTT(FALSE);  // insurance for PTT off
+		KeyPTT(false);  // insurance for PTT off
 		SetARDOPProtocolState(DISC);
-		blnAbort = FALSE;
-		return FALSE;
+		blnAbort = false;
+		return false;
 	}
 
 	if (intFECFramesSent == -1)
@@ -177,8 +181,8 @@ BOOL GetNextFECFrame()
 		ZF_LOGD("[GetNextFECFrame] intFECFramesSent = -1.  Going to DISC state");
 
 		SetARDOPProtocolState(DISC);
-		KeyPTT(FALSE);  // insurance for PTT off
-		return FALSE;
+		KeyPTT(false);  // insurance for PTT off
+		return false;
 	}
 
 	if (bytDataToSendLength == 0 && FECRepeatsSent >= FECRepeats && ProtocolState == FECSend)
@@ -186,10 +190,10 @@ BOOL GetNextFECFrame()
 		ZF_LOGD("[GetNextFECFrame] All data and repeats sent.  Going to DISC state");
 
 		SetARDOPProtocolState(DISC);
-		blnEnbARQRpt = FALSE;
-		KeyPTT(FALSE);  // insurance for PTT off
+		blnEnbARQRpt = false;
+		KeyPTT(false);  // insurance for PTT off
 
-		return FALSE;
+		return false;
 	}
 
 	if (ProtocolState == DISC && intPINGRepeats > 0)
@@ -198,17 +202,17 @@ BOOL GetNextFECFrame()
 		if (intRepeatCount <= intPINGRepeats && blnPINGrepeating)
 		{
 			dttLastPINGSent = Now;
-			return TRUE;  // continue PING
+			return true;  // continue PING
 		}
 
 		intPINGRepeats = 0;
-		blnPINGrepeating = False;
-		return FALSE;
+		blnPINGrepeating = false;
+		return false;
 	}
 
 
 	if (ProtocolState != FECSend)
-		return FALSE;
+		return false;
 
 	if (intFECFramesSent == 0)
 	{
@@ -237,9 +241,9 @@ BOOL GetNextFECFrame()
 
 sendit:
 		if (FECRepeats)
-			blnEnbARQRpt = TRUE;
+			blnEnbARQRpt = true;
 		else
-			blnEnbARQRpt = FALSE;
+			blnEnbARQRpt = false;
 
 		intFrameRepeatInterval = 400;  // should be a safe number for FEC...perhaps could be shortened down to 200 -300 ms
 
@@ -253,7 +257,7 @@ sendit:
 		{
 			if ((EncLen = EncodeFSKData(bytFrameType, bytDataToSend, Len, bytEncodedBytes)) <= 0) {
 				ZF_LOGE("ERROR: In GetNextFECFrame() 4FSK Invalid EncLen (%d).", EncLen);
-				return FALSE;
+				return false;
 			}
 			RemoveDataFromQueue(Len);  // No ACKS in FEC
 
@@ -266,12 +270,12 @@ sendit:
 		{
 			if ((EncLen = EncodePSKData(bytFrameType, bytDataToSend, Len, bytEncodedBytes)) <= 0) {
 				ZF_LOGE("ERROR: In GetNextFECFrame() PSK and QAM Invalid EncLen (%d).", EncLen);
-				return FALSE;
+				return false;
 			}
 			RemoveDataFromQueue(Len);  // No ACKS in FEC
 			ModPSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame
 		}
-		return TRUE;
+		return true;
 	}
 
 	// Not First
@@ -290,7 +294,7 @@ sendit:
 		// waiting for a full 10 minutes.
 		if(LastIDFrameTime != 0 && Now - LastIDFrameTime > 540000) {  // more than 9 minutes elapsed
 			SendID(NULL, "FECSend 10 minute ID");
-			return FALSE; // Don't repeat
+			return false; // Don't repeat
 		}
 
 		FrameInfo(bytLastFECDataFrameSent, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType);
@@ -309,7 +313,7 @@ sendit:
 	FECRepeatsSent++;
 	intFECFramesSent++;
 
-	return TRUE;
+	return true;
 }
 
 extern int frameLen;
@@ -329,7 +333,7 @@ void PassFECErrDataToHost() {
 
 // Function to process Received FEC data
 
-void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, BOOL blnFrameDecodedOK)
+void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, bool blnFrameDecodedOK)
 {
 	// Unlike ARQ protocolmode, this facilitates decoding of successive unique
 	// data frames of the same type.  Memory ARQ (using CarrierOk[] and Averaged

@@ -21,7 +21,7 @@ void ardop_logfile_init(
 	const char* logdir,
 	const char* stem,
 	const char* extension,
-	const uint16_t port
+	const uint16_t port  // ardopcf host_port
 ) {
 	memset(logfile, 0, sizeof(*logfile));
 	logfile->logdir = logdir;

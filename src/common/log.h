@@ -71,7 +71,7 @@
  * Log messages submitted prior to this function call will be
  * suppressed.
  *
- * You should configure the log directory, port number,
+ * You should configure the log directory, host port number,
  * and verbosity before you call this function.
  *
  * @param[in] enable_files  If true, enable the debug log and
@@ -182,19 +182,19 @@ bool ardop_log_set_directory(const char* const logdir);
 const char* ardop_log_get_directory();
 
 /**
- * @brief Set port number for log files
+ * @brief Set host port number for log files
  *
  * Log files from different ARDOP instances are distinguished by
- * their TCP control port number. If `port` is non-zero, a log
+ * their TCP control host port number. If `port` is non-zero, a log
  * file will be opened for appending in the current working
  * directory. File creation is deferred until the first loggable
  * message.
  *
- * The new port number takes effect the next time log files
+ * The new host port number takes effect the next time log files
  * are opened. Use \ref ardop_log_start() to make the new
- * port take effect immediately.
+ * host port take effect immediately.
  *
- * @param[in] port  TCP port number of the control port. If
+ * @param[in] port  TCP port number of the control host port. If
  *            zero, only console logging will be enabled.
  */
 void ardop_log_set_port(const uint16_t port);

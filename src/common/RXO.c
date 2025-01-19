@@ -1,3 +1,5 @@
+#include <stdbool.h>
+
 #include "common/ARDOPC.h"
 #include "common/ardopcommon.h"
 #include "common/RXO.h"
@@ -9,7 +11,7 @@ extern int stcLastPingintQuality;  // defined in ARDOPC.c. updated in SoundInput
 extern int intSNdB;  // defined in SoundInput.c
 extern int intQuality;  // defined in SoundInput.c
 extern int intLastRcvdFrameQuality;  // defined in SoundInput.c
-extern BOOL WG_DevMode;
+extern bool WG_DevMode;
 int wg_send_hostdatat(int cnum, char *prefix, unsigned char *data, int datalen);
 int wg_send_hostdatab(int cnum, char *prefix, unsigned char *data, int datalen);
 void ResetMemoryARQ();
@@ -58,10 +60,10 @@ float RxoComputeDecodeDistance(int * intToneMags, UCHAR bytFrameType)
 }
 
 // Decode the likely SessionID. If the decode distance is less than dblMaxDistance, then
-// set bytSessionID and return TRUE, else leave bytSessionID unchanged and return FALSE.
+// set bytSessionID and return true, else leave bytSessionID unchanged and return false.
 // SessionID is useful in RXO mode to indicate whether decoded frames are part of the
 // same session (or at least another session between the same two stations).
-BOOL RxoDecodeSessionID(UCHAR bytFrameType, int * intToneMags, float dblMaxDistance)
+bool RxoDecodeSessionID(UCHAR bytFrameType, int * intToneMags, float dblMaxDistance)
 {
 	UCHAR bytID = 0;
 	int int4ToneSum;
@@ -99,18 +101,18 @@ BOOL RxoDecodeSessionID(UCHAR bytFrameType, int * intToneMags, float dblMaxDista
 		else
 			ZF_LOGD("[RXO DecodeSessionID FAIL] Decoded ID=H%02hhX Dist=%.2f (%.2f Max). (Retain prior ID=H%02X)",
 					bytID, dblDistance, dblMaxDistance, bytSessionID);
-		return FALSE;
+		return false;
 	}
 	if (bytID == bytSessionID)
 	{
 		ZF_LOGD("[RXO DecodeSessionID OK  ] Decoded ID=H%02hhX Dist=%.2f (%.2f Max). (No change)",
 				bytID, dblDistance, dblMaxDistance);
-	return TRUE;
+	return true;
 	}
 	ZF_LOGI("[RXO DecodeSessionID OK  ] Decoded ID=H%02hhX Dist=%.2f (%.2f Max). (Prior ID=H%02hhX)",
 			bytID, dblDistance, dblMaxDistance, bytSessionID);
 	bytSessionID = bytID;
-	return TRUE;
+	return true;
 }
 
 int RxoMinimalDistanceFrameType(int * intToneMags)
@@ -157,7 +159,7 @@ int RxoMinimalDistanceFrameType(int * intToneMags)
 	return -1;  // indicates poor quality decode so don't use
 }
 
-void ProcessRXOFrame(UCHAR bytFrameType, int frameLen, UCHAR * bytData, BOOL blnFrameDecodedOK)
+void ProcessRXOFrame(UCHAR bytFrameType, int frameLen, UCHAR * bytData, bool blnFrameDecodedOK)
 {
 	char strMsg[4096];
 	int intMsgLen;

@@ -1,3 +1,4 @@
+#include <stdbool.h>
 
 #ifdef WIN32
 #define WIN32_LEAN_AND_MEAN  // Exclude rarely-used stuff from Windows headers
@@ -6,6 +7,7 @@
 #include <windows.h>
 #endif
 
+#include "common/os_util.h"
 #include "common/ARDOPC.h"
 
 VOID SortSignals2(float * dblMag, int intStartBin, int intStopBin, int intNumBins, float *  dblAVGSignalPerBin, float *  dblAVGBaselinePerBin);
@@ -15,7 +17,7 @@ int intLastStart, intLastStop;
 int LastBusyOn;
 int LastBusyOff;
 
-BOOL blnLastBusy = FALSE;
+bool blnLastBusy = false;
 
 float dblAvgStoNSlowNarrow;
 float dblAvgStoNFastNarrow;
@@ -38,8 +40,8 @@ VOID ClearBusy()
 	dttLastBusyTrip = Now;
 	dttPriorLastBusyTrip = dttLastBusyTrip;
 	dttLastBusyClear = dttLastBusyTrip + 610;  // This insures test in ARDOPprotocol ~ line 887 will work
-	dttLastTrip = dttLastBusyTrip -intHoldMs;  // This clears the busy detect immediatly (required for scanning when re enabled by Listen=True
-	blnLastBusy = False;
+	dttLastTrip = dttLastBusyTrip -intHoldMs;  // This clears the busy detect immediatly (required for scanning when re enabled by Listen=true
+	blnLastBusy = false;
 	intBusyOnCnt = 0;
 	intBusyOffCnt = 0;
 	intLastStart = 0;
@@ -49,7 +51,7 @@ VOID ClearBusy()
 // Deleted obsolete BusyDetect2() here
 
 
-BOOL BusyDetect3(float * dblMag, int intStart, int intStop)  // this only called while searching for leader ...once leader detected, no longer called.
+bool BusyDetect3(float * dblMag, int intStart, int intStop)  // this only called while searching for leader ...once leader detected, no longer called.
 {
 	// each bin is about 12000/1024 or 11.72 Hz
 	// this only called while searching for leader ...once leader detected, no longer called.
@@ -60,7 +62,7 @@ BOOL BusyDetect3(float * dblMag, int intStart, int intStop)  // this only called
 	float dblAvgStoNNarrow = 0, dblAvgStoNWide = 0;
 	int intNarrow = 8;  // 8 x 11.72 Hz about 94 z
 	int intWide = ((intStop - intStart) * 2) / 3;  // * 0.66);
-	int blnBusy = FALSE;
+	int blnBusy = false;
 
 	// First sort signals and look at highest signals:baseline ratio..
 	// First narrow band (~94Hz)
@@ -118,7 +120,7 @@ BOOL BusyDetect3(float * dblMag, int intStart, int intStop)  // this only called
 	}
 
 	if (BusyDet == 0)
-		blnBusy = FALSE;  // 0 Disables check ?? Is this the best place to do this?
+		blnBusy = false;  // 0 Disables check ?? Is this the best place to do this?
 
 	if (blnBusy)
 	{
@@ -136,18 +138,18 @@ BOOL BusyDetect3(float * dblMag, int intStart, int intStop)  // this only called
 		intBusyOnCnt = 0;
 	}
 
-	if (blnLastBusy == False && intBusyOnCnt >= 3)
+	if (blnLastBusy == false && intBusyOnCnt >= 3)
 	{
 		dttPriorLastBusyTrip = dttLastBusyTrip;  // save old dttLastBusyTrip for use in BUSYBLOCKING function
 		dttLastBusyTrip = Now;
-		blnLastBusy = True;
+		blnLastBusy = true;
 	}
 	else
 	{
 		if (blnLastBusy && (Now - dttLastTrip) > intHoldMs && intBusyOffCnt >= 3)
 		{
 			dttLastBusyClear = Now;
-			blnLastBusy = False;
+			blnLastBusy = false;
 		}
 	}
 	return blnLastBusy;
@@ -193,7 +195,7 @@ VOID SortSignals(float * dblMag, int intStartBin, int intStopBin, int intNumBins
 	*dblAVGBaselinePerBin = (dblTotalSum - dblSigSum) / (intStopBin - intStartBin - intNumBins + 1);
 }
 
-BOOL compare(const void *p1, const void *p2)
+int compare(const void *p1, const void *p2)
 {
 	float x = *(const float *)p1;
 	float y = *(const float *)p2;

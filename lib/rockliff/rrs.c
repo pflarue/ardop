@@ -2,6 +2,9 @@
 	downloaded from www.jjj.de/crs4 2024
 	Modified by Peter LaRue 2024 for use in ardopcf
 
+	For use outside of ardopcf, replace all ZF_LOGE() and ZF_LOGD with printf()
+	and add to the end of error and debugging messages.
+
 	This program is an encoder/decoder for Reed-Solomon codes. Encoding is in
 	systematic form, decoding via the Berlekamp iterative algorithm.
 	In the present form , the constants mm, nn, tt, and kk=nn-2tt must be
@@ -82,6 +85,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "common/log.h"
 #include "rrs.h"
 #define mm 8  // RS code over GF(2**8)
 // Notice that the length of an 8 bit codeword is 255, NOT 256!
@@ -171,19 +175,19 @@ int gen_polys(int *lengths, int count)
 	int rslen;
 
 	if (count > MAXRSLEN_COUNT) {
-		printf(
+		ZF_LOGE(
 			"ERROR in gen_polys().  count is limited to %d but %d provided."
-			" This limit can be increased by changing a value defined in rs.c.\n",
+			" This limit can be increased by changing a value defined in rs.c.",
 			MAXRSLEN_COUNT, count);
 		return (1);
 	}
 	rslen_count = count;
 	for (int l = 0; l < rslen_count; l++) {
 		if (lengths[l] > MAXRSLEN){
-			printf(
+			ZF_LOGE(
 				"ERROR in gen_polys().  Values in lengths are limited to %d but"
 				" %d provided. This limit can be increased by changing a value"
-				" defined in rs.c.\n",
+				" defined in rs.c.",
 				MAXRSLEN, lengths[l]);
 			return (1);
 		}
@@ -315,7 +319,7 @@ int decode_rs(int *rcvd, int rslen, bool quiet, bool test_only)
 			retval = 1;
 			if (test_only) {
 				if (!quiet)
-					printf("Errors Detected.\n");
+					ZF_LOGD("decode_rs() Errors Detected.");
 				return(retval);
 			}
 		}
@@ -323,7 +327,7 @@ int decode_rs(int *rcvd, int rslen, bool quiet, bool test_only)
 	}
 	if (test_only) {
 		if (!quiet)
-			printf("No Errors Detected.\n");
+			ZF_LOGD("decode_rs() No Errors Detected.");
 		return(retval);
 	}
 	if (syn_error) {  // if errors, try and correct
@@ -335,7 +339,7 @@ int decode_rs(int *rcvd, int rslen, bool quiet, bool test_only)
 			step number and the degree of the elp.
 		*/
 		if (!quiet)
-			printf("Errors Detected.\n");
+			ZF_LOGD("decode_rs() Errors Detected.");
 		// initialise table entries
 		d[0] = 0;  // index form
 		d[1] = s[1];  // index form
@@ -429,7 +433,7 @@ int decode_rs(int *rcvd, int rslen, bool quiet, bool test_only)
 					loc[count] = nn - i;
 					count++;
 					if (!quiet)
-						printf("At offset %d\n", nn-i);
+						ZF_LOGD("decode_rs() At offset %d", nn-i);
 				}
 			}
 			if (count == l[u]) {  // no. roots = degree of elp hence <= tt errors
@@ -477,11 +481,11 @@ int decode_rs(int *rcvd, int rslen, bool quiet, bool test_only)
 					}
 				}
 				if (!quiet)
-					printf("Errors Corrected\n");
+					ZF_LOGD("decode_rs() Errors Corrected");
 			} else {  // no. roots != degree of elp => >tt errors and cannot solve
 				retval = -1;
 				if (!quiet)
-					printf("Errors Not Corrected\n");
+					ZF_LOGD("decode_rs() Errors Not Corrected");
 				for (i = 0; i < nn; i++) {  // could return error flag if desired
 					if (rcvd[i] != -1)  // convert rcvd[] to polynomial form
 						rcvd[i] = alpha_to[rcvd[i]];
@@ -492,7 +496,7 @@ int decode_rs(int *rcvd, int rslen, bool quiet, bool test_only)
 		} else {  // elp has degree >tt hence cannot solve
 			retval = -1;
 			if (!quiet)
-				printf("Errors Not Corrected.\n");
+				ZF_LOGD("decode_rs() Errors Not Corrected.");
 			for (i = 0; i < nn; i++) {  // could return error flag if desired
 				if (rcvd[i] != -1)  // convert rcvd[] to polynomial form
 					rcvd[i] = alpha_to[rcvd[i]];
@@ -502,7 +506,7 @@ int decode_rs(int *rcvd, int rslen, bool quiet, bool test_only)
 		}
 	} else {  // no non-zero syndromes => no errors: output received codeword
 		if (!quiet)
-			printf("No Errors.\n");
+			ZF_LOGD("decode_rs() No Errors.");
 		for (i = 0; i < nn; i++) {
 			if (rcvd[i] != -1)  // convert rcvd[] to polynomial form
 				rcvd[i] = alpha_to[rcvd[i]];
@@ -532,13 +536,13 @@ int rs_append(unsigned char *data, int datalen, int rslen) {
 	int padded[nn] = {0};  // Need kk = nn - rslen.  This works for any rslen
 
 	if (rslen_count == 0) {
-		printf("Error in rs_append().  init_rs() must be called first.\n");
+		ZF_LOGE("Error in rs_append().  init_rs() must be called first.");
 		return (-1);
 	}
 	if (get_gg(rslen) == NULL) {
-		printf(
+		ZF_LOGE(
 			"Error in rs_append().  rslen=%d was not in the list of lengths"
-			" passed to init_rs().\n", rslen);
+			" passed to init_rs().", rslen);
 		return (-1);
 	}
 
@@ -573,20 +577,20 @@ int rs_correct(unsigned char *data, int combinedlen, int rslen, bool quiet, bool
 	int padded[nn] = {0};  // Need kk = nn - rslen.  This works for any rslen
 
 	if (rslen_count == 0) {
-		printf("Error in rs_correct().  init_rs() must be called first.\n");
+		ZF_LOGE("Error in rs_correct().  init_rs() must be called first.");
 		return (-2);
 	}
 	if (get_gg(rslen) == NULL) {
-		printf(
+		ZF_LOGE(
 			"Error in rs_correct().  rslen=%d was not in the list of lengths"
-			" passed to init_rs().\n", rslen);
+			" passed to init_rs().", rslen);
 		return (-2);
 	}
 
 	if (combinedlen > nn) {
-		printf(
+		ZF_LOGE(
 			"Error in rs_correct().  Invalid inputs."
-			" (combinedlen=%d)>(nn-%d)\n", combinedlen, nn);
+			" (combinedlen=%d)>(nn-%d)", combinedlen, nn);
 		return (-2);
 	}
 
@@ -633,7 +637,7 @@ int rs_correct(unsigned char *data, int combinedlen, int rslen, bool quiet, bool
 		*/
 		for (int i = 0; i < nn - combinedlen; i++) {
 			if (padded[i] != 0)	{
-				printf("Non-zero padding found.\n");
+				ZF_LOGD("In rs_correct() Non-zero padding found.");
 				return (-1);
 			}
 		}

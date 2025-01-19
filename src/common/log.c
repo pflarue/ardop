@@ -81,6 +81,8 @@ static bool ArdopLogConsoleSyslog = false;
  *
  * If empty, logs are output to the working directory
  */
+// If the size ArdopLogDir is changed, then the size of rxwf_pathname in
+// StartRxWav() and txwff_pathname in StartTxWav() should also be changed.
 static char ArdopLogDir[512] = "";
 
 /*
@@ -252,6 +254,7 @@ const char* ardop_log_get_directory() {
 	return ArdopLogDir;
 }
 
+// port should be the ardopcf host port number
 void ardop_log_set_port(const uint16_t port) {
 	for (size_t i = 0; i < sizeof(ALL_LOG_FILES)/sizeof(ALL_LOG_FILES[0]); ++i) {
 		ALL_LOG_FILES[i]->port = port;

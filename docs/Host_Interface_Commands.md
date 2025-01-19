@@ -4,7 +4,9 @@
 
 ## Use with the `--hostcommands` command line option
 
-The `-H` or `--hostcommands` option can be used to apply one or more semicolon separated host commands at startup.  The remainder of this document describes all of the available host commands.  The commands are applied in the order that they are written, but usually this doesn't matter.  Because most commands will include a command, a space, and a value, you usually need to put quotation marks around the commands string.  As an example, `--hostcommands "MYCALL AI7YN;DRIVELEVEL 90"` sets my callsign and sets the transmit drive level to 90%.
+The `-H` or `--hostcommands` option can be used to automatically apply one or more semicolon separated host commands at startup.  The remainder of this document describes all of the available host commands.  If the first commands are `LOGLEVEL` and/or `CONSOLELOG`, then these are applied before most other command line options are evaluated.  Processing them before the logging system is initiated ensures that the desired log settings are in place before any log messages are processed.
+
+The commands are applied in the order that they are written.  Except for those leading `LOGLEVEL` and `CONOSOLELOG` commands, the order usually doesn't matter.  As an example, `--hostcommands "LOGLEVEL 1;CONSOLELOG 2;MYCALL AI7YN"` sets the log file to be as detailed as possible, and data printed to the console to be only slightly less detailed, and sets my callsign to `AI7YN`.  Because most commands will include a command, a space, and a value, you usually need to put quotation marks around the commands string.   As another example, `--hostcommands "CONSOLELOG 4;MYCALL AI7YN;DRIVELEVEL 90"` leaves the log file settings at their default value, but prints only more important messages to the console, sets my callsign, and set the transmit drive level to 90%.
 
 Some command line options that were available before ardopcf v1.0.4.1.3 now require use of `--hostcommands` to produce the same result.  The following list includes host comands that can be used to replace obsolete command line arguments plus a few others that may be useful.  See the detailed descriptions of these commands later in this document for more information.
 
@@ -523,18 +525,13 @@ connected radio.
 - Mode: ANY
 - Arguments: Hex string
 - `RADIOHEX` Returns `FAULT RADIOHEX command string missing`
-- `RADIOHEX XXX` Returns `FAULT RADIOHEX not usable because CAT port not set` if
-a CAT port was not set with the -c or --cat command line option.
-- `RADIOHEX XXX` Returns `FAULT RADIOHEX command string is invalid.` if XXX is
-not a valid hex string.
+- `RADIOHEX XXX` Returns `FAULT RADIOHEX XXX failed` if
+a CAT port was not set with the -c or --cat command line option, if XXX is not
+a valid hex string, or if XXX is too long to be sent as a CAT command.
 - `RADIOHEX XXX` Returns `RADIOHEX XXX` and sends the command to the radio if
 XXX is a valid hex string.
 
 #### RADIOPTTOFF
-
-If either a RTS/DTR PTT Port was set with the -p or --ptt command line option,
-or if no CAT Port was set with the -c or --cat command line option, then this
-host command will fail unless it has no argument.
 
 Gets or Sets the radio specific hex string that can be sent to the radio as a
 CAT command to switch from transmit to receive (PTT Off).  With a hex string
@@ -542,10 +539,10 @@ argument, this is equivalent to the -u or --unkeystring command line option.
 
 If a CAT PTT Off string was previously set and is being used for PTT control,
 then a new valid string will immediately replace it and be used for future
-transitions from transmit to receive.  If no corresponding CAT PTT On command
-has been set (PTT is currently not controlled by Ardop), then a new valid string
-will not be used immediately.  In that case, it will not be used until a CAT PTT
-On command is also set with RADIOPTTON.
+transitions from transmit to receive.  If no CAT device is set or if no
+corresponding CAT PTT On command has been set, then a new valid string will
+not be used immediately.  In that case, it will not be used until a CAT device
+and a CAT PTT On command are also set.
 
 - Mode: ANY
 - Arguments: None or Hex string
@@ -553,22 +550,16 @@ On command is also set with RADIOPTTON.
 already defined.
 - `RADIOPTTOFF` Returns `RADIOPTTOFF XXX` where XXX is the hex string of the
 current CAT PTT Off command.
-- `RADIOPTTOFF XXX` Returns `FAULT RADIOPTTOFF not usable because RTS/DTR PTT is
-being used` if a PTT Port was set with the -p or --ptt command line option.
-- `RADIOPTTOFF XXX` Returns `FAULT RADIOPTTOFF not usable because CAT port not
-set` if a CAT port was not set with the -c or --cat command line option.
 - `RADIOPTTOFF XXX` Returns `FAULT RADIOPTTOFF command string is invalid.` if
 XXX is not a valid hex string.  When this occurs, the previously defined CAT PTT
 Off command, if one was set, remains unchanged.
 - `RADIOPTTOFF XXX` Returns `RADIOPTTOFF now XXX`, where XXX is a valid hex
 string.  As described above, this does not necessarily indicate that Ardop will
 begin using CAT PTT control if it was not already doing so.
+- `RADIOPTTOFF NONE` Returns `RADIOPTTOFF now NONE`.  This discards the previous
+CAT PTT Off command.  If CAT PTT control was being used, it is disabled.
 
 #### RADIOPTTON
-
-If either a RTS/DTR PTT Port was set with the -p or --ptt command line option,
-or if no CAT Port was set with the -c or --cat command line option, then this
-host command will fail unless it has no argument.
 
 Gets or Sets the radio specific hex string that can be sent to the radio as a
 CAT command to switch from receive to transmit (PTT On).  With a hex string
@@ -576,10 +567,10 @@ argument, this is equivalent to the -k or --keystring command line option.
 
 If a CAT PTT On string was previously set and is being used for PTT control,
 then a new valid string will immediately replace it and be used for future
-transitions from receive to transmit.  If no corresponding CAT PTT Off command
-has been set (PTT is currently not controlled by Ardop), then a new valid string
-will not be used immediately.  In that case, it will not be used until a CAT PTT
-Off command is also set with RADIOPTTOFF.
+transitions from receive to transmit.  If no CAT device is set or If no
+ corresponding CAT PTT Off command has been set, then a new valid string will
+not be used immediately.  In that case, it will not be used until a CAT device
+and a CAT PTT Off command is also set.
 
 - Mode: ANY
 - Arguments: None or Hex string
@@ -587,16 +578,14 @@ Off command is also set with RADIOPTTOFF.
 already defined.
 - `RADIOPTTON` Returns `RADIOPTTON XXX` where XXX is the hex string of the
 current CAT PTT On command.
-- `RADIOPTTON XXX` Returns `FAULT RADIOPTTON not usable because RTS/DTR PTT is
-being used` if a PTT Port was set with the -p or --ptt command line option.
-- `RADIOPTTON XXX` Returns `FAULT RADIOPTTON not usable because CAT port not
-set` if a CAT port was not set with the -c or --cat command line option.
-- `RADIOPTTON XXX` Returns `FAULT RADIOPTTON command string is invalid.` if XXX
-is not a valid hex string.  When this occurs, the previously defined CAT PTT On
-command, if one was set, remains unchanged.
+- `RADIOPTTON XXX` Returns `FAULT RADIOPTTON command string is invalid.` if
+XXX is not a valid hex string.  When this occurs, the previously defined CAT PTT
+On command, if one was set, remains unchanged.
 - `RADIOPTTON XXX` Returns `RADIOPTTON now XXX`, where XXX is a valid hex
 string.  As described above, this does not necessarily indicate that Ardop will
 begin using CAT PTT control if it was not already doing so.
+- `RADIOPTTON NONE` Returns `RADIOPTTON now NONE`.  This discards the previous
+CAT PTT On command.  If CAT PTT control was being used, it is disabled.
 
 #### RECRX
 
