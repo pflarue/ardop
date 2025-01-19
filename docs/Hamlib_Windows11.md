@@ -30,11 +30,11 @@ The 'doc' subdirectory within the Hamlib directory you just created contains som
 
 4. Next, you need to determine what hamlib model number matches your radio. Open a Windows Command Prompt by pressing the Windows Start button and typing 'Command Prompt' into the search bar and pressing Enter.  Then run rigctl with the -l option (that is a lowercase L) to list all of the supported radio model numbers.  You can also view this list at https://github.com/Hamlib/Hamlib/wiki/Supported-Radios, though that listing might not match the version of rigctl/rigctld you have installed.
 
-`"C:\Program Files\hamblib-w64-4.5.5\bin\rigctl" -l`
+`"C:\Program Files\hamblib-w64-4.6\bin\rigctl" -l`
 
 or
 
-`C:\Users\<USERNAME\hamblib-w64-4.5.5\bin\rigctl -l`
+`C:\Users\<USERNAME\hamblib-w64-4.6\bin\rigctl -l`
 
 Notice that if you installed hamlib in a directory that contains spaces (like `Program Files`), then quotes are required around the program name but not the command line options.  These quotes are not needed if there are no spaces in the direcory names.  Other than perhaps adding the quotes, this is just `\bin\rigctl -l` added to the directory created when you extracted the contents of the zip file.  This command prints a long list of supported radio models.  So, you'll need to scroll back through the results to look for your radio model.  If you don't find your exact model, you may need to do some searching on the iternet to see if you find a recommendation for a similar model that works.  For my Xiegu G90, I find the following line:
 
@@ -55,23 +55,23 @@ Some additional notes for a few specific radio models including the FT-747, FT-8
 **WARNING:** Executing this command may briefly key the PTT on your radio.  If the settings are incorrect, your radio may mistakenly change the power output settings or frequency on your radio, and may start transmitting and not stop until you kill rigctl with CTRL-C, turn the radio off, or pull a cable.  So, before continuing, it is recommended that you connect your radio to a dummy load.
 
 ```
-"C:\Program Files\hamblib-w64-4.5.5\bin\rigctl" -h
+"C:\Program Files\hamblib-w64-4.6\bin\rigctl" -h
 
-"C:\Program Files\hamblib-w64-4.5.5\bin\rigctl" -vvv -m 3088 -r COM4 -s 19200
+"C:\Program Files\hamblib-w64-4.6\bin\rigctl" -vvv -m 3088 -r COM4 -s 19200
 # OR
-C:\Users\<USERNAME>\hamblib-w64-4.5.5\bin\rigctl -vvv -m 3088 -r COM4 -s 19200
+C:\Users\<USERNAME>\hamblib-w64-4.6\bin\rigctl -vvv -m 3088 -r COM4 -s 19200
 ```
 
 To use Hamblib with [FLRig](http://www.w1hkj.com), only (-vvv) and -m 4 are needed:
 ```
-"C:\Program Files\hamblib-w64-4.5.5\bin\rigctl" -vvv -m 4
+"C:\Program Files\hamblib-w64-4.6\bin\rigctl" -vvv -m 4
 # OR
-C:\Users\<USERNAME>\hamblib-w64-4.5.5\bin\rigctl -vvv -m 4
+C:\Users\<USERNAME>\hamblib-w64-4.6\bin\rigctl -vvv -m 4
 ```
 
 If `COM4` cannot be used because it doesn't exist (used wrong number) or because it is already in use (Perhaps **ardopcf**, another instance of rigctl or rigctld, or FLRig is already running and using `COM4`), then rigctl (or rigctld if the same thing happens to it) will print an error like 'serial_open: Unable to open COM4 - No such file or directory'.  However, without at least `-vv` it might exit without printing any indication of what went wrong.  That is an example of the usefulness of the `-vvv` option.
 
-The first command display's the help screen for rigctl including a list of COMMANDs.  All commands don't necessarily work for all radios.  Pick one of the other lines based on where you intalled hamlib and whether or not there are spaces in the path.  With my configuration, this prints `Opened rig model 3088, 'G90'`.  It may briefly keys and unkey the radio and/or print some errors.  It then prints a `Rig command:` prompt.  You can type in a command at this prompt to manually control your radio.  rigctl can also be used to automate adjusting some radio settings with command line scripts.  I suggest using it interactively here as a way to verify that it is working correctly for your radio.  When you are done pressing CTRL-C will exit.  The most important commands for use with [Pat](https://getpat.io) and **ardopcf** are those that get and set frequency and key/unkey PTT.  In general, lower case command letters get settings and upper case command letters set them.
+The first command display's the help screen for rigctl including a list of COMMANDs.  All commands don't necessarily work for all radios.  Pick one of the other lines based on where you intalled hamlib and whether or not there are spaces in the path.  With my configuration, this prints `Opened rig model 3088, 'G90'`.  It may briefly key and unkey the radio and/or print some errors.  It then prints a `Rig command:` prompt.  You can type in a command at this prompt to manually control your radio.  rigctl can also be used to automate adjusting some radio settings with command line scripts.  I suggest using it interactively here as a way to verify that it is working correctly for your radio.  When you are done pressing CTRL-C will exit.  The most important commands for use with [Pat](https://getpat.io) and **ardopcf** are those that get and set frequency and key/unkey PTT.  In general, lower case command letters get settings and upper case command letters set them.
 
 Typing `f` and pressing Enter should print the frequency that your radio is currently tuned to in Hz.  So, mine shows `Frequency: 7064000` meaning 7.064 MHz.
 
@@ -83,7 +83,7 @@ In this next test, briefly cause your radio to transmit, verify that it works, a
 
 Press CTRL-C to exit.
 
-6. If rigctl worked correctly in the previous step, then rigctld should also work.  rigctld is a server program that other software like **ardopcf** and [Pat](https:\\getpat.io) can use to control your radio and its PTT.  You can either start rigctld manually each time you want to run a program that requires it, or you can set it to run automatically each time you log on to your computer.  The former might be a good choice if your radio is not always connected to your computer, or if you connect different radios to your computer at different times.  The latter is more convenient if you have a radio that is always connected to your computer.  However, you would not want to run rigctld automatically if you also use other programs that connect to your radio directly.  If you have multiple radios that are sometimes or always connected to your computer, then you can repeat these steps using a differnt `--port` setting for each radio.
+6. If rigctl worked correctly in the previous step, then rigctld should also work.  rigctld is a server program that other software like **ardopcf** and [Pat](https:\\getpat.io) can use to control your radio and its PTT.  You can either start rigctld manually each time you want to run a program that requires it, or you can set it to run automatically each time you log on to your computer.  The former might be a good choice if your radio is not always connected to your computer, or if you connect different radios to your computer at different times.  The latter is more convenient if you have a radio that is always connected to your computer.  However, you would not want to run rigctld automatically if you also use other programs that connect to your radio directly.  If you have multiple radios that are sometimes or always connected to your computer, then you can repeat these steps using a different `--port` setting for each radio.
 
 
 ### Create a Desktop Shortcut to rigctld only as needed.
@@ -91,19 +91,19 @@ Press CTRL-C to exit.
 1. Find rigctld.exe in the 'bin' subdirectory within the directory where you installed Hamlib (probably in C:\Program Files or C:\Users\<USERNAME>) with Windows File Explorer. Right click on it, Select `Show more options`, Select `Create shortcut`.  If you installed Hamlib in 'C:\Program Files', Windows will say that it can't create a shortcut here, and ask whether you want to place it on the Desktop instead.  Click `Yes`.  This will create a new icon on your Desktop with the name 'rigctld.exe - Shortcut'.  If you installed Hamlib in 'C:\Users\<USERNAME>', windows will create a shorcut in the same directory where rigctld.exe is located.  In that case, move the shortcut to the Desktop by dragging it to the desktop or using CTRL-X and CTRL-V.
 2. Configure the shortcut: Right click on the shortcut icon on your Desktop, Select `Properties`.  Add the desired command line options after rigctld.exe  in the `Target` line.  Note that this line begins with the full path to rigctld.exe.  Like when testing rigctl from the command prompt, there may be required double quotes around the command if there are spaces anywhere in the path.  If these quotes are required, the command line options must be placed after the closing quotes mark, not within then.  Add the same options that you used above for rigctl here.  Also include `-t 4532` (or `--port 4532`) as one additional command line option that wasn't used for rigctl.  This sets the TCP port number that other programs must use to work with rigctld.  4532 is the default value, and thus is not really required here.  Including it makes it easy to find if you forget what value is being used, and makes it simple to use a different value.  If you want to, you can set up rigctld to control multiple radios, each with their own uniqiue port number.  The documentation suggests using even numbered values.  So, in my case, I set the `Target` line to read:
 
-`"C:\Program Files\hamblib-w64-4.5.5\bin\rigctld.exe" -vvv -m 3088 -r COM4 -s 19200 -t 4532`
+`"C:\Program Files\hamblib-w64-4.6\bin\rigctld.exe" -vvv -m 3088 -r COM4 -s 19200 -t 4532`
 
 or
 
-`C:\Users\<USERNAME>\hamblib-w64-4.5.5\bin\rigctld.exe" -vvv -m 3088 -r COM4 -s 19200 -t 4532`
+`C:\Users\<USERNAME>\hamblib-w64-4.6\bin\rigctld.exe" -vvv -m 3088 -r COM4 -s 19200 -t 4532`
 
 or to use Hamblib with [FLRig](http://www.w1hkj.com)
 
-`"C:\Program Files\hamblib-w64-4.5.5\bin\rigctld.exe" -vvv -m 4 -t 4532`
+`"C:\Program Files\hamblib-w64-4.6\bin\rigctld.exe" -vvv -m 4 -t 4532`
 
 or
 
-`C:\Users\<USERNAME>\hamblib-w64-4.5.5\bin\rigctld.exe" -vvv -m 4 -t 4532`
+`C:\Users\<USERNAME>\hamblib-w64-4.6\bin\rigctld.exe" -vvv -m 4 -t 4532`
 
 The `-vvv` is optional.  If everything is working well, you can omit this, or come back and remove it later.  However, if something is not working quite right, using `-vvv` makes it easier to diagnose the problem.
 
