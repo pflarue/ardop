@@ -1606,12 +1606,46 @@ short loopbuff[1200];  // Temp for testing - loop sent samples to decoder
 // for (t = 0; t < sizeof(buffer); ++t)
 //  buffer[t] =((((t * (t >> 8 | t >> 9) & 46 & t >> 8)) ^ (t & t >> 13 | t >> 6)) & 0xFF);
 
+// This mininal error handler to be passed to snd_lib_error_set_handler()
+// prevents ALSA from printing errors directly to the console.  Instead,
+// write an appropriate log message.  This ensures that the error is
+// written to the log file, rather than only to the console.  It also prevents
+// undesirable console output when using the --syslog command line option.
+//
+// If it detects a rapid string of ALSA errors, it signals for ardopcf to exit
+// normally.  The scenario envisioned which will cause this is if a sound device
+// is (accidentally?) disconnected or otherwise fails.  TODO: If/when the
+// ability to stop and restart audio processing and change audio devices without
+// restarting ardopcf are implemented, a better course of action for such a
+// failure may be implemented.
+void alsa_errhandler(const char *file, int line, const char *function, int err, const char *fmt, ...) {
+	static unsigned int errtime = 0;  // ms resolution
+	static unsigned int errcount = 0;
+	(void) fmt;  // This prevents an unused variable warning.
 
+	if (Now - errtime > 2000) {
+		// It has been more than 2 seconds since the last error
+		errcount = 0;
+	}
+	errtime = Now;
+	errcount += 1;
+
+	if (err) {
+		ZF_LOGE("ALSA Error at %s:%i %s(): %s", file, line, function, snd_strerror(err));
+	} else {
+		ZF_LOGE("ALSA Error at %s:%i %s()", file, line, function);
+	}
+	if (errcount > 10) {
+		ZF_LOGE("In response to a string of rapid ALSA errors.  Exit.");
+		blnClosing = true;  // This is detected in the ardop main loop.
+	}
+}
 
 int InitSound(BOOL Quiet)
 {
 	if (strcmp(PlaybackDevice, "NOSOUND") == 0)
 		return (1);
+	snd_lib_error_set_handler(alsa_errhandler);
 	GetInputDeviceCollection();
 	GetOutputDeviceCollection();
 	return OpenSoundCard(CaptureDevice, PlaybackDevice, 12000, 12000, NULL);
