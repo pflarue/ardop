@@ -37,14 +37,14 @@ If you are using Hamlib/rigctld, then the hex strings for PTT ON and PTT OFF mus
 
 If you are not already using Hamlib/rigctld, there is probably no advantage to installing and configuring it only for use by **ardopcf**.  However, if you are already running Hamlib/rigctld and have it configured to work with your radio, then it may be convenient to use these options.  One advantage of using Hamlib/rigctld via a TCP CAT port is that, unlike a serial device, multiple programs can connect to one TCP CAT port simultaneously.  For example, you can have **ardopcf** use it for PTT control, while Pat uses the same TCP CAT port to set the radio frequency.
 
-CM108 devices are USB devices that combine an audio interface with PTT control.  These include user modified USB sound devices as well as commercial products including: the [digirig Lite](https://digirig.net/product/digirig-lite) (not to be confused with the [digirig mobile](https://digirig.net/product/digirig-mobile) which I refer to as simply a digirig elsewhere in this documentation), the [AIOC or All-in-one-Cable](https://github.com/skuep/AIOC) which is also available from https://na6d.com, and varios products from [masterscommunications.com](masterscommunications.com).
+CM108 devices are USB devices that combine an audio interface with PTT control.  These include user modified USB sound devices as well as commercial products including: the [digirig Lite](https://digirig.net/product/digirig-lite) (not to be confused with the [digirig mobile](https://digirig.net/product/digirig-mobile) which I refer to as simply a digirig elsewhere in this documentation), the [AIOC or All-in-one-Cable](https://github.com/skuep/AIOC) which is also available from https://na6d.com, and various products from [masterscommunications.com](https://masterscommunications.com).
 
 It may be possible to find the name of a CM108 device from the Windows Device Manager.  However, it is more convenient to specify the device by its Vendor ID (VID) and Product ID (PID).  Given these two values, as hex strings, you can use `--ptt CM108:VID:PID`.  As examples, my [AIOC](https://github.com/skuep/AIOC) has VID=1209 and PID=7388.  So, I use `--ptt CM108:1209:7388`.  My [digirig Lite](https://digirig.net/product/digirig-lite) has VID=0D8C and PID=0012.  So, I use `-p CM108:0D8C:0012`.  The leading zeros are optional, and the VID:PID string is not case sensitive.  So, `-p CM108:d8c:12` also works.  If you don't know the VID and PID of your device, run:
 ```
 ardopcf --ptt CM108:?
 ```
 
-This will list all known CM108 compatible devices connected to a Windows computer, giving their VID:PID, product name if one is defined, and their long device id string.  If you have a new or unusual CM108 device that is not known to ardopcf, it might not be listed.  In that case try:
+This will list all known CM108 compatible devices connected to a Windows computer, giving their VID:PID, product name if one is defined, and their full device id string.  If you have a new or unusual CM108 device that is not known to ardopcf, it might not be listed.  In that case try:
 ```
 ardopcf --ptt CM108:??
 ```
@@ -64,6 +64,8 @@ which is equivalent to:
 ```
 ardopcf -p CM108:0D8C:0012 -i 1 -o 1
 ```
+
+## Ardopcf audio devices and other options.
 
 Your Windows computer may have multiple audio input (Microphone/Recording) and output (Speakers/Playback) devices.  **Ardopcf** must be told which of these devices to use.
 
