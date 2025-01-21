@@ -628,7 +628,7 @@ int PackSamplesAndSend(short * input, int nSamples) {
 		}
 	} else {
 		for (int n = 0; n < nSamples; n++) {
-			if (UseLeftRX)
+			if (UseLeftTX)
 				*(sampptr++) = input[0];
 			else
 				*(sampptr++) = 0;
@@ -732,8 +732,8 @@ int SoundCardRead(short * input, unsigned int nSamples) {
 			start = 1;
 
 		for (n = start; n < (ret * 2); n+=2) {  // return alternate
-		}
 			*(input++) = samples[n];
+		}
 	}
 	return ret;
 }
