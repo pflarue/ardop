@@ -51,16 +51,13 @@ snd_pcm_sframes_t MaxAvail;
 snd_pcm_t *	playhandle = NULL;
 snd_pcm_t *	rechandle = NULL;
 
-// TODO: re-evaluate how these variables are used
-int Savedplaychannels = 1;
-int m_playchannels = 1;
-int m_recchannels = 1;
+int m_sampleRate = 12000;  // Ardopcf always uses 12000 samples per second
+int m_playchannels = 1;  // 1 for mono, 2 for stereo
+int m_recchannels = 1;  // 1 for mono, 2 for stereo
 snd_pcm_uframes_t fpp;  // Frames per period.
 int dir;
 char SavedCaptureDevice[256];  // Saved so we can reopen
 char SavedPlaybackDevice[256];
-int SavedPlaybackRate;
-int SavedCaptureRate;
 char **PlaybackDevices;
 int PlaybackDevicesCount;
 char **CaptureDevices;
@@ -311,7 +308,7 @@ nextcard:
 
 bool FirstOpenSoundPlayback = true;  // used to only log warning about -A option once.
 
-bool OpenSoundPlayback(char * PlaybackDevice, unsigned int m_sampleRate, int channels) {
+bool OpenSoundPlayback(char * PlaybackDevice) {
 	unsigned int intRate;  // reported number of frames per second
 	unsigned int intPeriodTime = 0;  // reported duration of one period in microseconds.
 	snd_pcm_uframes_t periodSize = 0;  // reported number of frames per period
@@ -358,7 +355,7 @@ bool OpenSoundPlayback(char * PlaybackDevice, unsigned int m_sampleRate, int cha
 		return false;
 	}
 	if ((err = snd_pcm_hw_params_set_format (playhandle, hw_params, SND_PCM_FORMAT_S16_LE)) < 0) {
-		ZF_LOGE("cannot setplayback  sample format (%s)", snd_strerror(err));
+		ZF_LOGE("cannot set playback sample format S16_LE (%s)", snd_strerror(err));
 		return false;
 	}
 	if ((err = snd_pcm_hw_params_set_rate (playhandle, hw_params, m_sampleRate, 0)) < 0) {
@@ -366,17 +363,31 @@ bool OpenSoundPlayback(char * PlaybackDevice, unsigned int m_sampleRate, int cha
 		return false;
 	}
 
-	// Initial call has channels set to 1. Subequent ones set to what worked last time
-	if ((err = snd_pcm_hw_params_set_channels (playhandle, hw_params, channels)) < 0) {
-		ZF_LOGE("cannot set play channel count to %d (%s)", channels, snd_strerror(err));
-		if (channels == 2)
-			return false;  // Shouldn't happen as should have worked before
-		channels = 2;
-
-		if ((err = snd_pcm_hw_params_set_channels (playhandle, hw_params, 2)) < 0) {
-			ZF_LOGE("cannot play set channel count to 2 (%s)", snd_strerror(err));
+	if ((err = snd_pcm_hw_params_set_channels (playhandle, hw_params, m_playchannels)) < 0) {
+		ZF_LOGE("cannot set playback channel count to %d (%s)", m_playchannels, snd_strerror(err));
+		if (m_playchannels  == 2) {
+			ZF_LOGE("The -%s command line option was used to indicate that the"
+				" %s channel of a stereo audio playback device should be used."
+				" However, the audio playback device specified (%s) could not be"
+				" opened as a two channel (stereo) device.  Try again without"
+				" the -%s command line option to open it as a single channel"
+				" (mono) device.",
+				UseLeftTX ? "y" : "z",
+				UseLeftTX ? "left" : "right",
+				PlaybackDevice,
+				UseLeftTX ? "y" : "z");
 			return false;
 		}
+		ZF_LOGE("Neither the -y nor -z command line option was used to indicate"
+			" that the specified audio playback device (%s) should be opened"
+			" as a stereo device, and to select which of its channels should be"
+			" used.  Thus, the device was opened as a single channel (mono)"
+			" audio device, but this failed.  This probably means that the"
+			" device can only be opened as a two channel (stereo) device.  So,"
+			" please try again using either the -y or -z command line option to"
+			" indicate which channel to use.",
+			PlaybackDevice);
+		return false;
 	}
 
 	if (FixTiming) {
@@ -450,13 +461,12 @@ bool OpenSoundPlayback(char * PlaybackDevice, unsigned int m_sampleRate, int cha
 		return false;
 	}
 
-	Savedplaychannels = m_playchannels = channels;
 	MaxAvail = snd_pcm_avail_update(playhandle);
 	return true;
 }
 
 
-bool OpenSoundCapture(char * CaptureDevice, int m_sampleRate) {
+bool OpenSoundCapture(char * CaptureDevice) {
 	int err = 0;
 	char buf1[100];
 	char * ptr;
@@ -489,30 +499,29 @@ bool OpenSoundCapture(char * CaptureDevice, int m_sampleRate) {
 		return false;
 	}
 
-	m_recchannels = 1;
-	if (UseLeftRX == 0 || UseRightRX == 0)
-		m_recchannels = 2;  // -L or -R was used.  So, open as a stereo device
-
 	if ((err = snd_pcm_hw_params_set_channels (rechandle, hw_params, m_recchannels)) < 0) {
+		ZF_LOGE("cannot set capture channel count to %d (%s)", m_recchannels, snd_strerror(err));
 		if (m_recchannels  == 2) {
 			ZF_LOGE("The -%s command line option was used to indicate that the"
 				" %s channel of a stereo audio capture device should be used."
 				" However, the audio capture device specified (%s) could not be"
-				" opened as a stereo device.  Try again without the -%s command"
-				" line option to open it as a single channel device.",
+				" opened as a two channel (stereo) device.  Try again without"
+				" the -%s command line option to open it as a single channel"
+				" (mono) device.",
 				UseLeftRX ? "L" : "R",
 				UseLeftRX ? "left" : "right",
-				UseLeftRX ? "L" : "R",
-				CaptureDevice);
+				CaptureDevice,
+				UseLeftRX ? "L" : "R");
 			return false;
 		}
 		ZF_LOGE("Neither the -L nor -R command line option was used to indicate"
-			" that the specified audio capture device (%s) was a stereo device,"
-			" and to select which of its channels should be used.  Thus, the"
-			" device was opened as a single channel audio device, but this"
-			" failed.  This usually means that the device can only be opened"
-			" as a stereo device.  So, please try again using either the -L"
-			" or -R command line option to indicate which channel to use.",
+			" that the specified audio capture device (%s) should be opened"
+			" as a stereo device, and to select which of its channels should be"
+			" used.  Thus, the device was opened as a single channel (mono)"
+			" audio device, but this failed.  This probably means that the"
+			" device can only be opened as a two channel (stereo) device.  So,"
+			" please try again using either the -L or -R command line option to"
+			" indicate which channel to use.",
 			CaptureDevice);
 		return false;
 	}
@@ -530,7 +539,7 @@ bool OpenSoundCapture(char * CaptureDevice, int m_sampleRate) {
 		return false;
 	}
 	if ((err = snd_pcm_hw_params_set_format (rechandle, hw_params, SND_PCM_FORMAT_S16_LE)) < 0) {
-		ZF_LOGE("cannot set capture sample format (%s)", snd_strerror(err));
+		ZF_LOGE("cannot set capture sample format S16_LE (%s)", snd_strerror(err));
 		return false;
 	}
 	if ((err = snd_pcm_hw_params_set_rate (rechandle, hw_params, m_sampleRate, 0)) < 0) {
@@ -552,9 +561,7 @@ bool OpenSoundCapture(char * CaptureDevice, int m_sampleRate) {
 	return true;
 }
 
-bool OpenSoundCard(int c_sampleRate, int p_sampleRate) {
-	int Channels = 1;
-
+bool OpenSoundCard() {
 	if (strcmp(CaptureDevice, "0") == 0
 		|| (atoi(CaptureDevice) > 0 && strlen(CaptureDevice) <= 2)
 	) {
@@ -574,42 +581,44 @@ bool OpenSoundCard(int c_sampleRate, int p_sampleRate) {
 	}
 
 	if (UseLeftRX == 1 && UseRightRX == 1) {
-		// TODO: Is this wording correct?
-		ZF_LOGI("Using Both Channels of soundcard for RX");
+		m_recchannels = 1;
+		ZF_LOGI("Opening %s for RX as a single channel (mono) device",
+			CaptureDevice);
 	} else {
+		m_recchannels = 2;
 		if (UseLeftRX == 0)
-			ZF_LOGI("Using Right Channel of soundcard for RX");
+			ZF_LOGI("Opening %s for RX as a stereo device and using Right channel",
+				CaptureDevice);
 		if (UseRightRX == 0)
-			ZF_LOGI("Using Left Channel of soundcard for RX");
+			ZF_LOGI("Opening %s for RX as a stereo device and using Left channel",
+				CaptureDevice);
 	}
 
 	if (UseLeftTX == 1 && UseRightTX == 1) {
-		// TODO: Is this wording correct?
-		ZF_LOGI("Using Both Channels of soundcard for TX");
+		m_playchannels = 1;
+		ZF_LOGI("Opening %s for TX as a single channel (mono) device",
+			PlaybackDevice);
 	} else {
+		m_playchannels = 2;
 		if (UseLeftTX == 0)
-			ZF_LOGI("Using Right Channel of soundcard for TX");
+			ZF_LOGI("Opening %s for TX as a stereo device and using Right channel",
+				PlaybackDevice);
 		if (UseRightTX == 0)
-			ZF_LOGI("Using Left Channel of soundcard for TX");
+			ZF_LOGI("Opening %s for TX as a stereo device and using Left channel",
+				PlaybackDevice);
 	}
 
-	ZF_LOGI("Opening Playback Device %s Rate %d", PlaybackDevice, p_sampleRate);
-	if (UseLeftTX == 0 || UseRightTX == 0)
-		Channels = 2;  // L or R implies stereo
 	strcpy(SavedPlaybackDevice, PlaybackDevice);  // Saved so we can reopen in error recovery
-	SavedPlaybackRate = p_sampleRate;
-	if (OpenSoundPlayback(PlaybackDevice, p_sampleRate, Channels)) {
+	if (OpenSoundPlayback(PlaybackDevice)) {
 		// TODO: Reconsider closing playback device here
 		// Close playback device so it can be shared
 		if (playhandle) {
 			snd_pcm_close(playhandle);
 			playhandle = NULL;
 		}
-		ZF_LOGI("Opening Capture Device %s Rate %d", CaptureDevice, c_sampleRate);
 
 		strcpy(SavedCaptureDevice, CaptureDevice);  // Saved so we can reopen in error recovery
-		SavedCaptureRate = c_sampleRate;
-		return OpenSoundCapture(CaptureDevice, c_sampleRate);
+		return OpenSoundCapture(CaptureDevice);
 	}
 	else
 		return false;
@@ -628,11 +637,13 @@ int PackSamplesAndSend(short * input, int nSamples) {
 		}
 	} else {
 		for (int n = 0; n < nSamples; n++) {
+			// Set left channel value
 			if (UseLeftTX)
 				*(sampptr++) = input[0];
 			else
 				*(sampptr++) = 0;
 
+			// Set right channel value
 			if (UseRightTX)
 				*(sampptr++) = input[0];
 			else
@@ -697,7 +708,7 @@ int SoundCardRead(short * input, unsigned int nSamples) {
 			rechandle = NULL;
 		}
 
-		OpenSoundCapture(SavedCaptureDevice, SavedCaptureRate);
+		OpenSoundCapture(SavedCaptureDevice);
 //		snd_pcm_recover(rechandle, avail, 0);
 		avail = snd_pcm_avail_update(rechandle);
 		ZF_LOGD("After avail recovery %d ..", avail);
@@ -714,7 +725,7 @@ int SoundCardRead(short * input, unsigned int nSamples) {
 			rechandle = NULL;
 		}
 
-		OpenSoundCapture(SavedCaptureDevice, SavedCaptureRate);
+		OpenSoundCapture(SavedCaptureDevice);
 //		snd_pcm_recover(rechandle, avail, 0);
 		avail = snd_pcm_avail_update(rechandle);
 		ZF_LOGD("After Read recovery Avail %d ..", avail);
@@ -805,7 +816,7 @@ bool InitSound() {
 	snd_lib_error_set_handler(alsa_errhandler);
 	GetInputDeviceCollection();
 	GetOutputDeviceCollection();
-	return OpenSoundCard(12000, 12000);
+	return OpenSoundCard();
 }
 
 // Process any captured samples
@@ -831,7 +842,7 @@ void StopCapture() {
 
 	// Stopcapture is only called when we are about to transmit, so use it to open plaback device. We don't keep
 	// it open all the time to facilitate sharing.
-	OpenSoundPlayback(SavedPlaybackDevice, SavedPlaybackRate, Savedplaychannels);
+	OpenSoundPlayback(SavedPlaybackDevice);
 }
 
 // TODO: Enable CODEC host command to start/stop audio processing
@@ -904,7 +915,7 @@ void SoundFlush() {
 		// txwfu = NULL;
 	// }
 
-	OpenSoundCapture(SavedCaptureDevice, SavedCaptureRate);
+	OpenSoundCapture(SavedCaptureDevice);
 	StartCapture();
 
 	if (WriteRxWav && !HWriteRxWav) {
