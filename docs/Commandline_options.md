@@ -127,7 +127,7 @@ All command line options are listed in the following sections. If the option has
 | **-L** | | _none_ | use only left audio channel of a stereo device for RX. |
 | **-R** | | _none_ | use only right audio channel of a stereo device for RX. |
 | **-y** | | _none_ | use only left audio channel of a stereo device for TX. |
-| **-z** | | _none_ | use only left audio channel of a stereo device for TX. |
+| **-z** | | _none_ | use only right audio channel of a stereo device for TX. |
 | **-w** | **&#8209;&#8209;writewav** |  _none_  | Write WAV files of received audio for debugging.  (The RECRX host command and a button in the the developer mode version of the WebGui can also be used to start/stop recording of received audio to a WAV file independent this option.) |
 | **-T** | **&#8209;&#8209;writetxwav** |  _none_  | Write WAV files of transmitted audio for debugging. |
 | **-d** | **&#8209;&#8209;decodewav** |  &lt;pathname&gt;  | Decode the supplied WAV file instead of the input audio.  This option can be repeated up to five times to provide up to five WAV files to be decoded as if they were received in the order provided, with a brief period of silence between them.  Unlike handling of most other command line arguments, the --hostcommands (or -H) option is processed before the WAV files are processed.  After these WAV files have been processed, ardopcf will exit. |
