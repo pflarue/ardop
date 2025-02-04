@@ -20,6 +20,9 @@ extern bool UseRightRX;
 extern bool UseLeftTX;
 extern bool UseRightTX;
 
+int m_playchannels = 1;  // 1 for mono, 2 for stereo
+int m_recchannels = 1;  // 1 for mono, 2 for stereo
+
 extern char CaptureDevice[80];
 extern char PlaybackDevice[80];
 
@@ -45,13 +48,9 @@ short inbuffer[5][ReceiveSize];  // Two buffers of 0.1 Sec duration for RX audio
 int Index = 0;  // buffer being used 0 or 1
 int inIndex = 0;  // inbuffer being used 0 or 1
 
-int CaptureIndex = -1;  // Card number
-int PlayBackIndex = -1;
-
-// This opens a single audio channel.  Command line options to use
-// the left or right channel of a stereo device are currently ignored.
-// TODO: For a stereo device, correctly handle user selection of left
-//   or right channel.
+// Single channel.
+// For receive, if a stereo device is opened this way, it uses the left chennal.
+// For transmit, if a stereo device is opened this way, it sends the audio to both channels.
 WAVEFORMATEX wfx = {
 	WAVE_FORMAT_PCM,  // wFormatTag (Format type)
 	1,  // nChannels
@@ -61,7 +60,6 @@ WAVEFORMATEX wfx = {
 	16,  // wBitsPerSample
 	0  // cbSize (extra format info.  0 for WAVE_FORMAT_PCM)
 };
-
 
 HWAVEOUT hWaveOut = 0;
 HWAVEIN hWaveIn = 0;
@@ -78,6 +76,40 @@ WAVEHDR inheader[5] = {
 	{(char *)inbuffer[2], 0, 0, 0, 0, 0, 0, 0},
 	{(char *)inbuffer[3], 0, 0, 0, 0, 0, 0, 0},
 	{(char *)inbuffer[4], 0, 0, 0, 0, 0, 0, 0}
+};
+
+
+// Open stereo device, but use only one channel.
+// For receive, this allows use of the right channel, by discarding even
+// numbered audio samples.
+// For transmit, this allows sending audio to either left or right, by
+// setting either odd or even numbered samples to zero.
+WAVEFORMATEX wfxs = {
+	WAVE_FORMAT_PCM,  // wFormatTag (Format type)
+	2,  // nChannels
+	12000,  // nSamplesPerSec
+	24000,  // nAvgBytesPerSec (nSamplesPerSec * nBlockAlign)
+	4,  // nBlockAlign (nChannels * wBitsPerSample / 8)
+	16,  // wBitsPerSample
+	0  // cbSize (extra format info.  0 for WAVE_FORMAT_PCM)
+};
+
+
+short stereobuffer[2][SendSize * 2];  // Two buffers of 0.1 sec duration for TX audio
+// TODO: Explore whether 5 inbuffer are really required.  ALSA uses only 2.
+short stereoinbuffer[5][ReceiveSize * 4];  // Two buffers of 0.1 Sec duration for RX audio.
+WAVEHDR stereoheader[2] =
+{
+	{(char *)stereobuffer[0], 0, 0, 0, 0, 0, 0, 0},
+	{(char *)stereobuffer[1], 0, 0, 0, 0, 0, 0, 0}
+};
+WAVEHDR stereoinheader[5] =
+{
+	{(char *)stereoinbuffer[0], 0, 0, 0, 0, 0, 0, 0},
+	{(char *)stereoinbuffer[1], 0, 0, 0, 0, 0, 0, 0},
+	{(char *)stereoinbuffer[2], 0, 0, 0, 0, 0, 0, 0},
+	{(char *)stereoinbuffer[3], 0, 0, 0, 0, 0, 0, 0},
+	{(char *)stereoinbuffer[4], 0, 0, 0, 0, 0, 0, 0}
 };
 
 WAVEOUTCAPS pwoc;
@@ -146,103 +178,141 @@ char *strcasestr(const char *haystack, const char *needle) {
 	return NULL;
 }
 
-bool OpenSoundPlayback(char * devstr) {
+bool OpenSoundPlayback(int devindex) {
 	int ret;
-	int devindex = -1;
 
-	if (strcmp(devstr, "NOSOUND") == 0)
+	if (devindex == -1)  // OK.  Special NOSOUND device
 		return true;
+	if (devindex < -1 || devindex >= PlaybackDevicesCount) {
+		ZF_LOGE("Invalid device index %i in OpenSoundPlayback.", devindex);
+		return false;
+	}
 
 	header[0].dwFlags = WHDR_DONE;
 	header[1].dwFlags = WHDR_DONE;
+	stereoheader[0].dwFlags = WHDR_DONE;
+	stereoheader[1].dwFlags = WHDR_DONE;
 
-	if (strlen(devstr) <= 2) {
-		// devstr is the integer index of a device in PlaybackDevices
-		devindex = atoi(devstr);
+	if (m_playchannels == 1) {
+		// For transmit, if a stereo device is opened this way, it sends the
+		// audio to both channels.
+		ret = waveOutOpen(&hWaveOut, devindex, &wfx, 0, 0, CALLBACK_NULL);
+		if (ret) {
+			// All of the stereo devices that I've tested can be successfully
+			// opened as mono.  However, this allows for the possibility that
+			// some devices (or their drivers) don't accomodate this.
+			ZF_LOGE("Neither the -y nor -z command line option was used to indicate"
+				" that the specified audio playback device (%s) should be opened"
+				" as a stereo device, and to select which of its channels should be"
+				" used.  Thus, the device was opened as a single channel (mono)"
+				" audio device, but this failed.  This probably means that the"
+				" device can only be opened as a two channel (stereo) device.  So,"
+				" please try again using either the -y or -z command line option to"
+				" indicate which channel to use.",
+				PlaybackDevices[devindex]);
+			return false;
+		}
 	} else {
-		// Name instead of number. Look for a substring match in PlaybackDevices
-		for (int i = 0; i < PlaybackDevicesCount; ++i) {
-			if (strcasestr(PlaybackDevices[i], devstr)) {
-				devindex = i;
-				break;
-			}
+		// m_playchannels == 2
+		// For transmit, this allows sending audio to either left or right, by
+		// setting either odd or even numbered samples to zero.
+		ret = waveOutOpen(&hWaveOut, devindex, &wfxs, 0, 0, CALLBACK_NULL);
+		if (ret) {
+			// All of the mono devices that I've tested can be successfully
+			// opened as stereo.  However, this allows for the possibility that
+			// some devices (or their drivers) don't accomodate this.
+			ZF_LOGE("The -%s command line option was used to indicate that the"
+				" %s channel of a stereo audio playback device should be used."
+				" However, the audio playback device specified (%s) could not be"
+				" opened as a two channel (stereo) device.  Try again without"
+				" the -%s command line option to open it as a single channel"
+				" (mono) device.",
+				UseLeftTX ? "y" : "z",
+				UseLeftTX ? "left" : "right",
+				PlaybackDevices[devindex],
+				UseLeftTX ? "y" : "z");
+			return false;
 		}
 	}
-	if (devindex == -1) {
-		ZF_LOGE("ERROR: playbackdevice = '%s' not found.  Try using one of the"
-			" names or numbers (0-%d) listed above.",
-			devstr,
-			PlaybackDevicesCount - 1
-		);
-		return false;
-	}
-
-	// As noted above, currently this opens a single default channel.
-	// TODO: If this is a stereo device, choose correct channel (probably
-	//   by opening as stereo device, and then setting only half the
-	//   samples.)
-	ret = waveOutOpen(&hWaveOut, devindex, &wfx, 0, 0, CALLBACK_NULL);
-	if (ret) {
-		ZF_LOGF("Failed to open WaveOut Device %s Error %d", devstr, ret);
-		return false;
-	}
-	ret = waveOutGetDevCaps((UINT_PTR)hWaveOut, &pwoc, sizeof(WAVEOUTCAPS));
-	ZF_LOGI("Opened WaveOut Device %s", pwoc.szPname);
 	return true;
 }
 
-bool OpenSoundCapture(char * devstr) {
+bool OpenSoundCapture(int devindex) {
 	int ret;
-	int devindex = -1;
 
-	if (strcmp(devstr, "NOSOUND") == 0)
+	if (devindex == -1)  // OK.  Special NOSOUND device
 		return true;
+	if (devindex < -1 || devindex >= CaptureDevicesCount) {
+		ZF_LOGE("Invalid device index %i in OpenSoundCapture.", devindex);
+		return false;
+	}
 
-	if (strlen(devstr) <= 2) {
-		// devstr is the integer index of a device in CaptureDevices
-		devindex = atoi(devstr);
-	} else {
-		// Name instead of number. Look for a substring match
-		for (int i = 0; i < CaptureDevicesCount; ++i) {
-			if (strcasestr(CaptureDevices[i], devstr)) {
-				devindex = i;
-				break;
+	if (m_recchannels == 1) {
+		// Open single channel audio capture and prepare for use
+		ret = waveInOpen(&hWaveIn, devindex, &wfx, 0, 0, CALLBACK_NULL);
+		if (ret) {
+			// All of the stereo devices that I've tested can be successfully
+			// opened as mono.  However, this allows for the possibility that
+			// some devices (or their drivers) don't accomodate this.
+			ZF_LOGE("Neither the -L nor -R command line option was used to indicate"
+				" that the specified audio capture device (%s) should be opened"
+				" as a stereo device, and to select which of its channels should be"
+				" used.  Thus, the device was opened as a single channel (mono)"
+				" audio device, but this failed.  This probably means that the"
+				" device can only be opened as a two channel (stereo) device.  So,"
+				" please try again using either the -L or -R command line option to"
+				" indicate which channel to use.",
+				CaptureDevices[devindex]);
+			return false;
+		}
+		for (int i = 0; i < NumberofinBuffers; ++i) {
+			inheader[i].dwBufferLength = ReceiveSize * 2;  // 2 bytes per sample
+			ret = waveInPrepareHeader(hWaveIn, &inheader[i], sizeof(WAVEHDR));
+			if (ret) {
+				ZF_LOGF("Failure of waveInPrepareHeader() %i: Error %d", i, ret);
+				waveInClose(hWaveIn);
+				return false;
+			}
+			ret = waveInAddBuffer(hWaveIn, &inheader[i], sizeof(WAVEHDR));
+			if (ret) {
+				ZF_LOGF("Failure of waveInAddBuffer() %i: Error %d", i, ret);
+				waveInClose(hWaveIn);
+				return false;
 			}
 		}
-	}
-	if (devindex == -1) {
-		ZF_LOGE("ERROR: capturedevice = '%s' not found.  Try using one of the"
-			" names or numbers (0-%d) listed above.",
-			devstr,
-			CaptureDevicesCount - 1);
-		return false;
-	}
-
-	// As noted above, currently this opens a single default channel.
-	// TODO: If this is a stereo device, choose correct channel (probably
-	//   by opening as stereo device, and then discarding half the samples.)
-	ret = waveInOpen(&hWaveIn, devindex, &wfx, 0, 0, CALLBACK_NULL);  // WAVE_MAPPER
-	if (ret) {
-		ZF_LOGF("Failed to open WaveIn Device %s Error %d", devstr, ret);
-		return false;
-	} else {
-		waveInGetDevCaps((UINT_PTR)hWaveIn, &pwic, sizeof(WAVEINCAPS));
-		ZF_LOGI("Opened WaveIn Device %s", pwic.szPname);
-	}
-
-	for (int i = 0; i < NumberofinBuffers; ++i) {
-		inheader[i].dwBufferLength = ReceiveSize * 2;
-		ret = waveInPrepareHeader(hWaveIn, &inheader[i], sizeof(WAVEHDR));
+	} else { // m_recchannels == 2
+		// Open two channel (stereo) audio capture and prepare for use
+		ret = waveInOpen(&hWaveIn, devindex, &wfxs, 0, 0, CALLBACK_NULL);
 		if (ret) {
-			ZF_LOGF("Failure of waveInPrepareHeader() %i: Error %d", i, ret);
-			waveInClose(hWaveIn);
+			// All of the mono devices that I've tested can be successfully
+			// opened as stereo.  However, this allows for the possibility that
+			// some devices (or their drivers) don't accomodate this.
+			ZF_LOGE("The -%s command line option was used to indicate that the"
+				" %s channel of a stereo audio capture device should be used."
+				" However, the audio capture device specified (%s) could not be"
+				" opened as a two channel (stereo) device.  Try again without"
+				" the -%s command line option to open it as a single channel"
+				" (mono) device.",
+				UseLeftRX ? "L" : "R",
+				UseLeftRX ? "left" : "right",
+				CaptureDevices[devindex],
+				UseLeftRX ? "L" : "R");
 			return false;
 		}
-		ret = waveInAddBuffer(hWaveIn, &inheader[i], sizeof(WAVEHDR));
-		if (ret) {
-			ZF_LOGF("Failure of waveInAddBuffer() %i: Error %d", i, ret);
-			waveInClose(hWaveIn);
-			return false;
+		for (int i = 0; i < NumberofinBuffers; ++i) {
+			stereoinheader[i].dwBufferLength = ReceiveSize * 2 * 2;  // 2 bytes per sample, 2 channels
+			ret = waveInPrepareHeader(hWaveIn, &stereoinheader[i], sizeof(WAVEHDR));
+			if (ret) {
+				ZF_LOGF("Failure of waveInPrepareHeader() %i: Error %d", i, ret);
+				waveInClose(hWaveIn);
+				return false;
+			}
+			ret = waveInAddBuffer(hWaveIn, &stereoinheader[i], sizeof(WAVEHDR));
+			if (ret) {
+				ZF_LOGF("Failure of waveInAddBuffer() %i: Error %d", i, ret);
+				waveInClose(hWaveIn);
+				return false;
+			}
 		}
 	}
 	ret = waveInStart(hWaveIn);
@@ -256,9 +326,83 @@ bool OpenSoundCapture(char * devstr) {
 
 bool InitSound() {
 	GetSoundDevices();
-	if (!OpenSoundPlayback(PlaybackDevice))
+	char * endptr;
+
+	int idevindex = strtol(CaptureDevice, &endptr, 10);
+	if (strcmp(CaptureDevice, "NOSOUND") == 0) {
+		idevindex = -1;  // special CaptureDevice
+	} else if (*endptr != '\0') {
+		// CaptureDevice is not a number. Look for a substring match of
+		// CaptureDevice in CaptureDevices[]
+		idevindex = -2;  // indicate no match found
+		for (int i = 0; i < CaptureDevicesCount; ++i) {
+			if (strcasestr(CaptureDevices[i], CaptureDevice)) {
+				idevindex = i;
+				break;
+			}
+		}
+	}
+	if (idevindex < -1 || idevindex >= CaptureDevicesCount) {
+		ZF_LOGE("ERROR: CaptureDevice = \"%s\" not found.  Try using one of the"
+			" names or numbers (0-%d) listed above.",
+			CaptureDevice,
+			CaptureDevicesCount - 1);
 		return false;
-	if (!OpenSoundCapture(CaptureDevice))
+	}
+
+	int odevindex = strtol(PlaybackDevice, &endptr, 10);
+	if (strcmp(PlaybackDevice, "NOSOUND") == 0) {
+		odevindex = -1;  // special PlaybackDevice
+	} else if (*endptr != '\0') {
+		// PlaybackDevice is not a number. Look for a substring match of
+		// PlaybackDevice in PlaybackDevices[]
+		odevindex = -2;  // indicate no match found
+		for (int i = 0; i < PlaybackDevicesCount; ++i) {
+			if (strcasestr(PlaybackDevices[i], PlaybackDevice)) {
+				odevindex = i;
+				break;
+			}
+		}
+	}
+	if (odevindex < -1 || odevindex >= PlaybackDevicesCount) {
+		ZF_LOGE("ERROR: PlaybackDevice = \"%s\" not found.  Try using one of the"
+			" names or numbers (0-%d) listed above.",
+			PlaybackDevice,
+			PlaybackDevicesCount - 1);
+		return false;
+	}
+
+	if (UseLeftRX == 1 && UseRightRX == 1) {
+		m_recchannels = 1;
+		ZF_LOGI("Opening %s for RX as a single channel (mono) device",
+			idevindex == -1 ? "NOSOUND" : CaptureDevices[idevindex]);
+	} else {
+		m_recchannels = 2;
+		if (UseLeftRX == 0)
+			ZF_LOGI("Opening %s for RX as a stereo device and using Right channel",
+				idevindex == -1 ? "NOSOUND" : CaptureDevices[idevindex]);
+		if (UseRightRX == 0)
+			ZF_LOGI("Opening %s for RX as a stereo device and using Left channel",
+				idevindex == -1 ? "NOSOUND" : CaptureDevices[idevindex]);
+	}
+
+	if (UseLeftTX == 1 && UseRightTX == 1) {
+		m_playchannels = 1;
+		ZF_LOGI("Opening %s for TX as a single channel (mono) device",
+			odevindex == -1 ? "NOSOUND" : PlaybackDevices[odevindex]);
+	} else {
+		m_playchannels = 2;
+		if (UseLeftTX == 0)
+			ZF_LOGI("Opening %s for TX as a stereo device and using Right channel",
+				odevindex == -1 ? "NOSOUND" : PlaybackDevices[odevindex]);
+		if (UseRightTX == 0)
+			ZF_LOGI("Opening %s for TX as a stereo device and using Left channel",
+				odevindex == -1 ? "NOSOUND" : PlaybackDevices[odevindex]);
+	}
+
+	if (!OpenSoundPlayback(odevindex))
+		return false;
+	if (!OpenSoundCapture(idevindex))
 		return false;
 	return true;
 }
@@ -273,18 +417,33 @@ short * SendtoCard(int n) {
 		return &buffer[Index][0];
 	}
 
-	header[Index].dwBufferLength = n * 2;
-	waveOutPrepareHeader(hWaveOut, &header[Index], sizeof(WAVEHDR));
-	waveOutWrite(hWaveOut, &header[Index], sizeof(WAVEHDR));
+	if (m_playchannels == 2) {
+		// fill buffer with zeros to ensure silence on unused channel
+		memset(stereobuffer[Index], 0x00, SendSize * 2 * 2);
 
-	// wait till previous buffer is complete
-	while (!(header[!Index].dwFlags & WHDR_DONE)) {
-		txSleep(10);  // Run background while waiting
+		int j = UseLeftTX ? 0 : 1;  // Select use of Left or Right channel
+		for (int i=0; i < n; ++i, j += 2)
+			stereobuffer[Index][j] = buffer[Index][i];
+		stereoheader[Index].dwBufferLength = n * 2 * 2;  // 2 bytes per sample, 2 channels
+		waveOutPrepareHeader(hWaveOut, &stereoheader[Index], sizeof(WAVEHDR));
+		waveOutWrite(hWaveOut, &stereoheader[Index], sizeof(WAVEHDR));
+
+		// wait till previous buffer is complete
+		while (!(stereoheader[!Index].dwFlags & WHDR_DONE))
+			txSleep(10);  // Run background while waiting
+		waveOutUnprepareHeader(hWaveOut, &stereoheader[!Index], sizeof(WAVEHDR));
+	} else {
+		header[Index].dwBufferLength = n * 2;
+		waveOutPrepareHeader(hWaveOut, &header[Index], sizeof(WAVEHDR));
+		waveOutWrite(hWaveOut, &header[Index], sizeof(WAVEHDR));
+
+		// wait till previous buffer is complete
+		while (!(header[!Index].dwFlags & WHDR_DONE))
+			txSleep(10);  // Run background while waiting
+		waveOutUnprepareHeader(hWaveOut, &header[!Index], sizeof(WAVEHDR));
 	}
-
-	waveOutUnprepareHeader(hWaveOut, &header[!Index], sizeof(WAVEHDR));
 	Index = !Index;  // toggle Index between 0 and 1
-	return &buffer[Index][0];
+	return &buffer[Index][0];  // even when using stereo, return mono buffer.
 }
 
 
@@ -293,23 +452,41 @@ void PollReceivedSamples() {
 		return;
 	// Process any captured samples
 	// Ideally call at least every 100 mS, more than 200 will loose data
+	if (m_recchannels == 2) {
+		if (stereoinheader[inIndex].dwFlags & WHDR_DONE) {
+			// Copy samples from the user specified channel into the corresponding
+			// inbuffer[inIndex] so that it can be passed to ProcessNewSamples(),
+			// which expects a mono signal.
+			if (Capturing) {
+				int j = UseLeftRX ? 0 : 1;  // Select use of Left or Right channel
+				for (int i = 0; i < ReceiveSize; ++i, j += 2)
+					inbuffer[inIndex][i] = stereoinbuffer[inIndex][j];
+				ProcessNewSamples(&inbuffer[inIndex][0],
+					stereoinheader[inIndex].dwBytesRecorded / 4);
+			}
+			waveInPrepareHeader(hWaveIn, &stereoinheader[inIndex], sizeof(WAVEHDR));
+			waveInAddBuffer(hWaveIn, &stereoinheader[inIndex], sizeof(WAVEHDR));
+			inIndex++;
+			if (inIndex == NumberofinBuffers)
+				inIndex = 0;
+		}
+		return;
+	}
+	// m_recchannels == 2 // Mono
 	if (inheader[inIndex].dwFlags & WHDR_DONE) {
-		// TODO: To extract one channel from a stereo system, do so here.
-
-//		ZF_LOGD("Process %d %d", inIndex, inheader[inIndex].dwBytesRecorded/2);
-		if (Capturing)
-			ProcessNewSamples(&inbuffer[inIndex][0], inheader[inIndex].dwBytesRecorded/2);
-
+		if (Capturing) {
+			ProcessNewSamples(&inbuffer[inIndex][0],
+				inheader[inIndex].dwBytesRecorded / 2);
+		}
 		waveInUnprepareHeader(hWaveIn, &inheader[inIndex], sizeof(WAVEHDR));
 		inheader[inIndex].dwFlags = 0;
 		waveInPrepareHeader(hWaveIn, &inheader[inIndex], sizeof(WAVEHDR));
 		waveInAddBuffer(hWaveIn, &inheader[inIndex], sizeof(WAVEHDR));
-
 		inIndex++;
-
 		if (inIndex == NumberofinBuffers)
 			inIndex = 0;
 	}
+	return;
 }
 
 void StopCapture() {
@@ -336,10 +513,17 @@ void SoundFlush() {
 
 	// Wait for all sound output to complete
 	if (strcmp(PlaybackDevice, "NOSOUND") != 0) {
-		while (!(header[0].dwFlags & WHDR_DONE))
-			txSleep(10);
-		while (!(header[1].dwFlags & WHDR_DONE))
-			txSleep(10);
+		if (m_playchannels == 2) {
+			while (!(stereoheader[0].dwFlags & WHDR_DONE))
+				txSleep(10);
+			while (!(stereoheader[1].dwFlags & WHDR_DONE))
+				txSleep(10);
+		} else {
+			while (!(header[0].dwFlags & WHDR_DONE))
+				txSleep(10);
+			while (!(header[1].dwFlags & WHDR_DONE))
+				txSleep(10);
+		}
 	}
 
 	SoundIsPlaying = false;
