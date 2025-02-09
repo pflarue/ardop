@@ -1109,8 +1109,6 @@ void ProcessUnconnectedConReqFrame(int intFrameType, UCHAR * bytData)
 
 }
 
-extern int extraDelay;
-
 // This is the main subroutine for processing ARQ frames
 
 void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool blnFrameDecodedOK)
@@ -1121,14 +1119,11 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 	static UCHAR * strCallsign;
 	int intReportedLeaderMS = 0;
 	char HostCmd[80];
-	int timeSinceDecoded = Now - DecodeCompleteTime;
 
-	// Allow for link turnround before responding
-
-	ZF_LOGD("Time since received = %d", timeSinceDecoded);
-
-	if (timeSinceDecoded < 250 + extraDelay)
-		txSleep((250 + extraDelay) - timeSinceDecoded);
+	// Sleep() was formerly used here to ensure that there was a sufficient
+	// minimum delay between a received frame and the transmitted response.
+	// This delay is now handled with txSleep() in initFilter(), which is called
+	// while preparing to transmit.
 
 	// Note this is called as part of the RX sample poll routine
 

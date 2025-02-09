@@ -96,6 +96,10 @@ unsigned int getNow() {
 	// in ms from the start of the WAV file.
 	if (DecodeWav[0][0])
 		return WavNow;
+	// TODO: timeGetTime() returns the time in ms since windows was started.  As
+	// a 32-bit value, it resets 2^32 ms, which is about 50 days.  While this is
+	// unlikely to occur, something should be implemented to keep this
+	// from causing a problem.  See DecodeCompleteTime and other uses.
 	return timeGetTime();
 }
 

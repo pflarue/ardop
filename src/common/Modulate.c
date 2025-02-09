@@ -29,6 +29,7 @@ extern short Dummy;
 extern int DriveLevel;
 extern bool WriteTxWav;
 extern unsigned int LastIDFrameTime;
+extern int extraDelay;
 
 int wg_send_txframet(int cnum, const char *frame);
 
@@ -695,14 +696,41 @@ void initFilter(int Width, int Centre)
 	DMABuffer = SoundInit();
 
 	KeyPTT(true);
+
+	SoundIsPlaying = true;
+	StopCapture();
+	// If responding to a received frame, ensure that a sufficient minimum
+	// amount of time has elapsed before transmitting.
+	// txSleep returns immediately if the delay value is negative.
+	//
+	// Previously, this delay was applied in ProcessRcvdARQFrame(), or for
+	// a received DataACK, in ProcessNewSamples().  Moving it here allows it to
+	// be applied only when actually preparing to transmit.  Thus, it can also
+	// use txSleep() rather than Sleep(), thereby helping to avoid problems that
+	// might otherwise be caused by failing to read from the audio capture
+	// device for too long.
+	ZF_LOGD("Time since received = %d (txSleep delay = %i mS)",
+		Now - DecodeCompleteTime,
+		250 + extraDelay - (Now - DecodeCompleteTime));
+	// Require minimum 250 ms delay between RX and TX.
+	// TODO: Is this working as expected?  See comments near start of
+	// ProcessNewSamples() regarding time uncertainty.  Also review how this
+	// interacts with leader length adjusments based on data exchanged during
+	// ARQ handshake.
+	txSleep(250 + extraDelay - (Now - DecodeCompleteTime));
+
+	// pttOnTime is used to in linux/ALSA.c to calculate when enough time has
+	// elapsed for the audio to have been fully played before KeyPTT(false).
+	// Thus, this must be set after txSleep.  pttOnTime is not used for Windows.
+	// TODO: Can greater consistency be achieved by monitoring the tx audio
+	// buffer, as is done in windows/Waveform.c rather than relying on
+	// pttOnTime?  Would such an approach be consistent for all linux audio
+	// devices including plughw, dmix, and pulse?
 	pttOnTime = Now;
 	if (LastIDFrameTime == 0)
 		// This is the first transmission since the last IDFrame.  Schedule the
 		// next IDFrame to be sent in about 10 minutes unless one is sent sooner.
 		LastIDFrameTime = pttOnTime - 1;
-
-	SoundIsPlaying = true;
-	StopCapture();
 
 	Last120Get = 0;
 	Last120Put = 120;

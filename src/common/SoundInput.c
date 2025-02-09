@@ -1193,6 +1193,10 @@ void ProcessNewSamples(short * Samples, int nSamples) {
 			{
 				// Frame has no data so is now complete
 				frameLen = 0;
+				// DecodeCompleteTime is used in initFilter() to ensure that
+				// there is a sufficient minimum delay between the end of a
+				// received frame, and the sending of a response.
+				DecodeCompleteTime = Now;
 
 				// See if IRStoISS shortcut can be invoked
 
@@ -1215,7 +1219,11 @@ void ProcessNewSamples(short * Samples, int nSamples) {
 				{
 					// In this state transition to ISS if  ACK frame
 
-					txSleep(250);
+					// Sleep() was formerly used here to ensure that there was
+					// a sufficient minimum delay between a received frame and
+					// the transmitted response.  This delay is now handled with
+					// txSleep() in initFilter(), which is called while
+					// preparing to transmit.
 
 					ZF_LOGI("[ARDOPprotocol.ProcessNewSamples] ProtocolState=IRStoISS, substate = %s ACK received. Cease BREAKS, NewProtocolState=ISS, substate ISSData", ARQSubStates[ARQState]);
 					blnEnbARQRpt = false;  // stop the BREAK repeats
@@ -1241,8 +1249,6 @@ void ProcessNewSamples(short * Samples, int nSamples) {
 				State = SearchingForLeader;
 				blnFrameDecodedOK = true;
 				ZF_LOGI("[DecodeFrame] Frame: %s ", Name(intFrameType));
-
-				DecodeCompleteTime = Now;
 
 				goto ProcessFrame;
 			}

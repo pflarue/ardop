@@ -5,6 +5,8 @@
 #include "common/version.h"
 #include "common/ptt.h"
 
+void PollReceivedSamples();
+
 #ifdef WIN32
 #define _CRT_SECURE_NO_DEPRECATE
 
@@ -81,19 +83,28 @@ bool UseLeftTX = true;
 bool UseRightTX = true;
 
 
-// called while waiting for next TX buffer or to delay response.
-// Run background processes
+// Called while waiting during TX. Run background processes.
+// If mS <= 0, return quickly
 void txSleep(int mS) {
-	TCPHostPoll();
-	WebguiPoll();
+	if (strcmp(PlaybackDevice, "NOSOUND") == 0)
+		return;
 
-	if (PKTLEDTimer && Now > PKTLEDTimer) {
-		PKTLEDTimer = 0;
-		SetLED(PKTLED, 0);  // turn off packet rxed led
+	unsigned int endNow = Now + mS;
+	while (Now < endNow && !blnClosing) {
+		if (PKTLEDTimer && Now > PKTLEDTimer) {
+			PKTLEDTimer = 0;
+			SetLED(PKTLED, 0);  // turn off packet rxed led
+		}
+		TCPHostPoll();
+		WebguiPoll();
+		// If !Capturing (as intended when called from here),
+		// PollReceivedSamples() reads samples from soundcard, but discards them
+		// rather than passing them to ProcessNewSamples().  This prevents the
+		// RX audio buffer flow overflowing, as could occur if
+		// PollReceivedSamples() was not called.
+		PollReceivedSamples();
+		Sleep(5);  // TODO: Explore whether this value should be adjusted.
 	}
-
-	if (strcmp(PlaybackDevice, "NOSOUND") != 0)
-		Sleep(mS);
 }
 
 void extendRxwf() {
