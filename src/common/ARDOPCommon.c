@@ -122,15 +122,19 @@ void StartRxWav() {
 	// written to the Log directory if defined, else to the current
 	// directory
 	//
-	// As currently implemented, the wav file written contains only
-	// received audio.  Since nothing is written for the time while
-	// transmitting, and thus not receiving, this recording is not
-	// time continuous.  Thus, the filename indicates the time that
-	// the recording was started, but the times of the received
-	// transmissions, other than the first one, are not indicated.
-	// The size should be 100 larger than the size of ArdopLogDir in log.c so
-	// that a WAV pathname in the directory from ardop_log_get_directory()
-	// will always fit.
+	// The wav file written contains only received audio, but continues to
+	// record while transmitting.  While transmitting, the recorded audio is
+	// usually near silence, but not always.  Depending on the hardware in use,
+	// artifacts of PTT on/off may be discernable, as well as the changes in
+	// noise level following PTT action.  Because recording is not interrupted
+	// while transmitting, the timing between various received audio features
+	// should be accurate, and the absolute time at which any audio was received
+	// can be approximately calculated based on the offset within the recording
+	// added to the time indicated by the filename.
+	//
+	// The size of rxwf_pathname should be 100 larger than the size of
+	// ArdopLogDir in log.c so that a WAV pathname in the directory from
+	// ardop_log_get_directory() will always fit.
 	char rxwf_pathname[612];
 	int pnlen;
 	char timestr[16];  // 15 char time string plus terminating NULL
@@ -849,14 +853,14 @@ void displayCall(int dirn, const char * Call)
 
 // When decoding WAV files, WavNow will be set to the offset from the
 // start of that file to the end of the data about to be passed to
-// ProcessNewSamples() in ms.  Thus, it serves as a proxy for Now
-// which is otherwise based on clock time.  This substitution occurs
-// in getNow() in os_util.c.  It is also used to indicate time offsets
-// in the log file.
+// ProcessNewSamples() in ms.  This is returned by Now rather than the
+// value typically provided based on clock time.  This substitution occurs
+// in getNow() in os_util.c.  While the timestamps in the log file are always
+// based on clock time, values of WavNow are also logged (with level VERBOSE)
+// at 100 ms intervals.
 int WavNow = 0;
 
-int decode_wav()
-{
+int decode_wav() {
 	FILE *wavf;
 	unsigned char wavHead[44];
 	size_t readCount;
@@ -864,10 +868,11 @@ int decode_wav()
 	unsigned int nSamples;
 	int sampleRate;
 	short samples[1024];
+	// For logging of WavNow, 100 ms must be a multiple of the duration
+	// corresponding to blocksize.
 	const unsigned int blocksize = 240;  // Number of 16-bit samples to read at a time
 	int WavFileCount = 0;
 	char *nextHostCommand = HostCommands;
-	bool warnedClipping = false;  // Use this to only log warning about clipping once.
 
 	// Seed the random number generator.  This is useful if INPUTNOISE is being
 	// used.  Seeding is normally done in ardopmain(), which is bypassed when
@@ -893,7 +898,6 @@ int decode_wav()
 
 	// Send blocksize silent/noise samples to ProcessNewSamples() before start of WAV file data.
 	memset(samples, 0, sizeof(samples));
-	add_noise(samples, blocksize, InputNoiseStdDev);
 	ProcessNewSamples(samples, blocksize);
 
 	WavNow = 0;
@@ -903,63 +907,48 @@ int decode_wav()
 		NowOffset = Now;
 		ZF_LOGI("Decoding WAV file %s.", DecodeWav[WavFileCount]);
 		wavf = fopen(DecodeWav[WavFileCount], "rb");
-		if (wavf == NULL)
-		{
+		if (wavf == NULL) {
 			ZF_LOGE("Unable to open WAV file %s.", DecodeWav[WavFileCount]);
 			return 1;
 		}
 		if ((Now - NowOffset) % 100 == 0)  // time stamp at 100 ms intervals
 			ZF_LOGV("%s: %.3f sec (%.3f)", DecodeWav[WavFileCount], (Now - NowOffset)/1000.0, Now/1000.0);
 		readCount = fread(wavHead, 1, 44, wavf);
-		if (readCount != 44)
-		{
+		if (readCount != 44) {
 			ZF_LOGE("Error reading WAV file header.");
 			return 2;
 		}
-		if (memcmp(wavHead, headStr, 4) != 0)
-		{
+		if (memcmp(wavHead, headStr, 4) != 0) {
 			ZF_LOGE("%s is not a valid WAV file. 0x%x %x %x %x != 0x%x %x %x %x",
 						DecodeWav[WavFileCount], wavHead[0], wavHead[1], wavHead[2],
 						wavHead[3], headStr[0], headStr[1], headStr[2], headStr[3]);
 			return 3;
 		}
-		if (wavHead[20] != 0x01)
-		{
+		if (wavHead[20] != 0x01) {
 			ZF_LOGE("Unexpected WAVE type.");
 			return 4;
 		}
-		if (wavHead[22] != 0x01)
-		{
+		if (wavHead[22] != 0x01) {
 			ZF_LOGE("Expected single channel WAV.  Consider converting it with SoX.");
 			return 7;
 		}
 		sampleRate = wavHead[24] + (wavHead[25] << 8) + (wavHead[26] << 16) + (wavHead[27] << 24);
-		if (sampleRate != 12000)
-		{
+		if (sampleRate != 12000) {
 			ZF_LOGE("Expected 12kHz sample rate but found %d Hz.  Consider converting it with SoX.", sampleRate);
 			return 8;
 		}
 
 		nSamples = (wavHead[40] + (wavHead[41] << 8) + (wavHead[42] << 16) + (wavHead[43] << 24)) / 2;
 		ZF_LOGD("Reading %d 16-bit samples.", nSamples);
-		while (nSamples >= blocksize)
-		{
+		while (nSamples >= blocksize) {
 			readCount = fread(samples, 2, blocksize, wavf);
-			if (readCount != blocksize)
-			{
+			if (readCount != blocksize) {
 				ZF_LOGE("Premature end of data while reading WAV file.");
 				return 5;
 			}
 			WavNow += blocksize * 1000 / 12000;
 			if ((Now - NowOffset) % 100 == 0)  // time stamp at 100 ms intervals
 				ZF_LOGV("%s: %.3f sec (%.3f)", DecodeWav[WavFileCount], (Now - NowOffset)/1000.0, Now/1000.0);
-			if (add_noise(samples, blocksize, InputNoiseStdDev) > 0 && !warnedClipping) {
-				// The warning normally logged when audio is too loud does not
-				// appear when using decode_wav().  So, add it here.
-				ZF_LOGI("WARNING: In decode_wav(), samples are clipped after adding"
-					" noise because they exceeded the range of a 16-bit integer.");
-				warnedClipping = true;
-			}
 			ProcessNewSamples(samples, blocksize);
 			nSamples -= blocksize;
 		}
@@ -970,21 +959,13 @@ int decode_wav()
 		// convenient for logging).
 		memset(samples, 0, sizeof(samples));
 		readCount = fread(samples, 2, nSamples, wavf);
-		if (readCount != nSamples)
-		{
+		if (readCount != nSamples) {
 			ZF_LOGE("Premature end of data while reading WAV file.");
 			return 6;
 		}
 		WavNow += blocksize * 1000 / 12000;
 		if ((Now - NowOffset) % 100 == 0)  // time stamp at 100 ms intervals
 			ZF_LOGV("%s: %.3f sec (%.3f)", DecodeWav[WavFileCount], (Now - NowOffset)/1000.0, Now/1000.0);
-		if (add_noise(samples, blocksize, InputNoiseStdDev) > 0 && !warnedClipping) {
-			// The warning normally logged when audio is too loud does not
-			// appear when using decode_wav().  So, add it here.
-			ZF_LOGI("WARNING: In decode_wav(), samples are clipped after adding"
-				" noise because they exceeded the range of a 16-bit integer.");
-			warnedClipping = true;
-		}
 		ProcessNewSamples(samples, blocksize);
 		nSamples = 0;
 		fclose(wavf);
@@ -1008,7 +989,6 @@ int decode_wav()
 			WavNow += blocksize * 1000 / 12000;
 			if ((Now - NowOffset) % 100 == 0)  // time stamp at 100 ms intervals
 				ZF_LOGV("Added silence/noise: %.3f sec (%.3f)", (Now - NowOffset)/1000.0, Now/1000.0);
-			add_noise(samples, blocksize, InputNoiseStdDev);
 			ProcessNewSamples(samples, blocksize);
 		}
 		ZF_LOGD("Done decoding %s.", DecodeWav[WavFileCount]);

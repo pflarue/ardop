@@ -818,9 +818,28 @@ short intPSKPhase_1[8], intPSKPhase_0[8];
 short intCP[8];  // Cyclic prefix offset
 float dblFreqBin[8];
 
-// This handles adding of InputNoise, updates CurrentLevel for logging and Guis,
-// and writes received audio to a WAV file when needed.
-void PreprocessNewSamples(short * Samples, int nSamples) {
+// Add InputNoise if specified and write samples to RX Wav file if needed.
+// Return true if any samples that were clipped due to added noise, else false.
+bool PreprocessNewSamples(short * Samples, int nSamples) {
+	bool clipped = (add_noise(Samples, nSamples, InputNoiseStdDev) > 0);
+	if (rxwf != NULL) {
+		// There is an open Wav file recording.
+		// Either close it or write samples to it.
+		if (rxwf_EndNow < Now && !HWriteRxWav) {
+			// timer to close WAV file has expired (not used with HWriteRxWav)
+			CloseWav(rxwf);
+			rxwf = NULL;
+			wg_send_wavrx(0, false);  // update "RECORDING RX" indicator on WebGui
+		}
+		else
+			WriteWav(Samples, nSamples, rxwf);
+	}
+	return clipped;
+}
+
+
+// Update CurrentLevel for logging and Guis.
+void UpdateCurrentLevel(bool clipped, short * Samples, int nSamples) {
 	// For level display we want a fairly rapid level average but only want to report
 	// to log every 10 secs or so
 	short * ptr = Samples;
@@ -830,8 +849,9 @@ void PreprocessNewSamples(short * Samples, int nSamples) {
 	static int lastlevelreport = 0;
 	static int lastlevelGUI = 0;
 
-	if (add_noise(Samples, nSamples, InputNoiseStdDev) > 0) {
-		// add_noise() resulted in clipping, so no need to search for min, max.
+	if (clipped) {
+		// add_noise() in PreprocessNewSamples() resulted in clipping, so no
+		// need to search for min, max.
 		max = 32767;
 		min = -32768;
 	} else {
@@ -877,25 +897,12 @@ void PreprocessNewSamples(short * Samples, int nSamples) {
 		}
 		min = max = 0;  // Every 2 secs
 	}
-
-	if (rxwf != NULL) {
-		// There is an open Wav file recording.
-		// Either close it or write samples to it.
-		if (rxwf_EndNow < Now && !HWriteRxWav) {
-			// timer to close WAV file has expired (not used with HWriteRxWav)
-			CloseWav(rxwf);
-			rxwf = NULL;
-			wg_send_wavrx(0, false);  // update "RECORDING RX" indicator on WebGui
-		}
-		else
-			WriteWav(Samples, nSamples, rxwf);
-	}
 }
 
 void ProcessNewSamples(short * Samples, int nSamples) {
 	bool blnFrameDecodedOK = false;
-
-	PreprocessNewSamples(Samples, nSamples);
+	bool clipped = PreprocessNewSamples(Samples, nSamples);
+	UpdateCurrentLevel(clipped, Samples, nSamples);
 
 	// Reset Memory ARQ values if they have become stale.
 	// This is done here rather than only when a new frame is detected so that

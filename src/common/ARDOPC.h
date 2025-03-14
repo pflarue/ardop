@@ -176,6 +176,7 @@ VOID ClearBusy();
 VOID CloseCOMPort(HANDLE fd);
 
 // #ifdef WIN32
+bool PreprocessNewSamples(short * Samples, int nSamples);
 void ProcessNewSamples(short * Samples, int nSamples);
 void ardopmain();
 bool GetNextFECFrame();

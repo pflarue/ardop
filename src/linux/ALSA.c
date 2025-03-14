@@ -1395,8 +1395,18 @@ void PollReceivedSamples() {
 	if (SoundCardRead(&inbuffer[0][0], ReceiveSize) == 0)
 		return;  // No samples to process
 
-	if (Capturing)
+	if (Capturing) {
 		ProcessNewSamples(&inbuffer[0][0], ReceiveSize);
+	} else {
+		// PreprocessNewSamples() writes these samples to the RX wav
+		// file when specified, even though not Capturing.  This
+		// produces a time continuous Wav file which can be useful for
+		// diagnostic purposes.  In earlier versions of ardopcf, this
+		// RX wav file could not be time continuous due to the way that
+		// ALSA audio devices were opened, closed, and configured.
+		// If Capturing, this is called from ProcessNewSamples().
+		PreprocessNewSamples(&inbuffer[0][0], ReceiveSize);
+	}
 }
 
 
