@@ -21,7 +21,7 @@ _ardopcf_ will list all available capture and playback devices when started. Eac
 Example: startup shows the following list
 ```
 ardopcf Version 1.0.4.1.3 (https://www.github.com/pflarue/ardop)
-Copyright (c) 2014-2024 Rick Muething, John Wiseman, Peter LaRue
+Copyright (c) 2014-2025 Rick Muething, John Wiseman, Peter LaRue
 See https://github.com/pflarue/ardop/blob/master/LICENSE for licence details including
 information about authors of external libraries used and their licenses.
 Capture Devices
@@ -48,7 +48,7 @@ _(In this example we omitted CAT/PTT options, see below in section 3)_
 
 ### Audio device selection in Linux
 
-_ardopcf_ will list all available ALSA capture and playback devices when started.  If your Linux computer is running PulseAudio, it may also work to specify `pulse` as an audio device.  `pulse` will never be listed as an available audio device by ardopcf.
+_ardopcf_ will list all available (hardware) ALSA capture and playback devices when started.  If your Linux computer is running PulseAudio, it may also work to specify `pulse` as an audio device.  `pulse` will never be listed as an available audio device by ardopcf.
 
 Example: startup shows the following list
 ```
@@ -95,6 +95,8 @@ or
 ardopcf -i 1 -o 1
 ```
 
+While these ALSA audio devices should work on all Linux computers, the use of `pulse` audio devices are also available on many systems.  See [USAGE_linux.md](USAGE_linux.md) for details of how to use `pulse` devices, as well as how to configure ardopcf so that it can share audio devices with other programs.
+
 _(In this example we omitted CAT/PTT options, see below in section 3)_
 
 All command line options are listed in the following sections. If the option has an argument, it follows the option after a space.
@@ -132,7 +134,6 @@ All command line options are listed in the following sections. If the option has
 | **-T** | **&#8209;&#8209;writetxwav** |  _none_  | Write WAV files of transmitted audio for debugging. |
 | **-d** | **&#8209;&#8209;decodewav** |  &lt;pathname&gt;  | Decode the supplied WAV file instead of the input audio.  This option can be repeated up to five times to provide up to five WAV files to be decoded as if they were received in the order provided, with a brief period of silence between them.  Unlike handling of most other command line arguments, the --hostcommands (or -H) option is processed before the WAV files are processed.  After these WAV files have been processed, ardopcf will exit. |
 | **-s** | **&#8209;&#8209;sfdt** |  _none_  | Use alternative Sliding DFT based 4FSK decoder. |
-| **-A** | **&#8209;&#8209;ignorealsaerror** |  _none_ | Ignore ALSA config error that causes timing error. <br> **DO NOT** use -A option except for testing/debugging, or if ardopcf fails to run and suggests trying this. |
 
 ## 5. Other options
 
