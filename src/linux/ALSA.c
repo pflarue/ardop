@@ -21,8 +21,6 @@ extern bool UseRightRX;
 extern bool UseLeftTX;
 extern bool UseRightTX;
 
-extern bool FixTiming;
-
 extern char CaptureDevice[80];
 extern char PlaybackDevice[80];
 
@@ -996,9 +994,6 @@ snd_pcm_t * open_audio(const char *devstr, bool iscapture, int ch) {
 	}
 	return handle;
 }
-
-
-bool FirstOpenSoundPlayback = true;  // used to only log warning about -A option once.
 
 bool OpenSoundPlayback(char * PlaybackDevice) {
 	if (strcmp(PlaybackDevice, "NOSOUND") == 0)

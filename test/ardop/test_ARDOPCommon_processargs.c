@@ -78,7 +78,6 @@ extern char DecodeWav[5][256];
 extern bool WriteRxWav;
 extern bool WriteTxWav;
 extern bool UseSDFT;
-extern bool FixTiming;
 
 void close_tcpCAT();
 int processargs(int argc, char * argv[]);
@@ -243,7 +242,6 @@ void reset_defaults() {
 		DecodeWav[i][0] = 0x00;  // zero length null terminated string
 	}
 	UseSDFT = false;
-	FixTiming = true;
 }
 
 
@@ -2749,34 +2747,6 @@ static void test_processargs(void** state) {
 		// nstartstrings=3 + cmdstr + 2x info about using default audio devices
 		assert_int_equal(printindex, 5);
 		assert_true(UseSDFT);
-	}
-	reset_defaults();  // reset global variables changed by processargs
-	reset_printstrs();  // reset captured strings from last test
-	if (true) {
-		// --ignorealsaerror
-		int testargc = 2;
-		char *testargv[] = {"ardopcf", "--ignorealsaerror"};
-		ret = processargs(testargc, testargv);
-		//print_printstrs();
-		//__real_printf("%i: %s\n", printindex, printstrs[printindex]);
-		assert_int_equal(ret, 0);  // 0 = normal end
-		// nstartstrings=3 + cmdstr + 2x info about using default audio devices
-		assert_int_equal(printindex, 5);
-		assert_false(FixTiming);
-	}
-	reset_defaults();  // reset global variables changed by processargs
-	reset_printstrs();  // reset captured strings from last test
-	if (true) {
-		// -A
-		int testargc = 2;
-		char *testargv[] = {"ardopcf", "-A"};
-		ret = processargs(testargc, testargv);
-		//print_printstrs();
-		//__real_printf("%i: %s\n", printindex, printstrs[printindex]);
-		assert_int_equal(ret, 0);  // 0 = normal end
-		// nstartstrings=3 + cmdstr + 2x info about using default audio devices
-		assert_int_equal(printindex, 5);
-		assert_false(FixTiming);
 	}
 	reset_defaults();  // reset global variables changed by processargs
 	reset_printstrs();  // reset captured strings from last test

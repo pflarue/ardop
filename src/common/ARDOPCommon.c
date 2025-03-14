@@ -65,7 +65,6 @@ bool HWriteRxWav = false;  // Record RX controlled by host command RECRX
 bool WriteRxWav = false;  // Record RX controlled by Command line/TX/Timer
 bool WriteTxWav = false;  // Record TX
 bool UseSDFT = false;
-bool FixTiming = true;
 bool WG_DevMode = false;
 // the --decodewav option can be repeated to provide the pathnames of multiple
 // WAV files to be decoded.  If more are given than DecodeWav can hold, then the
@@ -313,7 +312,6 @@ static struct option long_options[] =
 	{"writetxwav",  no_argument, 0, 'T'},
 	{"decodewav",  required_argument, 0, 'd'},
 	{"sdft", no_argument, 0, 's'},
-	{"ignorealsaerror", no_argument, 0, 'A'},
 	{"help",  no_argument, 0 , 'h'},
 	{ NULL , no_argument , NULL , no_argument }
 };
@@ -377,9 +375,6 @@ char HelpScreen[] =
 	"-d pathname or --decodewav pathname  Pathname of WAV file to decode instead of listening.\n"
 	"                                       Repeat up to 5 times for multiple WAV files.\n"
 	"-s or --sdft                         Use the alternative Sliding DFT based 4FSK decoder.\n"
-	"-A or --ignorealsaerror              Ignore ALSA config error that causes timing error.\n"
-	"                                       DO NOT use -A option except for testing/debugging,\n"
-	"                                       or if ardopcf fails to run and suggests trying this.\n"
 	"\n"
 	" CAT and RTS/DTR PTT can share the same port.\n"
 	" See the ardopcf documentation for command line options at\n"
@@ -438,7 +433,7 @@ int processargs(int argc, char * argv[]) {
 	}
 
 	// Starting optstring with : prevents getopt_long() from printing errors
-	char optstring[64] = ":i:o:l:H:mc:p:k:u:G:hLRyzwTd:sA";
+	char optstring[64] = ":i:o:l:H:mc:p:k:u:G:hLRyzwTd:s";
 #ifdef LOG_OUTPUT_SYSLOG
 	// -S is only a valid option on Linux systems
 	snprintf(optstring + strlen(optstring), sizeof(optstring), "S");
@@ -724,10 +719,6 @@ int processargs(int argc, char * argv[]) {
 
 			case 's':
 				UseSDFT = true;
-				break;
-
-			case 'A':
-				FixTiming = false;
 				break;
 
 			case ':':
