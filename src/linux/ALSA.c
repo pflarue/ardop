@@ -59,6 +59,11 @@ int PlaybackDevicesCount;
 char **CaptureDevices;
 int CaptureDevicesCount;
 
+// If set to true, then alsa_errhandler() will return without writing anything
+// to the log.  This may be set temporarily when doing something that is
+// expected to produce an error.
+bool mute_alsa_errhandler = false;
+
 void CloseSoundCard() {
 	if (rechandle) {
 		snd_pcm_close(rechandle);
@@ -69,6 +74,195 @@ void CloseSoundCard() {
 		snd_pcm_close(playhandle);
 		playhandle = NULL;
 	}
+}
+
+/**
+ * Shared function to clean up any of the two device collections
+ */
+void FreeDevicesCollection(char ***devices, int *deviceCount) {
+	if (*devices != NULL) {
+		for (int i = 0; i < (*deviceCount); i++) {
+			free((*devices)[i]);
+		}
+		free(*devices);
+		*deviceCount = 0;
+	}
+	*devices = NULL;
+}
+
+
+/**
+ * Shared function to add new item to any of the two device collections
+ */
+int AppendDeviceItem(char* newDevice, char ***devices, int deviceCount) {
+	*devices = realloc(*devices, (deviceCount + 1) * sizeof(char *));
+	(*devices)[deviceCount++] = newDevice;
+	return deviceCount;
+}
+
+
+void LogDeviceCollection(char **devices, int deviceCount) {
+	for (int i = 0; i < deviceCount; ++i) {
+		ZF_LOGI("%i: %s", i, devices[i]);
+	}
+}
+
+// some string constants, not to repeat the same strings at different locations in the code
+const char * STREAM_OUTPUT = "Output";
+const char * STREAM_INPUT = "Input";
+
+/* string constant for workaround about non-usable surround "devices".
+ * Surround implies additional channels. We only need one or two channels for a radio.
+ * Also, surround enhancement makes no sense for radio communication.
+*/
+const char * SURROUND = "surround" ;
+
+/**
+ * This functions populates both PlaybackDevices and CaptureDevices in one turn.
+ * It scans all visible PCM objects using ALSA name hint API. That in turn gives a list
+ * of more devices than the original functions GetOutputDeviceCollection
+ * and GetInputDeviceCollection, plus it fetches device description which might become
+ * useful for the end user when deciding which sound device to use for ARDOP.
+ *
+ * The original code fetching additional data about number of channels and sampling rates
+ * is not included here but may be added later if necessary. Pursuing the idea that direct user
+ * interaction with ardopcf should be minimized and on contrary more information and control
+ * should flow through the host interface will eventually require to somehow handle these data as well.
+ * But not now, yet...
+ *
+ * Out of all the name hints only those are selected that make sense for rig audio interfacing.
+ * From this already limited set only those devices that could be opened by snd_pcm_open will be
+ * included in the collections.
+ *
+ * Almost all of the code is common for input and output devices (or capture and playback,
+ * whatever is the preference) and only the final assignment to one of the two collections
+ * is decided based on the actual device 'stream' type.
+ */
+void GetDevicesCollections() {
+	void **h, **n;  // hint pointers
+	char *name, *descr, *io;  // extracted name, description and input/output stream type
+	int err;  // error indicator where necessary
+	snd_pcm_stream_t stream;  // input or output stream enum value
+	const char *streamstr;  // set to STREAM_OUTPUT or STREAM_INPUT
+	snd_pcm_t * pcm;  // pcm device handle
+	char firstLine[256];  // buffer to hold device name
+	char deviceLine[256];  // buffer to construct the whole device record
+	firstLine[255] = '\0';  // safety stop
+	deviceLine[255] = '\0';  // safety stop
+
+	// TODO: review string handling in this function to ensure that an overrun
+	// cannot occur due to an unexpectedly long name or description.
+
+	// Temporarily disable ALSA error logging to avoid logging errors while
+	// testing whether audio devices can be opened.
+	mute_alsa_errhandler = true;
+
+	// TODO: To allow this function to be run while sound devices are still
+	// open will require that the currently open devices (input and output)
+	// be identified, and handled correctly (don't try to re-open them)
+	CloseSoundCard();  // copied from the original
+
+	ZF_LOGI("Refreshing sound device list");
+
+	// Step 1: clean up previous results
+	FreeDevicesCollection(&PlaybackDevices, &PlaybackDevicesCount);
+	FreeDevicesCollection(&CaptureDevices, &CaptureDevicesCount);
+
+	// Step 2: scan over all device name hints
+	if (snd_device_name_hint(-1, "pcm", &h) != 0) {
+		ZF_LOGI("No sound devices found");
+		return;
+	}
+	n = h;  // prepare for scan
+
+	// repeat until we reach end of the hint list
+	while (*n != NULL) {
+		name = snd_device_name_get_hint(*n, "NAME");
+		// Step 3: Skip any 'surroundXX:' items, see above for reasoning
+		if (strncmp(name, SURROUND, strlen(SURROUND)) == 0) {
+			free(name);
+			n++;
+			continue;
+		}
+		descr = snd_device_name_get_hint(*n, "DESC");
+		// Don't skip any devices without descriptions, since user defined
+		// devices in ~/.asoundrc might not include descriptions (though they
+		// should)
+		io = snd_device_name_get_hint(*n, "IOID");
+
+		// Use only the first line of the description
+		// TODO: Is there a cleaner way to do this?
+		char * eol;
+		eol = strchr(descr, '\n');  // find the first newline if exists
+		if (eol != NULL)
+			*eol = '\0';  // temporarily cut the string
+		strcpy(firstLine, descr);  // copy the 1st description line into variable
+		if (eol != NULL)
+			*eol = '\n';  // restore the original string
+		// first line copied
+
+		// Step 4: confirm that the device can be opened by name
+		for (int mode = 0; mode < 2; ++mode) {
+			if (mode == 0) {
+				if (io != NULL && strcmp(io, STREAM_OUTPUT) != 0)
+					continue;  // This is not an output device
+				stream = SND_PCM_STREAM_PLAYBACK;
+				streamstr = STREAM_OUTPUT;
+			} else {  // mode == 1
+				if (io != NULL && strcmp(io, STREAM_INPUT) != 0)
+					continue;  // This is not an input device
+				stream = SND_PCM_STREAM_CAPTURE;
+				streamstr = STREAM_INPUT;
+			}
+			if ((err = snd_pcm_open(&pcm, name, stream, 0)) != 0) {
+				// This device will not be added to this collection.
+				// Log this occurence to the debug log (not a higher leve
+				// log).
+				ZF_LOGD("Error opening %s as an %s device in"
+					" GetDevicesCollections() (%s).  skipping.",
+					name, streamstr, snd_strerror(err));
+				continue;
+			}
+			if (snd_pcm_close(pcm) != 0) {
+				// This device will not be added to this collection.
+				// Log this occurence to the debug log (not a higher leve
+				// log).
+				ZF_LOGD("Error closing %s as an %s device in"
+					" GetDevicesCollections() (%s).  skipping.",
+					name, streamstr, snd_strerror(err));
+				continue;
+			}
+			// Device could be opened and closed, add it to the collection
+
+			// Step 5: construct device descriptor consisting of device name followed by a space
+			// and the first line of the description. For opening the device take the descriptor
+			// up to and excluding the first space and use the string as parameter for snd_pcm_open(...)
+			strcpy(deviceLine, name);
+			int n = strlen(deviceLine);
+			deviceLine[n++] = ' ';
+			strcpy(deviceLine + n, firstLine);
+			deviceLine[255] = '\0';  // just to be sure we have no overrun
+
+			// Step 6: Put the device into one of the collections.
+			// If io is NULL and it is successfully opened in both modes,
+			// then it will be added to both collections
+			if (stream == SND_PCM_STREAM_PLAYBACK) {
+				PlaybackDevicesCount =
+					AppendDeviceItem(strdup(deviceLine), &PlaybackDevices, PlaybackDevicesCount);
+			} else {  // stream == SND_PCM_STREAM_CAPTURE
+				CaptureDevicesCount =
+					AppendDeviceItem(strdup(deviceLine), &CaptureDevices, CaptureDevicesCount);
+			}
+		}
+		n++;
+		// clean up allocated pointers
+		free(name);
+		free(descr);
+		free(io);  // may be NULL
+	}
+	snd_device_name_free_hint(h);
+	mute_alsa_errhandler = false;  // DIAGNOSTIC: return this to its normal condition
+	ZF_LOGV("Done refreshing sound device list");
 }
 
 // Populate PlaybackDevices and Log the available output audio devices
@@ -1271,6 +1465,9 @@ void alsa_errhandler(const char *file, int line, const char *function, int err, 
 	if (blnClosing)
 		return;  // This avoids spamming the logger with excessive error msgs
 
+	if (mute_alsa_errhandler)
+		return;
+
 	if (Now - errtime > 2000) {
 		// It has been more than 2 seconds since the last error
 		errcount = 0;
@@ -1322,8 +1519,22 @@ bool InitSound() {
 
 	snd_lib_error_set_handler(alsa_errhandler);
 
+	// DIAGNOSTIC
+	GetDevicesCollections();
+	ZF_LOGI("PlaybackDevices [from GetDevicesCollections()]:");
+	LogDeviceCollection(PlaybackDevices, PlaybackDevicesCount);
+	ZF_LOGI("CaptureDevices [from GetDevicesCollections()]:");
+	LogDeviceCollection(CaptureDevices, CaptureDevicesCount);
+	FreeDevicesCollection(&PlaybackDevices, &PlaybackDevicesCount);
+	FreeDevicesCollection(&CaptureDevices, &CaptureDevicesCount);
+	// DIAGNOSTIC
+
 	GetInputDeviceCollection();
 	GetOutputDeviceCollection();
+	ZF_LOGI("PlaybackDevices [from GetOutputDeviceCollection()]:");
+	LogDeviceCollection(PlaybackDevices, PlaybackDevicesCount);
+	ZF_LOGI("CaptureDevices [from GetInputDeviceCollection()]:");
+	LogDeviceCollection(CaptureDevices, CaptureDevicesCount);
 
 	if (strcmp(CaptureDevice, "0") == 0
 		|| (atoi(CaptureDevice) > 0 && strlen(CaptureDevice) <= 2)
