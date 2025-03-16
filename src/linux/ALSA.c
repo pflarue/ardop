@@ -282,7 +282,7 @@ int GetInputDeviceCollection() {
 				snd_pcm_info_get_name(pcminfo), snd_ctl_card_info_get_name(info));
 			CaptureDevices = realloc(CaptureDevices,
 				(CaptureDevicesCount + 1) * sizeof(char *));
-			CaptureDevices[PlaybackDevicesCount++] = strdup(NameString);
+			CaptureDevices[CaptureDevicesCount++] = strdup(NameString);
 
 			snd_pcm_close(pcm);
 			pcm= NULL;
