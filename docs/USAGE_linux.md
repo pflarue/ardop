@@ -64,16 +64,14 @@ While the digirig lite is fully supported by ardopcf, I do not recommend it for 
 
 Your Linux computer may have multiple audio Capture (input) and Playback (output) devices.  **Ardopcf** must be told which of these devices to use.  **ardopcf** is designed to work with ALSA audio devices.  This low level audio interface system should be available on all Linux machines.
 
-However, especially when running a Linux desktop interface, a higher level sound server like Pulse Audio, PipeWire, or Jack may also be running.  In a message to the users subgroup at ardop.groups.io an **ardopcf** user [wrote](https://ardop.groups.io/g/users/message/5411) that **ardopcf** will also work if `pulse` is specified for the audio devices.  I have confirmed that this works, but need to explore it further to understand it better.  For example, I do not know how to select a specific audio device with pulse if more than one is available.  I will update this documentation when I understand this better.
+However, especially when running a Linux desktop interface, a higher level sound server like Pulse Audio, PipeWire, or Jack may also be running.  If you run `aplay -L`, you will see a list of all of the available (software) audio devices available.  If one of those listed is `pulse`, then you may choose to use that instead of one of the `plughw:N,0` devices described in this section.  Using `pulse` is recommended if it is an available option and you need multiple programs to share the same audio devices.  See the section called **Using pulse audio devices** for more details.  If `pulse` is available on your Linux computer, but you don't need multiple programs to share the same audio devices, then you can choose either to use `pulse` or one of the `plughw:N,0` devices described in this section.
 
-ALSA also allows the configuration of plugins that may allow multiple programs to use the same audio device.  John Wiseman provided a link to a [.asoundrc](https://www.cantab.net/users/john.wiseman/Downloads/alsa-shared-ardopcf-QtSM.txt) configuration file in a [discussion](https://ardop.groups.io/g/users/topic/108567735) of how to make this possible.  That discussion ended with a suggestion that some modification of **ardopcf** might be required for it to work well with specific other programs, and that the order in which those programs are started may also be relvant.  I don't fully understand this approach.  I will update this documention when I understand it better.
-
-While the previous paragraphs describe possible alternatives, the remainder of this section will describe using simple ALSA devices directly.
+ALSA also allows the configuration of plugins to allow multiple programs to use the same audio device.  These custom configured plugins should not be used if the `pulse` device is available on your computer as described in the previous paragraph.  To configure custom plugins on Linux systems where `pulse` is not available requires creating a `.asoundrc` file in your home directory.  An [example](example.asoundrc) of such a file is provided with this documentation.  This example creates four new software audio devices, mix0, mix1, snoop0, and snoop1.  The mixN devices are for playback (output), while the snoopN devices are for capture (input).  As described in the example file, you can easily create additional versions for card numbers greater than 1.
 
 Every time that **ardopcf** is started (except when the `--help` or `-h` option are used, or if you set `CONSOLELOG` too high), it will print a list of all of the ALSA audio devices that it finds.  It does not detect and print info about devices such as `pulse` mentioned above.  This can be used to identify which device numbers should be used.  So, run `ardopcf` with no other options from a command line to see the list of audio devices.  If it does not exit after printing this list, press CTRL-C to kill it.  This should print something that looks similar to:
 ```
-ardopcf Version 1.0.4.1.2 (https://www.github.com/pflarue/ardop)
-Copyright (c) 2014-2024 Rick Muething, John Wiseman, Peter LaRue
+ardopcf Version 1.0.4.1.3 (https://www.github.com/pflarue/ardop)
+Copyright (c) 2014-2025 Rick Muething, John Wiseman, Peter LaRue
 See https://github.com/pflarue/ardop/blob/master/LICENSE for licence details including
   information about authors of external libraries used and their licenses.
 ARDOPC listening on port 8515
@@ -95,17 +93,16 @@ Card 1, ID 'Device', name 'USB Audio Device'
   Device hw:1,0 ID 'USB Audio', name 'USB Audio', 1 subdevices (1 available)
     2 channels,  sampling rate 44100..48000 Hz
 
-Using Both Channels of soundcard for RX
-Using Both Channels of soundcard for TX
-Opening Playback Device ARDOP Rate 12000
-ALSA lib pcm.c:2660:(snd_pcm_open_noupdate) Unknown PCM ARDOP
-cannot open playback audio device ARDOP (No such file or directory)
+Opening plughw:0,0 for RX as a single channel (mono) device
+Opening plughw:0,0 for TX as a single channel (mono) device
+ALSA Error at pcm_hw.c:1722 snd_pcm_hw_open(): Unknown error 524
+Error opening audio device plughw:0,0 for playback (Unknown error 524)
 Error in InitSound().  Stopping ardop.
 ```
 
 In this case 'Card 1' with the name 'USB Audio Device' for both Capture and Playback devices is the [Digirig](https://www.digirig.net) interface that I use to connect to my Xiegu G90.  If you are unsure which device represents the interface to your radio, compare the results of running `ardopcf` with and without your interface connected to your computer.
 
-This list shows 'hw:1,0' as the Device for both of these.  Your device is likely similar, but the numbers may be different.  Using a 'hw:' device directly with **ardopcf** doesn't usually work, because most sound cards do not natively support the 12 kHz sample rate that **ardopcf** uses.  The listing above shows that these 'hw:' devices support sampling rates of 41000..48000 Hz.  Thus, they do not natively support the 12000 Hz rate required by **ardopcf**.  However, ALSA provides a plugin that allows it to resample the audio to sample rates not directly supported by the hardware.  To use this, tell **ardopcf** to use 'plughw:1,0' instead of 'hw:1,0'.  If you specify just a number, for the device, **ardopcf** uses the corresponding 'plughw' device.  So, if you specify `1`, ardopcf uses `plughw:1,0`.  Unless you are using a non-ALSA device like `pulse` or a plugin-based custom configured ALSA device, specifying each device by a number this way is probably what you want to do.  If you don't specify the audio devices, **ardopcf** uses a default of `0` (which expands to `plughw:0,0`) for both of them.
+This list shows 'hw:1,0' as the Device for both of these.  Your device is likely similar, but the numbers may be different.  Using a 'hw:' device directly with **ardopcf** doesn't usually work, because most sound cards do not natively support the 12 kHz sample rate that **ardopcf** uses.  The listing above shows that these 'hw:' devices support sampling rates of 41000..48000 Hz.  Thus, they do not natively support the 12000 Hz rate required by **ardopcf**.  However, ALSA provides a default plugin that allows it to resample the audio to sample rates not directly supported by the hardware.  To use this, tell **ardopcf** to use 'plughw:1,0' instead of 'hw:1,0'.  If you specify just a number, for the device, **ardopcf** uses the corresponding 'plughw' device.  So, if you specify `1`, ardopcf uses `plughw:1,0`.  Unless you are using a non-ALSA device like `pulse` or a plugin-based custom configured ALSA device, specifying each device by a number this way is probably what you want to do.  If you don't specify the audio devices, **ardopcf** uses a default of `0` (which expands to `plughw:0,0`) for both of them.
 
 Use the `-i` option to set the (input) audio capture device and the `-o` option to set the (output) audio playback device.  Earlier versions of **ardopcf** did not support these options, and thus required that you also specify the host port number to set these values.  So, for my system, I would use:
 `ardopcf -i 1 -o 1`
@@ -114,7 +111,10 @@ which is equivalent to the more verbose
 
 `ardopcf -i plughw:1,0 -o plughw:1,0`
 
-This starts **ardopcf** and may be sufficient if you decided after reading the earlier section on PTT/CAT control that you do not need **ardopcf** to handle PTT because a host program like [Pat](https://getpat.io) will handle this or because you will use VOX.  If you decided that you want **ardopcf** to handle PTT, then add those additional options.  For example:
+If you have created `.asoundrc` in your home directory from the provided example file, and you want to share card 1 (based on hw:1,0) with another program, then instead you would use:
+`ardopcf -i snoop1 -o mix1`
+
+Any of these options start **ardopcf** and may be sufficient if you decided after reading the earlier section on PTT/CAT control that you do not need **ardopcf** to handle PTT because a host program like [Pat](https://getpat.io) will handle this or because you will use VOX.  If you decided that you want **ardopcf** to handle PTT, then add those additional options.  For example:
 
 `ardopcf -p /dev/ttyUSB1 -i 1 -o 1`
 
@@ -138,6 +138,39 @@ So, annother example of the complete command you might want to use to start **ar
 
 With this running, **ardopcf** is functional and ready to be used by a host program like [Pat](https://getpat.io).  However, you probably don't want to type all of this every time you want to start **ardopcf**.  So, the next sections describe some better options for starting **ardopcf**.  All of them will use the sequence of options that you identified in this section.
 
+## Using pulse audio devices
+
+As mentioned in the previous section, **ardopcf** can also use `pulse` as the audio input and output devices with:
+`ardopcf -i pulse -o pulse`
+
+If `pulse` devices are not available on your computer, then this will produce an error message such as `Error opening audio device pulse for capture (No such file or directory)`, and you must use ALSA devices such as `plughw:0,0` as described in the previous section.
+
+If `pulse` devices are available on your computer, then you should not install the `.asoundrc` file and use the `mixN` and `snoopN` devices defined there and described in the previous section.
+
+If you want to share a single audio device beween **ardopcf** and another program and `pulse` audio devices are available on your system, then you should use them for this purpose rather than `mixN` and `snoopN`.  If `pulse` devices are available, but you do not need to share an audio device with another program, then you can either use `pulse` or an ALSA device such as `plughw:0,0`.
+
+If the `pulse` devices are available and you choose to use them with **ardopcf**, you will generally need to configure your audio system to indicate what audio hardware you wish to use.  This can be done with some desktop GUI tools not described here, or it can be done using environment variables as follows.  To do this, you first need to determine the names of the pulse devices that correspond to your radio interface.  With a DigiRig Mobile device connecting my Xiegu G90 to my computer I run the following command.
+`pactl list short`
+
+This displays a long list of devices including:
+```
+428     alsa_output.usb-C-Media_Electronics_Inc._USB_Audio_Device-00.analog-stereo      PipeWire        s16le 2ch 48000Hz       SUSPENDED
+428     alsa_output.usb-C-Media_Electronics_Inc._USB_Audio_Device-00.analog-stereo.monitor      PipeWire        s16le 2ch 48000Hz       SUSPENDED
+429     alsa_input.usb-C-Media_Electronics_Inc._USB_Audio_Device-00.mono-fallback       PipeWire        s16le 1ch 48000Hz       SUSPENDED
+```
+
+Notice that in this case there are two `alsa_output` devices, one of which has the suffix `.monitor`.  That is a special device that can be used to hear what you are playing to the corresponding `alsa_output` device.  Don't use that `.monitor` device.  To start **ardopcf** using `pulse` devices while indicating that the DigiRig Mobile should be used, I use the following command:
+```
+PULSE_PROP_APPLICATION_NAME=ARDOPCF \
+PULSE_SINK=alsa_output.usb-C-Media_Electronics_Inc._USB_Audio_Device-00.analog-stereo \
+PULSE_SOURCE=alsa_input.usb-C-Media_Electronics_Inc._USB_Audio_Device-00.mono-fallback \
+ardopcf -i pulse -o pulse
+```
+
+Note that this is a single bash command.  The slash characters at the end of each but the final line mean that it is equivalent to typing all of this on a single line.  Setting `PULSE_PROP_APPLICATION_NAME` is optional, and simply identifies the name of the program that is being configured.  The specific value is not important, but using `ARDOPCF` seems like a good choice.  The second line sets `PLUSE_SINK` to the correct `alsa_output` device, while the third line sets `PULSE_SOURCE` to the correct `alsa_input` device.  Finally, the last line starts ardopcf with the `-i pulse -o pulse` indicating that `pulse` devices are to be used for both audio input (capture) and output (playback).
+
+See the previous section **Ardopcf audio devices and other options** for how to combine the `-i` and `-o` options to select the audio devices with other options.  The next section **Starting ardopcf from the command line** also includes an example that uses `pulse` audio devices and several additional options.
+
 
 ## Starting **ardopcf** from the command line.
 
@@ -145,6 +178,15 @@ Starting **ardopcf** from the command line is useful if you access your Linux ma
 ```
 #! /bin/bash
 ardopcf --logdir ~/ardopc_logs -p /dev/ttyUSB1 -G 8514 --hostcommands "CONSOLELOG 4;MYCALL AI7YN;DRIVELEVEL 85" -i 1 -o 1
+```
+
+If you are using `pulse` audio devices, this might instead be similar to:
+```
+#! /bin/bash
+PULSE_PROP_APPLICATION_NAME=ARDOPCF \
+PULSE_SINK=alsa_output.usb-C-Media_Electronics_Inc._USB_Audio_Device-00.analog-stereo \
+PULSE_SOURCE=alsa_input.usb-C-Media_Electronics_Inc._USB_Audio_Device-00.mono-fallback \
+ardopcf --logdir ~/ardopc_logs -p /dev/ttyUSB1 -G 8514 --hostcommands "CONSOLELOG 4;MYCALL AI7YN;DRIVELEVEL 85" -i pulse -o pulse
 ```
 
 Once you have created this file, use `chmod` or an equivalent feature in a file manager to make it executable.
@@ -247,13 +289,13 @@ Once you have created this file, use `chmod` or an equivalent feature in a file 
 
 Once you have confirmed that **ardopcf** is successfully connected to your radio, you need to adjust the audio transmit and receive levels.
 
-In addition to making adjustments in **ardopcf** and with your radio, alsamixer or amixer are used to adjust your computer's audio settings.  See https://linux.die.net/man/1/alsamixer and https://linux.die.net/man/1/amixer for descriptions of the use of the two ALSA control programs.  Of these alsamixer is interactive, while amixer can be used to set values directly from the command line or a bash script.
+In addition to making adjustments in **ardopcf** and with your radio, alsamixer or amixer are used to adjust your computer's audio settings.  See https://linux.die.net/man/1/alsamixer and https://linux.die.net/man/1/amixer for descriptions of the use of the two ALSA control programs.  Of these alsamixer is interactive, while amixer can be used to set values directly from the command line or a bash script.  If you are using `pulse` audio devices, you can still use alsamixer or amixer, but you can also use interactive desktop GUI programs or the `pactl` command line tool.
 
 ### Adjusting your transmit audio.
 
 If your trasmitter has speech compression or other features that modify/distort transmit audio, these should be disabled when using any digital mode, including Ardop.
 
-Your transmit audio level can be adjusted using a combination of your radio's settings, the ALSA controls, and the **ardopcf** Drivelevel setting.  Drivelevel can be set when starting **ardopcf** using the `DRIVELEVEL` command with the `--hostcommands` option or with the slider in the **ardopcf** WebGui.  In theory, drivelevel can also be controlled from a host program like Pat, but I don't believe that any existing host programs provide this function.
+Your transmit audio level can be adjusted using a combination of your radio's settings, the ALSA/Pulse controls, and the **ardopcf** Drivelevel setting.  Drivelevel can be set when starting **ardopcf** using the `DRIVELEVEL` command with the `--hostcommands` option or with the slider in the **ardopcf** WebGui.  In theory, drivelevel can also be controlled from a host program like Pat, but I don't believe that any existing host programs provide this function.
 
 Together these settings influence the strength and quality of your transmitted radio signal.
 

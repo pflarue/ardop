@@ -1,0 +1,41 @@
+# Copy this file to ~/.asoundrc
+#
+# To share audio devices between multiple programs, use mixN for playback
+# and snoopN for capture, where N is the corresponding card number of the
+# device to be shared, as listed with the -l option of aplay and arecord.
+#
+# This file, which is available at
+# https://github.com/pflarue/ardop/blob/master/docs/example.asoundrc
+# provides mixed/snooped versions for cards 0 and 1.  These can be copied and
+# edited for additional card numbers as required.
+#
+# This file is generally only required on Linux systems that have only the
+# default ALSA sound system installed.  If you are using a Linux system running
+# PulseAudio or another audio server system that provides a "pulse" PCM as
+# listed with the -L option of aplay and arecord, then that pulse device should
+# generally be used when an audio device is to be shared between multiplt
+# programs.  When pulse is used, this file is not required.
+
+pcm.mix0 {
+	type plug
+	slave.pcm "dmix:0,0"
+	hint.description "Resample and mix (play) hw:0,0"
+}
+
+pcm.mix1 {
+	type plug
+	slave.pcm "dmix:1,0"
+	hint.description "Resample and mix (play) hw:1,0"
+}
+
+pcm.snoop0 {
+	type plug
+	slave.pcm "dsnoop:0,0"
+	hint.description "Resample and snoop (capture) hw:0,0"
+}
+
+pcm.snoop1 {
+	type plug
+	slave.pcm "dsnoop:1,0"
+	hint.description "Resample and snoop (capture) hw:1,0"
+}

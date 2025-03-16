@@ -457,11 +457,21 @@ void PollReceivedSamples() {
 			// Copy samples from the user specified channel into the corresponding
 			// inbuffer[inIndex] so that it can be passed to ProcessNewSamples(),
 			// which expects a mono signal.
+			int j = UseLeftRX ? 0 : 1;  // Select use of Left or Right channel
+			for (int i = 0; i < ReceiveSize; ++i, j += 2)
+				inbuffer[inIndex][i] = stereoinbuffer[inIndex][j];
 			if (Capturing) {
-				int j = UseLeftRX ? 0 : 1;  // Select use of Left or Right channel
-				for (int i = 0; i < ReceiveSize; ++i, j += 2)
-					inbuffer[inIndex][i] = stereoinbuffer[inIndex][j];
 				ProcessNewSamples(&inbuffer[inIndex][0],
+					stereoinheader[inIndex].dwBytesRecorded / 4);
+			} else {
+				// PreprocessNewSamples() writes these samples to the RX wav
+				// file when specified, even though not Capturing.  This
+				// produces a time continuous Wav file which can be useful for
+				// diagnostic purposes.  In earlier versions of ardopcf, this
+				// RX wav file could not be time continuous due to the way that
+				// ALSA audio devices were opened, closed, and configured.
+				// If Capturing, this is called from ProcessNewSamples().
+				PreprocessNewSamples(&inbuffer[inIndex][0],
 					stereoinheader[inIndex].dwBytesRecorded / 4);
 			}
 			waveInPrepareHeader(hWaveIn, &stereoinheader[inIndex], sizeof(WAVEHDR));
@@ -476,6 +486,16 @@ void PollReceivedSamples() {
 	if (inheader[inIndex].dwFlags & WHDR_DONE) {
 		if (Capturing) {
 			ProcessNewSamples(&inbuffer[inIndex][0],
+				inheader[inIndex].dwBytesRecorded / 2);
+		} else {
+			// PreprocessNewSamples() writes these samples to the RX wav
+			// file when specified, even though not Capturing.  This
+			// produces a time continuous Wav file which can be useful for
+			// diagnostic purposes.  In earlier versions of ardopcf, this
+			// RX wav file could not be time continuous due to the way that
+			// ALSA audio devices were opened, closed, and configured.
+			// If Capturing, this is called from ProcessNewSamples().
+			PreprocessNewSamples(&inbuffer[inIndex][0],
 				inheader[inIndex].dwBytesRecorded / 2);
 		}
 		waveInUnprepareHeader(hWaveIn, &inheader[inIndex], sizeof(WAVEHDR));

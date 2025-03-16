@@ -818,9 +818,28 @@ short intPSKPhase_1[8], intPSKPhase_0[8];
 short intCP[8];  // Cyclic prefix offset
 float dblFreqBin[8];
 
-// This handles adding of InputNoise, updates CurrentLevel for logging and Guis,
-// and writes received audio to a WAV file when needed.
-void PreprocessNewSamples(short * Samples, int nSamples) {
+// Add InputNoise if specified and write samples to RX Wav file if needed.
+// Return true if any samples that were clipped due to added noise, else false.
+bool PreprocessNewSamples(short * Samples, int nSamples) {
+	bool clipped = (add_noise(Samples, nSamples, InputNoiseStdDev) > 0);
+	if (rxwf != NULL) {
+		// There is an open Wav file recording.
+		// Either close it or write samples to it.
+		if (rxwf_EndNow < Now && !HWriteRxWav) {
+			// timer to close WAV file has expired (not used with HWriteRxWav)
+			CloseWav(rxwf);
+			rxwf = NULL;
+			wg_send_wavrx(0, false);  // update "RECORDING RX" indicator on WebGui
+		}
+		else
+			WriteWav(Samples, nSamples, rxwf);
+	}
+	return clipped;
+}
+
+
+// Update CurrentLevel for logging and Guis.
+void UpdateCurrentLevel(bool clipped, short * Samples, int nSamples) {
 	// For level display we want a fairly rapid level average but only want to report
 	// to log every 10 secs or so
 	short * ptr = Samples;
@@ -830,8 +849,9 @@ void PreprocessNewSamples(short * Samples, int nSamples) {
 	static int lastlevelreport = 0;
 	static int lastlevelGUI = 0;
 
-	if (add_noise(Samples, nSamples, InputNoiseStdDev) > 0) {
-		// add_noise() resulted in clipping, so no need to search for min, max.
+	if (clipped) {
+		// add_noise() in PreprocessNewSamples() resulted in clipping, so no
+		// need to search for min, max.
 		max = 32767;
 		min = -32768;
 	} else {
@@ -877,25 +897,12 @@ void PreprocessNewSamples(short * Samples, int nSamples) {
 		}
 		min = max = 0;  // Every 2 secs
 	}
-
-	if (rxwf != NULL) {
-		// There is an open Wav file recording.
-		// Either close it or write samples to it.
-		if (rxwf_EndNow < Now && !HWriteRxWav) {
-			// timer to close WAV file has expired (not used with HWriteRxWav)
-			CloseWav(rxwf);
-			rxwf = NULL;
-			wg_send_wavrx(0, false);  // update "RECORDING RX" indicator on WebGui
-		}
-		else
-			WriteWav(Samples, nSamples, rxwf);
-	}
 }
 
 void ProcessNewSamples(short * Samples, int nSamples) {
 	bool blnFrameDecodedOK = false;
-
-	PreprocessNewSamples(Samples, nSamples);
+	bool clipped = PreprocessNewSamples(Samples, nSamples);
+	UpdateCurrentLevel(clipped, Samples, nSamples);
 
 	// Reset Memory ARQ values if they have become stale.
 	// This is done here rather than only when a new frame is detected so that
@@ -909,6 +916,64 @@ void ProcessNewSamples(short * Samples, int nSamples) {
 		return;
 
 	// Append new data to anything in rawSamples
+
+	// rawSamples[] should contain rawSamplesLength samples that have not been
+	// used by SearchFor2ToneLeader3() (if State == SearchingForLeader) nor
+	// mixed and filtered into intFilteredMixedSamples[] by MixNCOFilter() and
+	// thus FSMixFilter2000Hz() (if State != SearchingForLeader because a leader
+	// was found and the remainder of the frame is now being processed).
+	//
+	// While State == SearchingForLeader and a leader is not found:
+	//   new samples (240 at a time) are added to rawSamples until
+	//   rawSamplesLength >= 1024.  Then UpdateBusyDetector() [which also
+	//   generates waterfall data] and SearchFor2ToneLeader3() are both run.
+	//   SearchFor2ToneLeader3() requires at least 1200 samples, which is how
+	//   many samples are actually available when rawSamplesLength > 1024
+	//   because rawSamples are provided and consumed in multiples of 240 and
+	//   the next multiple of 240 greater than or equal to 1024 is 1200.
+	//   If SearchFor2ToneLeader3() finds a leader (or SlowCPU is true, which it
+	//   never is), then 480 values from rawSamples are discarded giving
+	//   rawSamplesLength = 720.  If SearchFor2ToneLeader3() does not find a
+	//   leader, then 240 samples are discarded from rawSamples giving
+	//   rawSamplesLength = 960.  Thus when 240 new samples are provided,
+	//   rawSamplesLength = 1200 once again.  This means that while
+	//   UpdateBusyDetector() and SearchFor2ToneLeader3() use 1024 and 1200
+	//   samples respectively, they are provided overlapping samples advancing
+	//   by only 240 samples for each cycle.  However, UpdateBusyDetector()
+	//   returns without trying to detect busy conditions or generating
+	//   waterfall data unless it has been at least 100ms since it last did so.
+	//   100 ms corresponds to the average time required to generate 1200
+	//   samples.  However, since the audio samples are not always provided
+	//   exactly every 100 ms, overlaps or gaps may occur in the samples
+	//   actually used by UpdateBusyDetector().  (TODO: For greater consistency,
+	//   consider using a count of samples consumed rather than a 100 ms timer
+	//   to decide when UpdateBusyDetector() should be fully used.  One way to
+	//   do this would be for UpdateBusyDetector() to be called with the new
+	//   samples received (rather than the accumulated rawSamples), and
+	//   UpdateBusyDetector() could maintain its own buffer of these, which it
+	//   would process only when a sufficient number of samples has been
+	//   accumulated.  This would also allow greater consistency of behavior
+	//   independent of the current State.)
+	//
+	// When a leader is found, then the remaining 1200 - 480 = 720 samples from
+	//   rawSamples are added to intFilteredMixedSamples[] by MixNCOFilter() and
+	//   thus FSMixFilter2000Hz() and rawSamplesLength is set to 0;  Each
+	//   subsequent call of ProcessNewSamples() provides 240 more samples which
+	//   are added to rawSamples until rawSamplesLength is again 1200 (> 1024).
+	//   Then UpdateBusyDetector() is called with the 1200 new samples (though
+	//   due to the 100 ms timer, UpdateBusyDetector() may sometimes return
+	//   without doing anything).  These 1200 rawSamples are also added to
+	//   intFilteredMixedSamples[] by MixNCOFilter() and thus
+	//   FSMixFilter2000Hz() and rawSamplesLength is set to 0.  This continues
+	//   (ading 1200 samples to intFilteredMixedSamples[] at a time) until a
+	//   full frame is decoded or failure is detected.  Then rawSamplesLength is
+	//   set to 0, and any remaining contents of intFilteredMixedSamples[] are
+	//   also discarded, and state is set back to SearchingForLeader.  (TODO:
+	//   examine whether it is possible and advnatageous to retain some of the
+	//   final rawSamples to allow SearchFor2ToneLeader3() to detect the start
+	//   of a new leader if present. This might be especially valuable if the
+	//   last leader detected was a false positive, but a valid leader began
+	//   soon thereafter.)
 
 	if (rawSamplesLength)
 	{
@@ -1135,6 +1200,10 @@ void ProcessNewSamples(short * Samples, int nSamples) {
 			{
 				// Frame has no data so is now complete
 				frameLen = 0;
+				// DecodeCompleteTime is used in initFilter() to ensure that
+				// there is a sufficient minimum delay between the end of a
+				// received frame, and the sending of a response.
+				DecodeCompleteTime = Now;
 
 				// See if IRStoISS shortcut can be invoked
 
@@ -1157,7 +1226,11 @@ void ProcessNewSamples(short * Samples, int nSamples) {
 				{
 					// In this state transition to ISS if  ACK frame
 
-					txSleep(250);
+					// Sleep() was formerly used here to ensure that there was
+					// a sufficient minimum delay between a received frame and
+					// the transmitted response.  This delay is now handled with
+					// txSleep() in initFilter(), which is called while
+					// preparing to transmit.
 
 					ZF_LOGI("[ARDOPprotocol.ProcessNewSamples] ProtocolState=IRStoISS, substate = %s ACK received. Cease BREAKS, NewProtocolState=ISS, substate ISSData", ARQSubStates[ARQState]);
 					blnEnbARQRpt = false;  // stop the BREAK repeats
@@ -1183,8 +1256,6 @@ void ProcessNewSamples(short * Samples, int nSamples) {
 				State = SearchingForLeader;
 				blnFrameDecodedOK = true;
 				ZF_LOGI("[DecodeFrame] Frame: %s ", Name(intFrameType));
-
-				DecodeCompleteTime = Now;
 
 				goto ProcessFrame;
 			}
@@ -1294,17 +1365,31 @@ void ProcessNewSamples(short * Samples, int nSamples) {
 
 //		ZF_LOGD("got whole frame");
 
+		// Per the Ardop spec (section 4.2) a sample rate with an error of
+		// +/- 100ppm should work well, while an error of +/- 1000ppm should
+		// work with some performance degredation.  These have not been tested,
+		// but include references to them in the following log messages.  Error
+		// in sample rate should be equivalent to error on symbol rate when both
+		// are expressed in ppm.
+		// 50.0 +/- 100ppm = 50.005/49.995.  +/- 1000ppm = 50.050/49.950
+		// 100.0 +/- 100ppm = 100.010/99.990.  +/- 1000ppm = 100.100/99.900
 		if (strncmp (Name(intFrameType), "4FSK.200.50S", 12) == 0 && UseSDFT)
 		{
 			float observed_baudrate = 50.0 / ((intSampPerSym + ((float) cumAdvances)/symbolCnt)/intSampPerSym);
-			ZF_LOGV("Estimated %s symbol rate = %.3f. (ideal=50.000)",
-				Name(intFrameType), observed_baudrate);
+			ZF_LOGV("Estimated %s symbol rate = %.3f. (Good = 49.995-50.005"
+				" Usable = 49.950-50.050) [advanced %i samples over %i symbols"
+				" with %i samples per symbol]",
+				Name(intFrameType), observed_baudrate, cumAdvances, symbolCnt,
+				intSampPerSym);
 		}
 		else if (strncmp (Name(intFrameType), "4FSK.500.100", 12) == 0 && UseSDFT)
 		{
 			float observed_baudrate = 100.0 / ((intSampPerSym + ((float) cumAdvances)/symbolCnt)/intSampPerSym);
-			ZF_LOGV("Estimated %s symbol rate = %.3f. (ideal=100.000)",
-				Name(intFrameType), observed_baudrate);
+			ZF_LOGV("Estimated %s symbol rate = %.3f. (Good = 99.990-100.010"
+				" Usable = 99.900-100.100) [advanced %i samples over %i symbols"
+				" with %i samples per symbol]",
+				Name(intFrameType), observed_baudrate, cumAdvances, symbolCnt,
+				intSampPerSym);
 		}
 		if (strcmp (strMod, "4FSK") == 0)
 			Update4FSKConstellation(&intToneMags[0], &intLastRcvdFrameQuality);

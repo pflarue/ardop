@@ -173,7 +173,16 @@ struct SEM Semaphore = {0, 0, 0, 0};
 bool SoundIsPlaying = false;
 bool Capturing = true;
 
-int DecodeCompleteTime;
+// DecodeCompleteTime is the value of Now when the most recent received frame
+// was decoded.  Initializing it to 0 should normally ensure that
+// DecodeCompleteTime is less than future values of Now, avoiding an unexpected
+// and excessive delay if attempting to transmit before ever decoding any
+// recevied frames.
+// TODO: Now, as defined in windows/os_util.c (for windows) is the time since
+// windows was started, which resets every 2^32 ms, which is about 50 days.
+// While this is unlikely to occur, something should be implemented to keep
+// this from causing a problem.
+int DecodeCompleteTime = 0;
 
 bool blnAbort = false;
 int intRepeatCount;
