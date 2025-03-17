@@ -1236,7 +1236,10 @@ int SoundCardRead(short * input, unsigned int nSamples) {
 
 // TODO: Consider calling SoundCardWrite() directly instead
 short * SendtoCard(int n) {
-	if (playhandle == NULL) {
+	if (playhandle != NULL) {
+		SoundCardWrite(&buffer[Index][0], n);
+	} else if (strcmp(PlaybackDevice, "NOSOUND") != 0) {
+		// if PlaybackDevice is NOSOUND, then playhandle==NULL is not an error
 		ZF_LOGE("ERROR: SendtoCard() called, but no audio playback device"
 			" is open.");
 		// This error is likely to be repeated several times because blnClosing
@@ -1245,7 +1248,6 @@ short * SendtoCard(int n) {
 		blnClosing = true;
 	}
 
-	SoundCardWrite(&buffer[Index][0], n);
 	if (txwff != NULL)
 		WriteWav(&buffer[Index][0], n, txwff);
 	return &buffer[Index][0];
