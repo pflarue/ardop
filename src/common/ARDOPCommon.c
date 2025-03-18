@@ -213,6 +213,62 @@ void StartTxWav() {
 	// txwfu = OpenWavW(txwfu_pathname);
 }
 
+// Create a WAV from num 16-bit samples in *ptr.
+// tag is a string (max string length 40) to include in the filename, which will
+// also include a typical seconds-resolution date/time.
+// If multiple writes might occur within any clock second, then tag
+// should be unique (perhaps using a counter) to avoid overwriting prior files.
+// return 0 on success.  If an error occurs return -1.
+//
+// This function is not used in normal operation of ardopcf, but it is useful
+// for diagnostic and debugging purposes.  It can be used to create WAV files
+// from short segments of audio data for later inspection and analysis.  Unlike
+// longer recordings of received audio, this can be used to capture partially
+// processed (mixed, filtered) audio.  It can also be used to see exactly which
+// portion of a received signal is being processed in some function.  Since
+// OpenWavW() writes a message to the debug log that includes the filename, the
+// contents of this WAV file can later be related to other data written to the
+// debug log before or after its creation.  That level of time/sample
+// specificity is not available in a longer recording of received audio.
+int CreateWav(const char *tag, short *ptr, int num) {
+	// The size of wf_pathname should be 100 larger than the size of
+	// ArdopLogDir in log.c.  The length of the the additions to ArdopLogDir
+	// excluding tag are 21 fixed bytes + 5 for host_port + 40 for tag
+	// + 15 for timestr.  21+5+40+15=81<100.  So, the WAV pathname in the
+	// directory from ardop_log_get_directory() will always fit.
+	char wf_pathname[612];
+	int pnlen;
+	char timestr[16];  // 15 char time string plus terminating NULL
+	get_utctimestr(timestr);
+	if (strlen(tag) > 40) {
+		ZF_LOGE("ERROR: tag=%s in CreateWav is too long. It must be 40"
+			" characters or less.  Wav file not written.",
+			tag);
+		return -1;
+	}
+
+	if (ardop_log_get_directory()[0])
+		pnlen = snprintf(wf_pathname, sizeof(wf_pathname),
+			"%s/ARDOP_audio_%d_%s_%15s.wav",
+			ardop_log_get_directory(), host_port, tag, timestr);
+	else
+		pnlen = snprintf(wf_pathname, sizeof(wf_pathname),
+			"ARDOP_audio_%d_%s_%15s.wav", host_port, tag, timestr);
+	if (pnlen == -1 || pnlen > (int) sizeof(wf_pathname)) {
+		ZF_LOGE("Unable to write WAV file, invalid pathname. Logpath may be"
+			" too long.");
+		return -1;
+	}
+
+	struct WavFile* wf = OpenWavW(wf_pathname);
+	if (wf == NULL)
+		return -1;
+	WriteWav(ptr, num, wf);
+	if (CloseWav(wf) != 0)
+		return -1;
+	return 0;
+}
+
 char Leds[8]= {0};
 unsigned int PKTLEDTimer = 0;
 
