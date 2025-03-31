@@ -116,8 +116,16 @@ int GetOutputDeviceCollection() {
 	playhandle = NULL;
 	while (card >= 0) {
 		sprintf(hwdev, "hw:%d", card);
-		err = snd_ctl_open(&handle, hwdev, 0);
-		err = snd_ctl_card_info(handle, info);
+		if ((err = snd_ctl_open(&handle, hwdev, 0)) != 0) {
+			ZF_LOGI("Unable to open audio playback card %s (%s), skipping...",
+				hwdev, snd_strerror(err));
+			goto nextcard;
+		}
+		if ((err = snd_ctl_card_info(handle, info)) != 0) {
+			ZF_LOGI("Unable to get audio playback card %s info (%s), skipping...",
+				hwdev, snd_strerror(err));
+			goto nextcard;
+		}
 
 		ZF_LOGI("Card %d, ID `%s', name `%s'", card, snd_ctl_card_info_get_id(info),
 			snd_ctl_card_info_get_name(info));
@@ -134,10 +142,11 @@ int GetOutputDeviceCollection() {
 			snd_pcm_info_set_device(pcminfo, dev);
 			snd_pcm_info_set_subdevice(pcminfo, 0);
 			snd_pcm_info_set_stream(pcminfo, stream);
-			err = snd_ctl_pcm_info(handle, pcminfo);
-
-			if (err == -ENOENT)
+			if ((err = snd_ctl_pcm_info(handle, pcminfo)) != 0) {
+				ZF_LOGI("Unable to get audio playback device %s,%d info (%s), skipping...",
+					hwdev, dev, snd_strerror(err));
 				goto nextdevice;
+			}
 			nsubd = snd_pcm_info_get_subdevices_count(pcminfo);
 
 			ZF_LOGI("  Device hw:%d,%d ID `%s', name `%s', %d subdevices (%d available)",
@@ -147,15 +156,46 @@ int GetOutputDeviceCollection() {
 			sprintf(hwdev, "hw:%d,%d", card, dev);
 			if ((err = snd_pcm_open(&pcm, hwdev, stream, SND_PCM_NONBLOCK)) != 0) {
 				ZF_LOGW("Error %d opening output device", err);
+				pcm= NULL;
 				goto nextdevice;
 			}
 
 			// Get parameters for this device
-			err = snd_pcm_hw_params_any(pcm, pars);
-			snd_pcm_hw_params_get_channels_min(pars, &min);
-			snd_pcm_hw_params_get_channels_max(pars, &max);
-			snd_pcm_hw_params_get_rate_min(pars, &ratemin, NULL);
-			snd_pcm_hw_params_get_rate_max(pars, &ratemax, NULL);
+			if ((err = snd_pcm_hw_params_any(pcm, pars)) != 0) {
+				ZF_LOGI("Error initializing audio parameters (%s)",
+					snd_strerror(err));
+				snd_pcm_close(pcm);
+				pcm= NULL;
+				goto nextdevice;
+			}
+			if ((err = snd_pcm_hw_params_get_channels_min(pars, &min)) != 0) {
+				ZF_LOGI("Error getting minimum channels for audio device (%s)",
+					snd_strerror(err));
+				snd_pcm_close(pcm);
+				pcm= NULL;
+				goto nextdevice;
+			}
+			if ((err = snd_pcm_hw_params_get_channels_max(pars, &max)) != 0) {
+				ZF_LOGI("Error getting maximum channels for audio device (%s)",
+					snd_strerror(err));
+				snd_pcm_close(pcm);
+				pcm= NULL;
+				goto nextdevice;
+			}
+			if ((err = snd_pcm_hw_params_get_rate_min(pars, &ratemin, NULL)) != 0) {
+				ZF_LOGI("Error getting minimum sample rate for audio device (%s)",
+					snd_strerror(err));
+				snd_pcm_close(pcm);
+				pcm= NULL;
+				goto nextdevice;
+			}
+			if ((err = snd_pcm_hw_params_get_rate_max(pars, &ratemax, NULL)) != 0) {
+				ZF_LOGI("Error getting maximum sample rate for audio device (%s)",
+					snd_strerror(err));
+				snd_pcm_close(pcm);
+				pcm= NULL;
+				goto nextdevice;
+			}
 			if (min == max) {
 				if (min == 1)
 					ZF_LOGI("    1 channel,  sampling rate %u..%u Hz", ratemin, ratemax);
