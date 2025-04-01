@@ -245,7 +245,7 @@ Two 'truthy' settings:
 
 #### DATATOSEND
 
-Same as the `BUFFER` command, except passing a `0` arguement will clear the current buffer.
+Same as the `BUFFER` command, except passing a `0` argument will clear the current buffer.
 
 - Mode: ANY
 - Arguments: None, or `0`
@@ -358,7 +358,9 @@ When more than one copy of a data frame is received, the duplicates are discarde
 
 #### FECSEND
 
-If there is data in the `BUFFER`, ardopcf will await for a clear channel and then transmit the selected `FECMODE` frame `FECREPEATS` amount of times. If there is no data in the buffer, it will wait for data to be loaded. You cannot query this to see if `FECSEND` is true or not. If sending many FEC frames, setting this to `FALSE` will stop transmission.
+If there is data in the `BUFFER`, ardopcf will await for a clear channel and then transmit the selected `FECMODE` frame `FECREPEATS` amount of times. If there is no data in the buffer, `FECSEND TRUE` will cause error. You cannot query this to see if `FECSEND` is true or not. If sending many FEC frames, setting this to `FALSE` will stop transmission.
+
+As the buffer becomes empty, ardopcf will switch automatically to `FECSEND FALSE`, i.e. data will be accumulated in the buffer until the next `FECSEND TRUE` is issued.
 
 - Mode: FEC
 - Arguments: `TRUE` or `FALSE`
@@ -366,7 +368,7 @@ If there is data in the `BUFFER`, ardopcf will await for a clear channel and the
 
 #### FSKONLY
 
-Disables PSK and QAM modes for ARQ sessions?
+Disables PSK and QAM modes for ARQ sessions? It has no effect on FEC transmission.
 
 - Mode: ANY
 - Arguments: None, `TRUE` or `FALSE`
@@ -525,27 +527,24 @@ Send a CAT hex string to the connected radio.
 
 #### RADIOPTTOFF
 
-Sends predefined CAT PTT hex string to a radio. Possibly embedded device specific.
+Set hex string of CAT command to set rig PTT off. This is the same string
+as the argument to `-u` or `--unkeystring` but it enables the host to change the
+command online.
 
 - Mode: ANY
-- Arguments: UNK
-- Returns: UNK
+- Arguments: None, or CAT command as hex string, e.g. 52583B (Kenwood command to switch to RX: `RX;`)
+- `RADIOPTTOFF` returns `RADIOPTTOFF <string>` 
+- `RADIOPTTOFF <new-string>` returns `RADIOPTTOFF now <new-string>` 
 
 #### RADIOPTTON
 
-Sends predefined CAT PTT hex string to a radio. Possibly embedded device specific.
+Set hex string of CAT command to set rig PTT on. This is the same string
+as the argument to `-k` or `--keystring` but it enables the host to change the
+command online.
 
-- Mode: ANY
-- Arguments: UNK
-- Returns: UNK
-
-#### RXLEVEL
-
-Embedded platform control of ADC input volume.
-
-- Mode: ANY
-- Arguments: UNK
-- Returns: UNK
+- Arguments: None, or CAT command as hex string, e.g. 5458313B (Kenwood command to switch send from ACC or USB input: `TX1;`)
+- `RADIOPTTON` returns `RADIOPTTON <string>` 
+- `RADIOPTTON <new-string>` returns `RADIOPTTON now <new-string>` 
 
 #### SENDID
 
