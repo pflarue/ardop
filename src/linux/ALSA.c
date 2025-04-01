@@ -155,7 +155,8 @@ int GetOutputDeviceCollection() {
 
 			sprintf(hwdev, "hw:%d,%d", card, dev);
 			if ((err = snd_pcm_open(&pcm, hwdev, stream, SND_PCM_NONBLOCK)) != 0) {
-				ZF_LOGW("Error %d opening output device", err);
+				ZF_LOGW("Error %d opening output device (%s)",
+					err, snd_strerror(err));
 				pcm = NULL;
 				goto nextdevice;
 			}
@@ -310,7 +311,8 @@ int GetInputDeviceCollection() {
 			sprintf(hwdev, "hw:%d,%d", card, dev);
 
 			if ((err = snd_pcm_open(&pcm, hwdev, stream, SND_PCM_NONBLOCK)) != 0) {
-				ZF_LOGW("Error %d opening input device", err);
+				ZF_LOGW("Error %d opening input device (%s)",
+					err, snd_strerror(err));
 				pcm = NULL;
 				goto nextdevice;
 			}
