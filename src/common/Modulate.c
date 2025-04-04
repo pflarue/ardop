@@ -695,7 +695,9 @@ void initFilter(int Width, int Centre)
 
 	DMABuffer = SoundInit();
 
-	KeyPTT(true);
+	// TEMPORARY FIX FOR COMPATIBILITY WITH QMX BETA SSB FIRMWARE
+	//  KeyPTT(true);
+	/////////////////////////////////////////////////////////////
 
 	SoundIsPlaying = true;
 	StopCapture();
@@ -718,6 +720,10 @@ void initFilter(int Width, int Centre)
 	// interacts with leader length adjusments based on data exchanged during
 	// ARQ handshake.
 	txSleep(250 + extraDelay - (Now - DecodeCompleteTime));
+
+	// TEMPORARY FIX FOR COMPATIBILITY WITH QMX BETA SSB FIRMWARE
+	KeyPTT(true);
+	/////////////////////////////////////////////////////////////
 
 	// pttOnTime is used to in linux/ALSA.c to calculate when enough time has
 	// elapsed for the audio to have been fully played before KeyPTT(false).
