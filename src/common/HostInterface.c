@@ -1568,7 +1568,7 @@ void ProcessCommandFromHost(char * strCMD)
 		goto cmddone;
 	}
 
-	snprintf(strFault, sizeof(strFault), "CMD %s not recoginized", strCMD);
+	snprintf(strFault, sizeof(strFault), "CMD %s not recognized", strCMD);
 
 cmddone:
 
