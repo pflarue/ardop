@@ -15,6 +15,7 @@
 
 #include "common/os_util.h"
 #include "common/ARDOPC.h"
+#include "common/eutf8.h"
 
 extern unsigned int PKTLEDTimer;
 extern UCHAR bytData[];
@@ -33,7 +34,6 @@ int wg_send_state(int cnum);
 int wg_send_rcall(int cnum, const char *call);
 int wg_send_irsled(int cnum, bool isOn);
 int wg_send_issled(int cnum, bool isOn);
-unsigned char *utf8_check(unsigned char *s, size_t slen);
 
 int intLastFrameIDToHost = 0;
 int	intLastFailedFrameID = 0;
@@ -903,16 +903,15 @@ void SendData()
 			ARQState = ISSData;  // Should not be necessary
 
 
-			char Msg[3000] = "";
-
-			snprintf(Msg, sizeof(Msg), "[Encoding Data to TX] %d bytes as hex values: ", Len);
-			for (int i = 0; i < Len; i++)
-				snprintf(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg) - 1, "%02X ", bytDataToSend[i]);
+			// The largest data capacity of any Ardop data frame is 1024 bytes for a
+			// 16QAM.200.100 frame type.  Worst case behavior of eutf8() produces output
+			// that is three times as long as the input data plus one byte.  So, an
+			// available message length of 3200 should be more than adequate to log the
+			// eutf8 encoded data from any data frame along with a suitable preamble.
+			char Msg[3200] = "";
+			snprintf(Msg, sizeof(Msg), "[Encoding Data to TX] %d bytes (eutf8):\n", Len);
+			eutf8(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg), (char*) bytDataToSend, Len);
 			ZF_LOGV("%s", Msg);
-
-			if (utf8_check(bytDataToSend, Len) == NULL)
-				ZF_LOGV("[Encoding Data to TX] %d bytes as utf8 text: '%.*s'", Len, Len, bytDataToSend);
-
 
 			if (strcmp(strMod, "4FSK") == 0)
 			{
