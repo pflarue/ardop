@@ -36,7 +36,7 @@ int bytes2hex(char *outputStr, size_t count, unsigned char *data, size_t datalen
 extern bool NeedID;  // SENDID Command Flag
 extern bool NeedConReq;  // ARQCALL Command Flag
 extern bool NeedPing;
-extern bool PingCount;
+extern int PingCount;
 extern StationId ConnectToCall;
 extern enum _ARQBandwidth CallBandwidth;
 extern int extraDelay ;  // Used for long delay paths eg Satellite
