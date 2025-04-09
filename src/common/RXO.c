@@ -3,6 +3,7 @@
 #include "common/ARDOPC.h"
 #include "common/ardopcommon.h"
 #include "common/RXO.h"
+#include "common/eutf8.h"
 
 extern UCHAR bytSessionID;
 extern UCHAR bytFrameData1[760];
@@ -161,8 +162,12 @@ int RxoMinimalDistanceFrameType(int * intToneMags)
 
 void ProcessRXOFrame(UCHAR bytFrameType, int frameLen, UCHAR * bytData, bool blnFrameDecodedOK)
 {
-	char strMsg[4096];
-	int intMsgLen;
+	// The largest data capacity of any Ardop data frame is 1024 bytes for a
+	// 16QAM.200.100 frame type.  Worst case behavior of eutf8() produces output
+	// that is three times as long as the input data plus one byte.  So, an
+	// available message length of 3200 should be more than adequate to log the
+	// eutf8 encoded data from any data frame along with a suitable preamble.
+	char Msg[3200];
 
 	if (bytFrameType >= ConReqmin && bytFrameType <= ConReqmax)
 	{
@@ -205,39 +210,18 @@ void ProcessRXOFrame(UCHAR bytFrameType, int frameLen, UCHAR * bytData, bool bln
 	}
 	if (frameLen > 0)
 	{
-		snprintf(strMsg, sizeof(strMsg), "    [RXO %02hhX] %d bytes of data as hex values:\n", bytSessionID, frameLen);
-		intMsgLen = strlen(strMsg);
-		for (int i = 0; i < frameLen; i++)
-		{
-			sprintf(strMsg + intMsgLen, "%02X ", bytData[i]);
-			intMsgLen += 3;
-		}
-		ZF_LOGI("%s", strMsg);
-		// If there is a Null (0x00) anywhere other than as the last byte
-		// of bytData, or if utf8_check() indicates that it is not valid
-		// utf8, then bytData should not be displayed as text.
-		if (memchr(bytData, 0x00, frameLen - 1) == NULL && utf8_check(bytData, frameLen) == NULL) {
-			for (int i = 0; i < frameLen; i++)
-			{
-				if (bytData[i] == 0x0D && bytData[i + 1] != 0x0A)
-					bytData[i] = 0x0A;
-			}
-			ZF_LOGI("    [RXO %02hhX] %d bytes of data as UTF-8 text:\n%.*s", bytSessionID, frameLen, frameLen, bytData);
-			if (WG_DevMode)
-				wg_send_hostdatat(0, "RXO", bytData, frameLen);
-		}
-		else {
-			ZF_LOGI("    [RXO %02hhX] Data does not appear to be valid UTF-8 text.", bytSessionID);
-			if (WG_DevMode)
-				wg_send_hostdatab(0, "RXO", bytData, frameLen);
-		}
+		snprintf(Msg, sizeof(Msg),
+			"    [RXO %02hhX] %d bytes of data (eutf8):\n",
+			bytSessionID, frameLen);
+		eutf8(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg), (char*) bytData, frameLen);
+		ZF_LOGI("%s", Msg);
 	}
 	if (blnFrameDecodedOK) {
-		snprintf(strMsg, sizeof(strMsg), "STATUS [RXO %02hhX] %s frame received OK.", bytSessionID, Name(bytFrameType));
+		snprintf(Msg, sizeof(Msg), "STATUS [RXO %02hhX] %s frame received OK.", bytSessionID, Name(bytFrameType));
 	} else {
-		snprintf(strMsg, sizeof(strMsg), "STATUS [RXO %02hhX] %s frame decode FAIL.", bytSessionID, Name(bytFrameType));
+		snprintf(Msg, sizeof(Msg), "STATUS [RXO %02hhX] %s frame decode FAIL.", bytSessionID, Name(bytFrameType));
 	}
-	SendCommandToHost(strMsg);
+	SendCommandToHost(Msg);
 
 	if (blnFrameDecodedOK && IsDataFrame(bytFrameType)) {
 		// Like FEC protocolmode, this facilitates decoding of successive unique

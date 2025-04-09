@@ -8,6 +8,7 @@
 #include "common/ardopcommon.h"
 #include "common/wav.h"
 #include "common/ptt.h"  // PTT and CAT
+#include "common/eutf8.h"
 
 bool blnHostRDY = false;
 extern int intFECFramesSent;
@@ -93,15 +94,14 @@ extern UCHAR bytSessionID;
 
 void AddDataToDataToSend(UCHAR * bytNewData, int Len)
 {
-	char Msg[3000] = "";
-
-	snprintf(Msg, sizeof(Msg), "[bytNewData: Add to TX queue] %d bytes as hex values: ", Len);
-	for (int i = 0; i < Len; i++)
-		snprintf(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg) - 1, "%02X ", bytNewData[i]);
+	// Up to 8192 bytes of data may be provided from ProcessReceivedData().
+	// Worst case behavior of eutf8() produces output that is three times as
+	// long as the input data plus one byte.  So, an available message length of
+	// 25000 is adequate to log the eutf8 encoded data with a suitable preamble.
+	char Msg[25000] = "";
+	snprintf(Msg, sizeof(Msg), "[bytNewData: Add to TX queue] %d bytes (eutf8):\n", Len);
+	eutf8(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg), (char *) bytNewData, Len);
 	ZF_LOGV("%s", Msg);
-
-	if (utf8_check(bytNewData, Len) == NULL)
-		ZF_LOGV("[bytNewData: Add to TX queue] %d bytes as utf8 text: '%.*s'", Len, Len, bytNewData);
 
 	char HostCmd[32];
 
@@ -1613,17 +1613,16 @@ void SendReplyToHost(char * strText)
 }
 // Function to add a short 3 byte tag (ARQ, FEC, ERR, or IDF) to data and send to the host
 
-void AddTagToDataAndSendToHost(UCHAR * bytData, char * strTag, int Len)
-{
-	char Msg[3000] = "";
-
-	snprintf(Msg, sizeof(Msg), "[RX Data: Send To Host with TAG=%s] %d bytes as hex values: ", strTag, Len);
-	for (int i = 0; i < Len; i++)
-		snprintf(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg) - 1, "%02X ", bytData[i]);
+void AddTagToDataAndSendToHost(UCHAR * bytData, char * strTag, int Len) {
+	// The largest data capacity of any Ardop data frame is 1024 bytes for a
+	// 16QAM.200.100 frame type.  Worst case behavior of eutf8() produces output
+	// that is three times as long as the input data plus one byte.  So, an
+	// available message length of 3200 should be more than adequate to log the
+	// eutf8 encoded data from any data frame along with a suitable preamble.
+	char Msg[3200] = "";
+	snprintf(Msg, sizeof(Msg), "[RX Data: Send To Host with TAG=%s] %d bytes (eutf8):\n", strTag, Len);
+	eutf8(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg), (char*) bytData, Len);
 	ZF_LOGV("%s", Msg);
-
-	if (utf8_check(bytData, Len) == NULL)
-		ZF_LOGV("[RX Data: Send To Host with TAG=%s] %d bytes as utf8 text: '%.*s'", strTag, Len, Len, bytData);
 
 	TCPAddTagToDataAndSendToHost(bytData, strTag, Len);
 	if (WG_DevMode) {

@@ -13,6 +13,7 @@
 #include "common/Locator.h"
 #include "common/RXO.h"
 #include "common/sdft.h"
+#include "common/eutf8.h"
 #include "rockliff/rrs.h"
 
 #pragma warning(disable : 4244)  // Code does lots of float to int
@@ -687,15 +688,21 @@ void CountErrors(const UCHAR * Uncorrected, const UCHAR * Corrected, int Len, in
 		ErrMap);
 
 	// log hex string of Uncorrected and Corrected
-	char HexData[1024];
-	snprintf(HexData, sizeof(HexData), "Uncorrected: ");
-	for (int i = 0; i < Len; ++i)
-		snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", Uncorrected[i]);
-	ZF_LOGV("%s", HexData);
-	snprintf(HexData, sizeof(HexData), "Corrected:   ");
-	for (int i = 0; i < Len; ++i)
-		snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", Corrected[i]);
-	ZF_LOGV("%s", HexData);
+	// Since this is only data for a single carrier, the maximum value of Len
+	// is 256.  Worst case behavior of eutf8() produces output that is three
+	// times as long as the input data plus one byte.  So, an available message
+	// length of 800 should be more than adequate to log the eutf8 encoded data
+	// along with a suitable preamble.
+	char Msg[800];
+	snprintf(Msg, sizeof(Msg), "Uncorrected (eutf8):\n");
+	eutf8(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg), (char*) Uncorrected, Len);
+	ZF_LOGV("%s", Msg);
+	if (BitErrorCount > 0) {
+		// Only log corrected data if some corrections were made.
+		snprintf(Msg, sizeof(Msg), "Corrected (eutf8):\n");
+		eutf8(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg), (char*) Corrected, Len);
+		ZF_LOGV("%s", Msg);
+	}
 }
 
 // Function to Correct Raw demodulated data with Reed Solomon FEC
@@ -778,6 +785,17 @@ int CorrectRawDataWithRS(UCHAR * bytRawData, UCHAR * bytCorrectedData, int intDa
 			"Carrier[%d] %d raw bytes. CER and BER too high. (rs_correct() failed)",
 			Carrier,
 			CombinedLength);
+		if (ZF_LOG_ON_VERBOSE) {
+			// Log the uncorrectable data.  Cannot calculate CER and BER here.
+			// However, in a testing enviroment where the uncorrupted data is
+			// known, this uncorrectable data can be used to externally
+			// calculate these error rates and map the error locations as is
+			// done in CountErrors().
+			char Msg[800];
+			snprintf(Msg, sizeof(Msg), "Uncorrectable (eutf8):\n");
+			eutf8(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg), (char*) RawDataCopy, CombinedLength);
+			ZF_LOGV("%s", Msg);
+		}
 		ZF_LOGD("[CorrectRawDataWithRS] RS Says Can't Correct (%d(?)/%d net/gross bytes) (>%d max corrections)", bytRawData[0], intDataLen, intRSLen/2);
 		goto returnBad;
 	}
@@ -3695,7 +3713,13 @@ bool DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 			break;
 
 		// FSK 1 Carrier Modes
-		char HexData[1024];
+		// The maximum value of intDataLen (intPartDataLen for 600 baud frames)
+		// is 200.  Worst case behavior of eutf8() produces output that is
+		// three times as long as the input data plus one byte.  So, an
+		// available message length of 650 should be more than adequate to log
+		// the eutf8 encoded contents of bytFrameData1 along with a suitable
+		// preamble.
+		char Msg[650];
 
 		case 0x48:
 		case 0x49:
@@ -3704,15 +3728,13 @@ bool DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 		case 0x4c:
 		case 0x4d:
 
-			snprintf(HexData, sizeof(HexData), "bytFrameData1 as decoded:   ");
-			for (int i = 0; i < intDataLen; ++i)
-				snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytFrameData1[i]);
-			ZF_LOGI("%s", HexData);
+			snprintf(Msg, sizeof(Msg), "bytFrameData1 as decoded (eutf8):\n");
+			eutf8(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg), (char*) bytFrameData1, intDataLen);
+			ZF_LOGV("%s", Msg);
 			frameLen = CorrectRawDataWithRS(bytFrameData1, bytData, intDataLen, intRSLen, intFrameType, 0);
-			snprintf(HexData, sizeof(HexData), "bytFrameData1 after RS:   ");
-			for (int i = 0; i < intDataLen; ++i)
-				snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytFrameData1[i]);
-			ZF_LOGI("%s", HexData);
+			snprintf(Msg, sizeof(Msg), "bytFrameData1 after RS (eutf8):\n");
+			eutf8(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg), (char*) bytFrameData1, intDataLen);
+			ZF_LOGV("%s", Msg);
 
 			// Since these are single carrier/part, hard code carrier=part=0
 			if (!CarrierOk[0]) {
@@ -3726,15 +3748,14 @@ bool DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 					// Re-attempt to decode using intToneMagsAvg[0] updated by
 					// SaveFSKSamples()
 					Decode1Car4FSK(bytFrameData1, intToneMagsAvg[0], intToneMagsLength);
-					snprintf(HexData, sizeof(HexData), "bytFrameData1 after averaging:   ");
-					for (int i = 0; i < intDataLen; ++i)
-						snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytFrameData1[i]);
-					ZF_LOGI("%s", HexData);
+					snprintf(Msg, sizeof(Msg), "bytFrameData1 after averaging (eutf8):\n");
+					eutf8(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg), (char*) bytFrameData1, intDataLen);
+					ZF_LOGV("%s", Msg);
 					frameLen = CorrectRawDataWithRS(bytFrameData1, bytData, intDataLen, intRSLen, intFrameType, 0);
-					snprintf(HexData, sizeof(HexData), "bytFrameData1 after RS:   ");
-					for (int i = 0; i < intDataLen; ++i)
-						snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytFrameData1[i]);
-					ZF_LOGI("%s", HexData);
+					snprintf(Msg, sizeof(Msg), "bytFrameData1 after RS (eutf8):\n");
+					eutf8(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg), (char*) bytFrameData1, intDataLen);
+					ZF_LOGV("%s", Msg);
+
 					// TODO: It might be interesting to calculate Quality and
 					// plot the constellation for this averaged data so as to
 					// quantify how much improvement is achieved by using
@@ -3826,15 +3847,16 @@ bool DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 			for (int part = 0; part < 3; part++) {
 				PriorFrameLen = frameLen;
 				UCHAR *bytRawPartData = &bytFrameData1[part * intPartRawLen];
-				snprintf(HexData, sizeof(HexData), "bytRawPartData (part=%d) as decoded:   ", part);
-				for (int i = 0; i < intPartDataLen + 1; ++i)
-					snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytRawPartData[i]);
-				ZF_LOGI("%s", HexData);
+
+				snprintf(Msg, sizeof(Msg), "bytRawPartData (part=%d) as decoded (eutf8):\n", part);
+				eutf8(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg),
+					(char*) bytRawPartData, intPartDataLen + 1);
+				ZF_LOGV("%s", Msg);
 				frameLen += CorrectRawDataWithRS(bytRawPartData, &bytData[frameLen], intPartDataLen, intPartRSLen, intFrameType, part);
-				snprintf(HexData, sizeof(HexData), "bytRawPartData (part=%d) after RS:   ", part);
-				for (int i = 0; i < intPartDataLen + 1; ++i)
-					snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytRawPartData[i]);
-				ZF_LOGI("%s", HexData);
+				snprintf(Msg, sizeof(Msg), "bytRawPartData (part=%d) after RS (eutf8):   ", part);
+				eutf8(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg),
+					(char*) bytRawPartData, intPartDataLen + 1);
+				ZF_LOGV("%s", Msg);
 
 				if (!CarrierOk[part]) {
 					// SaveFSKSamples() stores a copy of intToneMags for the first
@@ -3846,17 +3868,18 @@ bool DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 						ZF_LOGD("Decode FSK 600 retry RS after MEM ARQ");
 						// try to decode based on intToneMags revised by SaveFSKSamples()
 						Decode1Car4FSK(bytRawPartData, intToneMagsAvg[part], intPartTonesLen);
-						snprintf(HexData, sizeof(HexData), "bytRawPartData (part=%d) after averaging:   ", part);
-						for (int i = 0; i < intPartDataLen + 1; ++i)
-							snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytRawPartData[i]);
-						ZF_LOGI("%s", HexData);
-						// reset frameLen so new corrections will overwrite prior (failed) corrections
+
+						snprintf(Msg, sizeof(Msg), "bytRawPartData (part=%d) after averaging (eutf8):\n", part);
+						eutf8(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg),
+							(char*) bytRawPartData, intPartDataLen + 1);
+						ZF_LOGV("%s", Msg);
 						frameLen = PriorFrameLen;
-						frameLen = CorrectRawDataWithRS(bytRawPartData, &bytData[frameLen], intPartDataLen, intPartRSLen, intFrameType, part);
-						snprintf(HexData, sizeof(HexData), "bytRawPartData (part=%d)after RS:   ", part);
-						for (int i = 0; i < intPartDataLen + 1; ++i)
-							snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytRawPartData[i]);
-						ZF_LOGI("%s", HexData);
+						frameLen += CorrectRawDataWithRS(bytRawPartData, &bytData[frameLen], intPartDataLen, intPartRSLen, intFrameType, part);
+						snprintf(Msg, sizeof(Msg), "bytRawPartData (part=%d) after RS (eutf8):\n", part);
+						eutf8(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg),
+							(char*) bytRawPartData, intPartDataLen + 1);
+						ZF_LOGV("%s", Msg);
+
 						// TODO: It might be interesting to calculate Quality and
 						// plot the constellation for this averaged data so as to
 						// quantify how much improvement is achieved by using
@@ -3880,15 +3903,13 @@ bool DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 
 			// Short 2000 Hz 600 baud 4FSK frames
 
-			snprintf(HexData, sizeof(HexData), "bytFrameData1 as decoded:   ");
-			for (int i = 0; i < intDataLen; ++i)
-				snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytFrameData1[i]);
-			ZF_LOGI("%s", HexData);
+			snprintf(Msg, sizeof(Msg), "bytFrameData1 as decoded (eutf8):\n");
+			eutf8(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg), (char*) bytFrameData1, intDataLen);
+			ZF_LOGV("%s", Msg);
 			frameLen = CorrectRawDataWithRS(bytFrameData1, bytData, intDataLen, intRSLen, intFrameType, 0);
-			snprintf(HexData, sizeof(HexData), "bytFrameData1 after RS:   ");
-			for (int i = 0; i < intDataLen; ++i)
-				snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytFrameData1[i]);
-			ZF_LOGI("%s", HexData);
+			snprintf(Msg, sizeof(Msg), "bytFrameData1 after RS (eutf8):\n");
+			eutf8(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg), (char*) bytFrameData1, intDataLen);
+			ZF_LOGV("%s", Msg);
 
 			// Since these are single carrier/part, hard code carrier=part=0
 			if (!CarrierOk[0]) {
@@ -3903,15 +3924,15 @@ bool DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 					// SaveFSKSamples()
 
 					Decode1Car4FSK(bytFrameData1, intToneMagsAvg[0], intToneMagsLength);
-					snprintf(HexData, sizeof(HexData), "bytFrameData1 after averaging:   ");
-					for (int i = 0; i < intDataLen; ++i)
-						snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytFrameData1[i]);
-					ZF_LOGI("%s", HexData);
+
+					snprintf(Msg, sizeof(Msg), "bytFrameData1 after averaging (eutf8):\n");
+					eutf8(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg), (char*) bytFrameData1, intDataLen);
+					ZF_LOGV("%s", Msg);
 					frameLen = CorrectRawDataWithRS(bytFrameData1, bytData, intDataLen, intRSLen, intFrameType, 0);
-					snprintf(HexData, sizeof(HexData), "bytFrameData1 after RS:   ");
-					for (int i = 0; i < intDataLen; ++i)
-						snprintf(HexData + strlen(HexData), sizeof(HexData) - strlen(HexData), " %02X", bytFrameData1[i]);
-					ZF_LOGI("%s", HexData);
+					snprintf(Msg, sizeof(Msg), "bytFrameData1 after RS (eutf8):\n");
+					eutf8(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg), (char*) bytFrameData1, intDataLen);
+					ZF_LOGV("%s", Msg);
+
 					// TODO: It might be interesting to calculate Quality and
 					// plot the constellation for this averaged data so as to
 					// quantify how much improvement is achieved by using
@@ -3936,15 +3957,15 @@ bool DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 		wg_send_quality(0, intLastRcvdFrameQuality, totalRSErrors, (intRSLen / 2) * intNumCar);
 
 		if (frameLen > 0) {
-			char Msg[3000] = "";
-
-			snprintf(Msg, sizeof(Msg), "[Decoded bytData] %d bytes as hex values: ", frameLen);
-			for (int i = 0; i < frameLen; i++)
-				snprintf(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg) - 1, "%02X ", bytData[i]);
+			// The largest data capacity of any Ardop data frame is 1024 bytes for a
+			// 16QAM.200.100 frame type.  Worst case behavior of eutf8() produces output
+			// that is three times as long as the input data plus one byte.  So, an
+			// available message length of 3200 should be more than adequate to log the
+			// eutf8 encoded data from any data frame along with a suitable preamble.
+			char Msg[3200] = "";
+			snprintf(Msg, sizeof(Msg), "[Decoded bytData] %d bytes (eutf8):\n", frameLen);
+			eutf8(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg), (char*) bytData, frameLen);
 			ZF_LOGV("%s", Msg);
-
-			if (utf8_check(bytData, frameLen) == NULL)
-				ZF_LOGV("[Decoded bytData] %d bytes as utf8 text: '%.*s'", frameLen, frameLen, bytData);
 		}
 
 #ifdef PLOTCONSTELLATION

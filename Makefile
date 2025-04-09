@@ -71,6 +71,7 @@ OBJS = \
 	src/common/Webgui.o \
 	src/common/noise.o \
 	src/common/ptt.o \
+	src/common/eutf8.o \
 
 # Linux-only object files
 OBJS_LIN = \
@@ -95,6 +96,7 @@ TESTS = \
 	test/ardop/test_Packed6 \
 	test/ardop/test_StationId \
 	test/ardop/test_ARDOPCommon_processargs \
+	test/ardop/test_eutf8 \
 
 # unit test common code
 TEST_OBJS_COMMON = \

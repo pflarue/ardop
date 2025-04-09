@@ -17,6 +17,7 @@ import subprocess
 
 # ardop_parameters.py contains constants required for these tests
 from ardop_parameters import *
+from eutf8 import from_eutf8
 
 def test_contol_wav_io(verbose=1):
     """
@@ -40,12 +41,10 @@ def test_contol_wav_io(verbose=1):
                 "--logdir",
                 TMPPATH,
                 "--writetxwav",
-                # Using special audio device name "NOSOUND" tells
-                # ardopcf to not use recording or playback sound
-                # devices and to not sleep when simulating TX.
-                # Whenever audio devices are specified, host port
-                # number must also be specified.
-                "8515", "NOSOUND", "NOSOUND",
+                # The options -i -1 -o -1 tells ardopcf to not use
+                # recording or playback sound devices and to not sleep
+                # when simulating TX.
+                "-i", "-1", "-o", "-1",
                 # CONSOLELOG 2 ensures that the filename of the WAV is
                 # written to stdout so that it can be parsed from
                 # res.stdout.
@@ -103,7 +102,7 @@ def test_contol_wav_io(verbose=1):
                         sdftstr if sdftstr else "-y",
                         # CONSOLELOG 2 ensures that [DecodeFrame] and
                         # [Frame Type Decode Fail] are written to stdout as well
-                        # as the hex representation of the decoded data.
+                        # as the eutf8 representation of the decoded data.
                         "--hostcommands",
                         'CONSOLELOG 2',
                         # No port number or sound devices are required
@@ -175,6 +174,19 @@ def parse_ber_results(logstr, cars, print_bermap=False):
             logstr
         )
         if m is None:
+            # ardopcf cannot calculate CER and BER if there are more errors than
+            # could by corrected.  However, with verbose logging (CONSOLELOG 1),
+            # the uncorrectable raw data for each carrier is written to the log.
+            # Given the data that was intended to be encoded in this frame, it
+            # should be possible to reconstruct what each carrier's raw data
+            # should have contained, and then compare that to the uncorrectable
+            # raw data to calulate CER, BER, and the bit error map.  This should
+            # be relateively easy for the actual data bytes, but would require
+            # use of rs_append() from rrs.c (or creation of an equivalent python
+            # function) to also calculate the RS bytes that would have been
+            # encoded into this frame.
+            # TODO: Implement CER/BER calculation for carriers whose contents
+            # could not be corrected?
             print(f"Unable to parse CER and BER for Carrier[{car+1}].")
             print(logstr)
             raise ValueError
@@ -223,7 +235,7 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                 # the random data will be generated here instead.
                 payload_capacity = cars * dbpc
                 payload_used = round(fill * payload_capacity)
-                rdatahex = randbytes(payload_used).hex()
+                rdata = randbytes(payload_used)
                 res = subprocess.run(
                     [
                         APATH,
@@ -251,14 +263,12 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                         # noise added to the recording.
                         "--hostcommands",
                         f'CONSOLELOG 2;MYCALL N0CALL;DRIVELEVEL 30;TXFRAME'
-                        f' {frametype[:-1]}{suffix} {rdatahex}'
+                        f' {frametype[:-1]}{suffix} {rdata.hex()}'
                         f' 0x{hex(sessionid)[2:]:>02};CLOSE',
-                        # Using special audio device name "NOSOUND" tells
-                        # ardopcf to not use recording or playback sound
-                        # devices and to not sleep when simulating TX.
-                        # Whenever audio devices are specified, host port
-                        # number must also be specified.
-                        "8515", "NOSOUND", "NOSOUND",
+                        # The options -i -1 -o -1 tells ardopcf to not use
+                        # recording or playback sound devices and to not sleep
+                        # when simulating TX.
+                        "-i", "-1", "-o", "-1",
                     ],
                     capture_output=True,
                     check=True,
@@ -304,7 +314,7 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                                 "--hostcommands",
                                 # CONSOLELOG 1 ensures that
                                 # [DecodeFrame] and [Frame Type Decode Fail],
-                                # the hex representation of the decoded data,
+                                # the eutf8 representation of the decoded data,
                                 # and Bit Error results are written to stdout so
                                 # that they can be parsed from res.stdout.
                                 'CONSOLELOG 1',
@@ -349,7 +359,7 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                                 f"FAILURE TO DECODE {frametype[:-1]}{suffix}"
                                 f" carrying {payload_used}"
                                 f" (of {payload_capacity} max) bytes of data."
-                                f" {rdatahex} 0x{hex(sessionid)[2:]:>02}"
+                                f" {rdata.hex()} 0x{hex(sessionid)[2:]:>02}"
                             )
                             print(
                                 f"The WAV file, {wavpath}, has not been erased."
@@ -390,12 +400,12 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                                 cars + additional_pseudocarriers,
                                 verbose > 2
                             )
-                    # Further parse stdout for decoded data as space delimited
-                    # hex string so that it can be compared to the encoded data.
+                    # Further parse stdout for decoded data as eutf8 encoded
+                    # data so that it can be compared to the encoded data.
                     m = re.search(
-                        r"\[RXO ([0-9A-F][0-9A-F])\] ([0-9]+) bytes of data as"
-                        r" hex values:\s+([0-9A-F ]+)\s\s+",
-                        res.stdout.decode("iso-8859-1")
+                        r"\[RXO ([0-9A-F][0-9A-F])\] ([0-9]+) bytes of data"
+                        r" \(eutf8\):\n+([^\n]+)\n",
+                        res.stdout.decode("utf-8")
                     )
                     if m is None:
                         if verbose > 0:
@@ -410,7 +420,7 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                                 f" {wavpath}, has not been erased since it may"
                                 f" be useful for debugging purposes.  The data"
                                 f" encoded in this WAV file (as a hex string)"
-                                f" is\n{rdatahex}"
+                                f" is\n{rdata.hex()}"
                             )
                             if sdftstr != "":
                                 print(
@@ -424,7 +434,8 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                             f" from {wavpath} {sdftstr}")
                         fail = True
                         continue
-                    if m.group(3).replace(' ', '') != rdatahex.upper():
+                    decodeddata = from_eutf8(m.group(3).encode("utf-8"));
+                    if decodeddata != rdata:
                         if verbose > 0:
                             print(
                                 f"While ardopcf reported that the data frame was"
@@ -433,8 +444,8 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                                 f" {wavpath}, has not been erased so that it may"
                                 f" be used to repeat the failed attempt to"
                                 f" decode for debugging purposes."
-                                f"\nEncoded data: {rdatahex}"
-                                f"\nDecoded data: {m.group(3).replace(' ', '')}"
+                                f"\nEncoded data: {rdata}"
+                                f"\nDecoded data: {decodeddata}"
                             )
                             if sdftstr != "":
                                 print(
