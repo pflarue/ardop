@@ -403,7 +403,7 @@ char HelpScreen[] =
 	"-c device or --cat device            Device to use for CAT Control\n"
 	"                                     or TCP:port to use a TCP CAT port on the local machine\n"
 	"                                     or TCP:ddd.ddd.ddd.ddd:port to use a TCP CAT port on a\n"
-	"                                     networked machine."
+	"                                     networked machine.\n"
 	"-p device or --ptt device            Device to use for PTT control using RTS\n"
 	// RTS:device is also permitted, but is equivalent to just device
 	"                                     or DTR:device to use DTR for PTT instead of RTS,\n"
