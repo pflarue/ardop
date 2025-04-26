@@ -209,53 +209,53 @@ void SendPING(const StationId* mycall, const StationId* target, int intRpt);
 
 int intRepeatCnt;
 
-extern SOCKET TCPControlSock, TCPDataSock;
+extern SOCKET TCPControlSock, TCPDataSock; // Sockets for TCP control and data communication.
 
-bool blnClosing = false;
-int closedByPosixSignal = 0;
-bool blnCodecStarted = false;
+bool blnClosing = false; // Indicates if the application is in the process of closing.
+int closedByPosixSignal = 0; // Stores the signal that caused the application to close (if any).
+bool blnCodecStarted = false; // Indicates if the codec has been started.
 
-unsigned int dttNextPlay = 0;
+unsigned int dttNextPlay = 0; // Timestamp for the next playback.
 
 const UCHAR bytValidFrameTypesALL[] = {
-	DataNAKmin, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-	0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
-	0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-	0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, DataNAKmax,
-	BREAK, IDLEFRAME, DISCFRAME, END, ConRejBusy, ConRejBW, IDFRAME,
-	ConReq200M, ConReq500M, ConReq1000M, ConReq2000M,
-	ConReq200F, ConReq500F, ConReq1000F, ConReq2000F,
-	ConAck200, ConAck500, ConAck1000, ConAck2000, PINGACK, PING,
+    // Array of all valid frame types for the protocol.
+    DataNAKmin, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+    0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+    0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, DataNAKmax,
+    BREAK, IDLEFRAME, DISCFRAME, END, ConRejBusy, ConRejBW, IDFRAME,
+    ConReq200M, ConReq500M, ConReq1000M, ConReq2000M,
+    ConReq200F, ConReq500F, ConReq1000F, ConReq2000F,
+    ConAck200, ConAck500, ConAck1000, ConAck2000, PINGACK, PING,
 
-	DataFRAMEmin, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46,0x47,0x48,0x49,  // 40 - 4F
-	0x4A, 0x4B, 0x4C, 0x4D,
-	0x50, 0x51, 0x52, 0x53, 0x54, 0x55,  // 50 - 5F
-	0x60, 0x61, 0x62, 0x63, 0x64, 0x65,  // 60 - 6F
-	0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x7A, 0x7B, 0x7C, DataFRAMEmax,  // 70 - 7F
+    DataFRAMEmin, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49,  // 40 - 4F
+    0x4A, 0x4B, 0x4C, 0x4D,
+    0x50, 0x51, 0x52, 0x53, 0x54, 0x55,  // 50 - 5F
+    0x60, 0x61, 0x62, 0x63, 0x64, 0x65,  // 60 - 6F
+    0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x7A, 0x7B, 0x7C, DataFRAMEmax,  // 70 - 7F
 
-	DataACKmin, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE7,
-	0xE8, 0xE9, 0xEA, 0xEB, 0xEC, 0xED, 0xEE, 0xEF,
-	0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7,
-	0xF8, 0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE, DataACKmax
+    DataACKmin, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE7,
+    0xE8, 0xE9, 0xEA, 0xEB, 0xEC, 0xED, 0xEE, 0xEF,
+    0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7,
+    0xF8, 0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE, DataACKmax
 };
 
-const UCHAR bytValidFrameTypesISS[] = {  // ACKs, NAKs, END, DISC, BREAK
-	// NAK
-	DataNAKmin, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-	0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
-	0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-	0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, DataNAKmax,
-	// BREAK, DISC, or END
-	BREAK, DISCFRAME, END, ConRejBusy, ConRejBW,
-	// Con req and Con ACK
-	ConReq200M, ConReq500M, ConReq1000M, ConReq2000M,
-	ConReq200F, ConReq500F, ConReq1000F, ConReq2000F,
-	ConAck200, ConAck500, ConAck1000, ConAck2000,
-	// ACK
-	DataACKmin, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE7,
-	0xE8, 0xE9, 0xEA, 0xEB, 0xEC, 0xED, 0xEE, 0xEF,
-	0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7,
-	0xF8, 0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE, DataACKmax
+const UCHAR bytValidFrameTypesISS[] = {
+    // Array of valid frame types for ISS (Idle Send State).
+    DataNAKmin, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+    0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+    0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, DataNAKmax,
+// BREAK, DISC, or END
+    BREAK, DISCFRAME, END, ConRejBusy, ConRejBW,
+    ConReq200M, ConReq500M, ConReq1000M, ConReq2000M,
+    ConReq200F, ConReq500F, ConReq1000F, ConReq2000F,
+    ConAck200, ConAck500, ConAck1000, ConAck2000,
+// ACK
+    DataACKmin, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE7,
+    0xE8, 0xE9, 0xEA, 0xEB, 0xEC, 0xED, 0xEE, 0xEF,
+    0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7,
+    0xF8, 0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE, DataACKmax
 };
 
 
@@ -575,22 +575,23 @@ void FreeSemaphore()
 
 bool GetNextFrame()
 {
-	// returning true sets frame pending in Main
+    // returning true sets frame pending in Main
 
-	if (ProtocolMode == FEC || ProtocolState == FECSend)
-	{
-		if (ProtocolState == FECSend || ProtocolState == FECRcv || ProtocolState == DISC)
-			return GetNextFECFrame();
-		else
-			return false;
-	}
-	if (ProtocolMode == ARQ)
-//		if (ARQState == None)
-//			return false;
-//		else
-			return GetNextARQFrame();
+    if (ProtocolMode == FEC || ProtocolState == FECSend)
+    {
+        // If the protocol state is FECSend, FECRcv, or DISC, get the next FEC frame.
+        if (ProtocolState == FECSend || ProtocolState == FECRcv || ProtocolState == DISC)
+            return GetNextFECFrame();
+        else
+            return false;
+    }
 
-	return false;
+    // If the protocol mode is ARQ, get the next ARQ frame.
+    if (ProtocolMode == ARQ)
+        return GetNextARQFrame();
+
+    // Default case: no frame is pending.
+    return false;
 }
 
 #ifdef WIN32
@@ -603,40 +604,45 @@ extern int NErrors;
 
 void setProtocolMode(char* strMode)
 {
-	if (strcmp(strMode, "ARQ") == 0)
-	{
-		ZF_LOGI("Setting ProtocolMode to ARQ.");
-		ProtocolMode = ARQ;
-	}
-	else
-	if (strcmp(strMode, "RXO") == 0)
-	{
-		ZF_LOGI("Setting ProtocolMode to RXO.");
-		ProtocolMode = RXO;
-	}
-	else
-	if (strcmp(strMode, "FEC") == 0)
-	{
-		ZF_LOGI("Setting ProtocolMode to FEC.");
-		ProtocolMode = FEC;
-	}
-	else
-	{
-		ZF_LOGW("WARNING: Invalid argument to setProtocolMode.  %s given, but expected one of ARQ, RXO, or FEC.  Setting ProtocolMode to ARQ as a default.", strMode);
-		ProtocolMode = ARQ;
-		return;
-	}
-	// CLear MEM ARQ Stuff
-	ResetMemoryARQ();
+    // Compare the input string with valid protocol modes and set the mode accordingly.
+    if (strcmp(strMode, "ARQ") == 0)
+    {
+        ZF_LOGI("Setting ProtocolMode to ARQ.");
+        ProtocolMode = ARQ;
+    }
+    else if (strcmp(strMode, "RXO") == 0)
+    {
+        ZF_LOGI("Setting ProtocolMode to RXO.");
+        ProtocolMode = RXO;
+    }
+    else if (strcmp(strMode, "FEC") == 0)
+    {
+        ZF_LOGI("Setting ProtocolMode to FEC.");
+        ProtocolMode = FEC;
+    }
+    else
+    {
+        // If the input is invalid, log a warning and default to ARQ.
+        ZF_LOGW("WARNING: Invalid argument to setProtocolMode. Defaulting to ARQ.");
+        ProtocolMode = ARQ;
+        return;
+    }
 
-	wg_send_protocolmode(0);
+    // Reset ARQ-related memory and notify the web GUI of the protocol mode change.
+    ResetMemoryARQ();
+    wg_send_protocolmode(0);
 }
 
+/**
+ * @brief Main function for the ARDOP protocol.
+ * 
+ * Initializes the protocol, processes host commands, and handles the main polling loop.
+ */
 void ardopmain()
 {
-	char *nextHostCommand = HostCommands;
+    char *nextHostCommand = HostCommands;
 
-	// For testing purposes, it may be useful to run ardopcf repeatedly (and
+    // For testing purposes, it may be useful to run ardopcf repeatedly (and
 	// very quickly) to generate recordings of "random" test frames.  For
 	// these test frames to differ from each other, it is necessary to seed
 	// the pseudo-random number generator.  Typically, this is done using
@@ -644,80 +650,84 @@ void ardopmain()
 	// running ardopcf more than once per second would produce duplicate
 	// values.  So, the following is used to for a more rapidly changing
 	// seed value.
-	struct timeval t1;
-	gettimeofday(&t1, NULL);
-	srand(t1.tv_usec + t1.tv_sec);
+    struct timeval t1;
+    gettimeofday(&t1, NULL);
+    srand(t1.tv_usec + t1.tv_sec);
 
-	blnTimeoutTriggered = false;
-	SetARDOPProtocolState(DISC);
+    blnTimeoutTriggered = false;
+    SetARDOPProtocolState(DISC);
 
-	if (!InitSound())
-	{
-		ZF_LOGF("Error in InitSound().  Stopping ardop.");
-		return;
-	}
+    // Initialize the sound system. If it fails, log an error and exit.
+    if (!InitSound())
+    {
+        ZF_LOGF("Error in InitSound(). Stopping ardop.");
+        return;
+    }
 
-	TCPHostInit();
-	WebguiInit();
+    // Initialize TCP host and web GUI components.
+    TCPHostInit();
+    WebguiInit();
 
-	tmrPollOBQueue = Now + 10000;
+    // Set the polling timer for the outbound queue.
+    tmrPollOBQueue = Now + 10000;
 
-	// Always start in ARQ ProtocolMode.  Use --hostcommands to start in another
-	// ProtocolMode.
-	setProtocolMode("ARQ");
+    // Always start in ARQ ProtocolMode.  Use --hostcommands to start in another
+	  // ProtocolMode.
+    setProtocolMode("ARQ");
 
-	while(!blnClosing)
-	{
-		if (nextHostCommand != NULL) {
-			// Process the next host command from the --hostcommands
-			// command line argument.
-			char *thisHostCommand = nextHostCommand;
-			nextHostCommand = strlop(nextHostCommand, ';');
-			if (thisHostCommand[0] != 0x00)
-				// not an empty string
-				ProcessCommandFromHost(thisHostCommand);
-		}
-		PollReceivedSamples();
-		WebguiPoll();
-		if (ProtocolMode != RXO)
-		{
-			CheckTimers();
-			TCPHostPoll();
-			MainPoll();
-		}
-		if (PKTLEDTimer && Now > PKTLEDTimer) {
-			PKTLEDTimer = 0;
-			SetLED(PKTLED, 0);  // turn off packet rxed led
-		}
-		Sleep(10);  // ms
-	}
+    // Main loop: process host commands, poll received samples, and handle protocol logic.
+    while (!blnClosing)
+    {
+        // Process the next host command if available.
+        if (nextHostCommand != NULL) {
+            char *thisHostCommand = nextHostCommand;
+            nextHostCommand = strlop(nextHostCommand, ';');
+            if (thisHostCommand[0] != 0x00)
+                ProcessCommandFromHost(thisHostCommand);
+        }
 
-	if (closedByPosixSignal) {
-		ZF_LOGI(
-			"Terminating on signal: %s",
-			PlatformSignalAbbreviation(closedByPosixSignal)
-		);
-	}
+        // Poll for received samples and update the web GUI.
+        PollReceivedSamples();
+        WebguiPoll();
 
-	// If currently recording a WAV file, close it
-	if (rxwf != NULL) {
-		CloseWav(rxwf);
-		rxwf = NULL;
-		wg_send_wavrx(0, false);  // update "RECORDING RX" indicator on WebGui
-	}
-	if (txwff != NULL) {
-		CloseWav(txwff);
-		txwff = NULL;
-	}
-	// writing unfiltered tx audio to WAV disabled
-	//if (txwuf != NULL) {
-	//	CloseWav(txwff);
-	//	txwff = NULL;
-	//}
+        // If not in RXO mode, check timers, poll TCP host, and perform main protocol polling.
+        if (ProtocolMode != RXO)
+        {
+            CheckTimers();
+            TCPHostPoll();
+            MainPoll();
+        }
 
-	closesocket(TCPControlSock);
-	closesocket(TCPDataSock);
-	return;
+        // Handle packet LED timeout.
+        if (PKTLEDTimer && Now > PKTLEDTimer) {
+            PKTLEDTimer = 0;
+            SetLED(PKTLED, 0);
+        }
+
+        // Sleep for 10 milliseconds to reduce CPU usage.
+        Sleep(10);
+    }
+
+    // Handle cleanup if the application is closing due to a POSIX signal.
+    if (closedByPosixSignal) {
+        ZF_LOGI("Terminating on signal: %s", PlatformSignalAbbreviation(closedByPosixSignal));
+    }
+
+    // Close any open WAV files for RX or TX audio.
+    if (rxwf != NULL) {
+        CloseWav(rxwf);
+        rxwf = NULL;
+        wg_send_wavrx(0, false);  // update "RECORDING RX" indicator on WebGui
+    }
+    if (txwff != NULL) {
+        CloseWav(txwff);
+        txwff = NULL;
+    }
+
+    // Close TCP sockets for control and data communication.
+    closesocket(TCPControlSock);
+    closesocket(TCPDataSock);
+    return;
 }
 
 // Subroutine to generate 1 symbol of leader
@@ -734,7 +744,8 @@ const char * Name(UCHAR bytID)
 		return strFrameType[bytID];
 }
 
-// returns pointer to Frame Type Name
+// returns pointer to Frame Type  
+// update "RECORDING RX" indicator on WebGui Name
 
 const char * shortName(UCHAR bytID)
 {
@@ -1600,7 +1611,7 @@ bool SendID(const StationId * id, char * reason)
 	if (!stationid_ok(id_to_send)) {
 		// This should not happen (so it is logged as an ERROR).  Host/Gui
 		// commands to transmit are designed to fail if Callsign is not set and
-		// automatic transmissions in response to received frames (ConReq ->
+		// automatic transmissions in response to received frames (ConReq -> 
 		// ConAck, Ping -> PingAck) only respond to frames whose target callsign
 		// matches Callsign or a value in AuxCalls.
 		// If this occurs, it could result in a bad loop condition as repeated
