@@ -14,6 +14,7 @@
 
 #include "common/ARDOPC.h"
 #include "common/Locator.h"
+#include "common/Modulate.h"
 
 extern int intLastRcvdFrameQuality;  // defined in ARDOPC.c
 
@@ -103,6 +104,10 @@ int bytes2hex(char *outputStr, size_t count, unsigned char *data, size_t datalen
 
 // return 0 on success, 1 on failure
 int txframe(char * frameParams) {
+	if (!TXEnabled) {
+		ZF_LOGW("txframe() called when not TXEnabled. Ignoring.");
+		return 1;
+	}
 	unsigned char sessionid;
 	char * params[10];
 	int paramcount = parse_params(frameParams, params);
@@ -143,7 +148,8 @@ int txframe(char * frameParams) {
 			ZF_LOGE("ERROR: In txframe() DataNAK Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
-		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
+		if (!Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength))
+			return 1;
 	} else if (strcmp(params[1], "BREAK") == 0) {
 		// TXFRAME BREAK [sessionid]
 		// 0x20 - 0x22 unused
@@ -158,7 +164,8 @@ int txframe(char * frameParams) {
 			ZF_LOGE("ERROR: In txframe() BREAK Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
-		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
+		if (!Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength))
+			return 1;
 	} else if(strcmp(params[1], "IDLE") == 0) {
 		// TXFRAME IDLE [sessionid]
 		// 0x24 IDLE
@@ -173,7 +180,8 @@ int txframe(char * frameParams) {
 			ZF_LOGE("ERROR: In txframe() IDLE Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
-		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
+		if (!Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength))
+			return 1;
 	} else if(strcmp(params[1], "DISC") == 0) {
 		// TXFRAME DISC [sessionid]
 		// 0x25 - 0x28 unused
@@ -189,7 +197,8 @@ int txframe(char * frameParams) {
 			ZF_LOGE("ERROR: In txframe() DISC Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
-		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
+		if (!Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength))
+			return 1;
 	} else if(strcmp(params[1], "END") == 0) {
 		// TXFRAME END [sessionid]
 		// 0x2A - 0x2B unused
@@ -205,7 +214,8 @@ int txframe(char * frameParams) {
 			ZF_LOGE("ERROR: In txframe() END Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
-		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
+		if (!Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength))
+			return 1;
 	} else if(strcmp(params[1], "ConRejBusy") == 0) {
 		// TXFRAME ConRejBusy [sessioid]
 		// 0x2D ConRejBusy
@@ -220,7 +230,8 @@ int txframe(char * frameParams) {
 			ZF_LOGE("ERROR: In txframe() ConRejBusy Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
-		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
+		if (!Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength))
+			return 1;
 	} else if(strcmp(params[1], "ConRejBW") == 0) {
 		// TXFRAME ConRejBW [sessionid]
 		// 0x2E ConRejBW
@@ -235,7 +246,8 @@ int txframe(char * frameParams) {
 			ZF_LOGE("ERROR: In txframe() ConRejBW Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
-		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
+		if (!Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength))
+			return 1;
 	} else if(strcmp(params[1], "IDFrame") == 0) {
 		// TXFRAME IDFrame [callsign] [gridsquare]
 		// 0x2F unused
@@ -278,7 +290,8 @@ int txframe(char * frameParams) {
 			ZF_LOGE("ERROR: In txframe() IDFrame Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
-		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
+		if (!Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength))
+			return 1;
 	} else if(strncmp(params[1], "ConReq", 6) == 0) {
 		// TXFRAME ConReq target [mycall] [bandwidth]
 		// TXFRAME ConReqXXXX target [mycallsign]
@@ -366,7 +379,8 @@ int txframe(char * frameParams) {
 			ZF_LOGE("ERROR: In txframe() ConReq Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
-		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
+		if (!Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength))
+			return 1;
 	} else if(strncmp(params[1], "ConAck", 6) == 0) {
 		// TXFRAME ConAck [leaderlen] [sessionid] [bandwidth]
 		// TXFRAME ConAckXXX [leaderlen] [sessionid]
@@ -418,7 +432,8 @@ int txframe(char * frameParams) {
 			ZF_LOGE("ERROR: In txframe() ConAck Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
-		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
+		if (!Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength))
+			return 1;
 	} else if(strcmp(params[1], "PingAck") == 0) {
 		// TXFRAME PingAck [snr] [quality]
 		// 0x3D
@@ -448,7 +463,8 @@ int txframe(char * frameParams) {
 			ZF_LOGE("ERROR: In txframe() PingAck Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
-		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
+		if (!Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength))
+			return 1;
 	} else if(strcmp(params[1], "Ping") == 0) {
 		// TXFRAME Ping target [mycall]
 		// 0x3$
@@ -494,7 +510,8 @@ int txframe(char * frameParams) {
 			ZF_LOGE("ERROR: In txframe() Ping Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
-		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
+		if (!Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength))
+			return 1;
 	} else if (strcmp(params[1], "DataACK") == 0) {
 		// TXFRAME DataACK [quality] [sessionid]
 		// 0xE0 - 0xFF DataACK
@@ -515,7 +532,8 @@ int txframe(char * frameParams) {
 			ZF_LOGE("ERROR: In txframe() DataACK Invalid EncLen (%d).", EncLen);
 			return 1;
 		}
-		Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
+		if (!Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength))
+			return 1;
 	} else {
 		// TXFRAME MOD.BW.BAUD.E/O "text data" [sessionid]
 		// TXFRAME MOD.BW.BAUD.E/O hexdigits [sessionid]
@@ -611,22 +629,27 @@ int txframe(char * frameParams) {
 					ZF_LOGE("ERROR: In txframe() 4FSK Invalid EncLen (%d).", EncLen);
 					return 1;
 				}
-				if (frametype >= 0x7A && frametype <= 0x7D)
-					Mod4FSK600BdDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
-				else
-					Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
+				if (frametype >= 0x7A && frametype <= 0x7D) {
+					if (!Mod4FSK600BdDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength))
+						return 1;
+				} else {
+					if (!Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength))
+						return 1;
+				}
 			} else if (strcmp(modulation, "4PSK") == 0 || strcmp(modulation, "8PSK") == 0) {
 				if ((EncLen = EncodePSKData(frametype, data, datalen, bytEncodedBytes)) <= 0) {
 					ZF_LOGE("ERROR: In txframe() 4PSK Invalid EncLen (%d).", EncLen);
 					return 1;
 				}
-				ModPSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
+				if (!ModPSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength))
+					return 1;
 			} else if (strcmp(modulation, "16QAM") == 0) {
 				if ((EncLen = EncodePSKData(frametype, data, datalen, bytEncodedBytes)) <= 0) {
 					ZF_LOGE("ERROR: In txframe() 16QAM Invalid EncLen (%d).", EncLen);
 					return 1;
 				}
-				ModPSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
+				if (!ModPSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength))
+					return 1;
 			} else {
 				bytSessionID = sessionid_bak;
 				ZF_LOGW("TXFRAME: Unexpected modulation='%s' for frame type=%s", modulation, params[1]);

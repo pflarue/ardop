@@ -4,9 +4,9 @@
 
 ## Use with the `--hostcommands` command line option
 
-The `-H` or `--hostcommands` option can be used to automatically apply one or more semicolon separated host commands at startup.  The remainder of this document describes all of the available host commands.  If the first commands are `LOGLEVEL` and/or `CONSOLELOG`, then these are applied before most other command line options are evaluated.  Processing them before the logging system is initiated ensures that the desired log settings are in place before any log messages are processed.
+The `-H` or `--hostcommands` option can be used to automatically apply one or more semicolon separated host commands at startup.  The remainder of this document describes all of the available host commands.  If the first commands are `LOGLEVEL N` and/or `CONSOLELOG N`, then these are applied before most other command line options are evaluated.  Processing them before the logging system is initiated ensures that the desired log settings are in place before any log messages are processed.  Host commands `LOGLEVEL` and `CONSOLELOG` without a new value are not processed early since these do not change the behavior of logging.
 
-The commands are applied in the order that they are written.  Except for those leading `LOGLEVEL` and `CONOSOLELOG` commands, the order usually doesn't matter.  As an example, `--hostcommands "LOGLEVEL 1;CONSOLELOG 2;MYCALL AI7YN"` sets the log file to be as detailed as possible, and data printed to the console to be only slightly less detailed, and sets my callsign to `AI7YN`.  Because most commands will include a command, a space, and a value, you usually need to put quotation marks around the commands string.   As another example, `--hostcommands "CONSOLELOG 4;MYCALL AI7YN;DRIVELEVEL 90"` leaves the log file settings at their default value, but prints only more important messages to the console, sets my callsign, and set the transmit drive level to 90%.
+The commands are applied in the order that they are written.  Except for those leading `LOGLEVEL N` and `CONOSOLELOG N` commands, the order usually doesn't matter.  As an example, `--hostcommands "LOGLEVEL 1;CONSOLELOG 2;MYCALL AI7YN"` sets the log file to be as detailed as possible, and data printed to the console to be only slightly less detailed, and sets my callsign to `AI7YN`.  Because most commands will include a command, a space, and a value, you usually need to put quotation marks around the commands string.   As another example, `--hostcommands "CONSOLELOG 4;MYCALL AI7YN;DRIVELEVEL 90"` leaves the log file settings at their default value, but prints only more important messages to the console, sets my callsign, and set the transmit drive level to 90%.
 
 Some command line options that were available before ardopcf v1.0.4.1.3 now require use of `--hostcommands` to produce the same result.  The following list includes host comands that can be used to replace obsolete command line arguments plus a few others that may be useful.  See the detailed descriptions of these commands later in this document for more information.
 
@@ -17,7 +17,7 @@ Some command line options that were available before ardopcf v1.0.4.1.3 now requ
 * LOGLEVEL: Controls amount of data written to debug log. 1-6. Lower values write more info to log. (replaces `-v` or `--verboselog`, but values are different)
 * MYCALL: Set callsign
 * PROTOCOLMODE: Sets the protocol mode.  ("PROTOCOLMODE RXO" replaces `-r` or `--receiveonly`)
-* TRAILER: Sets trailer length in ms. (replaces `-t` or `--trailerlength`)
+* TRAILER: Sets trailer length in ms.  This may be required to prevent PTT OFF from occuring before all of the transmitted audio is played when audio latency is significant. (replaces `-t` or `--trailerlength`)
 * TWOTONETEST: Transmit two-tone test signal for 5 seconds. ("TWOTONETEST;CLOSE" replaces `-n` or `--twotone`)
 
 
@@ -190,23 +190,46 @@ Set a bandwidth value to be used for ARQCALL which, unless set to UNDEFINED, wil
 
 #### CAPTURE
 
-Returns the currently selected capture device. This is supposed to let the user change the audio source, but currently it does not seem to work as intended. Changing this does not change where audio is routed for decoding.
+Warning: If an input/capture audio device is currently open and the value provided with this command is not identical to the current value, then the device will be closed so that this new device can be opened.  This is true even if using the same device specified by another name.  This may result in loss of received data.
+
+Set the audio input/capture device, or get the name of the current device if one is open.  The audio device names are the same as those used when specifying audio devices from the command line.  See [USAGE_linux.md](USAGE_linux.md) and [USAGE_windows.md](USAGE_windows.md) for additional information.
+
+If the special device name "NONE" is used, close any existing CAPTURE device if one is open.  This is similar to RXENABLED FALSE.
+
+If the special device name "RESTORE" is used, do nothing if RXENEABLED is TRUE.  However, if RXENEABLED is FALSE, but a CAPTURE device has previously been successfully opened, then try to reopen that device.
+
+Unlike many other comands, the arguments to CAPTURE, PLAYBACK, RADIOCTRLPORT, and RADIOPTT are case sensitive.
 
 - Mode: ANY
 - Arguments: None, String of the capture device.
-- `CAPTURE` returns `CAPTURE plughw:2,0`
-- `CAPTURE plughw:1,0` returns `CAPTURE now plughw:1,0`
+- `CAPTURE` returns `CAPTURE plughw:2,0` or `CAPTURE NONE`
+- `CAPTURE plughw:1,0` returns `CAPTURE now plughw:1,0` or `FAULT Cannot open CaptureDevice as configured: CAPTURE plughw:1,0`
+- `CAPTURE NONE` returns `FAULT Cannot open CaptureDevice as configured: CAPTURE NONE`
+- `CAPTURE RESTORE` returns `CAPTURE now plughw:1,0` or `FAULT Cannot open CaptureDevice as configured: CAPTURE RESTORE`
+
+
+#### CAPTURECHANNEL
+
+Set or get the audio channel of the CAPTURE device to use.  While structured differently, this duplicates the functionality of the `-L` and `-R` command line options.  Except when using a dual receiever radio, `MONO` should usually be used.
+
+- Mode: ANY
+- Arguments: None, MONO, LEFT, RIGHT
+- `CAPTURECHANNEL` returns `CAPTURECHANNEL MONO` or `CAPTURECHANNEL LEFT` or `CAPTURECHANNEL RIGHT`.
+- `CAPTURECHANNEL LEFT` returns `CAPTURECHANNEL now LEFT`
 
 
 #### CAPTUREDEVICES
 
-Returns the currently selected capture device. This is supposed to let the user change the audio source, but currently it does not seem to work as intended. Changing this does not change where audio is routed for decoding.
+Returns a comma separated list of available input/capture audio devices.
+Device names may be wrapped in double quotes, and double double quotes within double quotes shall be interpreted as a literal double quotes character.  If any device name includes a linefeed (\n), then the text before the linefeed shall be interpreted as the name, while any text after the first linefeed shall be interpreted as a description.  The name portion of this value is suitable to pass to the CAPTURE command.
+
+Furthermore, If the description begins with "[BUSY", then this is an indicaton that the device is currently in use (by this or another program).  This may be followed immediately by a closing bracket "]" or additional details may be included before that closing bracket.
+
+The response CSV text is preceeded by the command string and a space.  The host should probably discard all whitespace after the command string.
 
 - Mode: ANY
 - Arguments: None, String of the capture device.
-- `CAPTUREDEVICES` returns `CAPTUREDEVICES plughw:2,0`
-- `CAPTUREDEVICES plughw:1,0` returns `CAPTUREDEVICES now plughw:1,0`
-
+- `CAPTUREDEVICES` returns `CAPTUREDEVICES null\nDiscard all samples (playback) or generate zero samples (capture),"plughw:CARD=Transceiver,DEV=0\nplughw:0,0. QMX Transceiver, USB Audio",NOSOUND\nA dummy audio device for diagnostic use.` (where `\n` would actually be a linefeed character)
 
 #### CL
 
@@ -224,6 +247,17 @@ For debugging, determines if command sent from the host are recorded in the logf
 - Arguments: None, `TRUE` or `FALSE`
 - `CMDTRACE` returns `CMDTRACE TRUE`
 - `CMDTRACE FALSE` returns `CMDTRACE now FALSE`
+
+#### CODEC
+
+Enable or disable audio processing.  If one or both of RXENABLED and TXENABLED are false, then return false.
+
+- Mode: ANY
+- Arguments: None, `TRUE` or `FALSE`
+- `CODEC` returns `CODEC TRUE` or `CODEC FALSE`
+- `CODEC FALSE` returns `CODEC now FALSE`
+- `CODEC TRUE` return `CODEC now TRUE` or `FAULT CODEC cannot be set to TRUE.  CAPTURE required` or `FAULT CODEC cannot be set to TRUE.  PLAYBACK required` or `FAULT CODEC cannot be set to TRUE.  CAPTURE and PLAYBACK required`
+
 
 #### CONSOLELOG
 
@@ -475,20 +509,48 @@ If the pinged station responds with a `PINGACK` frame, this station will stop pi
 
 #### PLAYBACK
 
-Returns the currently selected playback device. This is supposed to let the user change the audio destination, but currently it does not seem to work as intended. Changing this does not change where audio is routed for transmission.
+Warning: If an output/playback audio device is currently open and the value provided with this command is not identical to the current value, then the device will be closed so that this new device can be opened.  This is true even if using the same device specified by another name.  If changed while transmitting, this will abort the transmission.
+
+Set the audio output/playback device, or get the name of the current device if one is open.  The audio device names are the same as those used when specifying audio devices from the command line.  See [USAGE_linux.md](USAGE_linux.md) and [USAGE_windows.md](USAGE_windows.md) for additional information.
+
+If the special device name "NONE" is used, close any existing PLAYBACK device if one is open.  This is similar to TXENABLED FALSE.
+
+If the special device name "RESTORE" is used, do nothing if TXENEABLED is TRUE.  However, if TXENEABLED is FALSE, but a PLAYBACK device has previously been successfully opened, then try to reopen that device.
+
+Unlike many other comands, the arguments to CAPTURE, PLAYBACK, RADIOCTRLPORT, and RADIOPTT are case sensitive.
 
 - Mode: ANY
 - Arguments: None, String of the playback device.
-- `PLAYBACK` returns `PLAYBACK plughw:2,0`
-- `PLAYBACK plughw:1,0` returns `PLAYBACK now plughw:1,0`
+- `PLAYBACK` returns `PLAYBACK plughw:2,0` or `PLAYBACK NONE`
+- `PLAYBACK plughw:1,0` returns `PLAYBACK now plughw:1,0` or `FAULT Cannot open PlaybackDevice as configured: PLAYBACK plughw:1,0`
+- `PLAYBACK NONE` returns `FAULT Cannot open PlaybackDevice as configured: PLAYBACK NONE`
+- `PLAYBACK RESTORE` returns `PLAYBACK now plughw:1,0` or `FAULT Cannot open PlaybackDevice as configured: PLAYBACK RESTORE`
+
+
+#### PLAYBACKCHANNEL
+
+Set or get the audio channel of the PLAYBACK device to use.  While structured differently, this duplicates the functionality of the `-y` and `-z` command line options.  For most hardware, `MONO` should usually be used.
+
+- Mode: ANY
+- Arguments: None, MONO, LEFT, RIGHT
+- `PLAYBACKCHANNEL` returns `PLAYBACKCHANNEL MONO` or `PLAYBACKCHANNEL LEFT` or `PLAYBACKCHANNEL RIGHT`.
+- `PLAYBACKCHANNEL LEFT` returns `PLAYBACKCHANNEL now LEFT`
+
 
 #### PLAYBACKDEVICES
 
-Returns the currently used playback device. This may be supposed to return a list of devices.
+Returns a comma separated list of available output/playback audio devices.
+
+Device names may be wrapped in double quotes, and double double quotes within double quotes shall be interpreted as a literal double quotes character.  If any device name includes a linefeed (\n), then the text before the linefeed shall be interpreted as the name, while any text after the first linefeed shall be interpreted as a description.  The name portion of this value is suitable to pass to the PLAYBACK command.
+
+Furthermore, If the description begins with "[BUSY", then this is an indicaton that the device is currently in use (by this or another program).  This may be followed immediately by a closing bracket "]" or additional details may be included before that closing bracket.
+
+The response CSV text is preceeded by the command string and a space.  The host should probably discard all whitespace after the command string.
 
 - Mode: ANY
-- Arguments: None
-- `PLAYBACKDEVICES` returns `PLAYBACKDEVICES plughw:2,0`
+- Arguments: None, String of the capture device.
+- `PLAYBACKDEVICES` returns `PLAYBACKDEVICES null\nDiscard all samples (playback) or generate zero samples (capture),"plughw:CARD=Transceiver,DEV=0\nplughw:0,0. QMX Transceiver, USB Audio",NOSOUND\nA dummy audio device for diagnostic use.` (where `\n` would actually be a linefeed character)
+
 
 #### PROTOCOLMODE
 
@@ -499,6 +561,16 @@ Part of initialization, sets the ardop operating mode.
 - `PROTOCOLMODE` returns `PROTOCOLMODE ARQ`
 - `PROTOCOLMODE FEC` returns `PROTOCOLMODE now FEC`
 
+#### PTTENABLED
+
+Enable or disble PTT control by any means including CAT control, RTS, DTR, CM108, or GPIO pin.
+
+- Mode: ANY
+- Arguments: None, TRUE, FALSE
+- `PTTENABLED` returns `PTTENABLED TRUE` or `PTTENABLED FALSE`
+- `PTTENABLED FALSE` returns `PTTENABLED now FALSE`
+- `PTTENABLED TRUE` returns `PTTENABLED now TRUE` or `PTTENABLED now TRUE after parse_pttstr("RESTORE")` or `PTTENABLED now TRUE after parse_catstr("RESTORE")` or `FAULT PTTENABLED cannot be set to TRUE.  RADIOPTT or RADIOCTRLPORT, RADIOPTTON, RADIOPTTOFF required.`
+
 #### PURGEBUFFER
 
 Empties all data from the outgoing data buffer. Will stop any data transmissions after the current frame is finished sending.
@@ -506,6 +578,21 @@ Empties all data from the outgoing data buffer. Will stop any data transmissions
 - Mode: ANY
 - Arguments: None
 - `PURGEBUFFER` returns `BUFFER 0`
+
+#### RADIOCTRLPORT
+
+Set the port to use for CAT commands.  The device name, including an optional `TCP:` prefix and/or `:baud` suffix are the same as would be used with the `--cat` command line option.
+
+The special device name `NONE` closes the current device if one is open.
+
+The special device name `RESTORE` attempts to reopens the last successfully opened device.
+
+- Mode: ANY
+- Arguments: None, String of the cat device name, NONE, RESTORE
+- `RADIOCTRLPORT` returns `RADIOCTRLPORT /dev/ttyUSB0` or `RADIOCTRLPORT NONE`
+- `RADIOCTRLPORT /dev/ttyUSB0` returns `RADIOCTRLPORT now /dev/ttyUSB0` or `FAULT RADIOCTRLPORT cannot be set to /dev/ttyUSB0`
+- `RADIOCTRLPORT NONE` returns `FAULT RADIOCTRLPORT cannot be set to NONE`
+- `RADIOCTRLPORT RESTORE` returns `RADIOCTRLPORT now /dev/ttyUSB0` or `FAULT RADIOCTRLPORT cannot be set to RESTORE`
 
 #### RADIOFREQ
 
@@ -530,6 +617,21 @@ a CAT port was not set with the -c or --cat command line option, if XXX is not
 a valid hex string, or if XXX is too long to be sent as a CAT command.
 - `RADIOHEX XXX` Returns `RADIOHEX XXX` and sends the command to the radio if
 XXX is a valid hex string.
+
+#### RADIOPTT
+
+Set the port to use for non-CAT PTT control.  The device name, including an optional `RTS:`, `DTR:`, `CM108:`, or `GPIO:` prefix and/or `:baud` suffix are the same as would be used with the `--ptt` command line option.
+
+The special device name `NONE` closes the current device if one is open.
+
+The special device name `RESTORE` attempts to reopens the last successfully opened device.
+
+- Mode: ANY
+- Arguments: None, String of the ptt device name, NONE, RESTORE
+- `RADIOPTT` returns `RADIOPTT /dev/ttyUSB0` or `RADIOPTT NONE`
+- `RADIOPTT /dev/ttyUSB0` returns `RADIOPTT now /dev/ttyUSB0` or `FAULT RADIOPTT cannot be set to /dev/ttyUSB0`
+- `RADIOPTT NONE` returns `FAULT RADIOPTT cannot be set to NONE`
+- `RADIOPTT RESTORE` returns `RADIOPTT now /dev/ttyUSB0` or `FAULT RADIOPTT cannot be set to RESTORE`
 
 #### RADIOPTTOFF
 
@@ -589,18 +691,20 @@ CAT PTT On command.  If CAT PTT control was being used, it is disabled.
 
 #### RECRX
 
+This command is not intended to be used or useful during normal operation of
+ardopcf.  Rather, it is useful for diagnostic purposes.
+
 Start (with `RECRX TRUE`) or Stop (with `RECRX FALSE`) recording of received
 audio to a WAV file.  Like those created with the -w or --writewav command line
 options, WAV files are named according to the UTC date and time they are
 started, and are located in the same directory as the debug log file.  The WAV
 files are single channel, 16-bit, 12 kHz sample rate, and thus are suitable to
-be read and decoded by ardopcf with the -d or --decodewav command line option.
+be read and decoded by ardopcf with the -d or --decodewav command line option.  A button in the developer mode version of the WebGUI also provides convenient interactive use of this function.
+
+Unlike the `WRITERXWAV` host command which causes received audio to be automatically recorded after transmitting, the `RECRX` allows the host prograam or user (via the WebGUI) to precisely control when recording is started and stopped.
 
 `RECRX TRUE` while RECRX is already TRUE or `RECRX FALSE` while RECRX is already
 FALSE is permitted and does nothing.
-
-This command is not intended to be used or useful during normal operation of
-ardopcf.  Rather, it is useful for diagnostic purposes.
 
 - Mode: ANY
 - Arguments: None or `TRUE` or `FALSE`
@@ -615,6 +719,15 @@ Similarly, while RECRX is TRUE, the -w and --writewav command line option is
 temporarily disabled.  Recording due to -w and --writewav may start at the end
 of the next transmission after RECRX is set to FALSE.
 
+#### RXENABLED
+
+Enable or disable processing of input audio
+
+- Mode: ANY
+- Arguments: None, TRUE, FALSE
+- `RXENABLED` returns `RXENABLED TRUE` or `RXENABLED FALSE`
+- `RXENABLED FALSE` returns `RXENABLED now FALSE`
+- `RXENABLED TRUE` returns `RXENABLED now TRUE` or `FAULT RXENABLED cannot be set to TRUE.  CAPTURE required`
 
 #### RXLEVEL
 
@@ -623,6 +736,20 @@ Embedded platform control of ADC input volume.
 - Mode: ANY
 - Arguments: UNK
 - Returns: UNK
+
+#### SDFTENABLED
+
+Enable or disable the use of the alternative Sliding DFT based 4FSK demodulator.  This demodulator was developed to allow demodulation of 4FSK data modes transmitted by earlier versions of ardopc and ardopcf with incorrect symbol rates.  This occured with certain audio hardware on some Linux machines.  When enabled, this is used to demodulate 4FSK data frames as well as the 4FSK modulated frame type and session ID at the start of all Ardop frames.
+
+If data frames from a remote station cannot be reliably decoded when band conditions and noise levels do not seem to be the cause of the problem, it may be useful to enable SDFT to see whether this helps.  If LOGLEVEL is set to 1 (verbose) with `SDFTENABLED TRUE`, then the estimated symbol rate is written to the log whenever a 4FSK data frame is received.  This may provide additional evidence that an incorrect transmitted symbol rate is causing problems.  If such a problem is found, advise the transmitting station to upgrade to the latest version of ardopcf.
+
+Rigorous testing to evaluate the performance of the alternative SDFT demodulator as compared to the normal Goertzel based demodulator for received signals whose symbol rate is not incorrect has not yet been conducted.  Therefore, it is not known whether this improves or degrades performance.
+
+- Mode: ANY
+- Arguments: None, TRUE, FALSE
+- `SDFTENABLED` returns `SDFTENABLED TRUE` or `SDFTENABLED FALSE`
+- `SDFTENABLED FALSE` returns `SDFTENABLED now FALSE`
+- `SDFTENABLED TRUE` returns `SDFTENABLED now TRUE`
 
 #### SENDID
 
@@ -689,6 +816,16 @@ Transmits a pair of tones at the normal leader amplitude for five seconds. May b
 - Arguments: None
 - Returns: None
 
+#### TXENABLED
+
+Enable or disable production of output audio
+
+- Mode: ANY
+- Arguments: None, TRUE, FALSE
+- `TXENABLED` returns `TXENABLED TRUE` or `TXENABLED FALSE`
+- `TXENABLED FALSE` returns `TXENABLED now FALSE`
+- `TXENABLED TRUE` returns `TXENABLED now TRUE` or `FAULT TXENABLED cannot be set to TRUE.  PLAYBACK required`
+
 #### TXLEVEL
 
 Embedded platform control of ADC output volume.
@@ -713,6 +850,33 @@ Returns the version of ardopcf.
 - Mode: ANY
 - Arguments: None
 - `VERSION` returns `VERSION ardopcf_1.0.4.1.2`
+
+#### WRITERXWAV
+
+This command is NOT intended to be used or useful during normal operation of ardopcf.  Rather, it is useful for diagnostic purposes.
+
+Enable or disable writing of WAV audio files containing received audio following transmit.  This duplicates the functionality of the `-w` or `--writewav` command line option.  WAV files are named according to the UTC date and time they are started, and are located in the same directory as the debug log file.  The WAV files are single channel, 16-bit, 12 kHz sample rate, and thus are suitable to be read and decoded by ardopcf with the -d or --decodewav command line option.
+
+Unlike the `RECRX` host command and the corresponding button in the develper mode version of the WebGUI which allow recording to be manually started and stopped, the `WRITERXWAV` host command causes received audio to be automatically recorded after transmitting.  This is primarily intended to record the audio received during an ARQ session.
+
+- Mode: ANY
+- Arguments: None, TRUE, FALSE
+- `WRITERXWAV` returns `WRITERXWAV TRUE` or `WRITERXWAV FALSE`
+- `WRITERXWAV FALSE` returns `WRITERXWAV now FALSE`
+- `WRITERXWAV TRUE` returns `WRITERXWAV now TRUE`
+
+#### WRITETXWAV
+
+This command is NOT intended to be used or useful during normal operation of ardopcf.  Rather, it is useful for diagnostic purposes.
+
+Enable or disable writing of WAV audio files containing transmitted audio.  This duplicates the functionality of the `-T` or `--writetxwav` command line option.  WAV files are named according to the UTC date and time they are started, and are located in the same directory as the debug log file.  The WAV files are single channel, 16-bit, 12 kHz sample rate, and thus are suitable to be read and decoded by ardopcf with the -d or --decodewav command line option.
+
+- Mode: ANY
+- Arguments: None, TRUE, FALSE
+- `WRITETXWAV` returns `WRITETXWAV TRUE` or `WRITETXWAV FALSE`
+- `WRITETXWAV FALSE` returns `WRITETXWAV now FALSE`
+- `WRITETXWAV TRUE` returns `WRITETXWAV now TRUE`
+
 
 ## ARDOPCF Command Socket Messages
 

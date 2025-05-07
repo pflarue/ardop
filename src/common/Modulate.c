@@ -1,5 +1,12 @@
 // Sample Creation routines (encode and filter) for ARDOP Modem
 
+// Tests of TXEnabled are included at the start of many functions here.  This is
+// intended to halt attempts to send quickly if TXEnabled is not true,
+// including if this state changes while already transmitting.  Several
+// functions that were of type void have also been changed to bool to return
+// false on failure so that such conditions can propagate back to calling
+// functions.
+
 #ifdef WIN32
 #define _CRT_SECURE_NO_DEPRECATE
 #include <windows.h>
@@ -9,8 +16,10 @@
 
 #include "os_util.h"
 #include "common/ARDOPC.h"
+#include "common/ardopcommon.h"
 #include "common/wav.h"
 #include "common/ptt.h"
+#include "common/audio.h"
 
 // pttOnTime is used both as a reference for how long audio has been playing
 // and as an indication of whether or not any transmissions have been made
@@ -30,6 +39,7 @@ extern int DriveLevel;
 extern bool WriteTxWav;
 extern unsigned int LastIDFrameTime;
 extern int extraDelay;
+extern unsigned int tmrFinalID;
 
 int wg_send_txframet(int cnum, const char *frame);
 
@@ -39,12 +49,291 @@ int wg_send_txframet(int cnum, const char *frame);
 int intSoftClipCnt = 0;
 
 void StartTxWav();
-void Flush();
 
-void GetTwoToneLeaderWithSync(int intSymLen)
-{
+// Filter State Variables
+static float dblR = (float)0.9995f;  // insures stability (must be < 1.0) (Value .9995 7/8/2013 gives good results)
+static int intN = 120;  // Length of filter 12000/100
+static float dblRn;
+
+static float dblR2;
+static float dblCoef[32] = {0.0f};  // the coefficients
+float dblZin = 0, dblZin_1 = 0, dblZin_2 = 0, dblZComb= 0;  // Used in the comb generator
+
+// The resonators
+float dblZout_0[32] = {0.0f};  // resonator outputs
+float dblZout_1[32] = {0.0f};  // resonator outputs delayed one sample
+float dblZout_2[32] = {0.0f};  // resonator outputs delayed two samples
+
+int fWidth;  // Filter BandWidth
+int SampleNo;
+int outCount = 0;
+int first, last;  // Filter slots
+int centreSlot;
+
+float largest = 0;
+float smallest = 0;
+
+short Last120[128];
+
+int Last120Get = 0;
+int Last120Put = 120;
+
+int Number = 0;  // Number waiting to be sent
+
+// initFilter is called to set up each packet. It selects filter width
+void initFilter(int Width, int Centre) {
+	int i, j;
+
+	if (WriteTxWav)
+		StartTxWav();
+
+	fWidth = Width;
+	centreSlot = Centre / 100;
+	largest = smallest = 0;
+	SampleNo = 0;
+	Number = 0;
+	outCount = 0;
+	memset(Last120, 0, 256);
+
+	// TEMPORARY FIX FOR COMPATIBILITY WITH QMX BETA SSB FIRMWARE
+	//  KeyPTT(true);
+	/////////////////////////////////////////////////////////////
+
+	SoundIsPlaying = true;
+	StopCapture();
+	// If responding to a received frame, ensure that a sufficient minimum
+	// amount of time has elapsed before transmitting.
+	//
+	// Previously, this delay was applied in ProcessRcvdARQFrame(), or for
+	// a received DataACK, in ProcessNewSamples().  Moving it here allows it to
+	// be applied only when actually preparing to transmit.  Thus, it can also
+	// use txSleep() rather than Sleep(), thereby helping to avoid problems that
+	// might otherwise be caused by failing to read from the audio capture
+	// device for too long.
+	unsigned int delay = 0;
+	if (DecodeCompleteTime + 250 + extraDelay > Now)
+		delay = (DecodeCompleteTime + 250 + extraDelay) - Now;
+	ZF_LOGD("Time since received = %d (required txSleep delay = %i mS)",
+		Now - DecodeCompleteTime, delay);
+	// Require minimum 250 ms delay between RX and TX.
+	// TODO: Is this working as expected?  See comments near start of
+	// ProcessNewSamples() regarding time uncertainty.  Also review how this
+	// interacts with leader length adjusments based on data exchanged during
+	// ARQ handshake.
+	txSleep(delay);
+
+	// TEMPORARY FIX FOR COMPATIBILITY WITH QMX BETA SSB FIRMWARE
+	KeyPTT(true);
+	/////////////////////////////////////////////////////////////
+
+	// pttOnTime is used to in linux/ALSA.c to calculate when enough time has
+	// elapsed for the audio to have been fully played before KeyPTT(false).
+	// Thus, this must be set after txSleep.  pttOnTime is not used for Windows.
+	// TODO: Can greater consistency be achieved by monitoring the tx audio
+	// buffer, as is done in windows/Waveform.c rather than relying on
+	// pttOnTime?  Would such an approach be consistent for all linux audio
+	// devices including plughw, dmix, and pulse?
+	pttOnTime = Now;
+	if (TXEnabled && LastIDFrameTime == 0)
+		// This is the first transmission since the last IDFrame.  Schedule the
+		// next IDFrame to be sent in about 10 minutes unless one is sent
+		// sooner.  However, if TXEnabled is false, then nothing will actually
+		// be transmitted.  So, no need to set this value.
+		LastIDFrameTime = pttOnTime - 1;
+
+	Last120Get = 0;
+	Last120Put = 120;
+
+	dblRn = powf(dblR, intN);
+	dblR2 = powf(dblR, 2);
+
+	dblZin_2 = dblZin_1 = 0;
+
+	switch (fWidth) {
+	case 200:
+		// implements 3 100 Hz wide sections centered on 1500 Hz  (~200 Hz wide @ - 30dB centered on 1500 Hz)
+		first = centreSlot - 1;
+		last = centreSlot + 1;  // 3 filter sections
+		break;
+
+	case 500:
+		// implements 7 100 Hz wide sections centered on 1500 Hz  (~500 Hz wide @ - 30dB centered on 1500 Hz)
+		first = centreSlot - 3;
+		last = centreSlot + 3;  // 7 filter sections
+//		first = 12;
+//		last = 18;  // 7 filter sections
+		break;
+
+	case 1000:
+		// implements 11 100 Hz wide sections centered on 1500 Hz  (~1000 Hz wide @ - 30dB centered on 1500 Hz)
+		first = centreSlot - 5;
+		last = centreSlot + 5;  // 11 filter sections
+//		first = 10;
+//		last = 20;  // 7 filter sections
+		break;
+
+	case 2000:
+		// implements 21 100 Hz wide sections centered on 1500 Hz  (~2000 Hz wide @ - 30dB centered on 1500 Hz)
+		first = centreSlot - 10;
+		last = centreSlot + 10;  // 21 filter sections
+//		first = 5;
+//		last = 25;  // 7 filter sections
+	}
+
+	for (j = first; j <= last; j++) {
+		dblZout_0[j] = 0;
+		dblZout_1[j] = 0;
+		dblZout_2[j] = 0;
+	}
+
+	// Initialise the coefficients
+
+	if (dblCoef[last] == 0.0) {
+		for (i = first; i <= last; i++) {
+			dblCoef[i] = 2 * dblR * cosf(2 * M_PI * i / intN);  // For Frequency = bin i
+		}
+	}
+}
+
+// return true on success and false on failure
+bool SampleSink(short Sample) {
+	if (!TXEnabled) {
+		ZF_LOGW("SampleSink() called when not TXEnabled. Ignoring.");
+		return false;
+	}
+
+	// Filter and send to sound interface
+
+	// TODO: Consider refactoring to take multiple symbols
+	// This version is passed samples one at a time, as we don't have
+	// enough RAM in embedded systems to hold a full audio frame
+
+	int intFilLen = intN / 2;
+	int j;
+	float intFilteredSample = 0;  // Filtered sample
+
+	Sample = Sample * DriveLevel / 100;
+	// writing unfiltered tx audio to WAV disabled
+	// if (txwfu != NULL)
+	//	WriteWav(&Sample, 1, txwfu);
+
+	// We save the previous intN samples
+	// The samples are held in a cyclic buffer
+	if (SampleNo < intN)
+		dblZin = Sample;
+	else
+		dblZin = Sample - dblRn * Last120[Last120Get];
+
+	if (++Last120Get == 121)
+		Last120Get = 0;
+
+	// Compute the Comb
+	dblZComb = dblZin - dblZin_2 * dblR2;
+	dblZin_2 = dblZin_1;
+	dblZin_1 = dblZin;
+
+	// Now the resonators
+	for (j = first; j <= last; j++) {  // calculate output for 3 or 7 resonators
+		dblZout_0[j] = dblZComb + dblCoef[j] * dblZout_1[j] - dblR2 * dblZout_2[j];
+		dblZout_2[j] = dblZout_1[j];
+		dblZout_1[j] = dblZout_0[j];
+
+		switch (fWidth) {
+		case 200:
+			// scale each by transition coeff and + (Even) or - (Odd)
+			if (SampleNo >= intFilLen) {
+				if (j == first || j == last)
+					intFilteredSample += (float)0.7389f * dblZout_0[j];
+				else
+					intFilteredSample -= (float)dblZout_0[j];
+			}
+			break;
+
+		case 500:
+			// scale each by transition coeff and + (Even) or - (Odd)
+			// Resonators 6 and 9 scaled by .15 to get best shape and side lobe supression to - 45 dB while keeping BW at 500 Hz @ -26 dB
+			// practical range of scaling .05 to .25
+			// Scaling also accomodates for the filter "gain" of approx 60.
+			if (SampleNo >= intFilLen) {
+				if (j == first || j == last)
+					intFilteredSample += 0.10601f * dblZout_0[j];
+				else if (j == (first + 1) || j == (last - 1))
+					intFilteredSample -= 0.59383f * dblZout_0[j];
+				else if ((j & 1) == 0)  // 14 15 16
+					intFilteredSample += (int)dblZout_0[j];
+				else
+					intFilteredSample -= (int)dblZout_0[j];
+			}
+			break;
+
+		case 1000:
+			// scale each by transition coeff and + (Even) or - (Odd)
+			// Resonators 6 and 9 scaled by .15 to get best shape and side lobe supression to - 45 dB while keeping BW at 500 Hz @ -26 dB
+			// practical range of scaling .05 to .25
+			// Scaling also accomodates for the filter "gain" of approx 60.
+			if (SampleNo >= intFilLen) {
+				if (j == first || j == last)
+					intFilteredSample +=  0.377f * dblZout_0[j];
+				else if ((j & 1) == 0)  // Even
+					intFilteredSample += (int)dblZout_0[j];
+				else
+					intFilteredSample -= (int)dblZout_0[j];
+			}
+			break;
+
+		case 2000:
+			// scale each by transition coeff and + (Even) or - (Odd)
+			// Resonators 6 and 9 scaled by .15 to get best shape and side lobe supression to - 45 dB while keeping BW at 500 Hz @ -26 dB
+			// practical range of scaling .05 to .25
+			// Scaling also accomodates for the filter "gain" of approx 60.
+			if (SampleNo >= intFilLen) {
+				if (j == first || j == last)
+					intFilteredSample +=  0.371f * dblZout_0[j];
+				else if ((j & 1) == 0)  // Even
+					intFilteredSample += (int)dblZout_0[j];
+				else
+					intFilteredSample -= (int)dblZout_0[j];
+			}
+		}
+	}
+
+	if (SampleNo >= intFilLen) {
+		intFilteredSample = intFilteredSample * 0.00833333333f;  // rescales for gain of filter
+		largest = max(largest, intFilteredSample);
+		smallest = min(smallest, intFilteredSample);
+
+		if (intFilteredSample > 32700)  // Hard clip above 32700
+			intFilteredSample = 32700;
+		else if (intFilteredSample < -32700)
+			intFilteredSample = -32700;
+
+		txbuffer[TxIndex][Number++] = (short)intFilteredSample;
+		if (Number == SendSize) {
+			// send this buffer to sound interface
+			if (!SendtoCard(SendSize))
+				return false;
+			Number = 0;
+		}
+	}
+
+	Last120[Last120Put++] = Sample;
+
+	if (Last120Put == 121)
+		Last120Put = 0;
+
+	SampleNo++;
+	return true;
+}
+
+
+// return true on success and false on failure
+bool GetTwoToneLeaderWithSync(int intSymLen) {
 	// Generate a 50 baud (20 ms symbol time) 2 tone leader
 	// leader tones used are 1475 and 1525 Hz.
+	if (!TXEnabled) {
+		ZF_LOGW("GetTwoToneLeaderWithSync() called when not TXEnabled. Ignoring.");
+		return false;
+	}
 
 	int intSign = 1;
 	int i, j;
@@ -53,24 +342,28 @@ void GetTwoToneLeaderWithSync(int intSymLen)
 	if ((intSymLen & 1) == 1)
 		intSign = -1;
 
-	for (i = 0; i < intSymLen; i++)  // for the number of symbols needed (two symbols less than total leader length)
-	{
-		for (j = 0; j < 240; j++)  // for 240 samples per symbol (50 baud)
-		{
+	for (i = 0; i < intSymLen; i++) {  // for the number of symbols needed (two symbols less than total leader length)
+		for (j = 0; j < 240; j++) {  // for 240 samples per symbol (50 baud)
 			if (i != (intSymLen - 1))
 				intSample = intSign * int50BaudTwoToneLeaderTemplate[j];
 			else
 				intSample = -intSign * int50BaudTwoToneLeaderTemplate[j];
 
-			SampleSink(intSample);
+			if (!SampleSink(intSample))
+				return false;
 		}
 		intSign = -intSign;
 	}
+	return true;
 }
 
-void SendLeaderAndSYNC(UCHAR * bytEncodedBytes, int intLeaderLen)
-{
-	int intMask = 0;
+// return true on success and false on failure
+bool SendLeaderAndSYNC(UCHAR * bytEncodedBytes, int intLeaderLen) {
+	if (!TXEnabled) {
+		ZF_LOGW("SendLeaderAndSYNC() called when not TXEnabled. Ignoring.");
+		return false;
+	}
+
 	int intLeaderLenMS;
 	int j, k, n;
 	UCHAR bytMask;
@@ -84,7 +377,8 @@ void SendLeaderAndSYNC(UCHAR * bytEncodedBytes, int intLeaderLen)
 
 	// Create the leader
 
-	GetTwoToneLeaderWithSync(intLeaderLenMS / 20);
+	if (!GetTwoToneLeaderWithSync(intLeaderLenMS / 20))
+		return false;
 
 	// Create the 8 symbols (16 bit) 50 baud 4FSK frame type with Implied SessionID
 	// No reference needed for 4FSK
@@ -92,37 +386,41 @@ void SendLeaderAndSYNC(UCHAR * bytEncodedBytes, int intLeaderLen)
 	// note revised To accomodate 1 parity symbol per byte (10 symbols total)
 
 	sprintf(DebugMess, "LeaderAndSYNC tones : ");
-	for(j = 0; j < 2; j++)  // for the 2 bytes of the frame type
-	{
+	for(j = 0; j < 2; j++) {  // for the 2 bytes of the frame type
 		bytMask = 0xc0;
 
-		for(k = 0; k < 5; k++)  // for 5 symbols per byte (4 data + 1 parity)
-		{
+		for(k = 0; k < 5; k++) {  // for 5 symbols per byte (4 data + 1 parity)
 			if (k < 4)
 				bytSymToSend = (bytMask & bytEncodedBytes[j]) >> (2 * (3 - k));
 			else
 				bytSymToSend = ComputeTypeParity(bytEncodedBytes[0]);
 			sprintf(DebugMess + strlen(DebugMess), "%d", bytSymToSend);
 
-			for(n = 0; n < 240; n++)
-			{
+			for(n = 0; n < 240; n++) {
 				if (((5 * j + k) & 1 ) == 0)
 					intSample = intFSK50bdCarTemplate[bytSymToSend][n];
 				else
 					intSample = -intFSK50bdCarTemplate[bytSymToSend][n];  // -sign insures no phase discontinuity at symbol boundaries
 
-				SampleSink(intSample);
+				if (!SampleSink(intSample))
+					return false;
 			}
 			bytMask = bytMask >> 2;
 		}
 	}
 	// Include these tone values in debug log only if FileLogLevel is VERBOSE (1)
 	ZF_LOGV("%s", DebugMess);
+	return true;
 }
 
 
-void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen)
-{
+// return true on success and false on failure
+bool Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen) {
+	if (!TXEnabled) {
+		ZF_LOGW("Mod4FSKDataAndPlay() called when not TXEnabled. Ignoring.");
+		return false;
+	}
+
 	// Function to Modulate data encoded for 4FSK, create
 	// the 16 bit samples and send to sound interface
 
@@ -137,27 +435,24 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 
 	UCHAR bytSymToSend, bytMask, bytMinQualThresh;
 
-	float dblCarScalingFactor;
-	int intMask = 0;
-	int intLeaderLenMS;
 	int k, m, n;
 
 	if (Len < 0) {
 		ZF_LOGE("ERROR: In Mod4FSKDataAndPlay() Invalid Len (%d).", Len);
-		return;
+		return false;
 	}
 
 	if (!FrameInfo(Type, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType))
-		return;
+		return false;
 
 	if (strcmp(strMod, "4FSK") != 0)
-		return;
+		return false;
 
 	if (intBaud == 600) {
 		ZF_LOGE(
 			"ERROR: Mod4FSKDataAndPlay() cannot be used for 600 baud 4FSK Frames."
 			"Use Mod4FSK600BdDataAndPlay() instead.");
-		return;
+		return false;
 	}
 
 	ZF_LOGI("Sending Frame Type %s", strType);
@@ -192,13 +487,12 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 //		strLastWavStream = strType
 //	End If
 
-	if (intLeaderLen == 0)
-		intLeaderLenMS = LeaderLength;
-	else
-		intLeaderLenMS = intLeaderLen;
+//	if (intLeaderLen == 0)
+//		intLeaderLenMS = LeaderLength;
+//	else
+//		intLeaderLenMS = intLeaderLen;
 
-	switch(intBaud)
-	{
+	switch(intBaud) {
 	case 50:
 		intSampPerSym = 240;
 		break;
@@ -207,47 +501,43 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 		break;
 	default:
 		ZF_LOGE("ERROR: Invalid baud rate (%d) in Mod4FSKDataAndPlay().", intBaud);
-		return;
+		return false;
 	}
 
 	intDataBytesPerCar = (Len - 2) / intNumCar;  // We queue the samples here, so dont copy below
 
-	SendLeaderAndSYNC(bytEncodedBytes, intLeaderLen);
+	if (!SendLeaderAndSYNC(bytEncodedBytes, intLeaderLen))
+		return false;
 
 	intDataPtr = 2;
 
 	// obsolete versions of this code accommodated inNumCar > 1
-	dblCarScalingFactor = 1.0;  // (scaling factors determined emperically to minimize crest factor)
 
 	sprintf(DebugMess, "Mod4FSKDataAndPlay 1Car tones :");
-	for (m = 0; m < intDataBytesPerCar; m++)  // For each byte of input data
-	{
+	for (m = 0; m < intDataBytesPerCar; m++) {  // For each byte of input data
 		bytMask = 0xC0;  // Initialize mask each new data byte
 		sprintf(DebugMess + strlen(DebugMess), " ");
-		for (k = 0; k < 4; k++)  // for 4 symbol values per byte of data
-		{
+		for (k = 0; k < 4; k++) { // for 4 symbol values per byte of data
 			bytSymToSend = (bytMask & bytEncodedBytes[intDataPtr]) >> (2 * (3 - k));  // Values 0-3
 			sprintf(DebugMess + strlen(DebugMess), "%d", bytSymToSend);
 
-			for (n = 0; n < intSampPerSym; n++)  // Sum for all the samples of a symbols
-			{
-				if((k & 1) == 0)
-				{
+			for (n = 0; n < intSampPerSym; n++) { // Sum for all the samples of a symbols
+				if((k & 1) == 0) {
 					if(intBaud == 50)
 						intSample = intFSK50bdCarTemplate[bytSymToSend][n];
 					else
 						intSample = intFSK100bdCarTemplate[bytSymToSend][n];
 
-					SampleSink(intSample);
-				}
-				else
-					{
+					if (!SampleSink(intSample))
+						return false;
+				} else {
 					if(intBaud == 50)
 						intSample = -intFSK50bdCarTemplate[bytSymToSend][n];
 					else
 						intSample = -intFSK100bdCarTemplate[bytSymToSend][n];
 
-					SampleSink(intSample);
+					if (!SampleSink(intSample))
+						return false;
 				}
 			}
 			bytMask = bytMask >> 2;
@@ -259,14 +549,18 @@ void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 		sprintf(DebugMess + strlen(DebugMess), "(None)");
 	ZF_LOGV("%s", DebugMess);
 
-	Flush();
+	return SoundFlush();
 }
 
 
 //	Function to Modulate data encoded for 4FSK High baud rate and create the integer array of 32 bit samples suitable for playing
+// return true on success and false on failure
+bool Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen) {
+	if (!TXEnabled) {
+		ZF_LOGW("Mod4FSK600BdDataAndPlay() called when not TXEnabled. Ignoring.");
+		return false;
+	}
 
-void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen)
-{
 	// Function to Modulate data encoded for 4FSK, create
 	// the 16 bit samples and send to sound interface
 
@@ -280,25 +574,24 @@ void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len,
 
 	UCHAR bytSymToSend, bytMask, bytMinQualThresh;
 
-	int intMask = 0;
 	int k, m, n;
 
 	if (Len < 0) {
 		ZF_LOGE("ERROR: In Mod4FSK600BdDataAndPlay() Invalid Len (%d).", Len);
-		return;
+		return false;
 	}
 
 	if (!FrameInfo(Type, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType))
-		return;
+		return false;
 
 	if (strcmp(strMod, "4FSK") != 0)
-		return;
+		return false;
 
 	if (intBaud != 600) {
 		ZF_LOGE(
 			"ERROR: Mod4FSK600BdDataAndPlay() is only for 600 baud 4FSK Frames."
 			"Use Mod4FSKDataAndPlay() instead.");
-		return;
+		return false;
 	}
 
 	ZF_LOGI("Sending Frame Type %s", strType);
@@ -315,39 +608,34 @@ void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len,
 
 	intSampPerSym = 12000 / intBaud;
 
-	SendLeaderAndSYNC(bytEncodedBytes, intLeaderLen);
+	if (!SendLeaderAndSYNC(bytEncodedBytes, intLeaderLen))
+		return false;
 
 	intDataPtr = 2;
 
-	for (m = 0; m < intDataBytesPerCar; m++)  // For each byte of input data
-	{
+	for (m = 0; m < intDataBytesPerCar; m++) {  // For each byte of input data
 		bytMask = 0xC0;  // Initialize mask each new data byte
-		for (k = 0; k < 4; k++)  // for 4 symbol values per byte of data
-		{
+		for (k = 0; k < 4; k++) {  // for 4 symbol values per byte of data
 			bytSymToSend = (bytMask & bytEncodedBytes[intDataPtr]) >> (2 * (3 - k));  // Values 0-3
-			for (n = 0; n < intSampPerSym; n++)  // Sum for all the samples of a symbols
-			{
+			for (n = 0; n < intSampPerSym; n++) {  // Sum for all the samples of a symbols
 				intSample = intFSK600bdCarTemplate[bytSymToSend][n];
-				SampleSink(intSample);
+				if (!SampleSink(intSample))
+					return false;
 			}
 			bytMask = bytMask >> 2;
 		}
 		intDataPtr += 1;
 	}
-	Flush();
+	return SoundFlush();
 }
 
 
 // Function to soft clip combined waveforms.
-int SoftClip(int intInput)
-{
-	if (intInput > 30000)  // soft clip above/below 30000
-	{
+int SoftClip(int intInput) {
+	if (intInput > 30000) {  // soft clip above/below 30000
 		intInput = min(32700, 30000 + 20 * sqrt(intInput - 30000));
 		intSoftClipCnt += 1;
-	}
-	else if(intInput < -30000)
-	{
+	} else if(intInput < -30000) {
 		intInput = max(-32700, -30000 - 20 * sqrt(-(intInput + 30000)));
 		intSoftClipCnt += 1;
 	}
@@ -375,9 +663,9 @@ int Calc1CarPSKSymbols(unsigned char *Symbols, char *strMod, unsigned char *bytS
 	if (strcmp(strMod, "4PSK") == 0) {
 		SymSet = 2;
 		bitsPerSymbol = 2;
-	} else if (strcmp(strMod, "8PSK") == 0)
+	} else if (strcmp(strMod, "8PSK") == 0) {
 		bitsPerSymbol = 3;
-	else if (strcmp(strMod, "16QAM") == 0)
+	} else if (strcmp(strMod, "16QAM") == 0)
 		bitsPerSymbol = 4;
 
 	// Number of Symbols to be encoded.
@@ -415,7 +703,13 @@ int Calc1CarPSKSymbols(unsigned char *Symbols, char *strMod, unsigned char *bytS
 
 // Play a sequence of multi-carrier PSK/QAM data whose phase and magnitude are
 // encoded in Symbols for one or more carriers.
-void PlayPSKSymbols(unsigned char Symbols[8][462], int intNumCars, int SymbolCount, double dblCarScalingFactor) {
+// return true on success and false on failure
+bool PlayPSKSymbols(unsigned char Symbols[8][462], int intNumCars, int SymbolCount, double dblCarScalingFactor) {
+	if (!TXEnabled) {
+		ZF_LOGW("PlayPSKSymbols() called when not TXEnabled. Ignoring.");
+		return false;
+	}
+
 	const int intSampPerSym = 120;
 	int intCarStartIndex;
 	int intSample;
@@ -465,16 +759,22 @@ void PlayPSKSymbols(unsigned char Symbols[8][462], int intNumCars, int SymbolCou
 			}
 			intSample *= dblCarScalingFactor;  // on the last carrier rescale value based on # of carriers to bound output
 			intSample = SoftClip(intSample);
-			SampleSink(intSample);
+			if (!SampleSink(intSample))
+				return false;
 		}
 	}
+	return true;
 }
 
 // Function to Modulate data encoded for PSK and 16QAM, create
 // the 16 bit samples and send to sound interface
+// return true on success and false on failure
+bool ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen) {
+	if (!TXEnabled) {
+		ZF_LOGW("ModPSKDataAndPlay() called when not TXEnabled. Ignoring.");
+		return false;
+	}
 
-void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen)
-{
 	int intNumCar, intBaud, intDataLen, intRSLen, intDataPtr;
 	bool blnOdd;
 
@@ -482,21 +782,18 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 	char strMod[16] = "";
 	UCHAR bytMinQualThresh;
 	float dblCarScalingFactor;
-	int intLeaderLenMS;
-	int intPeakAmp;
 
 	intSoftClipCnt = 0;
 
 	if (Len < 0) {
 		ZF_LOGE("ERROR: In ModPSKDataAndPlay() Invalid Len (%d).", Len);
-		return;
+		return false;
 	}
 
 	if (!FrameInfo(Type, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType))
-		return;
+		return false;
 
-	switch(intNumCar)
-	{
+	switch(intNumCar) {
 		// These new scaling factor combined with soft clipping to provide near optimum scaling Jan 6, 2018
 		// The Test form was changed to calculate the Peak power to RMS power (PAPR) of the test waveform and count the number of "soft clips" out of ~ 50,000 samples.
 		// These values arrived at emperically using the Test form (Quick brown fox message) to minimize PAPR at a minor decrease in maximum constellation quality
@@ -547,14 +844,14 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 //		strLastWavStream = strType
 //	End If
 
-	if (intLeaderLen == 0)
-		intLeaderLenMS = LeaderLength;
-	else
-		intLeaderLenMS = intLeaderLen;
+//	if (intLeaderLen == 0)
+//		intLeaderLenMS = LeaderLength;
+//	else
+//		intLeaderLenMS = intLeaderLen;
 
 	// Create the leader
-	SendLeaderAndSYNC(bytEncodedBytes, intLeaderLen);
-	intPeakAmp = 0;
+	if (!SendLeaderAndSYNC(bytEncodedBytes, intLeaderLen))
+		return false;
 	intDataPtr = 2;  // initialize pointer to start of data.
 
 	int bytesPerCarrier = intDataLen + intRSLen + 3;
@@ -570,7 +867,8 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 		// need to be adjusted to indicate what values were used.
 		Symbols[car][0] = 0;
 	}
-	PlayPSKSymbols(Symbols, intNumCar, 1, dblCarScalingFactor);
+	if (!PlayPSKSymbols(Symbols, intNumCar, 1, dblCarScalingFactor))
+		return false;
 
 	// Calculate the sequence of phase and magnitude values for all carriers.
 	// Each value in Symbols represents a phase and magnitude.  The low 3-bits
@@ -586,35 +884,46 @@ void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int i
 	}
 
 	PlayPSKSymbols(Symbols, intNumCar, SymbolCount, dblCarScalingFactor);
-	Flush();
+	if (!SoundFlush())
+		return false;
 
 	if (intSoftClipCnt > 0)
 		// SoftClips() was called in each of PlayPSKSymbols(), which set
 		// intSoftClipsCnt to the number of samples that were modified.
 		ZF_LOGD("Soft Clips %d ", intSoftClipCnt);
+	return true;
 }
 
 
 // Function to add trailer before filtering
+// return true on success and false on failure
+bool AddTrailer() {
+	if (!TXEnabled) {
+		ZF_LOGW("AddTrailer() called when not TXEnabled. Ignoring.");
+		return false;
+	}
 
-void AddTrailer()
-{
 	int intAddedSymbols = 1 + (TrailerLength / 10);  // add 1 symbol + 1 per each 10 ms of MCB.Trailer
 	int i, k;
 
-	for (i = 1; i <= intAddedSymbols; i++)
-	{
-		for (k = 0; k < 120; k++)
-		{
-			SampleSink(intPSK100bdCarTemplate[4][0][k]);
+	for (i = 1; i <= intAddedSymbols; i++) {
+		for (k = 0; k < 120; k++) {
+			if (!SampleSink(intPSK100bdCarTemplate[4][0][k]))
+				return false;
 		}
 	}
+	return true;
 }
 
 // Resends the last frame
+// return true on success and false on failure
+bool RemodulateLastFrame() {
+	ZF_LOGV("RemodulateLastFrame() for %s", Name(bytEncodedBytes[0]));
+	if (!TXEnabled) {
+		ZF_LOGW("RemodulateLastFrame() called when not TXEnabled. Ignoring.");
+		return false;
+	}
 
-void RemodulateLastFrame()
-{
 	int intNumCar, intBaud, intDataLen, intRSLen;
 	UCHAR bytMinQualThresh;
 	bool blnOdd;
@@ -623,349 +932,49 @@ void RemodulateLastFrame()
 	char strMod[16] = "";
 
 	if (!FrameInfo(bytEncodedBytes[0], &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType))
-		return;
+		return false;
 
-	if (strcmp(strMod, "4FSK") == 0)
-	{
-		if (bytEncodedBytes[0] >= 0x7A && bytEncodedBytes[0] <= 0x7D)
-			Mod4FSK600BdDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame
-		else
-			Mod4FSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame
-
-		return;
-	}
-	ModPSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame
-}
-
-// Filter State Variables
-
-static float dblR = (float)0.9995f;  // insures stability (must be < 1.0) (Value .9995 7/8/2013 gives good results)
-static int intN = 120;  // Length of filter 12000/100
-static float dblRn;
-
-static float dblR2;
-static float dblCoef[32] = {0.0f};  // the coefficients
-float dblZin = 0, dblZin_1 = 0, dblZin_2 = 0, dblZComb= 0;  // Used in the comb generator
-
-// The resonators
-
-float dblZout_0[32] = {0.0f};  // resonator outputs
-float dblZout_1[32] = {0.0f};  // resonator outputs delayed one sample
-float dblZout_2[32] = {0.0f};  // resonator outputs delayed two samples
-
-int fWidth;  // Filter BandWidth
-int SampleNo;
-int outCount = 0;
-int first, last;  // Filter slots
-int centreSlot;
-
-float largest = 0;
-float smallest = 0;
-
-short Last120[128];
-
-int Last120Get = 0;
-int Last120Put = 120;
-
-int Number = 0;  // Number waiting to be sent
-
-extern unsigned short buffer[2][1200];
-
-unsigned short * DMABuffer;
-
-unsigned short * SendtoCard(int n);
-unsigned short * SoundInit();
-
-// initFilter is called to set up each packet. It selects filter width
-
-void initFilter(int Width, int Centre)
-{
-	int i, j;
-
-	if (WriteTxWav)
-		StartTxWav();
-
-	fWidth = Width;
-	centreSlot = Centre / 100;
-	largest = smallest = 0;
-	SampleNo = 0;
-	Number = 0;
-	outCount = 0;
-	memset(Last120, 0, 256);
-
-	DMABuffer = SoundInit();
-
-	// TEMPORARY FIX FOR COMPATIBILITY WITH QMX BETA SSB FIRMWARE
-	//  KeyPTT(true);
-	/////////////////////////////////////////////////////////////
-
-	SoundIsPlaying = true;
-	StopCapture();
-	// If responding to a received frame, ensure that a sufficient minimum
-	// amount of time has elapsed before transmitting.
-	// txSleep returns immediately if the delay value is negative.
-	//
-	// Previously, this delay was applied in ProcessRcvdARQFrame(), or for
-	// a received DataACK, in ProcessNewSamples().  Moving it here allows it to
-	// be applied only when actually preparing to transmit.  Thus, it can also
-	// use txSleep() rather than Sleep(), thereby helping to avoid problems that
-	// might otherwise be caused by failing to read from the audio capture
-	// device for too long.
-	ZF_LOGD("Time since received = %d (txSleep delay = %i mS)",
-		Now - DecodeCompleteTime,
-		250 + extraDelay - (Now - DecodeCompleteTime));
-	// Require minimum 250 ms delay between RX and TX.
-	// TODO: Is this working as expected?  See comments near start of
-	// ProcessNewSamples() regarding time uncertainty.  Also review how this
-	// interacts with leader length adjusments based on data exchanged during
-	// ARQ handshake.
-	txSleep(250 + extraDelay - (Now - DecodeCompleteTime));
-
-	// TEMPORARY FIX FOR COMPATIBILITY WITH QMX BETA SSB FIRMWARE
-	KeyPTT(true);
-	/////////////////////////////////////////////////////////////
-
-	// pttOnTime is used to in linux/ALSA.c to calculate when enough time has
-	// elapsed for the audio to have been fully played before KeyPTT(false).
-	// Thus, this must be set after txSleep.  pttOnTime is not used for Windows.
-	// TODO: Can greater consistency be achieved by monitoring the tx audio
-	// buffer, as is done in windows/Waveform.c rather than relying on
-	// pttOnTime?  Would such an approach be consistent for all linux audio
-	// devices including plughw, dmix, and pulse?
-	pttOnTime = Now;
-	if (LastIDFrameTime == 0)
-		// This is the first transmission since the last IDFrame.  Schedule the
-		// next IDFrame to be sent in about 10 minutes unless one is sent sooner.
-		LastIDFrameTime = pttOnTime - 1;
-
-	Last120Get = 0;
-	Last120Put = 120;
-
-	dblRn = powf(dblR, intN);
-	dblR2 = powf(dblR, 2);
-
-	dblZin_2 = dblZin_1 = 0;
-
-	switch (fWidth)
-	{
-	case 200:
-
-		// implements 3 100 Hz wide sections centered on 1500 Hz  (~200 Hz wide @ - 30dB centered on 1500 Hz)
-
-		first = centreSlot - 1;
-		last = centreSlot + 1;  // 3 filter sections
-		break;
-
-	case 500:
-
-		// implements 7 100 Hz wide sections centered on 1500 Hz  (~500 Hz wide @ - 30dB centered on 1500 Hz)
-
-		first = centreSlot - 3;
-		last = centreSlot + 3;  // 7 filter sections
-//		first = 12;
-//		last = 18;  // 7 filter sections
-		break;
-
-	case 1000:
-
-		// implements 11 100 Hz wide sections centered on 1500 Hz  (~1000 Hz wide @ - 30dB centered on 1500 Hz)
-
-		first = centreSlot - 5;
-		last = centreSlot + 5;  // 11 filter sections
-//		first = 10;
-//		last = 20;  // 7 filter sections
-		break;
-
-	case 2000:
-
-		// implements 21 100 Hz wide sections centered on 1500 Hz  (~2000 Hz wide @ - 30dB centered on 1500 Hz)
-
-		first = centreSlot - 10;
-		last = centreSlot + 10;  // 21 filter sections
-//		first = 5;
-//		last = 25;  // 7 filter sections
-	}
-
-
-	for (j = first; j <= last; j++)
-	{
-		dblZout_0[j] = 0;
-		dblZout_1[j] = 0;
-		dblZout_2[j] = 0;
-	}
-
-	// Initialise the coefficients
-
-	if (dblCoef[last] == 0.0)
-	{
-		for (i = first; i <= last; i++)
-		{
-			dblCoef[i] = 2 * dblR * cosf(2 * M_PI * i / intN);  // For Frequency = bin i
+	if (strcmp(strMod, "4FSK") == 0) {
+		if (bytEncodedBytes[0] >= 0x7A && bytEncodedBytes[0] <= 0x7D) {
+			if (!Mod4FSK600BdDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader))  // Modulate Data frame
+				return false;
+		} else {
+			if (!Mod4FSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader))  // Modulate Data frame
+				return false;
+			if ((bytEncodedBytes[0] >= ConReqmin && bytEncodedBytes[0] <= ConReqmax)
+				|| bytEncodedBytes[0] == PING
+			) {
+				// ConReq and Ping frames also satisfy legal ID requirements
+				tmrFinalID = 0;
+				LastIDFrameTime = 0;
+			}
 		}
+		return true;
 	}
+	return ModPSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame
 }
 
 
-void SampleSink(short Sample)
-{
-	// Filter and send to sound interface
 
-	// This version is passed samples one at a time, as we don't have
-	// enough RAM in embedded systems to hold a full audio frame
-
-	int intFilLen = intN / 2;
-	int j;
-	float intFilteredSample = 0;  // Filtered sample
-
-	Sample = Sample * DriveLevel / 100;
-	// writing unfiltered tx audio to WAV disabled
-	// if (txwfu != NULL)
-	//	WriteWav(&Sample, 1, txwfu);
-
-	// We save the previous intN samples
-	// The samples are held in a cyclic buffer
-
-	if (SampleNo < intN)
-		dblZin = Sample;
-	else
-		dblZin = Sample - dblRn * Last120[Last120Get];
-
-	if (++Last120Get == 121)
-		Last120Get = 0;
-
-	// Compute the Comb
-
-	dblZComb = dblZin - dblZin_2 * dblR2;
-	dblZin_2 = dblZin_1;
-	dblZin_1 = dblZin;
-
-	// Now the resonators
-
-	for (j = first; j <= last; j++)  // calculate output for 3 or 7 resonators
-	{
-		dblZout_0[j] = dblZComb + dblCoef[j] * dblZout_1[j] - dblR2 * dblZout_2[j];
-		dblZout_2[j] = dblZout_1[j];
-		dblZout_1[j] = dblZout_0[j];
-
-		switch (fWidth)
-		{
-		case 200:
-
-			// scale each by transition coeff and + (Even) or - (Odd)
-
-			if (SampleNo >= intFilLen)
-			{
-				if (j == first || j == last)
-					intFilteredSample += (float)0.7389f * dblZout_0[j];
-				else
-					intFilteredSample -= (float)dblZout_0[j];
-			}
-			break;
-
-		case 500:
-
-			// scale each by transition coeff and + (Even) or - (Odd)
-			// Resonators 6 and 9 scaled by .15 to get best shape and side lobe supression to - 45 dB while keeping BW at 500 Hz @ -26 dB
-			// practical range of scaling .05 to .25
-			// Scaling also accomodates for the filter "gain" of approx 60.
-
-			if (SampleNo >= intFilLen)
-			{
-				if (j == first || j == last)
-					intFilteredSample += 0.10601f * dblZout_0[j];
-				else if (j == (first + 1) || j == (last - 1))
-					intFilteredSample -= 0.59383f * dblZout_0[j];
-				else if ((j & 1) == 0)  // 14 15 16
-					intFilteredSample += (int)dblZout_0[j];
-				else
-					intFilteredSample -= (int)dblZout_0[j];
-			}
-
-			break;
-
-		case 1000:
-
-			// scale each by transition coeff and + (Even) or - (Odd)
-			// Resonators 6 and 9 scaled by .15 to get best shape and side lobe supression to - 45 dB while keeping BW at 500 Hz @ -26 dB
-			// practical range of scaling .05 to .25
-			// Scaling also accomodates for the filter "gain" of approx 60.
-
-
-			if (SampleNo >= intFilLen)
-			{
-				if (j == first || j == last)
-					intFilteredSample +=  0.377f * dblZout_0[j];
-				else if ((j & 1) == 0)  // Even
-					intFilteredSample += (int)dblZout_0[j];
-				else
-					intFilteredSample -= (int)dblZout_0[j];
-			}
-
-			break;
-
-		case 2000:
-
-			// scale each by transition coeff and + (Even) or - (Odd)
-			// Resonators 6 and 9 scaled by .15 to get best shape and side lobe supression to - 45 dB while keeping BW at 500 Hz @ -26 dB
-			// practical range of scaling .05 to .25
-			// Scaling also accomodates for the filter "gain" of approx 60.
-
-			if (SampleNo >= intFilLen)
-			{
-				if (j == first || j == last)
-					intFilteredSample +=  0.371f * dblZout_0[j];
-				else if ((j & 1) == 0)  // Even
-					intFilteredSample += (int)dblZout_0[j];
-				else
-					intFilteredSample -= (int)dblZout_0[j];
-			}
-		}
-	}
-
-	if (SampleNo >= intFilLen)
-	{
-		intFilteredSample = intFilteredSample * 0.00833333333f;  // rescales for gain of filter
-		largest = max(largest, intFilteredSample);
-		smallest = min(smallest, intFilteredSample);
-
-		if (intFilteredSample > 32700)  // Hard clip above 32700
-			intFilteredSample = 32700;
-		else if (intFilteredSample < -32700)
-			intFilteredSample = -32700;
-
-		DMABuffer[Number++] = (short)intFilteredSample;
-		if (Number == SendSize)
-		{
-			// send this buffer to sound interface
-
-			DMABuffer = SendtoCard(SendSize);
-			Number = 0;
-		}
-	}
-
-	Last120[Last120Put++] = Sample;
-
-	if (Last120Put == 121)
-		Last120Put = 0;
-
-	SampleNo++;
+// Function to generate a 5 second burst of two tone (1450 and 1550 Hz) used for setting up drive level
+bool Send5SecTwoTone() {
+	initFilter(200, 1500);
+	if (!GetTwoToneLeaderWithSync(250))
+		return false;
+	return SoundFlush();
 }
 
 extern int dttTimeoutTrip;
 #define BREAK 0x23
 extern UCHAR bytSessionID;
 
-
-void Flush()
-{
-	SoundFlush();
-}
-
-
-
 // Send station id as FSK MORSE
-void sendCWID(const StationId * id)
-{
+bool sendCWID(const StationId * id) {
+	if (!TXEnabled) {
+		ZF_LOGW("sendCWID() called when not TXEnabled. Ignoring.");
+		return false;
+	}
+
 	// This generates a phase synchronous FSK MORSE keying of strID
 	// FSK used to maintain VOX on some sound cards
 	// Sent at 90% of max amplitude
@@ -1001,7 +1010,7 @@ void sendCWID(const StationId * id)
 
 	if (!stationid_ok(id)) {
 		ZF_LOGW("Unable to send CWID due to unpopulated station ID");
-		return;
+		return false;
 	}
 
 	ZF_LOGD("Sending CW ID of %s", id->call);
@@ -1011,12 +1020,10 @@ void sendCWID(const StationId * id)
 
 	// Generate the dot samples (high tone) and space samples (low tone)
 
-	for (i = 0; i < intDotSampCnt; i++)
-	{
+	for (i = 0; i < intDotSampCnt; i++) {
 		if (CWOnOff)
 			intSpace[i] = 0;
 		else
-
 			intSpace[i] = sin(dblLoPhase) * 0.9 * intAmp;
 
 		intDot[i] = sin(dblHiPhase) * 0.9 * intAmp;
@@ -1036,8 +1043,7 @@ void sendCWID(const StationId * id)
 		for (i = 0; i < intDotSampCnt; i++)
 			SampleSink(intSpace[i]);
 
-	for (j = 0; j < strnlen(id->call, sizeof(id->call)); j++)
-	{
+	for (j = 0; j < strnlen(id->call, sizeof(id->call)); j++) {
 		index = strchr(strAlphabet, id->call[j]);
 		if (index)
 			idoffset = index - &strAlphabet[0];
@@ -1046,45 +1052,41 @@ void sendCWID(const StationId * id)
 
 		intMask = 0x40000000;
 
-		if (index == NULL)
-		{
+		if (index == NULL) {
 			// process this as a space adding 6 dots worth of space to the wave file
-
 			for (k = 6; k >0; k--)
 				for (i = 0; i < intDotSampCnt; i++)
 					SampleSink(intSpace[i]);
-		}
-		else
-		{
-			while (intMask > 0)  // search for the first non 0 bit
+		} else {
+			while (intMask > 0) {  // search for the first non 0 bit
 				if (intMask & intCW[idoffset])
 					break;  // intMask is pointing to the first non 0 entry
 				else
 					intMask >>= 1;  // Right shift mask
+			}
 
-			while (intMask > 0)  // search for the first non 0 bit
-			{
-				if (intMask & intCW[idoffset])
+			while (intMask > 0) {  // search for the first non 0 bit
+				if (intMask & intCW[idoffset]) {
 					for (i = 0; i < intDotSampCnt; i++)
 						SampleSink(intDot[i]);
-				else
+				} else {
 					for (i = 0; i < intDotSampCnt; i++)
 						SampleSink(intSpace[i]);
-
+				}
 				intMask >>= 1;  // Right shift mask
 			}
 		}
 		// add 3 dot spaces for inter letter spacing
-		for (k = 6; k >0; k--)
+		for (k = 6; k >0; k--) {
 			for (i = 0; i < intDotSampCnt; i++)
 				SampleSink(intSpace[i]);
+		}
 	}
 
 	// add 3 spaces for the end tail
-
-	for (k = 6; k >0; k--)
+	for (k = 6; k >0; k--) {
 		for (i = 0; i < intDotSampCnt; i++)
 			SampleSink(intSpace[i]);
-
-	SoundFlush();
+	}
+	return SoundFlush();
 }

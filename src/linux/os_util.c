@@ -66,8 +66,8 @@ unsigned int getNow() {
 
 	// Otherwise, return a measure of clock time (also measured in ms).
 	clock_gettime(CLOCK_MONOTONIC, &tp);
-	return (tp.tv_sec - time_start.tv_sec) * 1000
-		+ (tp.tv_nsec - time_start.tv_nsec) / 1000000;
+	return (unsigned int) ((tp.tv_sec - time_start.tv_sec) * 1000
+		+ (tp.tv_nsec - time_start.tv_nsec) / 1000000);
 }
 
 
@@ -194,48 +194,69 @@ HANDLE OpenCOMPort(void * Port, int speed) {
 	return fd;
 }
 
-void CloseCOMPort(HANDLE fd) {
-	close(fd);
+void CloseCOMPort(HANDLE *fd) {
+	close(*fd);
+	*fd = 0;
 }
 
-void COMSetRTS(HANDLE fd) {
+bool COMSetRTS(HANDLE fd) {
 	int status;
 
-	if (ioctl(fd, TIOCMGET, &status) == -1)
+	if (ioctl(fd, TIOCMGET, &status) == -1) {
 		ZF_LOGE("ARDOP COMSetRTS TIOCMGET: %s", strerror(errno));
+		return false;
+	}
 	status |= TIOCM_RTS;
-	if (ioctl(fd, TIOCMSET, &status) == -1)
+	if (ioctl(fd, TIOCMSET, &status) == -1) {
 		ZF_LOGE("ARDOP COMSetRTS TIOCMSET: %s", strerror(errno));
+		return false;
+	}
+	return true;
 }
 
-void COMClearRTS(HANDLE fd) {
+bool COMClearRTS(HANDLE fd) {
 	int status;
 
-	if (ioctl(fd, TIOCMGET, &status) == -1)
+	if (ioctl(fd, TIOCMGET, &status) == -1) {
 		ZF_LOGE("ARDOP COMClearRTS TIOCMGET: %s", strerror(errno));
+		return false;
+	}
 	status &= ~TIOCM_RTS;
-	if (ioctl(fd, TIOCMSET, &status) == -1)
+	if (ioctl(fd, TIOCMSET, &status) == -1) {
 		ZF_LOGE("ARDOP COMClearRTS TIOCMSET: %s", strerror(errno));
+		return false;
+	}
+	return true;
 }
 
-void COMSetDTR(HANDLE fd) {
+bool COMSetDTR(HANDLE fd) {
 	int status;
 
-	if (ioctl(fd, TIOCMGET, &status) == -1)
+	if (ioctl(fd, TIOCMGET, &status) == -1) {
 		ZF_LOGE("ARDOP COMSetDTR TIOCMGET: %s", strerror(errno));
+		return false;
+	}
 	status |= TIOCM_DTR;
-	if (ioctl(fd, TIOCMSET, &status) == -1)
+	if (ioctl(fd, TIOCMSET, &status) == -1) {
 		ZF_LOGE("ARDOP COMSetDTR TIOCMSET: %s", strerror(errno));
+		return false;
+	}
+	return true;
 }
 
-void COMClearDTR(HANDLE fd) {
+bool COMClearDTR(HANDLE fd) {
 	int status;
 
-	if (ioctl(fd, TIOCMGET, &status) == -1)
+	if (ioctl(fd, TIOCMGET, &status) == -1) {
 		ZF_LOGE("ARDOP COMClearDTR TIOCMGET: %s", strerror(errno));
+		return false;
+	}
 	status &= ~TIOCM_DTR;
-	if (ioctl(fd, TIOCMSET, &status) == -1)
+	if (ioctl(fd, TIOCMSET, &status) == -1) {
 		ZF_LOGE("ARDOP COMClearDTR TIOCMSET: %s", strerror(errno));
+		return false;
+	}
+	return true;
 }
 
 
@@ -316,12 +337,14 @@ int tcpsend(int fd, unsigned char *data, size_t datalen) {
 	return 0;
 }
 
-void tcpclose(int fd) {
-	close(fd);
+void tcpclose(int *fd) {
+	close(*fd);
+	*fd = 0;
 }
 
-void CloseCM108(HANDLE fd) {
-	close(fd);
+void CloseCM108(HANDLE *fd) {
+	close(*fd);
+	*fd = 0;
 }
 
 // Return file descriptor on success.  On failure, log an error

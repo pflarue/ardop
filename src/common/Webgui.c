@@ -4,7 +4,11 @@
 #include <string.h>
 #include "common/ardopcommon.h"
 #include "common/StationId.h"
+#include "common/audio.h"
+#include "common/ptt.h"
+#include "common/Webgui.h"
 #include "ws_server/ws_server.h"
+
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -35,6 +39,8 @@ extern StationId ARQStationRemote;  // current connection remote callsign
 extern float wS1;
 int ExtractARQBandwidth();
 void ProcessCommandFromHost(char * strCMD);
+bool process_capturechannel(char *param);
+bool process_playbackchannel(char *param);
 int bytes2hex(char *outputStr, size_t count, unsigned char *data, size_t datalen, bool spaces);
 
 bool WebguiActive = false;
@@ -46,8 +52,6 @@ unsigned char AvgLen = 1;
 // recent at oldmags[oldindex - 1]
 float oldmags[MAX_AVGLEN][206];
 int oldindex = 0;  // index in oldmags of the
-void WebguiInit();
-void WebguiPoll();
 
 // A structure to hold/buffer data recieved from Webgui clients.
 struct wg_receive_data {
@@ -94,7 +98,7 @@ void debug_for_ws(const char* format, va_list arglist) {
 		return;
 
 	char Mess[1024] = "";
-	int rv = vsnprintf(Mess, sizeof(Mess), format, arglist);
+	vsnprintf(Mess, sizeof(Mess), format, arglist);
 	ZF_LOGD_STR(Mess);
 }
 
@@ -103,7 +107,7 @@ void error_for_ws(const char* format, va_list arglist) {
 		return;
 
 	char Mess[1024] = "";
-	int rv = vsnprintf(Mess, sizeof(Mess), format, arglist);
+	vsnprintf(Mess, sizeof(Mess), format, arglist);
 	ZF_LOGE_STR(Mess);
 }
 
@@ -227,6 +231,25 @@ int decodeUvint(struct wg_receive_data *rdata) {
 // "c|" followed by a string: remote callsign
 //   If string has zero length, clear remote callsign.
 // "D|" no additional data: Enable Dev Mode
+// "d|"
+//   followed by a character:
+//    'p' for PTT Device
+//    'c' for CAT device
+//    'k' for CAT PTTON Hex string
+//    'u' for CAT PTTOFF Hex string
+//   followed by a string containing the name of the string.
+// "E|"
+//   followed by a character:
+//    'P' for PTTENABLED, 'p' for NOT PTTENABLED
+//    'C' for RXENABLED, 'c' for NOT RXENABLED
+//    's' for RXENABLED, but received audio is silent.
+//    'T' for TXENABLED, 't' for NOT TXENABLED
+//    'L' for CAPTURECHANNEL LEFT
+//    'R' for CAPTURECHANNEL RIGHT
+//    'M' for CAPTURECHANNEL MONO
+//    'y' for PLAYBACKCHANNEL LEFT
+//    'z' for PLAYBACKCHANNEL RIGHT
+//    'm' for PLABACKCHANNEL MONO
 // "F|" followed by a string: TX Frame type
 // "f|"
 //   followed by a character:
@@ -269,6 +292,18 @@ int decodeUvint(struct wg_receive_data *rdata) {
 //	 data type 'FEC', 'ARQ', 'RXO', 'ERR', etc.
 // 0x9A7C followed by one additional byte interpreted as an unsigned
 //   char in the range 1 to MAX_AVGLEN: Set display averaging length
+// 0x9B7C"
+//   followed by an unsigned char: number of devices listed
+//   followed by an unsigned char: the index of the currently open capture
+//    device, or 0xFF for none.
+//   followed by an unsigned char: the index of the currently open playback
+//    device, or 0xFF for none.
+//   followed by that number of the following pattern:
+//     uvint of the length of a string containing the device name
+//     a non-null terminated string containing the device name
+//     uvint of the length of a string containing the device description
+//     a non-null terminated string containing the device description
+//     a byte indicating usage 'C' for capture, 'P' for playback, 'B' for both
 
 // For all of wg_send_*
 // cnum = 0 to send to all Webgui clients.
@@ -346,8 +381,12 @@ int wg_send_hostmsg(int cnum, char msgtype, unsigned char *strText) {
 	if (!WG_DevMode)
 		// don't send these to Webgui except in DevMode
 		return (0);
-	char Mess[256];
-	snprintf(Mess, sizeof(Mess), "H|%c%s", msgtype, strText);
+	char Mess[4096];  // Size increased to accomodate CAPTUREDEVICES
+	long int count;
+	count = snprintf(Mess, sizeof(Mess), "H|%c%s", msgtype, strText);
+	if (count < 0 || count >= (long) sizeof(Mess))
+		ZF_LOGW("wg_send_hostmsg: Oversized host message truncated before"
+			" sending to WebGui.");
 	return wg_send_msg(cnum, Mess, strlen(Mess));
 }
 
@@ -527,6 +566,232 @@ int wg_send_wavrx(int cnum, bool isRecording) {
 		return wg_send_msg(cnum, "w|", 2);
 }
 
+int wg_send_pttenabled(int cnum, bool enabled) {
+	if (enabled)
+		return wg_send_msg(cnum, "E|P", 3);
+	else
+		return wg_send_msg(cnum, "E|p", 3);
+}
+
+int wg_send_rxenabled(int cnum, bool enabled) {
+	if (enabled)
+		return wg_send_msg(cnum, "E|C", 3);
+	else
+		return wg_send_msg(cnum, "E|c", 3);
+}
+
+int wg_send_rxsilent(int cnum) {
+	return wg_send_msg(cnum, "E|s", 3);
+}
+
+int wg_send_txenabled(int cnum, bool enabled) {
+	if (enabled)
+		return wg_send_msg(cnum, "E|T", 3);
+	else
+		return wg_send_msg(cnum, "E|t", 3);
+}
+
+int wg_send_capturechannel(int cnum) {
+	if (UseLeftRX && UseRightRX)
+		return wg_send_msg(cnum, "E|M", 3);
+	else if (UseLeftRX)
+		return wg_send_msg(cnum, "E|L", 3);
+	else // UseRightRX
+		return wg_send_msg(cnum, "E|R", 3);
+}
+
+int wg_send_playbackchannel(int cnum) {
+	if (UseLeftTX && UseRightTX)
+		return wg_send_msg(cnum, "E|m", 3);
+	else if (UseLeftTX)
+		return wg_send_msg(cnum, "E|y", 3);
+	else // UseRightRX
+		return wg_send_msg(cnum, "E|z", 3);
+}
+
+int wg_send_audiodevices(int cnum, DeviceInfo **devices, char *cdevice,
+	char *pdevice, bool crestore, bool prestore
+) {
+	int cindex = -1;  // not found
+	int pindex = -1;  // not found
+	char msg[WG_SSIZE - 2] = "\x9B\x7C\x00\xFF\xFF";
+	int msglen = 5;
+	// The following is useful when an audio device is disconnected or turned
+	// off causing loss of the capture device to be quickly noticed, but loss
+	// of the playback device would not otherwise be noticed until the next
+	// attempt to transmit.  Because CloseSoundPlayback also does KeyPTT(false),
+	// This also then causes a related loss of the CAT/PTT control device to be
+	// detected.
+	if (pdevice != NULL && pdevice[0] != 0x00) {
+		pindex = FindAudioDevice(pdevice, false);  // -1 if not found
+		if ((pindex = FindAudioDevice(pdevice, false)) == -1) {  // -1 not found
+			if (TXEnabled) {
+				// TXEnabled should be false since pdevice is not found
+				ZF_LOGV("Closing playback device because it is missing from"
+					" updated AudioDevices[]");
+				if (ZF_LOG_ON_VERBOSE)
+					// For testing with testhost.py
+					SendCommandToHost("STATUS TXENABLED FALSE");
+				CloseSoundPlayback(true);  // calls this function recursively
+				return 0;
+			}
+		}
+	}
+	if (cdevice != NULL && cdevice[0] != 0x00) {
+		if ((cindex = FindAudioDevice(cdevice, true)) == -1) {  // -1 not found
+			if (RXEnabled) {
+				// This is less likely than unnoticed loss of playback device.
+				// RXEnabled should be false since cdevice is not found
+				ZF_LOGV("Closing capture device because it is missing from"
+					" updated AudioDevices[]");
+				if (ZF_LOG_ON_VERBOSE)
+					// For testing with testhost.py
+					SendCommandToHost("STATUS RXENABLED FALSE");
+				CloseSoundCapture(true);  // calls this function recursively
+				return 0;
+			}
+		}
+	}
+	int thislen = 0;
+	int index = -1;
+	int devicecount = 0;
+	// Always exclude devices where capture==playback==false.  Add a "RESTORE"
+	// device if crestore or prestore is true, using capture=crestore and
+	// playback=prestore.
+	// A "NONE" device is never added (because it is always available).
+	if (crestore || prestore) {
+		if ((thislen = encodeUvint(msg + msglen, 3, strlen("RESTORE"))) == -1) {
+			ZF_LOGE("ERROR: Failure encoding length of name=RESTORE for"
+				" wg_send_audiodevices()");
+			return 0;
+		}
+		msglen += thislen;
+		memcpy(msg + msglen, "RESTORE", strlen("RESTORE"));
+		msglen += strlen("RESTORE");
+		char rdesc[] = "Last successfully opened device";
+		if ((thislen = encodeUvint(msg + msglen, 3, strlen(rdesc))) == -1) {
+			ZF_LOGE("ERROR: Failure encoding length of desc for RESTORE for"
+				" wg_send_audiodevices()");
+			return 0;
+		}
+		msglen += thislen;
+		memcpy(msg + msglen, rdesc, strlen(rdesc));
+		msglen += strlen(rdesc);
+		if (crestore && prestore)
+			msg[msglen++] = 'B';
+		else if (crestore)
+			msg[msglen++] = 'C';
+		else
+			msg[msglen++] = 'P';
+		++devicecount;
+	}
+	while(devices[++index] != NULL) {
+		if (!(devices[index]->capture) && !(devices[index]->playback))
+			continue;
+		if (devices[index]->name == NULL || (devices[index]->name)[0] == 0x00)
+			continue;
+		int namelen = strlen(devices[index]->name);
+		int aliaslen = 0;
+		// If alias is defined, use it as the first part of desc, followed by
+		// a period and a space.
+		if (devices[index]->alias != NULL)
+			aliaslen = strlen(devices[index]->alias) + 2;  // +2 for ". "
+		int desclen = 0;
+		if (devices[index]->desc != NULL)
+			desclen = strlen(devices[index]->desc);
+		if ((int) sizeof(msg) - msglen < 7 + namelen + aliaslen + desclen) {
+			// TODO: Rework to allow sending multiple msgs if this happens.
+			ZF_LOGE("ERROR: wg_send_audiodevices() failed due to excess size");
+			return 0;
+		}
+		if ((thislen = encodeUvint(msg + msglen, 3, namelen)) == -1) {
+			ZF_LOGE("ERROR: Failure encoding length of name=%s for"
+				" wg_send_audiodevices()", devices[index]->name);
+			return 0;
+		}
+		msglen += thislen;
+		memcpy(msg + msglen, devices[index]->name, strlen(devices[index]->name));
+		msglen += strlen(devices[index]->name);
+
+		if ((thislen = encodeUvint(msg + msglen, 3, aliaslen + desclen)) == -1) {
+			ZF_LOGE("ERROR: Failure encoding length of desc for name=%s for"
+				" wg_send_audiodevices()", devices[index]->name);
+			return 0;
+		}
+		msglen += thislen;
+		if (aliaslen > 0) {
+			memcpy(msg + msglen, devices[index]->alias, aliaslen - 2);
+			msglen += aliaslen;
+			memcpy(msg + msglen - 2, ". ", 2);
+		}
+		if (desclen > 0) {
+			memcpy(msg + msglen, devices[index]->desc, desclen);
+			msglen += desclen;
+		}
+		if (devices[index]->capture && devices[index]->playback)
+			msg[msglen++] = 'B';
+		else if (devices[index]->capture)
+			msg[msglen++] = 'C';
+		else
+			msg[msglen++] = 'P';
+		if (cindex == index)
+			msg[3] = (unsigned char) devicecount;
+		if (pindex == index)
+			msg[4] = (unsigned char) devicecount;
+		++devicecount;
+	}
+	msg[2] = (unsigned char) devicecount;
+	return wg_send_msg(cnum, msg, msglen);
+}
+
+int wg_send_pttdevice(int cnum, char *devstr) {
+	char msg[203] = "d|pNONE";  // size based on PTTstr[200] in ptt.c
+	if (devstr == NULL || devstr[0] == 0x00)
+		return wg_send_msg(cnum, msg, 7);
+	if (strlen(devstr) > sizeof(msg) - 3) {
+		ZF_LOGE("Error in wg_send_pttdevice().  devstr too long.");
+		return 0;
+	}
+	memcpy(msg + 3, devstr, strlen(devstr));
+	return wg_send_msg(cnum, msg, strlen(devstr) + 3);
+}
+
+int wg_send_catdevice(int cnum, char *devstr) {
+	char msg[203] = "d|cNONE";  // size based on CATstr[200] in ptt.c
+	if (devstr == NULL || devstr[0] == 0x00)
+		return wg_send_msg(cnum, msg, 7);
+	if (strlen(devstr) > sizeof(msg) - 3) {
+		ZF_LOGE("Error in wg_send_catdevice().  devstr too long.");
+		return 0;
+	}
+	memcpy(msg + 3, devstr, strlen(devstr));
+	return wg_send_msg(cnum, msg, strlen(devstr) + 3);
+}
+
+int wg_send_ptton(int cnum, char *hexstr) {
+	char msg[2 * MAXCATLEN + 4] = "d|k";
+	if (hexstr == NULL || hexstr[0] == 0x00)
+		return wg_send_msg(cnum, msg, 3);
+	if (strlen(hexstr) > sizeof(msg) - 3) {
+		ZF_LOGE("Error in wg_send_ptton().  hexstr too long.");
+		return 0;
+	}
+	memcpy(msg + 3, hexstr, strlen(hexstr));
+	return wg_send_msg(cnum, msg, strlen(hexstr) + 3);
+}
+
+int wg_send_pttoff(int cnum, char *hexstr) {
+	char msg[2 * MAXCATLEN + 4] = "d|u";
+	if (hexstr == NULL || hexstr[0] == 0x00)
+		return wg_send_msg(cnum, msg, 3);
+	if (strlen(hexstr) > sizeof(msg) - 3) {
+		ZF_LOGE("Error in wg_send_pttoff().  hexstr too long.");
+		return 0;
+	}
+	memcpy(msg + 3, hexstr, strlen(hexstr));
+	return wg_send_msg(cnum, msg, strlen(hexstr) + 3);
+}
+
 int wg_send_pixels(int cnum, unsigned char *data, size_t datalen) {
 	char msg[10000];  // Large enough for 4FSK.2000.600
 	if (datalen > sizeof(msg)) {
@@ -704,6 +969,24 @@ void WebguiPoll() {
 	// "0~" no additional data: Client connected/reconnected
 	// "2~" no additional data: Request ardopcf to send 5 send two tone signal.
 	// "I~" no additional data: Request ardopcf to send ID frame.
+	// "D~"
+	//   followed by a character:
+	//    'C' to set CAPTURE device
+	//    'P' to set PLAYBACK device
+	//    'p' to set PTT device
+	//    'c' to set CAT device
+	//    'k' to set CAT PTTON Hex string
+	//    'u' to set CAT PTTOFF Hex string
+	//   followed by a string.
+	// "d~" no additional data: Request ardopcf to provide list of audio devices
+	// "E~"
+	//   followed by a character:
+	//    'L' for CAPTURECHANNEL LEFT
+	//    'R' for CAPTURECHANNEL RIGHT
+	//    'M' for CAPTURECHANNEL MONO
+	//    'y' for PLAYBACKCHANNEL LEFT
+	//    'z' for PLAYBACKCHANNEL RIGHT
+	//    'm' for PLABACKCHANNEL MONO
 	// 0x8D7E followed by one additional byte interpreted as an unsigned
 	//   char in the range 0 to 100: Set DriveLevel
 	// 0x9A7E followed by one additional byte interpreted as an unsigned
@@ -769,6 +1052,24 @@ void WebguiPoll() {
 				// This is an "undocumented" feature that may be discontinued in
 				// future releases
 				wg_send_msg(cnum, "D|", 2);
+			wg_send_txenabled(cnum, TXEnabled);
+			wg_send_rxenabled(cnum, RXEnabled);
+			wg_send_pttenabled(cnum, isPTTmodeEnabled());
+			wg_send_capturechannel(cnum);
+			wg_send_playbackchannel(cnum);
+			{
+				char tmpstr[200];
+				get_pttstr(tmpstr, sizeof(tmpstr));
+				wg_send_pttdevice(cnum, tmpstr);
+
+				get_catstr(tmpstr, sizeof(tmpstr));
+				wg_send_catdevice(cnum, tmpstr);
+
+				get_ptt_on_cmd_hex(tmpstr, sizeof(tmpstr));
+				wg_send_ptton(cnum, tmpstr);
+				get_ptt_off_cmd_hex(tmpstr, sizeof(tmpstr));
+				wg_send_pttoff(cnum, tmpstr);
+			}
 			break;
 		case '2':
 			if (ProtocolMode == RXO)
@@ -780,6 +1081,84 @@ void WebguiPoll() {
 			else
 				wg_send_alert(cnum, "Cannot send Two Tone Test from ProtocolState = %s.",
 					ARDOPStates[ProtocolState]);
+			break;
+		case 'D': {
+			memcpy(tmpdata, rdata->buf + rdata->offset + 3, msglen - 3);
+			// add NULL terminator
+			tmpdata[msglen - 3] = 0x00;
+			switch (rdata->buf[rdata->offset + 2]) {
+			case 'C':
+				OpenSoundCapture(strcmp(tmpdata, "NONE") == 0 ? "" : tmpdata,
+					getCch(true));
+				// On failure, and with some values of tmpdata, CamptureDevice
+				// does not match tmpdata.  Also, there may be more than one
+				// Webgui connection.  So, always send updated AudioDevices info
+				// to Webgui.
+				wg_send_audiodevices(0, AudioDevices, CaptureDevice,
+					PlaybackDevice, crestorable(), prestorable());
+				break;
+			case 'P':
+				OpenSoundPlayback(strcmp(tmpdata, "NONE") == 0 ? "" : tmpdata,
+					getPch(true));
+				// On failure, and with some values of tmpdata, CamptureDevice
+				// does not match tmpdata.  Also, there may be more than one
+				// Webgui connection.  So, always send updated AudioDevices info
+				// to Webgui.
+				wg_send_audiodevices(0, AudioDevices, CaptureDevice,
+					PlaybackDevice, crestorable(), prestorable());
+				break;
+			case 'p':
+				parse_pttstr(tmpdata);  // also does wg_send_pttdevice()
+				break;
+			case 'c':
+				parse_catstr(tmpdata);  // also does wg_send_catdevice()
+				break;
+			case 'k':
+				set_ptt_on_cmd(tmpdata, "Webgui PTTON str");  // also does wg_send_ptton()
+				break;
+			case 'u':
+				set_ptt_off_cmd(tmpdata, "Webgui PTTOFF str");  // also does wg_send_pttdevice()
+				break;
+			default:
+				ZF_LOGE("Invalid device type=%1s from cnum=%d with type=D. Ignoring.",
+					&(rdata->buf[rdata->offset + 2]), cnum);
+				break;
+			}
+			break;
+		}
+		case 'd':
+			GetDevices();
+			wg_send_audiodevices(cnum, AudioDevices, CaptureDevice,
+				PlaybackDevice, crestorable(), prestorable());
+			break;
+		case 'E':
+			if (msglen != 3) {
+				ZF_LOGW(
+					"WARNING: Invalid msglen=%d received from cnum=%d with type=E"
+					" (Set Config Parameter).  Expected msglen=3.  Ignoring.",
+					msglen, cnum);
+				break;
+			}
+			switch(rdata->buf[rdata->offset + 2]) {
+				case 'L':
+					process_capturechannel("LEFT");
+					break;
+				case 'R':
+					process_capturechannel("RIGHT");
+					break;
+				case 'M':
+					process_capturechannel("MONO");
+					break;
+				case 'y':
+					process_playbackchannel("LEFT");
+					break;
+				case 'z':
+					process_playbackchannel("RIGHT");
+					break;
+				case 'm':
+					process_playbackchannel("MONO");
+					break;
+			}
 			break;
 		case 'H':
 			// Host command
@@ -855,12 +1234,13 @@ void WebguiPoll() {
 			if (rdata->buf[rdata->offset] >= 0x20 && rdata->buf[rdata->offset] <= 0x7D)
 				// This message can be printed as text (though it doesn't have a terminating NULL)
 				ZF_LOGD("message (text): %.*s", msglen, rdata->buf + rdata->offset);
-			else
+			else {
 				// This message should be printed as a string of hex values.
-				ZF_LOGD("message (hex): %s...",
-					bytes2hex(errstr, sizeof(errstr),
+				bytes2hex(errstr, sizeof(errstr),
 					(unsigned char*)(rdata->buf + rdata->offset),
-					(size_t)(msglen), true));
+					(size_t)(msglen), true);
+				ZF_LOGD("message (hex): %s...", errstr);
+			}
 			break;
 		}
 		rdata->offset += msglen;

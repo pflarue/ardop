@@ -2,6 +2,8 @@
 
 There are three main steps to using **ardopcf** on Windows.  You need to obtain the `ardopcf.exe` file, determine what command line options you need to use, and finally create a Desktop Shortcut (and perhaps pin it to your taskbar) to start **ardopcf**.  You might also choose to create a Desktop Shortcut for the ardopcf WebGui (and perhaps pin it to your taskbar)
 
+Complete configuration of **ardopcf** can be done via the options used to start it, and this is recommended for most repeated use.  However, it is also possible to almost completely configure ardopcf interactively using the WebGUI.  This includes the ability to choose and configure the audio and CAT/PTT devices.  To set some configuration parameters interactively, it may be neccesary to enable the WebGUI Developer Mode by specifying a negative port number with the `-G` or `--webgui` command line option.  The remainder of this document mostly assumes that you want to fully configure **ardopcf** at startup.
+
 ## Getting `ardopcf.exe`
 If you want to try the latest changes that have been made to **ardopcf** since the last release, you can [build](BUILDING.md) it from source.  However, most Windows users will download one of the pre-built binary executable files from the [releases](https://github.com/pflarue/ardop/releases/latest) page at GitHub.  Before you can do either of these, you need to know whether your computer is running 32-bit or 64-bit Windows.  All Windows 11 and most Windows 10 operating systems are 64-bit.  To find out if a Windows 10 operating system is 32 or 64 bit press the **Start** button and select **Settings**, click on **System** then on **About** and read the line starting with **System type**.  If you are using a version of Windows older than Windows 10, you will also need to install the [Universal C Runtime update](https://support.microsoft.com/en-us/topic/update-for-universal-c-runtime-in-windows-c0514201-7fe6-95a3-b0a5-287930f3560c).
 
@@ -13,9 +15,9 @@ The first time that you run `ardopcf` without the `-h` option, Windows will ask 
 
 ## Ardopcf PTT/CAT conrol
 
-**ardopcf** has the ability to handle the PTT of your radio in a variety of ways, but other than activating PTT, it does not do other CAT control.  (ardopcf does allow a host program to provide hex strings to pass to a CAT serial device or TCP port, but since these strings must be appropriate for the specific model of radio or TCP middleware that you are using, this feature is not generally used.)  **ardopcf** can also allow a host program like [Pat](https://getpat.io) Winlink to handle PTT.  With Pat, this is convenient because it can also use CAT control to set your radio's frequency.  Other host programs may not have CAT or PTT capabilities, so they require **ardopcf** to handle PTT and require you to manually set the frequency on your radio.  A third option is to use the VOX capability of your radio to engage the PTT.  This may work OK for FEC mode operation with some host programs, but can be unreliable for the ARQ mode operation used by Pat because it may not engage or disengage quickly enough.
+**ardopcf** has the ability to handle the PTT of your radio in a variety of ways, but other than activating PTT, it does not do other CAT control.  The following describes how to specify the PTT control device with the command used to start **ardopcf**.  However, it is also possible to select and configure such devices interactively using the WebGUI.  (ardopcf does allow a host program to provide hex strings to pass to a CAT serial device or TCP port, but since these strings must be appropriate for the specific model of radio or TCP middleware that you are using, this feature is not generally used.)  **ardopcf** can also allow a host program like [Pat](https://getpat.io) Winlink to handle PTT.  With Pat, this is convenient because it can also use CAT control to set your radio's frequency.  Other host programs may not have CAT or PTT capabilities, so they require **ardopcf** to handle PTT and require you to manually set the frequency on your radio.  A third option is to use the VOX capability of your radio to engage the PTT.  This may work OK for FEC mode operation with some host programs, but can be unreliable for the ARQ mode operation used by Pat because it may not engage or disengage quickly enough.
 
-If you want Pat to do PTT and CAT control then do not use any of the `-p`, `--ptt`, `-c`, `--cat`, `-g`, `-k`, `--keystring`, `-u`, or `--unkeystring` options described in the remainder of this section.  Instead, set `"ptt_ctrl": true` in the ardop section of the Pat configuration and use the `"rig"` setting to point to a rig defined in the `"hamlib_rigs"` section.  The remainder of this section will assume that you want **ardopcf** to control PTT.  Note that you should **NOT** try to have **ardopcf** do PTT using the same COM port that you will ask PAT (via Hamlib/rigctld) or any other program to use for CAT control.  However, you may set Pat to provide CAT control via Hamlib/rigctld to set the frequency, while setting **ardopcf** to handle PTT via the same Hamlib/rigctld middleware.
+If you want Pat to do PTT and CAT control then do not use any of the `-p`, `--ptt`, `-c`, `--cat`, `-k`, `--keystring`, `-u`, or `--unkeystring` options described in the remainder of this section.  Instead, set `"ptt_ctrl": true` in the ardop section of the Pat configuration and use the `"rig"` setting to point to a rig defined in the `"hamlib_rigs"` section.  The remainder of this section will assume that you want **ardopcf** to control PTT.  Note that you should **NOT** try to have **ardopcf** do PTT using the same COM port that you will ask PAT (via Hamlib/rigctld) or any other program to use for CAT control.  However, you may set Pat to provide CAT control via Hamlib/rigctld to set the frequency, while setting **ardopcf** to handle PTT via the same Hamlib/rigctld middleware.
 
 **ardopcf** has a few methods available for controlling PTT.  Serial device RTS/DTR, CAT commands send to a serial device or TCP port (as used with Hamlib/rigctld), and use of CM108 sound devices using IO pin 3 for PTT will be described here.
 
@@ -67,7 +69,7 @@ ardopcf -p CM108:0D8C:0012 -i 1 -o 1
 
 ## Ardopcf audio devices and other options.
 
-Your Windows computer may have multiple audio input (Microphone/Recording) and output (Speakers/Playback) devices.  **Ardopcf** must be told which of these devices to use.
+Your Windows computer may have multiple audio input (Microphone/Recording) and output (Speakers/Playback) devices.  **Ardopcf** must be told which of these devices to use.  The following describes how to specify the audio devices with the command used to start **ardopcf**.  However, it is also possible to select and configure these devices interactively using the WebGUI.
 
 The windows audio device numbers may change as (USB) devices are plugged in or unplugged.  For a radio with a built in sound interface, they may also change when you turn that radio on and off.  They may also change if you use the Windows sound controls to change which devices are identified as defaults.  So, before continuing, be sure that your radio is connected to the computer and turned on.
 
@@ -80,7 +82,7 @@ Windows has two 'default' audio devices each for Playback and Recording.  These 
 6. Try turning your radio on and off, or plugging and unplugging it from your computer to verify that now it never shows up as a default device.
 7. Once **ardopcf** is running, you'll need to return to this Sound dialog to make some adjustments.
 
-Every time that **ardopcf** is started, it will print a list of all of the audio devices that it finds.  This can be used to identify which device numbers should be used.  These numbers might be different than they would have been before you set your radio not to be the default device.
+Every time that **ardopcf** is started, it will print a list of all of the audio devices that it finds.  This can be used to find the names and descriptions of the available devices.  While number based device names may be used to specify what audio devices to use, on Windows machines it is probably more reliable to specify audio devices by a unique substring in the device description.  The advantage of doing this is that the description should always be the same, while the number based device names may change.
 
 1. Open a Windows Command Prompt.  On Windows 11, this can be done by pressing the Windows Start button and typing `Command Prompt` into the search bar.  On older versions of Windows it is probably available in the Windows System folder after pressing the Windows Start button.
 2. Use `cd` to navigate to the location of ardopcf.exe.  For example:
@@ -91,47 +93,81 @@ The first time that you run `ardopcf` without the `-h` option, Windows will ask 
 
 Running `ardopcf` with no other options should print something that look similar to:
 ```
-ardopcf Version 1.0.4.1.2 (https://www.github.com/pflarue/ardop)
-Copyright (c) 2014-2024 Rick Muething, John Wiseman, Peter LaRue
-See https://github.com/pflarue/ardop/blob/master/LICENSE for license details including
-  information about authors of external libraries and their licenses.
-Capture Devices
-0 Microphone Array (Intel Smart
-1 Microphone (USB PnP Sound Devic
-Playback Devices
-0 Speakers (Realtek(R) Audio)
-1 Speakers (USB PnP Sound Device)
-ardopcf listening on port 8515
-Setting Protocolmode to ARQ.
+ardopcf Version 1.0.4.1.3 (https://www.github.com/pflarue/ardop)
+Copyright (c) 2014-2025 Rick Muething, John Wiseman, Peter LaRue
+See https://github.com/pflarue/ardop/blob/master/LICENSE for licence details including
+ information about authors of external libraries used and their licenses.
+Capture (input) Devices
+   i0 [Microphone Array (Intel� Smart ] (capture)
+   i1 [Hi-Fi Cable Output (VB-Audio Hi] (capture)
+   i2 [Microphone (USB PnP Sound Devic] (capture)
+   NOSOUND [A dummy audio device for diagnostic use.] (capture) (playback)
+[* before capture or playback indicates that the device is currently in use for that mode by this or another program]
+Playback (output) Devices
+   o0 [Speakers (Realtek(R) Audio)] (playback)
+   o1 [Hi-Fi Cable Input (VB-Audio Hi-] (playback)
+   o2 [Speakers (USB PnP Sound Device)] (playback)
+   NOSOUND [A dummy audio device for diagnostic use.] (capture) (playback)
+[* before capture or playback indicates that the device is currently in use for that mode by this or another program]
+
+  No audio devices were successfully opened based on the options
+  specified on the command line.  Suitable devices must be
+  configured by a host program or using the WebGUI before Ardop
+  will be usable.
+
+
+  No PTT control method has been successfully enabled based on
+  the options specified on the command line.  This configuration
+  is suitable for TX ONLY IF the host program is configured to
+  handle PTT or if the radio is configured to use VOX (which is
+  often not reliable).  Otherwise, a suitable method of PTT
+  control must be configured by a host program or using the
+  WebGUI before Ardop will be able to transmit.
+
+ardopcf listening for host connection on host_port 8515
+Webgui available at wg_port 8514.
+Setting ProtocolMode to ARQ.
 ```
 
 Press Ctrl-C to stop **ardopcf**.
 
-The list of Capture and Playback devices should be similar to what you saw in the Sound control dialog in the Recording and Playback tabs.  What is important is the numbers that **ardopcf** shows before each device.  In this example, the USB PnP devices represent the connection to my radio.  In this case, each is assigned number `1`.  Running **ardopcf** without any options defaults to using the devices labeled `0`.  Use the `-i` option to set the (input) audio capture device and the `-o` option to set the (output) audio playback device.  Earlier versions of **ardopcf** did not support these options, and thus required that you also specify the host port number to set these values.  So, for my system, I would use:
+The entry for each device begins with the device name such as `i0` for an capture/input device or `o0` for a playback/output device.  This is followed by a description enclosed in square brackets.  If the input for an audio device is an exact case sensistive match for the name, then it will be used.  If not, then the descriptions will be searched for a case insensitive substring match, and the first such match will be used.  A small integer `N` may also be used as a shortcut for the alias `iN` or `oN`.
 
-`ardopcf -i 1 -o 1`
+The list of Capture and Playback devices should be similar to what you saw in the Sound control dialog in the Recording and Playback tabs, except with the added NOSOUND device.  In this example, the `i2` and `o2` devices with `USB PnP Sound Dev` in their descriptions represent the connection to my radio.  Use the `-i` option to set the (input) audio capture device and the `-o` option to set the (output) audio playback device.  Earlier versions of **ardopcf** did not support these options, and thus required that you also specify the host port number to set these values.  So, for my system, I could use:
+
+`ardopcf -i i2 -o o2`
+or
+`ardopcf -i 2 -o 2`
+
+However, if you sometimes have other audio devices connected to your computer, or of you change some of the computer's audio settings, these might change.  So, a better choice is probably:
+
+`ardopcf -i PnP -o PnP`
+or
+`ardopcf -i "USB PnP Sound Dev" -o "USB PnP Sound Dev"`
+
+If there are spaces in the description that you use to specify an audio device, you need to wrap it in quotes.  Since the first case insensitive match found for a description is used, make sure that the value you use does not match anything else in the list.
 
 This starts **ardopcf** and may be sufficient if you decided after reading the earlier section on PTT/CAT control that you do not need **ardopcf** to handle PTT because a host program like [Pat](https://getpat.io) will handle this or because you will use VOX.  If you decided that you want **ardopcf** to handle PTT, then add those additional options.  For example:
 
-`ardopcf -p COM5:19200 -i 1 -o 1`
+`ardopcf -p COM5:19200 -i PnP -o PnP`
 
 or
 
-`ardopcf -c COM5 --keystring FEFE88E01C0001FD --unkeystring FEFE88E01C0000FD -i 1 -o 1`
+`ardopcf -c COM5 --keystring FEFE88E01C0001FD --unkeystring FEFE88E01C0000FD -i PnP -o PnP`
 
 4. There are some additional command line options that you might want to use.  If you are using the `-i` and `-o` options to set your audio devices (and not using the legacy method of providing three positional arguments), then the order in which the command line options are given does not matter.
 
-A.  By default **ardopcf** writes some log messages to the console and writes more detailed log messages to log files in the directory where it is started.  You can change where these files are created with the `-l` or `--logdir` option.  For example, I created an `ardop_logs` directory and use `--logdir C:\Users\<USERNAME>\ardop\ardop_logs`.  To not write any log files, use the `--nologfile` or `-m` options.  To write more or less detail to the console and log files, use the `CONSOLELOG` and `LOGLEVEL` host commands respectively.  These each take a value from 1 (most detail) to 6 (least detail), and can be set using the `-H` or `--hostcommands` option described below.
+A.  By default **ardopcf** writes some log messages to the console and writes more detailed log messages to log files in the directory where it is started.  You can change where these files are created with the `-l` or `--logdir` option.  For example, I created an `ardop_logs` directory and use `--logdir C:\Users\<USERNAME>\ardop\ardop_logs`.  To not write any log files, use the `--nologfile` or `-m` options.  To write more or less detail to the console and log files, use the `CONSOLELOG N` and `LOGLEVEL N` host commands respectively.  These each take a value from 1 (most detail) to 6 (least detail), and can be set using the `-H` or `--hostcommands` option described below.
 
-B.  The `-H` or `--hostcommands` option can be used to automatically apply one or more semicolon separated commands that **ardopcf** accepts from host programs like [Pat](https://getpat.io).  See [Host_Interface_Commands.md](Host_Interface_Commands.md) for more information about these commands.  If the first commands are `LOGLEVEL` and/or `CONSOLELOG` (as described above), then these are applied before most other command line options are evaluated.  Processing them before the logging system is initiated ensures that the log settings you want are in place before any log messages are processed.
+B.  The `-H` or `--hostcommands` option can be used to automatically apply one or more semicolon separated commands that **ardopcf** accepts from host programs like [Pat](https://getpat.io).  See [Host_Interface_Commands.md](Host_Interface_Commands.md) for more information about these commands.  If the first commands are `LOGLEVEL N` and/or `CONSOLELOG N` (as described above), then these are applied before most other command line options are evaluated.  Processing them before the logging system is initiated ensures that the log settings you want are in place before any log messages are processed.
 
-The host commands are applied in the order that they are written. Except for those leading `LOGLEVEL` and `CONSOLELOG` commands, the order usually doesn't matter.  As an example, `--hostcommands "LOGLEVEL 1;CONSOLELOG 2;MYCALL AI7YN"` sets the log file to be as detailed as possible, and data printed to the console to be only slightly less detailed, and sets my callsign to `AI7YN`.  Pat will also set my callsign, so this isn't usually necessary as a startup option, but it is a convenient example.  Because most commands will include a command, a space, and a value, you usually need to put quotation marks around the commands string.  After you adjust your sound audio levels, you may discover that you want the **ardopcf** transmit drive level to be less than the default of 100%.  As another example, `--hostcommands "CONSOLELOG 4;MYCALL AI7YN;DRIVELEVEL 90"` leaves the log file settings at their default value, but prints only more important messages to the console, sets my callsign, and set the transmit drive level to 90%.
+The host commands are applied in the order that they are written. Except for those leading `LOGLEVEL N` and `CONSOLELOG N` commands, the order usually doesn't matter.  As an example, `--hostcommands "LOGLEVEL 1;CONSOLELOG 2;MYCALL AI7YN"` sets the log file to be as detailed as possible, and data printed to the console to be only slightly less detailed, and sets my callsign to `AI7YN`.  Pat will also set my callsign, so this isn't usually necessary as a startup option, but it is a convenient example.  Because most commands will include a command, a space, and a value, you usually need to put quotation marks around the commands string.  After you adjust your sound audio levels, you may discover that you want the **ardopcf** transmit drive level to be less than the default of 100%.  As another example, `--hostcommands "CONSOLELOG 4;MYCALL AI7YN;DRIVELEVEL 90"` leaves the log file settings at their default value, but prints only more important messages to the console, sets my callsign, and set the transmit drive level to 90%.
 
-C.  To enable the WebGui use `-G 8514` or `--webgui 8514`.  This sets the WebGui to be availble by typing `localhost:8514` into the navgation bar of your web browser.  You may choose a different port number if 8514 causes a conflict with other software.  The WebGui is likely to be useful when you adjust the transmit and receive audio levels as described later.
+C.  By default, the WebGui is enabled using port 8514 so that the WebGui is available by typing `localhost:8514` into the navgation bar of your web browser.  The WebGui is likely to be useful when you adjust the transmit and receive audio levels as described later.  You may disable with WebGui by specifying a port number of zero using `-G 0` or `--webgui 0`.  You may choose a different port number with `-G 5014` or `--webgui 5014` or any other integer if 8514 causes a conflict with other software.  If a negative port number is given, such as `-G -8514`, then the corresponding positive number is used, but the WebGui is opened in developer mode.  Developer mode allows arbitrary host commands to be entered from within the WebGui, writes additional details in the WebGui Log display, and provides a button to start/stop recording of RX audio to a WAV file.  Developer mode is not intended for normal use, but is a useful tool for debugging purposes.
 
 So, an example of the complete command you might want to use to start **ardopcf** is:
 
-`ardopcf --logdir C:\Users\<USERNAME>\ardop\ardopc_logs -p COM5 -G 8514 --hostcommands "DRIVELEVEL 90" -i 1 -o 1`
+`ardopcf --logdir C:\Users\<USERNAME>\ardop\ardopc_logs -p COM5 --hostcommands "DRIVELEVEL 90" -i PnP -o PnP`
 
 With this running, **ardopcf** is functional and ready to be used by a host program like [Pat](https://getpat.io).  However, for windows users, it is probably more convenient to create a Desktop Shortcut to start **ardopcf** each time you want to use it.  For **ardopcf** to work well, you will also probably need to make adjustments to your receive and transmit audio levels.
 
@@ -145,11 +181,11 @@ The following is for Windows 11.  Windows 10 is very similar.
 2. Move 'ardopcf.exe - Shortcut' to your Desktop by dragging it either to a blank area on your desktop or to where 'Desktop' appears in the tree panel of Windows File Explorer.  If offered a choice to 'copy' or 'move' the shortcut, choose 'move'.
 3. Configure the shortcut: Right click on the shortcut icon on your desktop, Select `Properties`.  Add the command line options to set the port, audio devices, PTT options, enable the WebGui, etc. after 'ardopcf.exe' in the `Target` line.  Note that this line begins with the full path to 'ardopcf.exe', so that it does not need to be in any special location.  If there is a space anywhere in the path to 'ardopcf.exe', then this will be wrapped in double quotation marks.  In that case, the command line options are placed after the closing quotation marks.  For example:
 
-`C:\Users\<USERNAME>\ardop\ardopcf.exe -G 8514 --logdir C:\Users\<USERNAME>\ardop\logs --hostcommands "CONSOLELOG 4;MYCALL AI7YN;DRIVELEVEL 85" -i 1 -o 1`
+`C:\Users\<USERNAME>\ardop\ardopcf.exe --logdir C:\Users\<USERNAME>\ardop\logs --hostcommands "CONSOLELOG 4;MYCALL AI7YN;DRIVELEVEL 85" -i PnP -o PnP`
 
 or
 
-`"C:\Users\<USERNAME>\Documents\radio stuff\ardop\ardopcf.exe" -G 8514 --logdir C:\Users\<USERNAME>\ardop\logs --hostcommands "CONSOLELOG 4;MYCALL AI7YN;DRIVELEVEL 85" -i 1 -o 1`
+`"C:\Users\<USERNAME>\Documents\radio stuff\ardop\ardopcf.exe" --logdir C:\Users\<USERNAME>\ardop\logs --hostcommands "CONSOLELOG 4;MYCALL AI7YN;DRIVELEVEL 85" -i PnP -o PnP`
 
 Change the `Run:` pulldown to `Minimized`.  If you are not using the '-l' or '--logdir' option to control where the ardop log files will be written, you may also want to change the `Start in` line, since that is where the log files will go.  If you want to, you can also click on `Change Icon` and select a different icon to change the appearance of the shortcut on your desktop.  By switching to the `General` tab, you can also change the shortcut's label if you want to.  Finally, click on `OK`.
 
@@ -159,10 +195,8 @@ Change the `Run:` pulldown to `Minimized`.  If you are not using the '-l' or '--
 
 ## Create a Desktop shortcut to open the ardopcf WebGui
 
-For this to work, **ardopcf** must have been started with the option `-G port` or `--webgui port` option, where `port` is usually 8514.
-
 1. Start **ardopcf**.
-2. Open your web browser and type `localhost:port` into the navigation bar, where `port` is the number you used with the `-G` or `--webgui` option (usually 8514) and press Enter.  This should display the ardopcf WebGui.
+2. Open your web browser and type `localhost:port` into the navigation bar, where `port` is 8514 unless you used the `-G` or `--webgui` option to specify a different value and press Enter.  This should display the ardopcf WebGui.
 3. Drag the icon left of the `localhost:port` to a blank spot on your desktop.  This will create a desktop shortcut for the WebGui.
 4. (OPTIONAL) You can also create a bookmark for the WebGui address to make it easier to open this page if your web browser is already running.  This is done by clicking the star to the right of the navigation bar in your browser while you are viewing the WebGui.
 

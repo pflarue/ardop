@@ -14,7 +14,6 @@ extern const char ProductVersion[];
 
 // Sound interface buffer size
 
-#define SendSize 1200  // 100 mS for now
 // #define ReceiveSize 512  // Must be 1024 for FFT (or we will need torepack frames)
 #define NumberofinBuffers 4
 
@@ -38,8 +37,6 @@ typedef void *HANDLE;
 #else
 #define HANDLE int
 #endif
-
-void txSleep(int mS);
 
 extern unsigned int pttOnTime;
 
@@ -119,12 +116,7 @@ int EncodePing(const StationId* mycall, const StationId* target, UCHAR* bytRetur
 int Encode4FSKIDFrame(const StationId* callsign, const Locator* square, unsigned char* bytreturn);
 int EncodeDATAACK(int intQuality, UCHAR bytSessionID, UCHAR * bytreturn);
 int EncodeDATANAK(int intQuality , UCHAR bytSessionID, UCHAR * bytreturn);
-void Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);
-void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);
-void ModPSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);
 bool IsDataFrame(UCHAR intFrameType);
-void StartCodec(char * strFault);
-void StopCodec(char * strFault);
 bool SendARQConnectRequest(const StationId* mycall, const StationId* target);
 void AddDataToDataToSend(UCHAR * bytNewData, int Len);
 bool StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, bool blnSendID);
@@ -143,17 +135,15 @@ bool BusyDetect3(float * dblMag, int intStart, int intStop);
 void displayState(const char * State);
 void displayCall(int dirn, const char * call);
 
-void SampleSink(short Sample);
-void SoundFlush();
 void StopCapture();
 void DiscardOldSamples();
 void ClearAllMixedSamples();
 
 void SetFilter(void * Filter());
 
-void AddTrailer();
+bool ProcessPingFrame();
+bool AddTrailer();
 void CWID(char * strID, short * intSamples, bool blnPlay);
-void sendCWID(const StationId * id);
 UCHAR ComputeTypeParity(UCHAR bytFrameType);
 void GenCRC16FrameType(char * Data, int Length, UCHAR bytFrameType);
 bool CheckCRC16FrameType(unsigned char * Data, int Length, UCHAR bytFrameType);
@@ -173,7 +163,6 @@ void SaveQueueOnBreak();
 void Abort();
 void SetLED(int LED, int State);
 VOID ClearBusy();
-VOID CloseCOMPort(HANDLE fd);
 
 // #ifdef WIN32
 bool PreprocessNewSamples(short * Samples, int nSamples);
@@ -196,14 +185,13 @@ void AddTagToDataAndSendToHost(UCHAR * Msg, char * Type, int Len);
 void TCPAddTagToDataAndSendToHost(UCHAR * Msg, char * Type, int Len);
 
 void RemoveDataFromQueue(int Len);
-void RemodulateLastFrame();
+bool RemodulateLastFrame();
 
 void GetSemaphore();
 void FreeSemaphore();
 const char * Name(UCHAR bytID);
 const char * shortName(UCHAR bytID);
 bool InitSound();
-void initFilter(int Width, int centerFreq);
 void FourierTransform(int NumSamples, float * RealIn, float * RealOut, float * ImagOut, int InverseTransform);
 VOID LostHost();
 VOID ProcessDEDModeFrame(UCHAR * rxbuffer, unsigned int Length);
@@ -351,6 +339,9 @@ extern struct SEM Semaphore;
 #define DataACKmin 0xE0
 #define DataACKmax 0xFF
 
+extern bool TXEnabled;
+extern bool RXEnabled;
+extern bool RXSilent;  // Set true when RXEnabled, but all received samples are zero.
 extern const short intTwoToneLeaderTemplate[120];  // holds just 1 symbol (0 ms) of the leader
 extern const short int50BaudTwoToneLeaderTemplate[240];  // holds just 1 symbol (20 ms) of the leader
 
@@ -388,7 +379,6 @@ extern bool blnPINGrepeating;
 extern bool blnFramePending;
 extern int intPINGRepeats;
 
-extern int dttCodecStarted;
 extern int dttStartRTMeasure;
 
 extern int intCalcLeader;  // the computed leader to use based on the reported Leader Length
@@ -399,7 +389,6 @@ extern bool Capturing;
 extern bool SoundIsPlaying;
 extern bool blnAbort;
 extern bool blnClosing;
-extern bool blnCodecStarted;
 extern bool blnInitializing;
 extern bool blnARQDisconnect;
 extern int DriveLevel;
@@ -418,7 +407,7 @@ extern bool Monitor;
 extern bool AutoBreak;
 extern bool BusyBlock;
 
-extern int DecodeCompleteTime;
+extern unsigned int DecodeCompleteTime;
 
 extern bool AccumulateStats;
 

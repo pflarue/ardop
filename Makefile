@@ -193,9 +193,8 @@ test/ardop/test_log: OBJS := \
 	src/common/log.o
 test/ardop/test_log: WRAP := fopen fclose fwrite fflush freopen
 test/ardop/test_ARDOPCommon_processargs: WRAP := \
-	printf puts ardop_log_start \
-	OpenCOMPort COMSetDTR COMClearDTR COMSetRTS COMClearRTS \
-	tcpconnect OpenCM108
+	printf puts ardop_log_start InitAudio \
+	OpenCOMPort tcpconnect OpenCM108 OpenSoundCapture OpenSoundPlayback \
 
 -include *.d
 

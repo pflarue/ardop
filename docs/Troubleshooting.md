@@ -9,25 +9,37 @@ By default, ardopcf generates two sources of debug information
   - A log file in the directory where it was launched.
 
 
-## Audio Device Related Issues (Linux)
+## Audio Device Related Issues
 
-If you get an error message in the console like this:
+If you see a warning message in the console like this at startup:
 ```
-Opening Playback Device ARDOP Rate 12000
-ALSA lib pcm.c:2664:(snd_pcm_open_noupdate) Unknown PCM ARDOP
-cannot open playback audio device ARDOP (No such file or directory)
-Error in InitSound().  Stopping ardop.
+  No audio devices were successfully opened based on the options
+  specified on the command line.  Suitable devices must be
+  configured by a host program or using the WebGUI before Ardop
+  will be usable.
 ```
-This means that you did not invoke ardopcf correctly (see the top of this page), or you did not (on Linux) specifiy an alsa rate slave device named ARDOP in `~/.asoundrc` or `/etc/asound.conf` like this: `pcm.ARDOP {type rate slave {pcm "hw:1,0" rate 48000}}`
 
-### ALSA Device Sharing
+This means that you did not specify which audio devices ardopcf should use, or the devices that you specified were invalid or could not be opened and correctly configured.  You can proceed by interactively selecting suitable audio devices in the WebGui after pressing the `Show Config Controls` button there.  Use the WebGui's `Show Help` button for more details.
 
-You may run into issues as well (device or resource busy) if you have another program (like Direwolf) trying to access the same audio device (radio) at the same time. ardopcf is not a jack/pulseaudio/portaudio/oss/pipewire aware program, and alsa does not do mixing and audio redirecting between sources and sinks by default. You might be able to use alsa plugins like dsnoop or create a new pcm definition in ~/.asoundrc to do point to the PulseAudio default device, but your mileage may vary and this author has not tested it. If you find an elegant solution, please open a github issue or let us know in the users groups.
+See [USAGE_linux.md](USAGE_linux.md) or [USAGE_windows.md](USAGE_windows.md) for detailed help understanding the list of audio devices shown at startup and how to specify these with your startup command.
 
+## CAT/PTT Control Device Related Issues
 
-## Audio Device Related Issues (Windows)
+If you see a warning message in the console like this at startup:
+```
+  No PTT control method has been successfully enabled based on
+  the options specified on the command line.  This configuration
+  is suitable for TX ONLY IF the host program is configured to
+  handle PTT or if the radio is configured to use VOX (which is
+  often not reliable).  Otherwise, a suitable method of PTT
+  control must be configured by a host program or using the
+  WebGUI before Ardop will be able to transmit.
+```
 
-Stub.
+If you are using Pat with ardopcf AND you have configured Pat to do PTT control using Hamlib/rigctld, then you can ignore this warning.  You can also ignore it if you intend to use VOX, through this may not always work reliably.
+
+Otherwise, this means that you did not specify which CAT/PTT device ardopcf should use, or the device that you specified was invalid or could not be opened and correctly configured.  You can proceed by interactively configuring a suitable device in the WebGui after pressing the `Show Config Controls` button there.  Use the WebGui's `Show Help` button for more details.  However, unlike the audio configuration controls in the WebGui, you must manually type in a device name for `PTT device` or `CAT device`, and for CAT control of PTT, you must also type in the two hex strings.  So, you will still probably want to see [USAGE_linux.md](USAGE_linux.md) or [USAGE_windows.md](USAGE_windows.md) for detailed help choosing appropriate settings.
+
 
 ## Over-the-air Connection Issues
 

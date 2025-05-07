@@ -34,11 +34,11 @@ const char* PlatformSignalAbbreviation(int signal);
 // and return 0;
 HANDLE OpenCOMPort(void * Port, int speed);
 
-void CloseCOMPort(HANDLE fd);
-void COMSetRTS(HANDLE fd);
-void COMClearRTS(HANDLE fd);
-void COMSetDTR(HANDLE fd);
-void COMClearDTR(HANDLE fd);
+void CloseCOMPort(HANDLE *fd);
+bool COMSetRTS(HANDLE fd);
+bool COMClearRTS(HANDLE fd);
+bool COMSetDTR(HANDLE fd);
+bool COMClearDTR(HANDLE fd);
 bool WriteCOMBlock(HANDLE fd, unsigned char * Block, int BytesToWrite);
 
 // Return the number of bytes read, or -1 if an error occurs.
@@ -57,7 +57,7 @@ int tcpconnect(char *address, int port);
 // Return 0 on success.  If an error occurs, log the error
 // and return -1;
 int tcpsend(int fd, unsigned char *data, size_t datalen);
-void tcpclose(int fd);
+void tcpclose(int *fd);
 
 // Return file descriptor on success.  On failure, log an error
 // and return 0;
@@ -65,7 +65,7 @@ HANDLE OpenCM108(char *devstr);
 // Return 0 on success.  If an error occurs, log the error
 // and return -1;
 int CM108_set_ptt(HANDLE fd, bool State);
-void CloseCM108(HANDLE fd);
+void CloseCM108(HANDLE *fd);
 
 // Items below are platform specific
 #ifdef WIN32

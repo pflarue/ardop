@@ -4,7 +4,9 @@
 
 #include "common/os_util.h"
 #include "common/ARDOPC.h"
+#include "common/ardopcommon.h"
 #include "common/ptt.h"
+#include "common/Modulate.h"
 
 extern bool blnAbort;
 
@@ -157,16 +159,14 @@ bool StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, bool
 
 // Function to get the next FEC data frame
 
-bool GetNextFECFrame()
-{
+bool GetNextFECFrame() {
 	int Len;
 	int intNumCar, intBaud, intDataLen, intRSLen;
 	bool blnOdd;
 	char strType[18] = "";
 	char strMod[16] = "";
 
-	if (blnAbort)
-	{
+	if (blnAbort) {
 		ClearDataToSend();
 
 		ZF_LOGD("[GetNextFECFrame] FECAbort. Going to DISC state");
@@ -176,8 +176,7 @@ bool GetNextFECFrame()
 		return false;
 	}
 
-	if (intFECFramesSent == -1)
-	{
+	if (intFECFramesSent == -1) {
 		ZF_LOGD("[GetNextFECFrame] intFECFramesSent = -1.  Going to DISC state");
 
 		SetARDOPProtocolState(DISC);
@@ -185,22 +184,18 @@ bool GetNextFECFrame()
 		return false;
 	}
 
-	if (bytDataToSendLength == 0 && FECRepeatsSent >= FECRepeats && ProtocolState == FECSend)
-	{
+	if (bytDataToSendLength == 0 && FECRepeatsSent >= FECRepeats && ProtocolState == FECSend) {
 		ZF_LOGD("[GetNextFECFrame] All data and repeats sent.  Going to DISC state");
 
 		SetARDOPProtocolState(DISC);
 		blnEnbARQRpt = false;
 		KeyPTT(false);  // insurance for PTT off
-
 		return false;
 	}
 
-	if (ProtocolState == DISC && intPINGRepeats > 0)
-	{
+	if (ProtocolState == DISC && intPINGRepeats > 0) {
 		intRepeatCount++;
-		if (intRepeatCount <= intPINGRepeats && blnPINGrepeating)
-		{
+		if (intRepeatCount <= intPINGRepeats && blnPINGrepeating) {
 			dttLastPINGSent = Now;
 			return true;  // continue PING
 		}
@@ -214,10 +209,8 @@ bool GetNextFECFrame()
 	if (ProtocolState != FECSend)
 		return false;
 
-	if (intFECFramesSent == 0)
-	{
+	if (intFECFramesSent == 0) {
 		// Initialize the first FEC Data frame (even) from the queue and compute the Filtered samples and filename
-
 		char FullType[18];
 
 		strcpy(FullType, strFECMode);
@@ -228,7 +221,6 @@ bool GetNextFECFrame()
 //		If bytFrameType = bytLastFECDataFrameSent Then  // Added 0.3.4.1
 //			bytFrameType = bytFrameType Xor 0x1  // insures a new start is on a different frame type.
 //		End If
-
 
 		FrameInfo(bytFrameType, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType);
 
@@ -246,53 +238,47 @@ sendit:
 			blnEnbARQRpt = false;
 
 		intFrameRepeatInterval = 400;  // should be a safe number for FEC...perhaps could be shortened down to 200 -300 ms
-
 		FECRepeatsSent = 0;
-
 		intFECFramesSent += 1;
-
 		bytFrameType = bytLastFECDataFrameSent;
 
-		if (strcmp(strMod, "4FSK") == 0)
-		{
+		if (strcmp(strMod, "4FSK") == 0) {
 			if ((EncLen = EncodeFSKData(bytFrameType, bytDataToSend, Len, bytEncodedBytes)) <= 0) {
 				ZF_LOGE("ERROR: In GetNextFECFrame() 4FSK Invalid EncLen (%d).", EncLen);
 				return false;
 			}
 			RemoveDataFromQueue(Len);  // No ACKS in FEC
 
-			if (bytFrameType >= 0x7A && bytFrameType <= 0x7D)
-				Mod4FSK600BdDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame
-			else
-				Mod4FSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame
-		}
-		else  // This handles PSK and QAM
-		{
+			if (bytFrameType >= 0x7A && bytFrameType <= 0x7D) {
+				if (!Mod4FSK600BdDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader))  // Modulate Data frame
+					return false;
+			} else {
+				if (!Mod4FSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader))  // Modulate Data frame
+					return false;
+			}
+		} else {  // This handles PSK and QAM
 			if ((EncLen = EncodePSKData(bytFrameType, bytDataToSend, Len, bytEncodedBytes)) <= 0) {
 				ZF_LOGE("ERROR: In GetNextFECFrame() PSK and QAM Invalid EncLen (%d).", EncLen);
 				return false;
 			}
 			RemoveDataFromQueue(Len);  // No ACKS in FEC
-			ModPSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame
+			if (!ModPSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader))  // Modulate Data frame
+				return false;
 		}
 		return true;
 	}
 
 	// Not First
-
-	if (FECRepeatsSent >= FECRepeats)
-	{
+	if (FECRepeatsSent >= FECRepeats) {
 		// Send New Data
 
-		// Need to add pause
-
-		txSleep(400);
+		txSleep(400);  // Need to add pause
 
 		// While sending FEC data, only send an IDFrame before sending new data
 		// so as not to disrupt repeated frames.  Because some delay is
 		// possible, begin trying to send an IDFrame every 9 minutes rather than
 		// waiting for a full 10 minutes.
-		if(LastIDFrameTime != 0 && Now - LastIDFrameTime > 540000) {  // more than 9 minutes elapsed
+		if(LastIDFrameTime != 0 && Now > LastIDFrameTime + 540000) {  // more than 9 minutes elapsed
 			SendID(NULL, "FECSend 10 minute ID");
 			return false; // Don't repeat
 		}
@@ -300,7 +286,6 @@ sendit:
 		FrameInfo(bytLastFECDataFrameSent, &blnOdd, &intNumCar, strMod, &intBaud, &intDataLen, &intRSLen, &bytMinQualThresh, strType);
 
 		Len = intDataLen * intNumCar;
-
 		if (Len > bytDataToSendLength)
 			Len = bytDataToSendLength;
 
@@ -309,10 +294,8 @@ sendit:
 	}
 
 	// just a repeat of the last frame so no changes to samples...just inc frames Sent
-
 	FECRepeatsSent++;
 	intFECFramesSent++;
-
 	return true;
 }
 

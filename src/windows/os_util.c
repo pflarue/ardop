@@ -18,7 +18,6 @@
 
 #include "common/os_util.h"
 #include "common/log.h"
-#include "windows/Waveform.h"
 
 extern char DecodeWav[5][256];
 extern int WavNow;  // Time since start of WAV file being decoded
@@ -100,7 +99,7 @@ unsigned int getNow() {
 	// a 32-bit value, it resets 2^32 ms, which is about 50 days.  While this is
 	// unlikely to occur, something should be implemented to keep this
 	// from causing a problem.  See DecodeCompleteTime and other uses.
-	return timeGetTime();
+	return (unsigned int) timeGetTime();
 }
 
 
@@ -245,30 +244,31 @@ bool WriteCOMBlock(HANDLE fd, unsigned char * Block, int BytesToWrite) {
 }
 
 
-VOID COMSetDTR(HANDLE fd) {
-	EscapeCommFunction(fd, SETDTR);
+bool COMSetDTR(HANDLE fd) {
+	return !!EscapeCommFunction(fd, SETDTR);
 }
 
-VOID COMClearDTR(HANDLE fd) {
-	EscapeCommFunction(fd, CLRDTR);
+bool COMClearDTR(HANDLE fd) {
+	return !!EscapeCommFunction(fd, CLRDTR);
 }
 
-VOID COMSetRTS(HANDLE fd) {
-	EscapeCommFunction(fd, SETRTS);
+bool COMSetRTS(HANDLE fd) {
+	return !!EscapeCommFunction(fd, SETRTS);
 }
 
-VOID COMClearRTS(HANDLE fd) {
-	EscapeCommFunction(fd, CLRRTS);
+bool COMClearRTS(HANDLE fd) {
+	return !!EscapeCommFunction(fd, CLRRTS);
 }
 
 
-VOID CloseCOMPort(HANDLE fd) {
-	SetCommMask(fd, 0);
+VOID CloseCOMPort(HANDLE *fd) {
+	SetCommMask(*fd, 0);
 	// drop DTR
-	COMClearDTR(fd);  // TODO: Why is this done?  Is it appropriate?
+	COMClearDTR(*fd);  // TODO: Why is this done?  Is it appropriate?
 	// purge any outstanding reads/writes and close device handle
-	PurgeComm(fd, PURGE_TXABORT | PURGE_RXABORT | PURGE_TXCLEAR | PURGE_RXCLEAR);
-	CloseHandle(fd);
+	PurgeComm(*fd, PURGE_TXABORT | PURGE_RXABORT | PURGE_TXCLEAR | PURGE_RXCLEAR);
+	CloseHandle(*fd);
+	*fd = 0;
 }
 
 
@@ -361,8 +361,9 @@ int tcpsend(int fd, unsigned char *data, size_t datalen) {
 	return 0;
 }
 
-void tcpclose(int fd) {
-	closesocket(fd);
+void tcpclose(int *fd) {
+	closesocket(*fd);
+	*fd = 0;
 }
 
 // Known CM108 and compatible devices have VID=0x0D8C and one of the following
@@ -595,15 +596,27 @@ int CM108_set_ptt(HANDLE fd, bool State) {
 	DWORD NumberOfBytesWritten;
 	if (!WriteFile(fd, io, 5, &NumberOfBytesWritten, NULL)) {
 		ZF_LOGE("ERROR: Failure of PTT via CM108.");
+		LPVOID errstr;
+		DWORD err = GetLastError();
+		FormatMessageA(
+			FORMAT_MESSAGE_ALLOCATE_BUFFER
+			| FORMAT_MESSAGE_FROM_SYSTEM
+			| FORMAT_MESSAGE_IGNORE_INSERTS,
+			NULL, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+			(LPTSTR) &errstr, 0, NULL);
+		ZF_LOGE("GetLastError() -> (%lu) %s", err, (LPCTSTR) errstr);
+		LocalFree(errstr);
 		return (-1);
 	}
 	if (NumberOfBytesWritten != 5) {
-		ZF_LOGE("ERROR: Failure of PTT via CM108.");
+		ZF_LOGE("ERROR: Failure to write all bytes for PTT via CM108.");
+		ZF_LOGE("%lu of 5 bytes written", NumberOfBytesWritten);
 		return (-1);
 	}
 	return 0;
 }
 
-void CloseCM108(HANDLE fd) {
-	CloseHandle(fd);
+void CloseCM108(HANDLE *fd) {
+	CloseHandle(*fd);
+	*fd = 0;
 }

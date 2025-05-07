@@ -30,11 +30,13 @@ const char ProductName[] = "ardopcf";
 #endif
 
 #include "common/os_util.h"
-#include "linux/ALSA.h"
+#include "common/audio.h"
 #include "common/ARDOPC.h"
 #include "common/Locator.h"
 #include "common/StationId.h"
 #include "common/wav.h"
+#include "common/Modulate.h"
+#include "common/Webgui.h"
 #include "rockliff/rrs.h"
 
 UCHAR bytDataToSend[DATABUFFERSIZE];
@@ -50,7 +52,6 @@ extern StationId LastDecodedStationCaller;
 extern StationId LastDecodedStationTarget;
 extern unsigned char CurrentLevel;
 
-void GetTwoToneLeaderWithSync(int intSymLen);
 bool SendID(const StationId * id, char * reason);
 void PollReceivedSamples();
 void CheckTimers();
@@ -68,12 +69,7 @@ void ResetMemoryARQ();
 
 void WebguiInit();
 void WebguiPoll();
-int wg_send_fftdata(float *mags, int magsLen);
-int wg_send_busy(int cnum, bool isBusy);
-int wg_send_protocolmode(int cnum);
-int wg_send_wavrx(int cnum, bool isRecording);
-extern int WebGuiNumConnected;
-extern char HostCommands[2048];
+extern char *HostCommands;
 void ProcessCommandFromHost(char * strCMD);
 
 extern struct WavFile *rxwf;  // For recording of RX audio
@@ -159,8 +155,6 @@ unsigned int tmrSendTimeout;
 int intCalcLeader;        // the computed leader to use based on the reported Leader Length
 int intRmtLeaderMeasure = 0;
 
-int dttCodecStarted;
-
 enum _ReceiveState State;
 enum _ARDOPState ProtocolState;
 
@@ -170,8 +164,11 @@ const char ARDOPStates[8][9] = {
 
 struct SEM Semaphore = {0, 0, 0, 0};
 
+bool RXEnabled = false;  // Is there an open CaptureDevice?
+bool TXEnabled = false;  // Is there an open PlaybackDevice?
+bool RXSilent = false;  // Set true when RXEnabled, but all received samples are zero.
 bool SoundIsPlaying = false;
-bool Capturing = true;
+bool Capturing = false;
 
 // DecodeCompleteTime is the value of Now when the most recent received frame
 // was decoded.  Initializing it to 0 should normally ensure that
@@ -182,7 +179,7 @@ bool Capturing = true;
 // windows was started, which resets every 2^32 ms, which is about 50 days.
 // While this is unlikely to occur, something should be implemented to keep
 // this from causing a problem.
-int DecodeCompleteTime = 0;
+unsigned int DecodeCompleteTime = 0;
 
 bool blnAbort = false;
 int intRepeatCount;
@@ -205,7 +202,7 @@ extern unsigned int tmrIRSPendingTimeout;
 extern unsigned int tmrFinalID;
 extern unsigned int tmrPollOBQueue;
 int Encode4FSKControl(UCHAR bytFrameType, UCHAR bytSessionID, UCHAR * bytreturn);
-void SendPING(const StationId* mycall, const StationId* target, int intRpt);
+bool SendPING(const StationId* mycall, const StationId* target, int intRpt);
 
 int intRepeatCnt;
 
@@ -213,7 +210,6 @@ extern SOCKET TCPControlSock, TCPDataSock;
 
 bool blnClosing = false;
 int closedByPosixSignal = 0;
-bool blnCodecStarted = false;
 
 unsigned int dttNextPlay = 0;
 
@@ -632,10 +628,7 @@ void setProtocolMode(char* strMode)
 	wg_send_protocolmode(0);
 }
 
-void ardopmain()
-{
-	char *nextHostCommand = HostCommands;
-
+void ardopmain() {
 	// For testing purposes, it may be useful to run ardopcf repeatedly (and
 	// very quickly) to generate recordings of "random" test frames.  For
 	// these test frames to differ from each other, it is necessary to seed
@@ -649,13 +642,8 @@ void ardopmain()
 	srand(t1.tv_usec + t1.tv_sec);
 
 	blnTimeoutTriggered = false;
+	DecodeCompleteTime = Now;
 	SetARDOPProtocolState(DISC);
-
-	if (!InitSound())
-	{
-		ZF_LOGF("Error in InitSound().  Stopping ardop.");
-		return;
-	}
 
 	TCPHostInit();
 	WebguiInit();
@@ -666,21 +654,26 @@ void ardopmain()
 	// ProtocolMode.
 	setProtocolMode("ARQ");
 
-	while(!blnClosing)
-	{
-		if (nextHostCommand != NULL) {
-			// Process the next host command from the --hostcommands
-			// command line argument.
-			char *thisHostCommand = nextHostCommand;
-			nextHostCommand = strlop(nextHostCommand, ';');
-			if (thisHostCommand[0] != 0x00)
-				// not an empty string
-				ProcessCommandFromHost(thisHostCommand);
-		}
-		PollReceivedSamples();
+	char *nextHostCommand = HostCommands;
+	while (!blnClosing && nextHostCommand != NULL) {
+		// Process the next host command from the --hostcommands
+		// command line argument.
+		char *thisHostCommand = nextHostCommand;
+		nextHostCommand = strlop(nextHostCommand, ';');
+		if (thisHostCommand[0] != 0x00)
+			// not an empty string
+			ProcessCommandFromHost(thisHostCommand);
+	}
+	if (HostCommands != NULL) {
+		free(HostCommands);
+		HostCommands = NULL;
+	}
+
+	while(!blnClosing) {
+		if (RXEnabled)
+			PollReceivedSamples();
 		WebguiPoll();
-		if (ProtocolMode != RXO)
-		{
+		if (ProtocolMode != RXO) {
 			CheckTimers();
 			TCPHostPoll();
 			MainPoll();
@@ -689,7 +682,7 @@ void ardopmain()
 			PKTLEDTimer = 0;
 			SetLED(PKTLED, 0);  // turn off packet rxed led
 		}
-		Sleep(10);  // ms
+		Sleep(RXEnabled ? 10 : 100);  // (ms)
 	}
 
 	if (closedByPosixSignal) {
@@ -717,6 +710,7 @@ void ardopmain()
 
 	closesocket(TCPControlSock);
 	closesocket(TCPDataSock);
+	FreeDevices(&AudioDevices);
 	return;
 }
 
@@ -1580,8 +1574,7 @@ int EncodeDATANAK(int intQuality , UCHAR bytSessionID, UCHAR * bytreturn)
 // always use global wantCWID to determine whether CWID is also sent.
 // reason is used to log info about why SendID is being called.
 // Return true on success or false if no ID was sent.
-bool SendID(const StationId * id, char * reason)
-{
+bool SendID(const StationId * id, char * reason) {
 	const StationId *id_to_send = &Callsign;  // default to Callsign if id not provided
 	unsigned char bytIDSent[80];
 	int Len;
@@ -1623,10 +1616,40 @@ bool SendID(const StationId * id, char * reason)
 
 	AddTagToDataAndSendToHost(bytIDSent, "IDF", Len);
 
-	Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0);  // only returns when all sent
-
-	if (wantCWID)
-		sendCWID(id_to_send);
+	if (!Mod4FSKDataAndPlay(IDFRAME, &bytEncodedBytes[0], EncLen, 0)) {  // only returns when all sent
+		if (!TXEnabled) {
+			// This also prevents the ID timer from being started simply due to
+			// a user request to send an IDFrame (such as from the WebGui)
+			ZF_LOGW("Unable to TX IDFrame because TXENABLED FALSE.  Canceling"
+				"ID timer to prevent loop due to repeated attempts.");
+			if (strcmp(reason, "10 minute ID") == 0)
+				wg_send_alert(0, "Unable to TX IDFrame because TXENABLED"
+					" FALSE.  Canceling ID timer to prevent loop due to"
+					" repeated attempts.  It is the operator's"
+					" responsibility to ensure that legal ID  requriements"
+					" are met.");
+			tmrFinalID = 0;
+			LastIDFrameTime = 0;
+		}
+		return false;
+	}
+	if (wantCWID) {
+		if (!sendCWID(id_to_send)) {
+			if (!TXEnabled) {
+				ZF_LOGW("Unable to TX CWID because TXENABLED FALSE.  Canceling"
+					"ID timer to prevent loop due to repeated attempts.");
+				if (strcmp(reason, "10 minute ID") == 0)
+					wg_send_alert(0, "Unable to TX CWID because TXENABLED"
+						" FALSE.  Canceling ID timer to prevent loop due to"
+						" repeated attempts.  It is the operator's"
+						" responsibility to ensure that legal ID  requriements"
+						" are met.");
+				tmrFinalID = 0;
+				LastIDFrameTime = 0;
+			}
+			return false;
+		}
+	}
 
 	// tmrFinalID and LastIDFrameTime are reset after Mod4FSKDataAndPlay and
 	// sendCWID() are done.  Setting them to zero indicates that no
@@ -1637,15 +1660,6 @@ bool SendID(const StationId * id, char * reason)
 	return true;
 }
 
-// Function to generate a 5 second burst of two tone (1450 and 1550 Hz) used for setting up drive level
-
-void Send5SecTwoTone()
-{
-	initFilter(200, 1500);
-	GetTwoToneLeaderWithSync(250);
-//	SampleSink(0);  // 5 secs
-	SoundFlush();
-}
 
 // A function to compute the parity symbol used in the frame type encoding
 
@@ -1808,38 +1822,27 @@ void RemoveDataFromQueue(int Len)
 
 // Timer Rotines
 
-void CheckTimers()
-{
+void CheckTimers() {
 	// Check for Timeout after a send that needs to be repeated
 
-	if ((blnEnbARQRpt || blnDISCRepeating) && Now > dttNextPlay)
-	{
+	if ((blnEnbARQRpt || blnDISCRepeating) && Now > dttNextPlay) {
 		// No response Timeout
-
-		if (GetNextFrame())
-		{
+		if (GetNextFrame()) {
 			// I think this only returns true if we have to repeat the last
-
 			//	Repeat mechanism for normal repeated FEC or ARQ frames
-
 			ZF_LOGI("[Repeating Last Frame]");
 			RemodulateLastFrame();
 		}
 		else
 			// I think this means we have exceeded retries or had an abort
-
 			blnEnbARQRpt = false;
 	}
 
-
 	// Event triggered by tmrSendTimeout elapse. Ends an ARQ session and sends a DISC frame
-
-	if (tmrSendTimeout && Now > tmrSendTimeout)
-	{
+	if (tmrSendTimeout && Now > tmrSendTimeout) {
 		char HostCmd[80];
 
 		// (Handles protocol rule 1.7)
-
 		tmrSendTimeout = 0;
 
 		// Dim dttStartWait As Date = Now
@@ -1870,6 +1873,7 @@ void CheckTimers()
 			ZF_LOGE("ERROR: In CheckTimers() sending DISC Invalid EncLen (%d).", EncLen);
 			return;
 		}
+		// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 		Mod4FSKDataAndPlay(DISCFRAME, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 
 		intFrameRepeatInterval = 2000;
@@ -1888,17 +1892,14 @@ void CheckTimers()
 
 	// Elapsed Subroutine for Pending timeout
 
-	if (tmrIRSPendingTimeout && Now > tmrIRSPendingTimeout)
-	{
+	if (tmrIRSPendingTimeout && Now > tmrIRSPendingTimeout) {
 		char HostCmd[80];
-
 		tmrIRSPendingTimeout = 0;
 
 		ZF_LOGD("ARDOPprotocol.tmrIRSPendingTimeout]  ARQ Timeout from ProtocolState: %s Going to DISC state",  ARDOPStates[ProtocolState]);
 
 		QueueCommandToHost("DISCONNECTED");
 		snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECT REQUEST TIMEOUT FROM PROTOCOL STATE: %s",ARDOPStates[ProtocolState]);
-
 		QueueCommandToHost(HostCmd);
 
 		blnEnbARQRpt = false;
@@ -1915,43 +1916,43 @@ void CheckTimers()
 
 	// Subroutine for tmrFinalIDElapsed
 
-	if (tmrFinalID && Now > tmrFinalID && !blnBusyStatus)
-	{
+	if (tmrFinalID && Now > tmrFinalID && !blnBusyStatus) {
 		// SendID will default to Callsign if ARQStationFinalId is not valid.
+		// TODO: Do anything different if SendID() fails returning false?
 		SendID(&ARQStationFinalId, "ARQ FinalID");
 	}
 
 	// Send Conect Request (from ARQCALL command)
 
-	if (NeedConReq)
-	{
+	if (NeedConReq) {
 		NeedConReq = 0;
+		// TODO: Do anything different if SendARQConnectRequest() fails returning false?
 		SendARQConnectRequest(&Callsign, &ConnectToCall);
 	}
-	if (NeedPing)
-	{
+	if (NeedPing) {
 		NeedPing = 0;
+		// TODO: Do anything different if SendPING() fails returning false?
 		SendPING(&Callsign, &ConnectToCall, PingCount);
 	}
 
 	// Send Async ID (from SENDID command)
-	if (NeedID)
-	{
+	if (NeedID) {
 		// This occurs from SENDID Host command, from Gui, and from StartFEC()
 		// with blnSendID=true (due to FECSEND true host command after FECID
 		// true HOST COMMAND)
+		// TODO: Do anything different if SendID() fails returning false?
 		SendID(NULL, "Host/User requested");
 		NeedID = 0;
 	}
 
-	if (NeedCWID)
-	{
+	if (NeedCWID) {
+		// TODO: Do anything different if sendCWID() fails returning false?
 		sendCWID(&Callsign);
 		NeedCWID = 0;
 	}
 
-	if (NeedTwoToneTest)
-	{
+	if (NeedTwoToneTest) {
+		// TODO: Do anything different if Send5SecTwoTone() fails returning false?
 		Send5SecTwoTone();
 		NeedTwoToneTest = 0;
 	}
@@ -1974,14 +1975,14 @@ void CheckTimers()
 		&& !blnBusyStatus  // no other traffic on this frequency has been detected
 		&& !blnPINGrepeating  // not sending a sequence of PING frames
 		&& LastIDFrameTime != 0  // Some transmission has been since last IDFrame
-		&& Now - LastIDFrameTime > 540000  // more than 9 minutes elapsed
+		&& Now > LastIDFrameTime + 540000  // more than 9 minutes elapsed
 	) {
 		// 9 minutes since the first transmission after the last IDFrame was sent.
+		// TODO: Do anything different if SendID() fails returning false?
 		SendID(NULL, "10 minute ID");
 	}
 
-	if (Now > tmrPollOBQueue)
-	{
+	if (Now > tmrPollOBQueue) {
 		tmrPollOBQueue = Now + 10000;  // 10 Secs
 	}
 }
@@ -2241,11 +2242,10 @@ void UpdateBusyDetector(short * bytNewSamples)
 	wg_send_fftdata(dblMag, 206);
 }
 
-void SendPING(const StationId* mycall, const StationId* target, int intRpt)
-{
+bool SendPING(const StationId* mycall, const StationId* target, int intRpt) {
 	if ((EncLen = EncodePing(mycall, target, bytEncodedBytes)) <= 0) {
 		ZF_LOGE("ERROR: In SendPING() Invalid EncLen (%d).", EncLen);
-		return;
+		return false;
 	}
 
 	// generate the modulation with 2 x the default FEC leader length...Should insure reception at the target
@@ -2256,7 +2256,10 @@ void SendPING(const StationId* mycall, const StationId* target, int intRpt)
 	intFrameRepeatInterval = 2000;  // ms Finn reported 7/4/2015 that 1600 was too short ...need further evaluation but temporarily moved to 2000 ms
 	blnEnbARQRpt = true;
 
-	Mod4FSKDataAndPlay(PING, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
+	if (!Mod4FSKDataAndPlay(PING, &bytEncodedBytes[0], EncLen, LeaderLength))  // only returns when all sent
+		return false;
+	tmrFinalID = 0;
+	LastIDFrameTime = 0;  // Ping frame also satisfies legal ID requirements
 
 	blnAbort = false;
 	dttTimeoutTrip = Now;
@@ -2266,20 +2269,17 @@ void SendPING(const StationId* mycall, const StationId* target, int intRpt)
 	dttLastPINGSent = Now;
 
 	ZF_LOGD("[SendPING] MYCALL= %s TARGET=%s  Repeat=%d", mycall->str, target->str, intRpt);
-
-	return;
+	return true;
 }
 
 // This sub processes a correctly decoded Ping frame, decodes it an passed to host for display if it doesn't duplicate the prior passed frame.
-
-void ProcessPingFrame(char * _bytData)
-{
+// return true successful (whether or not it is approprate tpo send a PingAck),
+// or false if an error occurs preventing a desired PingAck from being sent.
+bool ProcessPingFrame() {
 	ZF_LOGD("ProcessPingFrame Protocol State = %s", ARDOPStates[ProtocolState]);
 
-	if (ProtocolState == DISC)
-	{
-		if (blnListen && IsPingToMe(&LastDecodedStationCaller, &LastDecodedStationTarget) && EnablePingAck)
-		{
+	if (ProtocolState == DISC) {
+		if (blnListen && IsPingToMe(&LastDecodedStationCaller, &LastDecodedStationTarget) && EnablePingAck) {
 			// Ack Ping
 			ZF_LOGI("[ProcessPingFrame] PING from %s>%s S:N=%d Qual=%d Reply=1", LastDecodedStationCaller.str, LastDecodedStationTarget.str, stcLastPingintRcvdSN, stcLastPingintQuality);
 
@@ -2290,9 +2290,10 @@ void ProcessPingFrame(char * _bytData)
 
 			if ((EncLen = EncodePingAck(PINGACK, stcLastPingintRcvdSN, stcLastPingintQuality, bytEncodedBytes)) <= 0) {
 				ZF_LOGE("ERROR: In ProcessPingFrame() Invalid EncLen (%d).", EncLen);
-				return;
+				return false;
 			}
-			Mod4FSKDataAndPlay(PINGACK, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
+			if (!Mod4FSKDataAndPlay(PINGACK, &bytEncodedBytes[0], EncLen, LeaderLength))  // only returns when all sent
+				return false;
 
 			SendCommandToHost("PINGREPLY");
 
@@ -2309,7 +2310,7 @@ void ProcessPingFrame(char * _bytData)
 				// or ARQStationFinalId is if tmrFinalID is already set.  This
 				// is unlikely, but possible.  If it is, then do nothing and
 				// accept the station ID that will be sent for it is sufficient.
-				return;
+				return true;
 			// Set ARQStationFinalId to contain the target callsign from the Ping.
 			memcpy(&ARQStationFinalId, &LastDecodedStationTarget, sizeof(ARQStationFinalId));
 			// The response to tmrFinalID will be deferred if the busy detector
@@ -2321,9 +2322,10 @@ void ProcessPingFrame(char * _bytData)
 			// initial delay.  This works well because the hold time of the busy
 			// detector is longer than the delay between repeated Ping frames.
 			tmrFinalID = Now + 3000;
-			return;
+			return true;
 		}
 	}
 	ZF_LOGI("[ProcessPingFrame] PING from %s>%s S:N=%d Qual=%d Reply=0", LastDecodedStationCaller.str, LastDecodedStationTarget.str, stcLastPingintRcvdSN, stcLastPingintQuality);
 	SendCommandToHost("CANCELPENDING");
+	return true;
 }

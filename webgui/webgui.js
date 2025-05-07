@@ -280,6 +280,24 @@ window.addEventListener("load", function(evt) {
 	// "0~" no additional data: Client connected/reconnected
 	// "2~" no additional data: Request ardopcf to send 5 send two tone signal.
 	// "I~" no additional data: Request ardopcf to send ID frame.
+	// "D~"
+	//   followed by a character:
+	//    'C' to set CAPTURE device
+	//    'P' to set PLAYBACK device
+	//    'p' to set PTT device
+	//    'c' to set CAT device
+	//    'k' to set CAT PTTON Hex string
+	//    'u' to set CAT PTTOFF Hex string
+	//   followed by a string.
+	// "d~" no additional data: Request ardopcf to provide list of audio devices
+	// "E~"
+	//   followed by a character:
+	//    'L' for CAPTURECHANNEL LEFT
+	//    'R' for CAPTURECHANNEL RIGHT
+	//    'M' for CAPTURECHANNEL MONO
+	//    'y' for PLAYBACKCHANNEL LEFT
+	//    'z' for PLAYBACKCHANNEL RIGHT
+	//    'm' for PLABACKCHANNEL MONO
 	// 0x8D7E followed by one additional byte interpreted as an unsigned
 	//   char in the range 0 to 100: Set DriveLevel
 	// 0x9A7E followed by one additional byte interpreted as an unsigned
@@ -291,6 +309,7 @@ window.addEventListener("load", function(evt) {
 	// length of its body (excluding the header length).
 	const send_msg = (data, data_len) => {
 		if (String.fromCharCode(data[1]) != "~") {
+			console.log("data", data);
 			alert("ERROR: Invalid message.  second byte is not '~'.");
 			return (0);
 		}
@@ -392,6 +411,18 @@ window.addEventListener("load", function(evt) {
 		// "c|" followed by a string: remote callsign
 		//   If string has zero length, clear remote callsign.
 		// "D|" no additional data: Enable Dev Mode
+		// "E|"
+		//   followed by a character:
+		//    'P' for PTTENABLED, 'p' for NOT PTTENABLED,
+		//    'C' for RXENABLED, 'c' for NOT RXENABLED,
+		//    's' for RXENABLED, but received audio is silent.
+		//    'T' for TXENABLED, 't' for NOT TXENABLED
+		//    'L' for CAPTURECHANNEL LEFT
+		//    'R' for CAPTURECHANNEL RIGHT
+		//    'M' for CAPTURECHANNEL MONO
+		//    'y' for PLAYBACKCHANNEL LEFT
+		//    'z' for PLAYBACKCHANNEL RIGHT
+		//    'm' for PLABACKCHANNEL MONO
 		// "F|" followed by a string: TX Frame type
 		// "f|"
 		//   followed by a character:
@@ -434,6 +465,18 @@ window.addEventListener("load", function(evt) {
 		//	 data type 'FEC', 'ARQ', 'RXO', 'ERR', etc.
 		// 0x9A7C followed by one additional byte interpreted as an unsigned
 		//   char in the range 1 to MAX_AVGLEN: Set display averaging length
+		// 0x9B7C
+		//   followed by an unsigned char: number of devices listed
+		//   followed by an unsigned char: the index of the currently open capture
+		//    device, or 0xFF for none.
+		//   followed by an unsigned char: the index of the currently open playback
+		//    device, or 0xFF for none.
+		//   followed by that number of the following pattern:
+		//     uvint of the length of a string containing the device name
+		//     a non-null terminated string containing the device name
+		//     uvint of the length of a string containing the device description
+		//     a non-null terminated string containing the device description
+		//     a byte indicating usage 'C' for capture, 'P' for playback, 'B' for both
 
 		if(!(wsdata instanceof ArrayBuffer)) {
 			alert("Unexpected WS data format.  Closing connection.");
@@ -544,6 +587,145 @@ window.addEventListener("load", function(evt) {
 						.classList.remove("dnone");
 					txtlog.value += "DevMode Enabled\n";
 					break;
+				case "d": {
+					let strtype = decodestr(rdata, 1);
+					let tmpstr = decodestr(rdata, -1);
+					switch (strtype) {
+					case "p":
+						txtlog.value += "[" + (new Date().toISOString()) + "]"
+							+ "  PTTstr " + tmpstr + "\n";
+						document.getElementById("pttdev").value = tmpstr;
+						break;
+					case "c":
+						txtlog.value += "[" + (new Date().toISOString()) + "]"
+							+ "  CATstr " + tmpstr + "\n";
+						document.getElementById("catdev").value = tmpstr;
+						break;
+					case "k":
+						txtlog.value += "[" + (new Date().toISOString()) + "]"
+							+ "  CAT PTTON string (hex) " + tmpstr + "\n";
+						document.getElementById("ptton").value = tmpstr;
+						break;
+					case "u":
+						txtlog.value += "[" + (new Date().toISOString()) + "]"
+							+ "  CAT PTTOFF string (hex) " + tmpstr + "\n";
+						document.getElementById("pttoff").value = tmpstr;
+						break;
+					}
+					break;
+				}
+				case "E": {
+					let enabled = decodestr(rdata, -1);
+					switch (enabled) {
+					case "P":
+						txtlog.value += "[" + (new Date().toISOString()) + "]"
+							+ "  PTTControl ENABLED\n";
+						document.getElementById("pttenabled").innerHTML = "ENABLED";
+						document.getElementById("pttenabled").classList.remove("voxhost");
+						document.getElementById("pttenabled").classList.add("enabled");
+						break;
+					case "p":
+						txtlog.value += "[" + (new Date().toISOString()) + "]"
+							+ "  PTTControl VOX/HOST\n";
+						document.getElementById("pttenabled").innerHTML = "VOX/HOST";
+						document.getElementById("pttenabled").classList.remove("enabled");
+						document.getElementById("pttenabled").classList.add("voxhost");
+						break;
+					case "C":
+						txtlog.value += "[" + (new Date().toISOString()) + "]"
+							+ "  RXAudio ENABLED\n";
+						document.getElementById("rxenabled").innerHTML = "ENABLED";
+						document.getElementById("rxenabled").classList.remove("disabled");
+						document.getElementById("rxenabled").classList.remove("silent");
+						document.getElementById("rxenabled").classList.add("enabled");
+						if (document.getElementById("txenabled").innerHTML == "ENABLED") {
+							// both rx and tx are enabled == CODEC TRUE
+							document.getElementById("codectoggle").innerHTML
+								= "DISABLE Audio Processing";
+						}
+						break;
+					case "s":
+						txtlog.value += "[" + (new Date().toISOString()) + "]"
+							+ "  RXAudio ENABLED but silent\n";
+						document.getElementById("rxenabled").innerHTML = "SILENT";
+						document.getElementById("rxenabled").classList.remove("disabled");
+						document.getElementById("rxenabled").classList.remove("enabled");
+						document.getElementById("rxenabled").classList.add("silent");
+						if (document.getElementById("txenabled").innerHTML == "ENABLED") {
+							// both rx and tx are enabled == CODEC TRUE
+							document.getElementById("codectoggle").innerHTML
+								= "DISABLE Audio Processing";
+						}
+						break;
+					case "c":
+						txtlog.value += "[" + (new Date().toISOString()) + "]"
+							+ "  RXAudio DISABLED\n";
+						document.getElementById("rxenabled").innerHTML = "DISABLED";
+						document.getElementById("rxenabled").classList.remove("enabled");
+						document.getElementById("rxenabled").classList.remove("silent");
+						document.getElementById("rxenabled").classList.add("disabled");
+						// one or both of rx and tx are disabled == CODEC FALSE
+						document.getElementById("codectoggle").innerHTML
+							= "ENABLE Audio Processing";
+						break;
+					case "T":
+						txtlog.value += "[" + (new Date().toISOString()) + "]"
+							+ "  TXAudio ENABLED\n";
+						document.getElementById("txenabled").innerHTML = "ENABLED";
+						document.getElementById("txenabled").classList.remove("disabled");
+						document.getElementById("txenabled").classList.add("enabled");
+						if (document.getElementById("rxenabled").innerHTML == "ENABLED"
+							|| document.getElementById("rxenabled").innerHTML == "SILENT"
+						) {
+							// both rx and tx are enabled == CODEC TRUE
+							document.getElementById("codectoggle").innerHTML
+								= "DISABLE Audio Processing";
+						}
+						break;
+					case "t":
+						txtlog.value += "[" + (new Date().toISOString()) + "]"
+							+ "  TXAudio DISABLED\n";
+						document.getElementById("txenabled").innerHTML = "DISABLED";
+						document.getElementById("txenabled").classList.remove("enabled");
+						document.getElementById("txenabled").classList.add("disabled");
+						// one or both of rx and tx are disabled == CODEC FALSE
+						document.getElementById("codectoggle").innerHTML
+							= "ENABLE Audio Processing";
+						break;
+					case "L":
+						txtlog.value += "[" + (new Date().toISOString()) + "]"
+							+ "  RX Audio Channel = LEFT (stereo)\n";
+						document.getElementById("rxch").value = "LEFT";
+						break;
+					case "R":
+						txtlog.value += "[" + (new Date().toISOString()) + "]"
+							+ "  RX Audio Channel = RIGHT (stereo)\n";
+						document.getElementById("rxch").value = "RIGHT";
+						break;
+					case "M":
+						txtlog.value += "[" + (new Date().toISOString()) + "]"
+							+ "  RX Audio Channel = MONO\n";
+						document.getElementById("rxch").value = "MONO";
+						break;
+					case "y":
+						txtlog.value += "[" + (new Date().toISOString()) + "]"
+							+ "  TX Audio Channel = LEFT (stereo)\n";
+						document.getElementById("txch").value = "LEFT";
+						break;
+					case "z":
+						txtlog.value += "[" + (new Date().toISOString()) + "]"
+							+ "  TX Audio Channel = RIGHT (stereo)\n";
+						document.getElementById("txch").value = "RIGHT";
+						break;
+					case "m":
+						txtlog.value += "[" + (new Date().toISOString()) + "]"
+							+ "  TX Audio Channel = MONO\n";
+						document.getElementById("txch").value = "MONO";
+						break;
+					}
+					txtlog.scrollTo(0, txtlog.scrollHeight);
+					break;
+				}
 				case "F": {
 					// TX Frame type
 					let txfrtype = decodestr(rdata, -1);
@@ -863,6 +1045,50 @@ window.addEventListener("load", function(evt) {
 					document.getElementById("avglenslider").value = avglen;
 					break;
 				}
+				case "\x9B": {
+					// list of audio devices
+					let rxselect = document.getElementById("rxselect");
+					rxselect.innerHTML = "";  // clear prior options
+					let txselect = document.getElementById("txselect");
+					txselect.innerHTML = "";  // clear prior options
+					let option = document.createElement("option");
+					option.value = "NONE";
+					option.text = "NONE [Close the current device (if open)]";
+					rxselect.add(option);
+					rxselect.value = "NONE";
+					option = document.createElement("option");
+					option.value = "NONE";
+					option.text = "NONE [Close the current device (if open)]";
+					txselect.add(option);
+					txselect.value = "NONE";
+					let devcount = decodebyte(rdata);
+					let cindex = decodebyte(rdata);
+					let pindex = decodebyte(rdata);
+					for (let i = 0; i < devcount; ++i) {
+						let namelen = decodeUvint(rdata);
+						let name = decodestr(rdata, namelen);
+						let desclen = decodeUvint(rdata);
+						let desc = decodestr(rdata, desclen);
+						let usage = decodestr(rdata, 1);
+						if (usage == "B" || usage == "C") {
+							option = document.createElement("option");
+							option.value = name;
+							option.text = name + " [" + desc + "]";
+							rxselect.add(option);
+							if (i == cindex)
+								rxselect.value = name;
+						}
+						if (usage == "B" || usage == "P") {
+							option = document.createElement("option");
+							option.value = name;
+							option.text = name + " [" + desc + "]";
+							txselect.add(option);
+							if (i == pindex)
+								txselect.value = name;
+						}
+					}
+					break;
+				}
 				default:
 					txtlog.value +=
 						"WARNING: Received an unexpected message of type="
@@ -900,6 +1126,16 @@ window.addEventListener("load", function(evt) {
 	document.getElementById("clearlog").onclick = function() {
 		txtlog.value = "";
 	};
+	document.getElementById("confighider").onclick = function() {
+		send_msg(encoder.encode("d~"), 2);  // update contents of rxselect and txselect
+		if (document.getElementById("confighider").innerHTML == "Show Config Controls") {
+			document.getElementById("configdiv").classList.remove("dnone");
+			document.getElementById("confighider").innerHTML = "Hide Config Controls";
+		} else {
+			document.getElementById("configdiv").classList.add("dnone");
+			document.getElementById("confighider").innerHTML = "Show Config Controls";
+		}
+	};
 	document.getElementById("loghider").onclick = function() {
 		if (document.getElementById("loghider").innerHTML == "Show Log") {
 			document.getElementById("logdiv").classList.remove("dnone");
@@ -936,6 +1172,96 @@ window.addEventListener("load", function(evt) {
 			document.getElementById("recrx").innerHTML = "Start RX Recording";
 		}
 	};
+
+	document.getElementById("codectoggle").onclick = function() {
+		// The text on this button is changed when E|C, E|c, E|T, or E|t
+		// are received.
+		if (document.getElementById("codectoggle").innerHTML == "ENABLE Audio Processing") {
+			// Attempt to RESTORE both audio devices
+			send_msg(encoder.encode("D~CRESTORE"), 10);
+			send_msg(encoder.encode("D~PRESTORE"), 10);
+		} else {
+			// Close both audio devices
+			send_msg(encoder.encode("D~CNONE"), 7);
+			send_msg(encoder.encode("D~PNONE"), 7);
+		}
+	};
+
+	document.getElementById("getdevices").onclick = function() {
+		send_msg(encoder.encode("d~"), 2);
+	};
+
+	document.getElementById("rxselect").onchange = function() {
+		send_msg(encoder.encode("D~C"
+			+ document.getElementById("rxselect").value),
+			3 + document.getElementById("rxselect").value.length);
+	}
+
+	document.getElementById("txselect").onchange = function() {
+		send_msg(encoder.encode("D~P"
+			+ document.getElementById("txselect").value),
+			3 + document.getElementById("txselect").value.length);
+	}
+
+	document.getElementById("pttdev").onkeydown = function(evt) {
+		if (evt.keyCode != 13)
+			// User has not pressed Enter.  Do nothing.
+			return;
+		// User has pressed Enter.  Send the command
+		var text = evt.target.value;
+		send_msg(encoder.encode("D~p" + text), 3 + text.length);
+	};
+	document.getElementById("catdev").onkeydown = function(evt) {
+		if (evt.keyCode != 13)
+			// User has not pressed Enter.  Do nothing.
+			return;
+		// User has pressed Enter.  Send the command
+		var text = evt.target.value;
+		send_msg(encoder.encode("D~c" + text), 3 + text.length);
+	};
+	document.getElementById("ptton").onkeydown = function(evt) {
+		if (evt.keyCode != 13)
+			// User has not pressed Enter.  Do nothing.
+			return;
+		// User has pressed Enter.  Send the command
+		var text = evt.target.value;
+		send_msg(encoder.encode("D~k" + text), 3 + text.length);
+	};
+	document.getElementById("pttoff").onkeydown = function(evt) {
+		if (evt.keyCode != 13)
+			// User has not pressed Enter.  Do nothing.
+			return;
+		// User has pressed Enter.  Send the command
+		var text = evt.target.value;
+		send_msg(encoder.encode("D~u" + text), 3 + text.length);
+	};
+
+	document.getElementById("rxch").onchange = function() {
+		switch (document.getElementById("rxch").value) {
+			case "LEFT":
+				send_msg(encoder.encode("E~L"), 3);
+				break;
+			case "RIGHT":
+				send_msg(encoder.encode("E~R"), 3);
+				break;
+			case "MONO":
+				send_msg(encoder.encode("E~M"), 3);
+				break;
+		}
+	}
+	document.getElementById("txch").onchange = function() {
+		switch (document.getElementById("txch").value) {
+			case "LEFT":
+				send_msg(encoder.encode("E~y"), 3);
+				break;
+			case "RIGHT":
+				send_msg(encoder.encode("E~z"), 3);
+				break;
+			case "MONO":
+				send_msg(encoder.encode("E~m"), 3);
+				break;
+		}
+	}
 
 	document.getElementById("hostcommand").onkeydown = function(evt) {
 		if (!devmode)
