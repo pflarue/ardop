@@ -12,14 +12,14 @@
 			#lostcon {background-color: hotpink;}
 			#rcvoverflow {background-color: hotpink;}
 			#hostcommand, #text-log {width: 95%;}
-			#info {background-color: lightgray;}
+			#info, #configdiv {background-color: lightgray;}
 			.hidden {visibility: hidden;}
 			.dnone {display: none;}
-			.quality {background-color: lime;}
+			.quality, .enabled {background-color: lime;}
 			.rxstate_none {background-color: white;}
-			.rxstate_pending, #rcvunderflow {background-color: yellow;}
+			.rxstate_pending, .silent, #rcvunderflow, .voxhost {background-color: yellow;}
 			.rxstate_ok {background-color: lime;}
-			.rxstate_fail {background-color: red;}
+			.rxstate_fail, .disabled {background-color: red;}
 			.txnak {background-color: lightpink;}
 			.txack {background-color: aquamarine;}
 			.state {background-color: #D0D0D0;}
@@ -41,6 +41,11 @@
 			State:
 			<span class="state">&nbsp;</span><span id="state" class="state">UNKNOWN</span><span class="state">&nbsp;</span>
 		</div>
+		<div><small>
+			RXAudio: <span id="rxenabled" class="disabled">DISABLED</span>
+			TXAudio: <span id="txenabled" class="disabled">DISABLED</span>
+			PTTControl: <span id="pttenabled" class="voxhost">VOX/HOST</span>
+		</small></div>
 		<div>
 			<span id="ptt" class="hidden">&nbsp;PTT&nbsp;</span>
 			<span id="busy" class="hidden">Channel Busy</span>
@@ -98,13 +103,53 @@
 			<button id="send2tone">Send2Tone</button>
 			<button id="sendid">SendID</button>
 		</div>
+		<div>
+			<button id="confighider">Show Config Controls</button>
+			<button id="loghider">Show Log</button>
+			<button id="infohider">Show Help</button>
+		</div>
+		<div id="configdiv" class="dnone">
+			<br /><br />
+			<b>WARNING: Changing these settings may disrupt audio processing (maybe
+			only briefly).  So, making changes while transmitting or receiving
+			is not recommended.</b><br /><br />
+
+			<button id="codectoggle">ENABLE Audio Processing</button><br /><br />
+
+			RX Audio Device:
+			<select name="rxselect" id="rxselect"></select><br />
+			TX Audio Device:
+			<select name="txselect" id="txselect"></select><br />
+			<button id="getdevices">Refresh audio devices list</button><br />
+			<br />
+			For these settings, type a new value and press enter to change.
+			Device names should be the same as would be entered on the
+			command line or the special values of NONE or RESTORE<br />
+			PTT device: <input type="text" id="pttdev"></input><br />
+			CAT device: <input type="text" id="catdev"></input><br />
+			CAT PTTON string (hex): <input type="text" id="ptton"></input><br />
+			CAT PTTONFFstring (hex): <input type="text" id="pttoff"></input><br /><br />
+
+			MONO is usually used, except when using a dual VFO system that has
+			audio from VFO A on one channel and VFO B on the other.
+			<br />
+			RX Audio Channel:
+			<select name="rxch" id="rxch">
+				<option value="MONO">MONO</option>
+				<option value="LEFT">LEFT (stereo)</option>
+				<option value="RIGHT">RIGHT (stereo)</option>
+			</select><br />
+			TX Audio Channel:
+			<select name="txch" id="txch">
+				<option value="MONO">MONO</option>
+				<option value="LEFT">LEFT (stereo)</option>
+				<option value="RIGHT">RIGHT (stereo)</option>
+			</select><br />
+			<br />
+		</div>
 		<div id="logdiv" class="dnone">
 			<button id="clearlog">Clear Log</button><br />
 			<textarea id="text-log" rows="10"></textarea>
-		</div>
-		<div>
-			<button id="loghider">Show Log</button>
-			<button id="infohider">Show Help</button>
 		</div>
 		<div id="info" class="dnone">
 			<p>
@@ -135,20 +180,26 @@
 				<dt>'IDLE'</dt><dd>idle</dd>
 			</dl>
 			</p><p>
+			The next line shows the status of <b>RXAudio</b>, <b>TXAudio</b>, and
+			<b>PTTControl</b>.  When ardopcf is operating normally, all will show
+			<b>ENABLED</b>, except that if using VOX or if the host program, such as Pat,
+			is providing PTT Control rather than ardopcf, then <b>PTTControl</b> is
+			<b>VOX/HOST</b>.  If RXAudio is active, but the audio being received has zero
+			amplitude, then it will show <b>SILENCE</b> rather than <b>ENABLED</b>.  This may
+			indicate a device failure.  The alternative to <b>ENABLED</b> is <b>DISABLED</b>.
+			</p><p>
 			The next blank line will show <b>'PTT'</b> when transmitting, <b>'Channel Busy'</b>
 			when the busy detector detects a signal within Ardop's current bandwidth settings,
 			and <b>RECORDING RX</b> when ardopcf is writing a WAV file containing the received
 			audio.  Such recording happens after transmitting when the -w or --writewav command
-			line option is used, as well as in response to the RECRX host command.  No data is
-			written to this WAV file while transmitting, but this indicator remains on while
-			transmitting since writing of data automatically resumes at the end of the
-			transmission.
+			line option is used, as well as in response to the RECRX host command.
 			</p><p>
 			The next line shows the value of <b>MYCALL</b> and the callsign of the station you
 			are connected to or sending Connection Requests (ConReq) to.  MYCALL is
 			normally set by the Host program such as Pat Winlink or gARIM.  This should
 			be your callsign.  If it has not been set, then it will show <b>'(MYCALL NOT
-			SET)'</b>.
+			SET)'</b>.  Transmitting, including the 2tone test signal, is not permitted when no
+			callsign has been set.
 			</p><p>
 			The <b>spectrum and waterfall plots</b> show from about 300 to 2700 Hz.  If this is
 			narrower than the receive filter of your radio, high and/or low pitched audio
@@ -248,7 +299,7 @@
 			received data frame type, then the <b>TX Frame Type</b> or <b>RX Frame Type</b> field
 			will show '(REPEATED TYPE)' after the frame type. This is only shown for data frames
 			(not for control frames like IDLE or BREAK).  In ARQ Protocol Mode, a frame is repeated
-			because a DataNAK was received or because no DataACK received.  So, if your station
+			because a DataNAK was received or because no DataACK was received.  So, if your station
 			correctly decoded a data frame and sent a DataACK, but the next frame is a REPEATED TYPE,
 			this means that the other station did not correctly decode your DataACK.  In ARQ Protocol
 			Mode, REPEATED TYPE always means that a duplicate copy of the data frame is being sent
@@ -295,9 +346,9 @@
 			settings.
 			</p><p>
 			The <b>'Send2Tone'</b> button causes ardopcf to transmit a 5 second two tone signal
-			similar, but longer than what is used as the leader at the start of all Ardop
+			similar to, but longer than, what is used as the leader at the start of all Ardop
 			frames.  If MYCALL has not been set, such that '(MYCALL NOT SET)' is shown, then this
-			frame signal cannot be sent, and an alert is displayed instead.  This restriction
+			test signal cannot be sent, and an alert is displayed instead.  This restriction
 			ensures that your station ID can be sent after all transmissions.  Normally MYCALL
 			is set when a host program such as Pat Winlink connects to ardopcf.  If you want
 			to be able to use Send2Tone before the host program connects, you can set MYCALL
@@ -323,7 +374,40 @@
 			known issue that will hopefully be improved in a future release.  For now, this
 			means that additional adjustments may be useful based on actual data transmissions.
 			</p><p>
-			The various items displayed here can change quickly during an Ardop ARQ
+			The <b>Show Config Controls</b> button displays additional controls that can be used
+			to configure or reconfigure the audio and CAT/PTT devices used by ardopcf.
+			As indicated by the warning at the top of this section <b>Changing these settings
+			may disrupt audio processing (maybe only briefly). So, making changes while
+			transmitting or receiving is not recommended.</b>  Of these controls, the item
+			most likely to be useful is the <b>DISABLE/ENABLE Audio Processing</b> button.
+			This button can be used to temporily disable, and later re-enable audio processing.
+			Disabling audio processing reduces CPU/power usage by the computer that ardopcf is
+			running on, and should also be done before disconnecting or turning off the audio
+			devices used.
+			</p><p>
+			The <b>ENABLE Audio Processing</b> button doesn't work unless the audio devices
+			were previously successfully configured, and then <b>DISABLED</b>.  To initially
+			configure the audio devices, or to select audio devices different from what were
+			previously configured, select appropriate devices from the <b>RX Audio Device</b>
+			and/or <b>TX Audio Device</b> selectors.  Some of the devices listed may not be
+			appropriate for use by ardopcf.  If no suitable audio devices are available, these
+			controls might show only <b>NONE</b> and <b>NOSOUND</b>.  <b>NONE</b> can be used
+			to close the current audio device if one is open.  <b>NOSOUND</b> is a dummy
+			device intended only for diagnostic/testing purposes.  If an audio device has
+			previously been successfully configured, then a special <b>RESTORE</b> item is
+			also included in the list of devices.  Selecting <b>RESTORE</b> causes ardopcf
+			to attempt to re-open the last device that was successfully opened and configured.
+			</p><p>
+			The remaining configuration controls duplicate the functionality of
+			some commandline options.  See the documentation for those options for more
+			details.  By providing these controls within the WebGUI, ardopcf can be started
+			without specifying these options, and it may be reconfigured to change which
+			devices are used and how they are configured without having to exit and restart
+			ardopcf.  Unlike the command line options, special values of <b>NONE</b> and
+			<b>RESTORE</b> may also be used in the <b>PTT device</b> and <b>CAT device</b>
+			input fields.
+			</p><p>
+			The various items displayed in this WebGUI can change quickly during an Ardop ARQ
 			connection.  The debug log file created by ardopcf contains most of this same
 			information and more, though it does not contain data comparable to the waterfall
 			or constellation plots.  Reviewing the contents of the log file may be of interest

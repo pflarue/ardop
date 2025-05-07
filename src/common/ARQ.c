@@ -15,6 +15,7 @@
 
 #include "common/os_util.h"
 #include "common/ARDOPC.h"
+#include "common/Modulate.h"
 #include "common/eutf8.h"
 
 extern unsigned int PKTLEDTimer;
@@ -147,7 +148,6 @@ int Encode4FSKControl(UCHAR bytFrameType, UCHAR bytSessionID, UCHAR * bytreturn)
 int IRSNegotiateBW(int intConReqFrameType);
 int GetNextFrameData(int * intUpDn, UCHAR * bytFrameTypeToSend, UCHAR * strMod, bool blnInitialize);
 bool CheckForDisconnect();
-void ProcessPingFrame(char * bytData);
 
 void LogStats();
 int ComputeInterFrameInterval(int intRequestedIntervalMS);
@@ -254,27 +254,22 @@ int ComputeInterFrameInterval(int intRequestedIntervalMS)
 
 // Function to Set the protocol state
 
-void SetARDOPProtocolState(int value)
-{
+void SetARDOPProtocolState(int value) {
 	char HostCmd[24];
 
 	if (ProtocolState == value)
 		return;
 
 	ProtocolState = value;
-
 	displayState(ARDOPStates[ProtocolState]);
-
 	newStatus = true;  // report to PTC
 
 	// Dim stcStatus As Status
 	// stcStatus.ControlName = "lblState"
 	// stcStatus.Text = ARDOPState.ToString
 
-	switch(ProtocolState)
-	{
+	switch(ProtocolState) {
 	case DISC:
-
 		blnARQDisconnect = false;  // always clear the ARQ Disconnect Flag from host.
 		// stcStatus.BackColor = System.Drawing.Color.White
 		blnARQConnected = false;
@@ -293,7 +288,6 @@ void SetARDOPProtocolState(int value)
 		break;
 
 	case FECSend:
-
 		InitializeConnection();
 		intLastFrameIDToHost = -1;
 		intLastFailedFrameID = -1;
@@ -303,10 +297,8 @@ void SetARDOPProtocolState(int value)
 
 	// Case ProtocolState.IRS
 	// stcStatus.BackColor = System.Drawing.Color.LightGreen
-
 	case ISS:
 	case IDLE:
-
 		blnFramePending = false;  // Added 0.6.4 to insure any prior repeating frame is cancelled before new data.
 		blnEnbARQRpt = false;
 		SetLED(ISSLED, true);
@@ -314,20 +306,16 @@ void SetARDOPProtocolState(int value)
 		wg_send_irsled(0, false);
 		wg_send_issled(0, true);
 		// stcStatus.BackColor = System.Drawing.Color.LightSalmon
-
 		break;
 
 	case IRS:
 	case IRStoISS:
-
 		SetLED(IRSLED, true);
 		SetLED(ISSLED, false);
 		wg_send_issled(0, false);
 		wg_send_irsled(0, true);
 		bytLastACKedDataFrameType = 0;  // Clear on entry to IRS or IRS to ISS states. 3/15/2018
-
 		break;
-
 
 	// Case ProtocolState.IDLE
 	// stcStatus.BackColor = System.Drawing.Color.NavajoWhite
@@ -529,8 +517,7 @@ UCHAR GenerateSessionID(const char * strCallingCallSign, const char *strTargetCa
 
 // Function to compute the optimum leader based on the Leader sent and the reported Received leader
 
-void CalculateOptimumLeader(int intReportedReceivedLeaderMS,int  intLeaderSentMS)
-{
+void CalculateOptimumLeader(int intReportedReceivedLeaderMS,int  intLeaderSentMS) {
 //	intCalcLeader = max(200, 120 + intLeaderSentMS - intReportedReceivedLeaderMS);  // This appears to work well on HF sim tests May 31, 2015
 //	ZF_LOGD("CalcualteOptimumLeader Leader Sent= %d   ReportedReceived= %d  Calculated= %d", intLeaderSentMS, intReportedReceivedLeaderMS, intCalcLeader);
 }
@@ -825,8 +812,7 @@ int GetNumCarriers(UCHAR bytFrameType)
 
 // Function to determine the next data frame to send (or IDLE if none)
 
-void SendData()
-{
+void SendData() {
 	char strMod[16];
 	int Len;
 
@@ -835,15 +821,12 @@ void SendData()
 	if (blnDISCRepeating)
 		return;
 
-	switch (ProtocolState)
-	{
+	switch (ProtocolState) {
 	case IDLE:
-
 		ZF_LOGI("[ARDOPProtocol.SendData] Sending Data from IDLE state! Exit SendData");
 		return;
 
 	case ISS:
-
 		if (CheckForDisconnect())
 			return;
 
@@ -856,13 +839,12 @@ void SendData()
 		// and ISS that this is unlikely to last long.  Because some delay is
 		// possible, begin trying to send an IDFrame after 9 minutes rather than
 		// waiting for a full 10 minutes.
-		if(LastIDFrameTime != 0 && Now - LastIDFrameTime > 540000) {  // 9 minutes
+		if(LastIDFrameTime != 0 && Now > LastIDFrameTime + 540000) {  // 9 minutes
 			blnEnbARQRpt = false;  // Only send once.
 			SendID(&ARQStationLocal, "ARQ 10 minute ID (while ISS)");
 		}
 
-		if (bytDataToSendLength > 0)
-		{
+		if (bytDataToSendLength > 0) {
 			ZF_LOGD("[ARDOPprotocol.SendData] DataToSend = %d bytes, In ProtocolState ISS", bytDataToSendLength);
 
 			// Get the data from the buffer here based on current data frame type
@@ -876,8 +858,7 @@ void SendData()
 			// This does not slow down the throughput significantly since if an ACK or NAK is received by the sending station
 			// the repeat interval does not come into play.
 
-			switch(GetNumCarriers(bytCurrentFrameType))
-			{
+			switch(GetNumCarriers(bytCurrentFrameType)) {
 			case 1:
 				intFrameRepeatInterval = ComputeInterFrameInterval(1500);  // fairly conservative based on measured leader from remote end
 				break;
@@ -902,7 +883,6 @@ void SendData()
 			blnEnbARQRpt = true;
 			ARQState = ISSData;  // Should not be necessary
 
-
 			// The largest data capacity of any Ardop data frame is 1024 bytes for a
 			// 16QAM.200.100 frame type.  Worst case behavior of eutf8() produces output
 			// that is three times as long as the input data plus one byte.  So, an
@@ -913,29 +893,27 @@ void SendData()
 			eutf8(Msg + strlen(Msg), sizeof(Msg) - strlen(Msg), (char*) bytDataToSend, Len);
 			ZF_LOGV("%s", Msg);
 
-			if (strcmp(strMod, "4FSK") == 0)
-			{
+			if (strcmp(strMod, "4FSK") == 0) {
 				if ((EncLen = EncodeFSKData(bytCurrentFrameType, bytDataToSend, Len, bytEncodedBytes)) <= 0) {
 					ZF_LOGE("ERROR: In SendData() for 4FSK Invalid EncLen (%d).", EncLen);
 					return;
 				}
 				if (bytCurrentFrameType >= 0x7A && bytCurrentFrameType <= 0x7D)
+					// TODO: Do anything different if Mod4FSK600BdDataAndPlay() fails returning false?
 					Mod4FSK600BdDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame
 				else
+					// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 					Mod4FSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame
-			}
-			else  // This handles PSK and QAM
-			{
+			} else {  // This handles PSK and QAM
 				if ((EncLen = EncodePSKData(bytCurrentFrameType, bytDataToSend, Len, bytEncodedBytes)) <= 0) {
 					ZF_LOGE("ERROR: In SendData() for PSK and QAM Invalid EncLen (%d).", EncLen);
 					return;
 				}
+				// TODO: Do anything different if ModPSKDataAndPlay() fails returning false?
 				ModPSKDataAndPlay(bytEncodedBytes[0], bytEncodedBytes, EncLen, intCalcLeader);  // Modulate Data frame
 			}
 			return;
-		}
-		else
-		{
+		} else {
 			// Nothing to send - set IDLE
 
 			// ReDim bytQDataInProcess(-1)  // added 0.3.1.3
@@ -943,9 +921,7 @@ void SendData()
 
 			blnEnbARQRpt = true;
 			dttTimeoutTrip = Now;
-
 			blnLastFrameSentData = false;
-
 			intFrameRepeatInterval = ComputeInterFrameInterval(2000);  // keep IDLE repeats at 2 sec
 			ClearDataToSend();  // 0.6.4.2 This insures new OUTOUND queue is updated (to value = 0)
 
@@ -953,6 +929,7 @@ void SendData()
 				ZF_LOGE("ERROR: In SendData() for IDLE Invalid EncLen (%d).", EncLen);
 				return;
 			}
+			// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 			Mod4FSKDataAndPlay(IDLEFRAME, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 
 			ZF_LOGI("[ARDOPprotocol.SendData]  Send IDLE with Repeat, Set ProtocolState=IDLE ");
@@ -1090,8 +1067,7 @@ void InitializeConnection()
 
 // This sub processes a correctly decoded ConReq frame, decodes it an passed to host for display if it doesn't duplicate the prior passed frame.
 
-void ProcessUnconnectedConReqFrame(int intFrameType, UCHAR * bytData)
-{
+void ProcessUnconnectedConReqFrame(int intFrameType, UCHAR * bytData) {
 	static char strLastStringPassedToHost[80] = "";
 	char strDisplay[128];
 	char * ToCall = strlop(bytData, ' ');
@@ -1105,13 +1081,11 @@ void ProcessUnconnectedConReqFrame(int intFrameType, UCHAR * bytData)
 
 	Len = sprintf(strDisplay, " [%s: %s > %s]", Name(intFrameType), bytData, ToCall);
 	AddTagToDataAndSendToHost(strDisplay, "ARQ", Len);
-
 }
 
 // This is the main subroutine for processing ARQ frames
 
-void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool blnFrameDecodedOK)
-{
+void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool blnFrameDecodedOK) {
 	// blnFrameDecodedOK should always be true except in the case of a failed data frame ...Which is then NAK'ed if in IRS Data state
 
 	int intReply;
@@ -1126,16 +1100,12 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 
 	// Note this is called as part of the RX sample poll routine
 
-	switch (ProtocolState)
-	{
+	switch (ProtocolState) {
 	case DISC:
 
 		// DISC State *******************************************************************************************
-
-		if (blnFrameDecodedOK && intFrameType == DISCFRAME)
-		{
+		if (blnFrameDecodedOK && intFrameType == DISCFRAME) {
 			// Special case to process DISC from previous connection (Ending station must have missed END reply to DISC) Handles protocol rule 1.5
-
 			ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame]  DISC frame received in ProtocolState DISC, Send END with SessionID= %XX Stay in DISC state", bytLastARQSessionID);
 
 			// Send END.  The other station should respond by immediately
@@ -1157,19 +1127,18 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 				ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for DISC->END Invalid EncLen (%d).", EncLen);
 				return;
 			}
+			// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 			Mod4FSKDataAndPlay(END, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 			return;
 		}
 
-		if (intFrameType == PING && blnFrameDecodedOK)
-		{
-			ProcessPingFrame(bytData);
+		if (intFrameType == PING && blnFrameDecodedOK) {
+			// TODO: Do anything different if ProcessPingFrame() fails returning false?
+			ProcessPingFrame();
 			return;
 		}
 
-
 		// Process Connect request to MyCallsign or Aux Call signs  (Handles protocol rule 1.2)
-
 		if (!blnFrameDecodedOK || intFrameType < ConReqmin || intFrameType > ConReqmax)
 			return;  // No decode or not a ConReq
 
@@ -1179,9 +1148,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 			return;  // ignore connect request if not blnListen
 
 		// see if connect request is to MyCallsign or any Aux call sign
-
-		if (IsCallToMe(&LastDecodedStationCaller, &LastDecodedStationTarget, & bytPendingSessionID))  // (Handles protocol rules 1.2, 1.3)
-		{
+		if (IsCallToMe(&LastDecodedStationCaller, &LastDecodedStationTarget, & bytPendingSessionID)) {  // (Handles protocol rules 1.2, 1.3)
 			bool blnLeaderTrippedBusy;
 
 			// This logic works like this:
@@ -1193,16 +1160,14 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 
 			blnLeaderTrippedBusy = (dttLastLeaderDetect - dttLastBusyTrip) < 300;
 
-			if (BusyBlock)
-			{
+			if (BusyBlock) {
 				if ((blnLeaderTrippedBusy && dttLastBusyClear - dttPriorLastBusyTrip < 600)
-					|| (!blnLeaderTrippedBusy && dttLastBusyClear - dttLastBusyTrip < 600))
-				{
+					|| (!blnLeaderTrippedBusy && dttLastBusyClear - dttLastBusyTrip < 600)
+				) {
 					ZF_LOGI("[ProcessRcvdARQFrame] Con Req Blocked by BUSY!  LeaderTrippedBusy=%d, Prior Last Busy Trip=%d, Last Busy Clear=%d,  Last Leader Detect=%d",
 						blnLeaderTrippedBusy, Now - dttPriorLastBusyTrip, Now - dttLastBusyClear, Now - dttLastLeaderDetect);
 
 					ClearBusy();
-
 					// Clear out the busy detector. This necessary to keep the received frame and hold time from causing
 					// a continuous busy condition.
 
@@ -1210,6 +1175,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 						ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for ConRejBusy Invalid EncLen (%d).", EncLen);
 						return;
 					}
+					// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 					Mod4FSKDataAndPlay(ConRejBusy, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 
 					snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBUSY %s", LastDecodedStationCaller.str);
@@ -1223,9 +1189,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 			}
 
 			intReply = IRSNegotiateBW(intFrameType);  // NegotiateBandwidth
-
-			if (intReply != ConRejBW)  // If not ConRejBW the bandwidth is compatible so answer with correct ConAck frame
-			{
+			if (intReply != ConRejBW) {  // If not ConRejBW the bandwidth is compatible so answer with correct ConAck frame
 				// report oncoming connection
 				snprintf(HostCmd, sizeof(HostCmd), "TARGET %s", LastDecodedStationTarget.str);
 				QueueCommandToHost(HostCmd);
@@ -1238,12 +1202,9 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 				tmrIRSPendingTimeout = Now + 10000;  // Triggers a 10 second timeout before auto abort from pending
 
 				// (Handles protocol rule 1.2)
-
 				dttTimeoutTrip = Now;
-
 				SetARDOPProtocolState(IRS);
 				ARQState = IRSConAck;  // now connected
-
 				intLastARQDataFrameToHost = -1;  // precondition to an illegal frame type
 				// CLear MEM ARQ Stuff
 				ResetMemoryARQ();
@@ -1261,14 +1222,12 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for ConAck Invalid EncLen (%d).", EncLen);
 					return;
 				}
+				// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 				Mod4FSKDataAndPlay(intReply, &bytEncodedBytes[0], EncLen, intARQDefaultDlyMs);  // only returns when all sent
-			}
-			else
-			{
+			} else {
 				// ConRejBW  (Incompatible bandwidths)
 
 				// (Handles protocol rule 1.3)
-
 				snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBW %s", ARQStationRemote.str);
 				QueueCommandToHost(HostCmd);
 				ZF_LOGI("[STATUS: ARQ CONNECTION REJECTED BY %s]", ARQStationRemote.str);
@@ -1279,11 +1238,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for ConRejBW Invalid EncLen (%d).", EncLen);
 					return;
 				}
+				// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 				Mod4FSKDataAndPlay(intReply, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 			}
-		}
-		else
-		{
+		} else {
 			// Not for us - cancel pending
 
 			QueueCommandToHost("CANCELPENDING");
@@ -1297,42 +1255,32 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 
 		// IRS State ****************************************************************************************
 		// Process ConReq, ConAck, DISC, END, Host DISCONNECT, DATA, IDLE, BREAK
-
-		if (ARQState == IRSConAck)  // Process ConAck or ConReq if reply ConAck sent above in Case ProtocolState.DISC was missed by ISS
-		{
+		if (ARQState == IRSConAck) {  // Process ConAck or ConReq if reply ConAck sent above in Case ProtocolState.DISC was missed by ISS
 			if (!blnFrameDecodedOK)
 				return;  // no reply if no correct decode
 
 			// ConReq processing (to handle case of ISS missing initial ConAck from IRS)
-
-			if (intFrameType >= ConReqmin && intFrameType <= ConReqmax)  // Process Connect request to MyCallsign or Aux Call signs as for DISC state above (ISS must have missed initial ConACK from ProtocolState.DISC state)
-			{
+			if (intFrameType >= ConReqmin && intFrameType <= ConReqmax) {  // Process Connect request to MyCallsign or Aux Call signs as for DISC state above (ISS must have missed initial ConACK from ProtocolState.DISC state)
 				if (!blnListen)
 					return;
 
 				// see if connect request is to MyCallsign or any Aux call sign
-				if (IsCallToMe(&LastDecodedStationCaller, &LastDecodedStationTarget, &bytPendingSessionID))  // (Handles protocol rules 1.2, 1.3)
-				{
+				if (IsCallToMe(&LastDecodedStationCaller, &LastDecodedStationTarget, &bytPendingSessionID)) {  // (Handles protocol rules 1.2, 1.3)
 					intReply = IRSNegotiateBW(intFrameType);  // NegotiateBandwidth
 
-					if (intReply != ConRejBW)  // If not ConRejBW the bandwidth is compatible so answer with correct ConAck frame
-					{
+					if (intReply != ConRejBW) {  // If not ConRejBW the bandwidth is compatible so answer with correct ConAck frame
 						// Note: CONNECTION and STATUS notices were already sent from  Case ProtocolState.DISC above...no need to duplicate
 
 						SetARDOPProtocolState(IRS);
 						ARQState = IRSConAck;  // now connected
-
 						intLastARQDataFrameToHost = -1;  // precondition to an illegal frame type
 						// CLear MEM ARQ Stuff
 						ResetMemoryARQ();
-
 						intAvgQuality = 0;  // initialize avg quality
 						intReceivedLeaderLen = intLeaderRcvdMs;  // capture the received leader from the remote ISS's ConReq (used for timing optimization)
 						InitializeConnection();
 
-
 						bytDataToSendLength = 0;
-
 						dttTimeoutTrip = Now;
 
 						// Stop and restart the Pending timer upon each ConReq received to ME
@@ -1347,6 +1295,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 							ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for ConAck Invalid EncLen (%d).", EncLen);
 							return;
 						}
+						// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 						Mod4FSKDataAndPlay(intReply, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 						// No delay to allow ISS to measure its TX>RX delay
 						return;
@@ -1355,7 +1304,6 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 					// ConRejBW  (Incompatible bandwidths)
 
 					// (Handles protocol rule 1.3)
-
 					snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBW %s", ARQStationRemote.str);
 					QueueCommandToHost(HostCmd);
 					ZF_LOGI("[STATUS: ARQ CONNECTION FROM %s REJECTED, INCOMPATIBLE BANDWIDTHS.]", ARQStationRemote.str);
@@ -1366,6 +1314,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 						ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for ConRejBW Invalid EncLen (%d).", EncLen);
 						return;
 					}
+					// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 					Mod4FSKDataAndPlay(intReply, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 
 					return;
@@ -1375,16 +1324,12 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 
 				// if (DebugLog)
 					// WriteDebug("[ARDOPprotocol.ProcessRcvdARQFrame] Call to another target while in ProtocolState.IRS, ARQSubStates.IRSConAck...Ignore");
-
 				return;
 			}
 
 			// ConAck processing from ISS
-
-			if (intFrameType >= ConAckmin && intFrameType <= ConAckmax)  // Process ConACK frames from ISS confirming Bandwidth and providing ISS's received leader info.
-			{
-				switch (intFrameType)
-				{
+			if (intFrameType >= ConAckmin && intFrameType <= ConAckmax) {  // Process ConACK frames from ISS confirming Bandwidth and providing ISS's received leader info.
+				switch (intFrameType) {
 				case ConAck200:
 					intSessionBW = 200;
 					break;
@@ -1402,17 +1347,14 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 				CalculateOptimumLeader(10 * bytData[0], LeaderLength);
 
 				bytSessionID = bytPendingSessionID;  // This sets the session ID now
-
 				blnARQConnected = true;
 				blnPending = false;
 				tmrIRSPendingTimeout = 0;
-
 				dttTimeoutTrip = Now;
 				ARQState = IRSData;
 				intLastARQDataFrameToHost = -1;
 				intTrackingQuality = -1;
 				intNAKctr = 0;
-
 				blnEnbARQRpt = false;
 				snprintf(HostCmd, sizeof(HostCmd), "CONNECTED %s %d", ARQStationRemote.str, intSessionBW);
 				QueueCommandToHost(HostCmd);
@@ -1426,10 +1368,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for ConAck->DataACK Invalid EncLen (%d).", EncLen);
 					return;
 				}
+				// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 
 				// Initialize the frame type and pointer based on bandwidth (added 0.3.1.3)
-
 				GetNextFrameData(&intShiftUpDn, 0, NULL, true);  // just sets the initial data, frame type, and sets intShiftUpDn= 0
 
 				// Update the main form menu status lable
@@ -1437,7 +1379,6 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 				// stcStatus.ControlName = "mnuBusy"
 				// stcStatus.Text = "Connected " & .strRemoteCallsign
 				// queTNCStatus.Enqueue(stcStatus)
-
 				return;
 			}
 			ZF_LOGD(
@@ -1447,16 +1388,12 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 			return;
 		}
 
-		if (ARQState == IRSData || ARQState == IRSfromISS)  // Process Data or ConAck if ISS failed to receive ACK confirming bandwidth so ISS repeated ConAck
-		{
+		if (ARQState == IRSData || ARQState == IRSfromISS) {  // Process Data or ConAck if ISS failed to receive ACK confirming bandwidth so ISS repeated ConAck
 			// ConAck processing from ISS
-
-			if (intFrameType >= ConAckmin && intFrameType <= ConAckmax)  // Process ConACK frames from ISS confirming Bandwidth and providing ISS's received leader info.
-			{
+			if (intFrameType >= ConAckmin && intFrameType <= ConAckmax) {  // Process ConACK frames from ISS confirming Bandwidth and providing ISS's received leader info.
 				// Process ConACK frames (ISS failed to receive prior ACK confirming session bandwidth so repeated ConACK)
 
-				switch (intFrameType)
-				{
+				switch (intFrameType) {
 				case ConAck200:
 					intSessionBW = 200;
 					break;
@@ -1478,14 +1415,13 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for repeat ConAck->DataACK Invalid EncLen (%d).", EncLen);
 					return;
 				}
+				// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 				return;
 			}
 
 			// handles DISC from ISS
-
-			if (blnFrameDecodedOK && intFrameType == DISCFRAME)  // IF DISC received from ISS Handles protocol rule 1.5
-			{
+			if (blnFrameDecodedOK && intFrameType == DISCFRAME) {  // IF DISC received from ISS Handles protocol rule 1.5
 				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame]  DISC frame received in ProtocolState IRS, IRSData...going to DISC state");
 				if (AccumulateStats)
 					LogStats();
@@ -1494,9 +1430,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 				ZF_LOGI("[STATUS: ARQ CONNECTION ENDED WITH %s]", ARQStationRemote.str);
 				snprintf(HostCmd, sizeof(HostCmd), "STATUS ARQ CONNECTION ENDED WITH %s", ARQStationRemote.str);
 				QueueCommandToHost(HostCmd);
-
 				bytLastARQSessionID = bytSessionID;  // capture this session ID to allow answering DISC from DISC state if ISS missed Sent END
-
 				ClearDataToSend();
 				// Send END.  The other station should respond by immediately
 				// sending an IDFrame.  tmrFinalID should be set so that IDFrame
@@ -1512,7 +1446,6 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 				// delay, especially when the other station does not send a CW ID.
 				tmrFinalID = Now + 3000;
 				blnDISCRepeating = false;
-
 				SetARDOPProtocolState(DISC);
 				InitializeConnection();
 				blnEnbARQRpt = false;
@@ -1521,14 +1454,13 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for END Invalid EncLen (%d).", EncLen);
 					return;
 				}
+				// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 				Mod4FSKDataAndPlay(END, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 				return;
 			}
 
 			// handles END from ISS
-
-			if (blnFrameDecodedOK && intFrameType == END)  // IF END received from ISS
-			{
+			if (blnFrameDecodedOK && intFrameType == END) {  // IF END received from ISS
 				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame]  END frame received in ProtocolState IRS, IRSData...going to DISC state");
 				if (AccumulateStats)
 					LogStats();
@@ -1539,10 +1471,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 				QueueCommandToHost(HostCmd);
 				blnDISCRepeating = false;
 				ClearDataToSend();
-
 				SetARDOPProtocolState(DISC);
 
 				// SendID will default to Callsign if ARQStationLocal is not valid.
+				// TODO: Do anything different if SendID() fails returning false?
 				SendID(&ARQStationLocal, "Rcvd END in IRSData or IRSfromISS ARQState");
 
 				InitializeConnection();
@@ -1551,9 +1483,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 			}
 
 			// handles BREAK from remote IRS that failed to receive ACK
-
-			if (blnFrameDecodedOK && intFrameType == BREAK)
-			{
+			if (blnFrameDecodedOK && intFrameType == BREAK) {
 				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame]  BREAK received in ProtocolState %s , IRSData. Sending ACK", ARDOPStates[ProtocolState]);
 
 				blnEnbARQRpt = false;  // setup for no repeats
@@ -1563,22 +1493,21 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for repeat BREAK->DataACK Invalid EncLen (%d).", EncLen);
 					return;
 				}
+				// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 				dttTimeoutTrip = Now;
 				return;
 			}
 
-			if (blnFrameDecodedOK && intFrameType == IDLEFRAME)  // IF IDLE received from ISS
-			{
+			if (blnFrameDecodedOK && intFrameType == IDLEFRAME) {  // IF IDLE received from ISS
 				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame]  IDLE received in ProtocolState %s substate %s", ARDOPStates[ProtocolState], ARQSubStates[ARQState]);
 
 				blnEnbARQRpt = false;  // setup for no repeats
-
 				if (CheckForDisconnect())
 					return;
 
 				if ((AutoBreak && bytDataToSendLength > 0) || blnBREAKCmd
-					|| (LastIDFrameTime != 0 && Now - LastIDFrameTime > 540000)  // 9 minutes, so BREAK
+					|| (LastIDFrameTime != 0 && Now > LastIDFrameTime + 540000)  // 9 minutes, so BREAK
 				) {
 					// In an active ARQ Connection, only send an IDFrame when ProtocolState
 					// is ISS or IDLE.  If ProtocolState is IRS and an IDLEFRAME is
@@ -1589,7 +1518,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 					// and ISS that this is unlikely to last long.  Because some delay is
 					// possible, begin trying to send an IDFrame after 9 minutes rather than
 					// waiting for a full 10 minutes.
-					if(LastIDFrameTime != 0 && Now - LastIDFrameTime > 540000)  // 9 minutes
+					if(LastIDFrameTime != 0 && Now > LastIDFrameTime + 540000)  // 9 minutes
 						ZF_LOGD("Need 10 minute ID, but IRS, so BREAK on receiving IDLEFRAME");
 
 					// keep BREAK Repeats fairly short (preliminary value 1 - 3 seconds)
@@ -1603,16 +1532,16 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 						ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for IDLE->BREAK Invalid EncLen (%d).", EncLen);
 						return;
 					}
+					// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 					Mod4FSKDataAndPlay(BREAK, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
-				}
-				else
-				{
+				} else {
 					// Send ACK
 					dttTimeoutTrip = Now;
 					if ((EncLen = EncodeDATAACK(100, bytSessionID, bytEncodedBytes)) <= 0) {
 						ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for IDLE->DataACK Invalid EncLen (%d).", EncLen);
 						return;
 					}
+					// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 					Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 					dttTimeoutTrip = Now;
 				}
@@ -1625,17 +1554,13 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 //				return;
 
 			// This handles normal data frames
-
-			if (blnFrameDecodedOK && IsDataFrame(intFrameType))  // Frame even/odd toggling will prevent duplicates in case of missed ACK
-			{
-				if (intRmtLeaderMeas == 0)
-				{
+			if (blnFrameDecodedOK && IsDataFrame(intFrameType)) {  // Frame even/odd toggling will prevent duplicates in case of missed ACK
+				if (intRmtLeaderMeas == 0) {
 					intRmtLeaderMeas = intRmtLeaderMeasure;  // capture the leader timing of the first ACK from IRS, use this value to help compute repeat interval.
 					ZF_LOGD("[ARDOPprotocol.ProcessRcvdARQFrame] IRS (receiving data) RmtLeaderMeas=%d ms", intRmtLeaderMeas);
 				}
 
-				if (ARQState == IRSData && blnBREAKCmd && intFrameType != bytLastACKedDataFrameType)
-				{
+				if (ARQState == IRSData && blnBREAKCmd && intFrameType != bytLastACKedDataFrameType) {
 					// if BREAK Command and first time the new frame type is seen then
 					// Handles Protocol Rule 3.4
 					// This means IRS wishes to BREAK so start BREAK repeats and go to protocol state IRStoISS
@@ -1654,25 +1579,22 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 						ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for Rule 3.4 BREAK Invalid EncLen (%d).", EncLen);
 						return;
 					}
+					// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 					Mod4FSKDataAndPlay(BREAK, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 					return;
 				}
 
-				if (intFrameType != intLastARQDataFrameToHost)  // protects against duplicates if ISS missed IRS's ACK and repeated the same frame
-				{
+				if (intFrameType != intLastARQDataFrameToHost) {  // protects against duplicates if ISS missed IRS's ACK and repeated the same frame
 					AddTagToDataAndSendToHost(bytData, "ARQ", DataLen);  // only correct data in proper squence passed to host
 					intLastARQDataFrameToHost = intFrameType;
 					dttTimeoutTrip = Now;
-				}
-				else
+				} else
 					ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] Frame with same Type - Discard");
 
-				if (ARQState == IRSfromISS)
-				{
+				if (ARQState == IRSfromISS) {
 					ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] Data Rcvd in ProtocolState=IRSData, Substate IRSfromISS Go to Substate IRSData");
 					ARQState = IRSData;  // This substate change is the final completion of ISS to IRS changeover and allows the new IRS to now break if desired (Rule 3.5)
 				}
-
 
 				// Always ACK good data frame ...ISS may have missed last ACK
 				// Send ACK
@@ -1681,6 +1603,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for DataACK Invalid EncLen (%d).", EncLen);
 					return;
 				}
+				// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 				bytLastACKedDataFrameType = intFrameType;
 				return;
@@ -1689,26 +1612,21 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 			// handles Data frame which did not decode correctly but was previously ACKed to ISS  Rev 0.4.3.1  2/28/2016  RM
 			// this to handle marginal decoding cases where ISS missed an original ACK from IRS, IRS passed that data to host, and channel has
 			// deteriorated to where data decode is now now not possible.
-
-			if ((!blnFrameDecodedOK) && intFrameType == bytLastACKedDataFrameType)
-			{
+			if ((!blnFrameDecodedOK) && intFrameType == bytLastACKedDataFrameType) {
 				// Send ACK
 				blnEnbARQRpt = false;
 				if ((EncLen = EncodeDATAACK(intLastRcvdFrameQuality, bytSessionID, bytEncodedBytes)) <= 0) {
 					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for repeat DataACK Invalid EncLen (%d).", EncLen);
 					return;
 				}
+				// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] Data Decode Failed but Frame Type matched last ACKed. Send ACK, data already passed to host. ");
 
 				// handles Data frame which did not decode correctly (Failed CRC) and hasn't been acked before
-			}
-			else if ((!blnFrameDecodedOK) && IsDataFrame(intFrameType))  // Incorrectly decoded frame. Send NAK with Quality
-			{
-				if (ARQState == IRSfromISS)
-				{
+			} else if ((!blnFrameDecodedOK) && IsDataFrame(intFrameType)) {  // Incorrectly decoded frame. Send NAK with Quality
+				if (ARQState == IRSfromISS) {
 					ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] Data Frame Type Rcvd in ProtocolState=IRSData, Substate IRSfromISS Go to Substate IRSData");
-
 					ARQState = IRSData;  // This substate change is the final completion of ISS to IRS changeover and allows the new IRS to now break if desired (Rule 3.5)
 				}
 				// Send NAK
@@ -1717,6 +1635,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for DataNAK Invalid EncLen (%d).", EncLen);
 					return;
 				}
+				// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 				return;
 			}
@@ -1745,7 +1664,6 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 
 
 		// IRStoISS State **************************************************************************************************
-
 	case IRStoISS:  // In this state answer any data frame with a BREAK. If ACK received go to Protocol State ISS
 		ZF_LOGD(
 			"In ProtocolState == IRStoISS, Nothing is done in"
@@ -1758,13 +1676,11 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 		return;
 
 	case IDLE:  // The state where the ISS has no data to send and is looking for a BREAK from the IRS
-
 		if (!blnFrameDecodedOK)
 			return;  // No decode so continue to wait
 
 		if (intFrameType >= DataACKmin) {
-			if (bytDataToSendLength > 0)  // If ACK and Data to send
-			{
+			if (bytDataToSendLength > 0) {  // If ACK and Data to send
 				ZF_LOGI("[ARDOPprotocol.ProcessedRcvdARQFrame] Protocol state IDLE, ACK Received with Data to send. Go to ISS Data state.");
 
 				SetARDOPProtocolState(ISS);
@@ -1781,7 +1697,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 			// and ISS that this is unlikely to last long.  Because some delay is
 			// possible, begin trying to send an IDFrame after 9 minutes rather than
 			// waiting for a full 10 minutes.
-			if(LastIDFrameTime != 0 && Now - LastIDFrameTime > 540000) {  // 9 minutes
+			if(LastIDFrameTime != 0 && Now > LastIDFrameTime + 540000) {  // 9 minutes
 				blnEnbARQRpt = false;  // Only send once.
 				SendID(&ARQStationLocal, "ARQ 10 minute ID (while IDLE)");
 
@@ -1795,6 +1711,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 					ZF_LOGE("ERROR: In SendData() for IDLE Invalid EncLen (%d).", EncLen);
 					return;
 				}
+				// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 				Mod4FSKDataAndPlay(IDLEFRAME, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 
 				ZF_LOGI("[ARDOPprotocol.SendData]  Send IDLE with Repeat (after IDFrame), ProtocolState=IDLE ");
@@ -1803,13 +1720,11 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 
 			ZF_LOGI("[ARDOPprotocol.ProcessedRcvdARQFrame] Protocol state IDLE, ACK Received with No Data to send. Ignore, will repeat IDLE.");
 			// DataACK but no data to send
-
 			return;
 		}
-		// process BREAK here Send ID if over 10 min.
 
-		if (intFrameType == BREAK)
-		{
+		// process BREAK here Send ID if over 10 min.
+		if (intFrameType == BREAK) {
 			// Initiate the transisiton to IRS
 
 			dttTimeoutTrip = Now;
@@ -1819,6 +1734,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 				ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for BREAK->DataACK Invalid EncLen (%d).", EncLen);
 				return;
 			}
+			// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 			Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);
 
 			ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] BREAK Rcvd from IDLE, Go to IRS, Substate IRSfromISS");
@@ -1834,8 +1750,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 			ResetMemoryARQ();
 			return;
 		}
-		if (intFrameType == DISCFRAME)  // IF DISC received from IRS Handles protocol rule 1.5
-		{
+		if (intFrameType == DISCFRAME) {  // IF DISC received from IRS Handles protocol rule 1.5
 			ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame]  DISC frame received Send END...go to DISC state");
 
 			if (AccumulateStats)
@@ -1863,6 +1778,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 				ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for DISC->END Invalid EncLen (%d).", EncLen);
 				return;
 			}
+			// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 			Mod4FSKDataAndPlay(END, &bytEncodedBytes[0], EncLen, LeaderLength);
 			bytLastARQSessionID = bytSessionID;  // capture this session ID to allow answering DISC from DISC state
 			ClearDataToSend();
@@ -1870,8 +1786,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 			blnEnbARQRpt = false;
 			return;
 		}
-		if (intFrameType == END)
-		{
+		if (intFrameType == END) {
 			ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame]  END received ... going to DISC state");
 			if (AccumulateStats)
 				LogStats();
@@ -1882,6 +1797,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 			ClearDataToSend();
 
 			// SendID will default to Callsign if ARQStationLocal is not valid.
+			// TODO: Do anything different if SendID() fails returning false?
 			SendID(&ARQStationLocal, "Rcvd END in IDLE ProtocolState");
 
 			SetARDOPProtocolState(DISC);
@@ -1889,7 +1805,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 			blnDISCRepeating = false;
 			return;
 		}
-		// Shouldn'r get here ??
+		// Shouldn't get here ??
 		if (blnFrameDecodedOK)
 			ZF_LOGD(
 				"Received correctly decoded frame of unexpected FrameType=%s"
@@ -1907,11 +1823,8 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 		return;
 
 	// ISS state **************************************************************************************
-
 	case ISS:
-
-		if (ARQState == ISSConReq)  // The ISS is sending Connect requests waiting for a ConAck from the remote IRS
-		{
+		if (ARQState == ISSConReq) {  // The ISS is sending Connect requests waiting for a ConAck from the remote IRS
 			// Session ID should be correct already (set by the ISS during first Con Req to IRS)
 			// Process IRS Conack and capture IRS received leader for timing optimization
 			// Process ConAck from IRS (Handles protocol rule 1.4)
@@ -1919,12 +1832,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 			if (!blnFrameDecodedOK)
 				return;
 
-			if (intFrameType >= ConAckmin && intFrameType <= ConAckmax)  // Process ConACK frames from IRS confirming BW is compatible and providing received leader info.
-			{
+			if (intFrameType >= ConAckmin && intFrameType <= ConAckmax) {  // Process ConACK frames from IRS confirming BW is compatible and providing received leader info.
 				UCHAR bytDummy = 0;
 
-				switch (intFrameType)
-				{
+				switch (intFrameType) {
 				case ConAck200:
 					intSessionBW = 200;
 					break;
@@ -1958,12 +1869,12 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for ConAck->ConAck Invalid EncLen (%d).", EncLen);
 					return;
 				}
+				// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 				Mod4FSKDataAndPlay(intFrameType, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 				return;
 			}
 
-			if (intFrameType == ConRejBusy)  // ConRejBusy Handles Protocol Rule 1.5
-			{
+			if (intFrameType == ConRejBusy) {  // ConRejBusy Handles Protocol Rule 1.5
 				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] ConRejBusy received from %s ABORT Connect Request", ARQStationRemote.str);
 				snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBUSY %s", ARQStationRemote.str);
 				QueueCommandToHost(HostCmd);
@@ -1973,8 +1884,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 				Abort();
 				return;
 			}
-			if (intFrameType == ConRejBW)  // ConRejBW Handles Protocol Rule 1.3
-			{
+			if (intFrameType == ConRejBW) {  // ConRejBW Handles Protocol Rule 1.3
 				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] ConRejBW received from %s ABORT Connect Request", ARQStationRemote.str);
 				snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBW %s", ARQStationRemote.str);
 				QueueCommandToHost(HostCmd);
@@ -1996,15 +1906,12 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 					Name(intFrameType));
 			return;  // Shouldn't get here
 		}
-		if (ARQState == ISSConAck)
-		{
-			if ((blnFrameDecodedOK && intFrameType >= DataACKmin) || intFrameType == BREAK)  // if ACK received then IRS correctly received the ISS ConACK
-			{
+		if (ARQState == ISSConAck) {
+			if ((blnFrameDecodedOK && intFrameType >= DataACKmin) || intFrameType == BREAK) {  // if ACK received then IRS correctly received the ISS ConACK
 				// Note BREAK added per input from John W. to handle case where IRS has data to send and ISS missed the IRS's ACK from the ISS's ConACK Rev 0.5.3.1
 				// Not sure about this. Not needed with AUTOBREAK but maybe with BREAK command
 
-				if (intRmtLeaderMeas == 0)
-				{
+				if (intRmtLeaderMeas == 0) {
 					intRmtLeaderMeas = intRmtLeaderMeasure;  // capture the leader timing of the first ACK from IRS, use this value to help compute repeat interval.
 					ZF_LOGD("[ARDOPprotocol.ProcessRcvdARQFrame] ISS RmtLeaderMeas=%d ms", intRmtLeaderMeas);
 				}
@@ -2032,10 +1939,8 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 				intTrackingQuality = -1;  // initialize tracking quality to illegal value
 				intNAKctr = 0;
 
-				if (intFrameType == BREAK && bytDataToSendLength == 0)
-				{
+				if (intFrameType == BREAK && bytDataToSendLength == 0) {
 					// Initiate the transisiton to IRS
-
 					ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] implied ACK, no data to send so action BREAK, send ACK");
 
 					ClearDataToSend();
@@ -2046,6 +1951,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 						ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for ConAck + BREAK->DataACK Invalid EncLen (%d).", EncLen);
 						return;
 					}
+					// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 					Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 
 					dttTimeoutTrip = Now;
@@ -2063,8 +1969,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 				return;
 			}
 
-			if (blnFrameDecodedOK && intFrameType == ConRejBusy)  // ConRejBusy
-			{
+			if (blnFrameDecodedOK && intFrameType == ConRejBusy) {  // ConRejBusy
 				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] ConRejBusy received in ARQState %s. Going to Protocol State DISC", ARQSubStates[ARQState]);
 
 				snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBUSY %s", ARQStationRemote.str);
@@ -2077,10 +1982,8 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 				InitializeConnection();
 				return;
 			}
-			if (blnFrameDecodedOK && intFrameType == ConRejBW)  // ConRejBW
-			{
+			if (blnFrameDecodedOK && intFrameType == ConRejBW) {  // ConRejBW
 				// if (DebugLog) WriteDebug("[ARDOPprotocol.ProcessRcvdARQFrame] ConRejBW received in ARQState " & ARQState.ToString & " Going to Protocol State DISC")
-
 				snprintf(HostCmd, sizeof(HostCmd), "REJECTEDBW %s", ARQStationRemote.str);
 				QueueCommandToHost(HostCmd);
 				ZF_LOGI("[STATUS: ARQ CONNECTION REJECTED BY %s]", ARQStationRemote.str);
@@ -2104,8 +2007,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 			return;  // Shouldn't get here
 		}
 
-		if (ARQState == ISSData)
-		{
+		if (ARQState == ISSData) {
 			if (CheckForDisconnect())
 				return;  // DISC sent
 
@@ -2113,13 +2015,10 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 				return;  // No decode so continue repeating either data or idle
 
 			// process ACK, NAK, DISC, END or BREAK here. Send ID if over 10 min.
-
-			if (intFrameType >= DataACKmin)  // if ACK
-			{
+			if (intFrameType >= DataACKmin) {  // if ACK
 				dttTimeoutTrip = Now;
 
-				if (blnLastFrameSentData)
-				{
+				if (blnLastFrameSentData) {
 					intACKctr++;
 
 					SetLED(PKTLED, true);  // Flash LED
@@ -2127,8 +2026,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 
 					bytLastARQDataFrameAcked = bytLastARQDataFrameSent;
 
-					if (bytQDataInProcessLen)
-					{
+					if (bytQDataInProcessLen) {
 						RemoveDataFromQueue(bytQDataInProcessLen);
 						bytQDataInProcessLen = 0;
 					}
@@ -2143,10 +2041,8 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 				return;
 			}
 
-			if (intFrameType == BREAK)
-			{
-				if (!blnARQConnected)
-				{
+			if (intFrameType == BREAK) {
+				if (!blnARQConnected) {
 					// Handles the special case of this ISS missed last Ack from the
 					// IRS ConAck and remote station is now BREAKing to become ISS.
 					// clean up the connection status
@@ -2162,13 +2058,11 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 				}
 
 				// Initiate the transisiton to IRS
-
 				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame] BREAK Rcvd from ARQState ISSData, Go to ProtocolState IRS & substate IRSfromISS , send ACK");
 
 				// With new rules IRS can use BREAK to interrupt data from ISS. It will only
 				// be sent on IDLE or changed data frame type, so we know the last sent data
 				// wasn't processed by IRS
-
 				if (bytDataToSendLength)
 					SaveQueueOnBreak();  // Save the data so appl can restore it
 
@@ -2184,6 +2078,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for BREAK->DataACK Invalid EncLen (%d).", EncLen);
 					return;
 				}
+				// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 				Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 
 				dttTimeoutTrip = Now;
@@ -2197,17 +2092,14 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 				intLastARQDataFrameToHost = -1;  // precondition to an illegal frame type (insures the new IRS does not reject a frame)
 				return;
 			}
-			if (intFrameType <= DataNAKmax)  // if NAK
-			{
-				if (blnLastFrameSentData)
-				{
+			if (intFrameType <= DataNAKmax) {  // if NAK
+				if (blnLastFrameSentData) {
 					intNAKctr++;
 
 					ComputeQualityAvg(38 + 2 * intFrameType);  // Average in NAK quality to exponential averager.
 					Gearshift_9();  // gear shift based on average quality or Shift Down if intNAKcnt >= 10
 
-					if (intShiftUpDn != 0)
-					{
+					if (intShiftUpDn != 0) {
 						dttTimeoutTrip = Now;  // Retrigger the timeout on a shift and clear the NAK counter
 						intNAKctr = 0;
 						SendData();  // Added 0.3.5.2     Restore the last frames data, Send new data from outbound queue and set up repeats
@@ -2224,8 +2116,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 				return;
 			}
 
-			if (intFrameType == DISCFRAME)  // if DISC  Handles protocol rule 1.5
-			{
+			if (intFrameType == DISCFRAME) {  // if DISC  Handles protocol rule 1.5
 				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame]  DISC frame received Send END...go to DISC state");
 				if (AccumulateStats)
 					LogStats();
@@ -2260,12 +2151,12 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 					ZF_LOGE("ERROR: In ProcessRcvdARQFrame() for DISC->END Invalid EncLen (%d).", EncLen);
 					return;
 				}
+				// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 				Mod4FSKDataAndPlay(END, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 				return;
 			}
 
-			if (intFrameType == END)  // if END
-			{
+			if (intFrameType == END) {  // if END
 				ZF_LOGI("[ARDOPprotocol.ProcessRcvdARQFrame]  END received ... going to DISC state");
 				if (AccumulateStats)
 					LogStats();
@@ -2278,6 +2169,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 				blnDISCRepeating = false;
 
 				// SendID will default to Callsign if ARQStationLocal is not valid.
+				// TODO: Do anything different if SendID() fails returning false?
 				SendID(&ARQStationLocal, "Rcvd END in ISSData ARQState");
 
 				SetARDOPProtocolState(DISC);
@@ -2312,115 +2204,90 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 
 // Function to determine the IRS ConAck to reply based on intConReqFrameType received and local MCB.ARQBandwidth setting
 
-int IRSNegotiateBW(int intConReqFrameType)
-{
+int IRSNegotiateBW(int intConReqFrameType) {
 	// returns the correct ConAck frame number to establish the session bandwidth to the ISS or the ConRejBW frame number if incompatible
 	// if acceptable bandwidth sets stcConnection.intSessionBW
 
-	switch (ARQBandwidth)
-	{
+	switch (ARQBandwidth) {
 	case B200FORCED:
-
-		if ((intConReqFrameType >= ConReq200M && intConReqFrameType <= ConReq2000M)|| intConReqFrameType == ConReq200F)
-		{
+		if ((intConReqFrameType >= ConReq200M && intConReqFrameType <= ConReq2000M)|| intConReqFrameType == ConReq200F) {
 			intSessionBW = 200;
 			return ConAck200;
 		}
 		break;
 
 	case B500FORCED:
-
-		if ((intConReqFrameType >= ConReq500M && intConReqFrameType <= ConReq2000M) || intConReqFrameType == ConReq500F)
-		{
+		if ((intConReqFrameType >= ConReq500M && intConReqFrameType <= ConReq2000M) || intConReqFrameType == ConReq500F) {
 			intSessionBW = 500;
 			return ConAck500;
 		}
 		break;
 
 	case B1000FORCED:
-
-		if ((intConReqFrameType >= ConReq1000M && intConReqFrameType <= ConReq2000M) || intConReqFrameType == ConReq1000F)
-		{
+		if ((intConReqFrameType >= ConReq1000M && intConReqFrameType <= ConReq2000M) || intConReqFrameType == ConReq1000F) {
 			intSessionBW = 1000;
 			return ConAck1000;
 		}
 		break;
 
 	case B2000FORCED:
-
-		if (intConReqFrameType == ConReq2000M || intConReqFrameType == ConReq2000F)
-		{
+		if (intConReqFrameType == ConReq2000M || intConReqFrameType == ConReq2000F) {
 			intSessionBW = 2000;
 			return ConAck2000;
 		}
 		break;
 
 	case B200MAX:
-
-		if (intConReqFrameType >= ConReq200M && intConReqFrameType <= ConReq200F)
-		{
+		if (intConReqFrameType >= ConReq200M && intConReqFrameType <= ConReq200F) {
 			intSessionBW = 200;
 			return ConAck200;
 		}
 		break;
 
 	case B500MAX:
-
-		if (intConReqFrameType == ConReq200M || intConReqFrameType == ConReq200F)
-		{
+		if (intConReqFrameType == ConReq200M || intConReqFrameType == ConReq200F) {
 			intSessionBW = 200;
 			return ConAck200;
 		}
-		if ((intConReqFrameType >= ConReq500M && intConReqFrameType <= ConReq2000M) || intConReqFrameType == ConReq500F)
-		{
+		if ((intConReqFrameType >= ConReq500M && intConReqFrameType <= ConReq2000M) || intConReqFrameType == ConReq500F) {
 			intSessionBW = 500;
 			return ConAck500;
 		}
 		break;
 
 	case B1000MAX:
-
-		if (intConReqFrameType == ConReq200M || intConReqFrameType == ConReq200F)
-		{
+		if (intConReqFrameType == ConReq200M || intConReqFrameType == ConReq200F) {
 			intSessionBW = 200;
 			return ConAck200;
 		}
-		if (intConReqFrameType == ConReq500M || intConReqFrameType == ConReq500F)
-		{
+		if (intConReqFrameType == ConReq500M || intConReqFrameType == ConReq500F) {
 			intSessionBW = 500;
 			return ConAck500;
 		}
-		if ((intConReqFrameType >= ConReq1000M && intConReqFrameType <= ConReq2000M) || intConReqFrameType == ConReq1000F)
-		{
+		if ((intConReqFrameType >= ConReq1000M && intConReqFrameType <= ConReq2000M) || intConReqFrameType == ConReq1000F) {
 			intSessionBW = 1000;
 			return ConAck1000;
 		}
 		break;
 
 	case B2000MAX:
-
-		if (intConReqFrameType == ConReq200M || intConReqFrameType == ConReq200F)
-		{
+		if (intConReqFrameType == ConReq200M || intConReqFrameType == ConReq200F) {
 			intSessionBW = 200;
 			return ConAck200;
 		}
-		if (intConReqFrameType == ConReq500M || intConReqFrameType == ConReq500F)
-		{
+		if (intConReqFrameType == ConReq500M || intConReqFrameType == ConReq500F) {
 			intSessionBW = 500;
 			return ConAck500;
 		}
-		if (intConReqFrameType == ConReq1000M || intConReqFrameType == ConReq1000F)
-		{
+		if (intConReqFrameType == ConReq1000M || intConReqFrameType == ConReq1000F) {
 			intSessionBW = 1000;
 			return ConAck1000;
 		}
-		if (intConReqFrameType == ConReq2000M || intConReqFrameType == ConReq2000F)
-		{
+		if (intConReqFrameType == ConReq2000M || intConReqFrameType == ConReq2000F) {
 			intSessionBW = 2000;
 			return ConAck2000;
 		}
 	}
-
 	return ConRejBW;  // ConRejBW
 }
 
@@ -2475,8 +2342,10 @@ bool SendARQConnectRequest(const StationId* mycall, const StationId* target)
 	intFrameRepeatInterval = 2000;  // ms Finn reported 7/4/2015 that 1600 was too short ...need further evaluation but temporarily moved to 2000 ms
 	blnEnbARQRpt = true;
 
-	Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
-
+	if (Mod4FSKDataAndPlay(bytEncodedBytes[0], &bytEncodedBytes[0], EncLen, LeaderLength)) {  // only returns when all sent
+		tmrFinalID = 0;
+		LastIDFrameTime = 0;  // ConReq frame also satisfies legal ID requirements
+	}
 	// Update the main form menu status lable
 	// Dim stcStatus As Status = Nothing
 	// stcStatus.ControlName = "mnuBusy"
@@ -2522,12 +2391,10 @@ bool CheckForDisconnect()
 
 // subroutine to implement Host Command BREAK
 
-void Break()
-{
+void Break() {
 	time_t dttStartWait = Now;
 
-	if (ProtocolState != IRS)
-	{
+	if (ProtocolState != IRS) {
 		ZF_LOGI("[ARDOPprotocol.Break] |BREAK command received in ProtocolState: %s :", ARDOPStates[ProtocolState]);
 		return;
 	}
@@ -2538,16 +2405,14 @@ void Break()
 
 // Function to abort an FEC or ARQ transmission
 
-void Abort()
-{
+void Abort() {
 	blnAbort = true;
 
 	if (ProtocolState == IDLE || ProtocolState == IRS || ProtocolState == IRStoISS)
 		GetNextARQFrame();
 }
 
-void ClearTuningStats()
-{
+void ClearTuningStats() {
 	intLeaderDetects = 0;
 	intLeaderSyncs = 0;
 	intFrameSyncs = 0;
@@ -2588,8 +2453,7 @@ void ClearTuningStats()
 	intConReqQuality = 0;
 }
 
-void ClearQualityStats()
-{
+void ClearQualityStats() {
 	int4FSKQuality = 0;
 	int4FSKQualityCnts = 0;
 	intPSKQuality[0] = 0;
@@ -2606,8 +2470,7 @@ void ClearQualityStats()
 
 // Sub to Write Tuning Stats to the Debug Log
 
-void LogStats()
-{
+void LogStats() {
 	int intTotFSKDecodes = intGoodFSKFrameDataDecodes + intFailedFSKFrameDataDecodes;
 	int intTotPSKDecodes = intGoodPSKFrameDataDecodes + intFailedPSKFrameDataDecodes;
 	int i;
@@ -2619,22 +2482,19 @@ void LogStats()
 	ardop_log_session_info("     FrameSyncs=%d  Good Frame Type Decodes=%d  Failed Frame Type Decodes =%d", intFrameSyncs, intGoodFSKFrameTypes, intFailedFSKFrameTypes);
 	ardop_log_session_info("     Avg Frame Type decode distance= %f over %d decodes", dblAvgDecodeDistance, intDecodeDistanceCount);
 
-	if (intGoodFSKFrameDataDecodes + intFailedFSKFrameDataDecodes + intGoodFSKSummationDecodes > 0)
-	{
+	if (intGoodFSKFrameDataDecodes + intFailedFSKFrameDataDecodes + intGoodFSKSummationDecodes > 0) {
 		ardop_log_session_info("%s","");
 		ardop_log_session_info("  FSK:");
 		ardop_log_session_info("     Good FSK Data Frame Decodes= %d  RecoveredFSKCarriers with Summation=%d  Failed FSK Data Frame Decodes=%d", intGoodFSKFrameDataDecodes, intGoodFSKSummationDecodes, intFailedFSKFrameDataDecodes);
 		ardop_log_session_info("     AccumFSKTracking= %d   over %d symbols   Good Data Frame Decodes= %d   Failed Data Frame Decodes=%d\n", intAccumFSKTracking, intFSKSymbolCnt, intGoodFSKFrameDataDecodes, intFailedFSKFrameDataDecodes);
 	}
-	if (intGoodPSKFrameDataDecodes + intFailedPSKFrameDataDecodes + intGoodPSKSummationDecodes > 0)
-	{
+	if (intGoodPSKFrameDataDecodes + intFailedPSKFrameDataDecodes + intGoodPSKSummationDecodes > 0) {
 		ardop_log_session_info("%s", "");
 		ardop_log_session_info("  PSK:");
 		ardop_log_session_info("     Good PSK Data Frame Decodes=%d  RecoveredPSKCarriers with Summation=%d  Failed PSK Data Frame Decodes=%d", intGoodPSKFrameDataDecodes, intGoodPSKSummationDecodes, intFailedPSKFrameDataDecodes);
 		ardop_log_session_info("     AccumPSKTracking=%d  %d attempts over %d total PSK Symbols\n", intAccumPSKTracking, intPSKTrackAttempts, intPSKSymbolCnt);
 	}
-	if (intGoodQAMFrameDataDecodes + intFailedQAMFrameDataDecodes + intGoodQAMSummationDecodes > 0)
-	{
+	if (intGoodQAMFrameDataDecodes + intFailedQAMFrameDataDecodes + intGoodQAMSummationDecodes > 0) {
 		ardop_log_session_info("%s", "");
 		ardop_log_session_info("  QAM:");
 		ardop_log_session_info("     Good QAM Data Frame Decodes=%d  RecoveredQAMCarriers with Summation=%d  Failed QAM Data Frame Decodes=%d", intGoodQAMFrameDataDecodes, intGoodQAMSummationDecodes, intFailedQAMFrameDataDecodes);
@@ -2660,8 +2520,7 @@ void LogStats()
 	// Experimental logging of Frame Type ACK and NAK counts
 	ardop_log_session_info("\nType              ACKS  NAKS");
 
-	for (i = 0; i < bytFrameTypesForBWLength; i++)
-	{
+	for (i = 0; i < bytFrameTypesForBWLength; i++) {
 		ardop_log_session_info("%-16s %5d %5d", Name(bytFrameTypesForBW[i]), ModeHasWorked[i], ModeNAKS[i]);
 	}
 

@@ -23,5 +23,31 @@ int get_ptt_off_cmd_hex(char *hexstr, int length);
 int sendCAThex(char *hexstr);
 int readCAT(unsigned char *data, size_t len);
 int parse_catstr(char *catstr);
+// Write up to size bytes of the CAT string as provided to parse_catstr to
+// catstr.  If no CAT port is open, write nothing.but a terminating null.
+// Return the number of bytes written (excluding the terminating NULL)
+int get_catstr(char *catstr, int size);
+
 int parse_pttstr(char *pttstr);
-int set_GPIOpin(int pin);
+// Write up to size bytes of the PTT string as provided to parse_pttstr to
+// pttstr.  If no PTT port/device is active, write nothing.but a terminating
+// null.
+// Return the number of bytes written (excluding the terminating NULL)
+int get_pttstr(char *pttstr, int size);
+
+// Does nothing if no PTT device/port is open.
+// If statusmsg && ZF_LOG_ON_VERBOSE && !isPTTmodeEnabled() after closing,
+// then STATUS PTTENABLED FALSE.  So, use statusmsg=false when responding to
+// a PTTENABLED FALSE host command to avoid redundancy.
+void close_PTT(bool statusmsg);
+
+// Does nothing if no CATport or tcpCATport is open.
+// If statusmsg && ZF_LOG_ON_VERBOSE && !isPTTmodeEnabled() after closing,
+// then STATUS PTTENABLED FALSE.  So, use statusmsg=false when responding to
+// a PTTENABLED FALSE host command to avoid redundancy.
+void close_CAT(bool statusmsg);
+
+// Return true if any PTT mode is enabled, else false.  If false, this means
+// that either the host program must do PTT control or the radio must be
+// configured to use VOX, which is not recommended.
+bool isPTTmodeEnabled();

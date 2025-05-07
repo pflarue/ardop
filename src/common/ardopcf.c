@@ -1,6 +1,7 @@
 #include <stdlib.h>
 
 #include "common/log.h"
+#include "common/audio.h"
 #include "rockliff/rrs.h"
 
 extern char DecodeWav[5][256];
@@ -21,11 +22,8 @@ int main(int argc, char *argv[])
 {
 	int ret;
 
-	if ((ret = processargs(argc, argv)) < 0) {
-		return ret;
-	} else if (ret > 0) {
-		return 0;  // exit without indicating an error.
-	}
+	if (processargs(argc, argv) > 0)
+		return 0;  // response to --help or -h
 
 	// Set up the Reed Solomon FEC functions.
 	// rslen_set[] must list all of the rslen values used.
@@ -37,11 +35,8 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-	if ((ret = platform_init()) < 0) {
+	if ((ret = platform_init()) < 0)
 		return ret;
-	} else if (ret > 0) {
-		return 0;  // exit without indicating an error.
-	}
 
 	// TODO: move other setup features from ardopmain() to here so that
 	// ardopmain mostly just handles the main program loop?

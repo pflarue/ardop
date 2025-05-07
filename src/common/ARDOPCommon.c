@@ -3,7 +3,10 @@
 //   of version numbers pushed to git repository.
 #include "os_util.h"
 #include "common/version.h"
+#include "common/audio.h"
+#include "common/Webgui.h"
 #include "common/ptt.h"
+
 
 void PollReceivedSamples();
 
@@ -40,8 +43,12 @@ void ProcessCommandFromHost(char * strCMD);
 
 extern char HostPort[80];
 extern int host_port;
-char CaptureDevice[80] = "";  // If not specified, becomes default of "0"
-char PlaybackDevice[80] = "";  // If not specified, becomes default of "0"
+char CaptureDevice[DEVSTRSZ] = "";
+int Cch = -1;  // Number of channels used to open CaptureDevice
+char PlaybackDevice[DEVSTRSZ] = "";
+int Pch = -1;  // Number of channels used to open PlaybackDevice
+
+DeviceInfo **AudioDevices;  // A list of all audio devices (Capture and Playback)
 
 struct WavFile *rxwf = NULL;  // For recording of RX audio
 struct WavFile *txwff = NULL;  // For recording of filtered TX audio
@@ -60,7 +67,7 @@ void WebguiPoll();
 
 
 int	intARQDefaultDlyMs = 240;
-int wg_port = 0;  // If not changed from 0, do not use WebGui
+int wg_port = 8514;  // Port for WebGui.  Set to 0 to not start WebGui.
 bool HWriteRxWav = false;  // Record RX controlled by host command RECRX
 bool WriteRxWav = false;  // Record RX controlled by Command line/TX/Timer
 bool WriteTxWav = false;  // Record TX
@@ -72,8 +79,10 @@ bool WG_DevMode = false;
 char DecodeWav[5][256] = {"", "", "", "", ""};
 // HostCommands may contain one or more semicolon separated host commands
 // provided as a command line parameter.  These are to be interpreted at
-// startup of ardopcf as if they were issued by a connected host program
-char HostCommands[3000] = "";
+// startup of ardopcf as if they were issued by a connected host program.
+// HostCommands is populated with strdup().  When the commands have been
+// processed, free() this memory and set the pointer to NULL.
+char *HostCommands = NULL;
 
 bool UseLeftRX = true;
 bool UseRightRX = true;
@@ -83,8 +92,7 @@ bool UseRightTX = true;
 
 
 // Called while waiting during TX. Run background processes.
-// If mS <= 0, return quickly
-void txSleep(int mS) {
+void txSleep(unsigned int mS) {
 	if (strcmp(PlaybackDevice, "NOSOUND") == 0)
 		return;
 
@@ -101,8 +109,10 @@ void txSleep(int mS) {
 		// rather than passing them to ProcessNewSamples().  This prevents the
 		// RX audio buffer flow overflowing, as could occur if
 		// PollReceivedSamples() was not called.
-		PollReceivedSamples();
-		Sleep(5);  // TODO: Explore whether this value should be adjusted.
+		if (RXEnabled)
+			PollReceivedSamples();
+		// TODO: Explore whether sleep duration should be adjusted.
+		Sleep(RXEnabled ? 5 : 100);  // (ms)
 	}
 }
 
@@ -379,11 +389,11 @@ static struct option long_options[] =
 char HelpScreen[] =
 	"Usage:\n"
 	"%s [Options] host_port [CaptureDevice] [PlaybackDevice]\n"
-	"defaults are host_port=8515, CaptureDevice=0, and PlaybackDevice=0\n"
-	"Capture and Playback devices may be set either with positional parameters (which\n"
-	"requires also setting host_port), or using the -i and -o options.\n"
-	"\n"
-	"host_port is host interface TCP Port Number.  data_port is automatically 1 higher.\n"
+	"defaults are host_port=8515, data_port=8516, and wg_port=8514\n"
+	"If Capture and Playback devices are not set either with positional parameters (which\n"
+	"requires also setting host_port), or using the -i and -o options, then ardopcf will\n"
+	"be started with CODEC FALSE.  In that case, these devices must be set using the WebGui\n"
+	"or via commands from a Host program "
 	"\n"
 	"Optional Paramters\n"
 	"-h or --help                         Display this help screen.\n"
@@ -404,9 +414,16 @@ char HelpScreen[] =
 	"                                     or TCP:port to use a TCP CAT port on the local machine\n"
 	"                                     or TCP:ddd.ddd.ddd.ddd:port to use a TCP CAT port on a\n"
 	"                                     networked machine.\n"
+	"                                     Using RIGCTLD as the --cat device is equivalent to\n"
+	"                                     -c TCP:4532 -k 5420310A -u 5420300A to use hamlib/rigctld\n"
+	"                                     for CAT on its default TCP port 4532, and use it for PTT.\n"
 	"-p device or --ptt device            Device to use for PTT control using RTS\n"
 	// RTS:device is also permitted, but is equivalent to just device
 	"                                     or DTR:device to use DTR for PTT instead of RTS,\n"
+#ifdef __ARM_ARCH
+	"                                     or GPIO:pin to use a hardware GPIO pin for PTT\n"
+	"                                     (Raspberry Pi only, use GPIO:-pin to invert PTT state)\n"
+#endif
 #ifdef WIN32
 	// For Windows, use VID:PID for CM108 devices, though use of device name is also accepted.
 	"                                     or CM108:VID:PID of CM108-like Device to use for PTT.\n"
@@ -414,14 +431,7 @@ char HelpScreen[] =
 	"                                     devices known to be CM108 compatible for PTT control.\n"
 #else
 	// For Linux, CM108 devices like /dev/hidraw0 are used.
-	"                                     or CM108:device of CM108-like device to use for PTT\n"
-#endif
-	"                                     Using RIGCTLD as the --ptt device is equivalent to\n"
-	"                                     -c TCP:4532 -k 5420310A -u 5420300A to use hamlib/rigctld\n"
-	"                                     running on its default TCP port 4532 for PTT.\n"
-#ifdef __ARM_ARCH
-	"-g Pin                               GPIO pin to use for PTT (ARM Only)\n"
-	"                                     Use -Pin to invert PTT state\n"
+	"                                     or CM108:device of CM108-like device to use for PTT.\n"
 #endif
 	"-k string or --keystring string      String (In HEX) to send to the radio to key PTT\n"
 	"-u string or --unkeystring string    String (In HEX) to send to the radio to unkey PTT\n"
@@ -429,7 +439,9 @@ char HelpScreen[] =
 	"-R use Right Channel of Soundcard for receive in stereo mode\n"
 	"-y use Left Channel of Soundcard for transmit in stereo mode\n"
 	"-z use Right Channel of Soundcard for transmit in stereo mode\n"
-	"-G wg_port or --webgui wg_port       Enable WebGui and specify wg_port number.\n"
+	"-G wg_port or --webgui wg_port       Specify wg_port for WebGui.  If wg_port is 0, then\n"
+	"                                     disable WebGui.  Without this option, the WebGui\n"
+	"                                     uses the default port of 8514.\n"
 	"-w or --writewav                     Write WAV files of received audio for debugging.\n"
 	"-T or --writetxwav                   Write WAV files of sent audio for debugging.\n"
 	"-d pathname or --decodewav pathname  Pathname of WAV file to decode instead of listening.\n"
@@ -451,19 +463,14 @@ static const char *startstrings[] = {
 static const int nstartstrings = 3;
 static char cmdstr[3000] = "";
 
-static void logstart(bool enable_log_files, bool enable_syslog, char *err) {
-	ardop_log_start(enable_log_files, enable_syslog);
-	// Always begin log with startstrings and cmdstr
-	ZF_LOGI(startstrings[0], ProductName, ProductVersion);
-	for (int j = 1; j < nstartstrings; ++j)
-		ZF_LOGI("%s", startstrings[j]);
-	ZF_LOGD("Command line: %s", cmdstr);
-	if (err[0] != 0x00)
-		ZF_LOGE("%s", err);  // Not an empty string
-}
-
-// Return 0 for success, < 0 for failure, and > 1 for success but program should
-// exit anyways.
+// Normally return 0 for success.  However, return 1 if the --help or -h option
+// is used so that ardopcf exits without indicating an error immediately after
+// printing the help info.  Unlike earlier versions of ardopcf, configuration
+// errors should not cause ardopcf to exit.  Instead, suitable Warnings or
+// Errors are written to the log and ardopcf remains running, usually by
+// reverting to some default setting.  The Webgui or commands from a host
+// program can now be used to fix/modify most configuration options.
+//
 // With the exception of the -h (help) option, all generated warnings and error
 // messages are routed through ZF_LOG so that they may go to console (or syslog)
 // and/or a log file.  If LOGFILE and/or CONSOLELOG are the first elements of a
@@ -473,8 +480,17 @@ int processargs(int argc, char * argv[]) {
 	int c;
 	bool enable_log_files = true;
 	bool enable_syslog = false;
-	char deferredErr[ZF_LOG_BUF_SZ - 80] = "";  // If set, log this error and exit.
+	// If set, log this error once all logging parameters have been parsed.
+	// It is possible that up to two deferred errors can occur:  due to
+	// a problem with --logdir and due to an error in strdup() for HostCommands.
+	char deferredErr[2][ZF_LOG_BUF_SZ - 80] = {"", ""};
+	int deferredErrCount = 0;
 	unsigned int WavFileCount = 0;
+	// Use tmpCaptureDevice and tmpPlaybackDevice to store parsed device names.
+	// Don't try to open them until after all arguments have been parsed
+	// including those that set the use of left/right channels.
+	char tmpCaptureDevice[DEVSTRSZ] = "";
+	char tmpPlaybackDevice[DEVSTRSZ] = "";
 
 	cmdstr[0] = 0x00;  // reset to a zero length str
 	for (int i = 0; i < argc; ++i) {
@@ -498,10 +514,6 @@ int processargs(int argc, char * argv[]) {
 	// -S is only a valid option on Linux systems
 	snprintf(optstring + strlen(optstring), sizeof(optstring), "S");
 #endif
-#ifdef __ARM_ARCH
-	// -g <pin> is only a valid option on ARM systems
-	snprintf(optstring + strlen(optstring), sizeof(optstring), "g:");
-#endif
 
 	// To allow logging while evaluating the command line arguments in
 	// accordance with those command line arguments which set logging
@@ -524,7 +536,7 @@ int processargs(int argc, char * argv[]) {
 			}
 			printf("Command line: %s", cmdstr);
 			printf(HelpScreen, ProductName);
-			return 1;  // Exit immediately, but without indicating an error.
+			return 1;  // Exit ardopcf immediately, but not indicating an error.
 		}
 	}
 
@@ -554,15 +566,20 @@ int processargs(int argc, char * argv[]) {
 		// Once logging is started (using the default log directory), this
 		// error will be logged, and then the program will exit.
 		if (i == argc - 1) {
-			snprintf(deferredErr, sizeof(deferredErr),
+			snprintf(deferredErr[deferredErrCount],
+				sizeof(deferredErr[deferredErrCount]),
 				"ERROR: --logdir (or -l) requires an argument, but none was"
-				"provided");
+				"provided.  So, default log directory will be used.");
+			++deferredErrCount;
 			break;
 		}
 		if (!ardop_log_set_directory(argv[i + 1])) {
-			snprintf(deferredErr, sizeof(deferredErr),
-				"ERROR: --logdir (or -l) argument too long: \"%s\"",
+			snprintf(deferredErr[deferredErrCount],
+				sizeof(deferredErr[deferredErrCount]),
+				"ERROR: --logdir (or -l) argument too long (\"%s\").  So,"
+				" default log directory will be used.",
 				argv[i + 1]);
+			++deferredErrCount;
 			break;
 		}
 	}
@@ -571,68 +588,63 @@ int processargs(int argc, char * argv[]) {
 		if (strcmp(argv[i], "--hostcommands") != 0 && strcmp(argv[i], "-H") != 0)
 			continue;
 		if (i == argc - 1) {
-			logstart(enable_log_files, enable_syslog, deferredErr);
-			ZF_LOGE("ERROR: --hostcommands (or -H) requires an argument, but"
-				" none was provided");
-			return (-1);
+			// Missing argument string for --hostcommands or -H.  Do nothing
+			// here.  An error message will be generated during normal
+			// processing of options below.
+			break;
 		}
-		if (strlen(argv[i + 1]) >= sizeof(HostCommands)) {
-			logstart(enable_log_files, enable_syslog, deferredErr);
-			ZF_LOGE("ERROR: --hostcommands (or -H) argument too long: \"%s\"",
-				argv[i + 1]);
-			return (-1);
+		if ((HostCommands = strdup(argv[i + 1])) == NULL) {
+			snprintf(deferredErr[deferredErrCount],
+				sizeof(deferredErr[deferredErrCount]),
+				"strdup() failed to duplicate the argument to the"
+				" --hostcommands or -H command line option.  Ignoring that"
+				" option.");
+			++deferredErrCount;
+			break;
 		}
 		// The commands in the argument to -H or --hostcommands are mostly
 		// handled after the the startup process is finished.  However, if
-		// this argument starts with LOGLEVEL and/or CONSOLELOG, handle them
-		// here before logging is started
-		strcpy(HostCommands, argv[i + 1]);
+		// this argument starts with one or more valid "LOGLEVEL N" or
+		// "CONSOLELOG N" host commands, then handle them here before logging is
+		// started.  If any other host command is encountered, including an
+		// invalid variation on these commands, then wait to process them after
+		// loogging has started.
 		char *nextHC = HostCommands;
-		char *logcmds[] = {"LOGLEVEL", "CONSOLELOG"};
+		// Notice that logcmds[] include trailing spaces.  While these host
+		// commands are valid without a trailing space and a value, those
+		// versions do not change the logging configuration, and thus are not
+		// appropriate for early processing.
+		char *logcmds[] = {"LOGLEVEL ", "CONSOLELOG "};
+		// Set cerr true if a command is not a valid "LOGLEVEL N" or
+		// "CONSOLELOG N" command.  In this case, do not remove it from
+		// HostCommands and stop further early processing of host commands.
+		bool cerr = false;
 		while (nextHC[0] != 0x00) {
 			for (int i = 0; i < 2; ++i) {
 				if (strncasecmp(nextHC, logcmds[i], strlen(logcmds[i])) != 0)
 					continue;
 				nextHC += strlen(logcmds[i]);
-				if (nextHC[0] != ' ') {
-					// Missing space between command and argument
-					logstart(enable_log_files, enable_syslog, deferredErr);
-					ZF_LOGE("ERROR: Missing space after %s in HostCommands: \"%s\"",
-						logcmds[i], HostCommands);
-					return (-1);
-				}
-				nextHC++;
 				long lv = strtol(nextHC, &nextHC, 10);
-				if (nextHC[0] != 0x00 && nextHC[0] != ';') {
-					// Argument contains something extra after integer.
-					logstart(enable_log_files, enable_syslog, deferredErr);
-					ZF_LOGE("ERROR: Invalid argument to HostCommands: \"%s\"",
-						HostCommands);
-					return (-1);
+				if ((nextHC[0] != 0x00 && nextHC[0] != ';')
+					|| lv < ZF_LOG_VERBOSE || lv > ZF_LOG_FATAL
+				) {
+					// Argument contains something extra after value, or value
+					// is out of range.
+					cerr = true;
+					break;
 				} else if (nextHC[0] == ';')
 					nextHC++;
-				if (lv < ZF_LOG_VERBOSE || lv > ZF_LOG_FATAL) {
-					logstart(enable_log_files, enable_syslog, deferredErr);
-					ZF_LOGE("ERROR: Invalid argument to %s in HostCommands: %li",
-						logcmds[i], lv);
-					return (-1);
-				}
 				if (i == 0)
 					ardop_log_set_level_file((int) lv);
 				else
 					ardop_log_set_level_console((int) lv);
 				break;
 			}
-			if (nextHC == HostCommands) {
-				// No log command found.  Break to defer processing of any
-				// remaining host commands, including log commands later in the
-				// string.
+			if (cerr || nextHC == NULL || nextHC == HostCommands)
 				break;
-			} else {
-				// Discard processed log command, and continue to next command
-				memmove(HostCommands, nextHC, strlen(nextHC) + 1);
-				nextHC = HostCommands;  // reseet nextHC
-			}
+			// Discard processed log command, and continue to next command
+			memmove(HostCommands, nextHC, strlen(nextHC) + 1);
+			nextHC = HostCommands;  // reseet nextHC
 		}
 	}
 	// begin logging.
@@ -643,9 +655,19 @@ int processargs(int argc, char * argv[]) {
 	// specified directory, else it will be written in the current directory.
 	// Log filename includes the host_port number to allow multiple instances
 	// running on different host ports to each create their own log file.
-	logstart(enable_log_files, enable_syslog, deferredErr);
-	if (deferredErr[0] != 0x00)
-		return (-1);
+	ardop_log_start(enable_log_files, enable_syslog);
+	// Always begin log with startstrings and cmdstr
+	ZF_LOGI(startstrings[0], ProductName, ProductVersion);
+	for (int j = 1; j < nstartstrings; ++j)
+		ZF_LOGI("%s", startstrings[j]);
+	ZF_LOGD("Command line: %s", cmdstr);
+	for (int i = 0; i < deferredErrCount; ++i)
+		ZF_LOGE("%s", deferredErr[i]);
+
+	// Build and log the list of available audio devices.  Notice that this is
+	// done after logging has been started, but before audio device related
+	// options are parsed.
+	InitAudio(false);
 
 	// Now consider all other command line options.  Logging related options
 	// already handled will be ignored.
@@ -669,92 +691,77 @@ int processargs(int argc, char * argv[]) {
 				break;  // These options were already handled.
 
 			case 'i':
-				strcpy(CaptureDevice, optarg);
+				snprintf(tmpCaptureDevice, DEVSTRSZ, "%s", optarg);
 				break;
 
 			case 'o':
-				strcpy(PlaybackDevice, optarg);
+				snprintf(tmpPlaybackDevice, DEVSTRSZ, "%s", optarg);
 				break;
-
-#ifdef __ARM_ARCH
-			// Previously, this took an optional argument, and defaulted to a
-			// value of 18 without an argument.  However, due to limitations of
-			// getopt_long(), this required a different syntax than the other
-			// options to speccify a value.  So, now a value must be specified.
-			case 'g':
-				if (set_GPIOpin(atoi(optarg)) == -1) // -ve is acceptable
-					return (-1);
-				break;
-#endif
 
 			case 'k':
-				if (set_ptt_on_cmd(optarg,
-					"command line option --keystring or -k") == -1
-				)
-					return (-1);
+				set_ptt_on_cmd(optarg, "command line option --keystring or -k");
 				break;
 
 			case 'u':
-				if (set_ptt_off_cmd(optarg,
-					"command line option --unkeystring or -u") == -1
-				)
-					return (-1);
+				set_ptt_off_cmd(optarg, "command line option --unkeystring or -u");
 				break;
 
 			case 'p':
-				if (parse_pttstr(optarg) == -1)
-					return (-1);
+				parse_pttstr(optarg);
 				break;
 
 			case 'c':
-				if (parse_catstr(optarg) == -1)
-					return (-1);
+				parse_catstr(optarg);
 				break;
 
 			case 'L':
 				if (UseRightRX && !UseLeftRX) {
-					ZF_LOGE("ERROR: Invalid use of both -R and -L");
-					return (-1);
+					ZF_LOGE("ERROR: Invalid use of both -R and -L.  Ignoring both");
+					UseLeftRX = true;
+					UseRightRX = true;
+				} else {
+					UseLeftRX = true;
+					UseRightRX = false;
 				}
-				UseLeftRX = true;
-				UseRightRX = false;
 				break;
 
 			case 'R':
 				if (UseLeftRX && !UseRightRX) {
-					ZF_LOGE("ERROR: Invalid use of both -L and -R");
-					return (-1);
+					ZF_LOGE("ERROR: Invalid use of both -R and -L.  Ignoring both");
+					UseLeftRX = true;
+					UseRightRX = true;
+				} else {
+					UseLeftRX = false;
+					UseRightRX = true;
 				}
-				UseLeftRX = false;
-				UseRightRX = true;
 				break;
 
 			case 'y':
 				if (UseRightTX && !UseLeftTX) {
-					ZF_LOGE("ERROR: Invalid use of both -z and -y");
-					return (-1);
+					ZF_LOGE("ERROR: Invalid use of both -y and -z.  Ignoring both");
+					UseLeftTX = true;
+					UseRightTX = true;
+				} else {
+					UseLeftTX = true;
+					UseRightTX = false;
 				}
-				UseLeftTX = true;
-				UseRightTX = false;
 				break;
 
 			case 'z':
 				if (UseLeftTX && !UseRightTX) {
-					ZF_LOGE("ERROR: Invalid use of both -y and -z");
-					return (-1);
+					ZF_LOGE("ERROR: Invalid use of both -y and -z.  Ignoring both");
+					UseLeftTX = true;
+					UseRightTX = true;
+				} else {
+					UseLeftTX = false;
+					UseRightTX = true;
 				}
-				UseLeftTX = false;
-				UseRightTX = true;
 				break;
 
 			case 'G':
 				wg_port = atoi(optarg);
-				if (wg_port == 0) {
-					ZF_LOGE("ERROR: Invalid argument to --webgui (or -G)"
-						" (expecting non-zero integer): \"%s\"",
-						optarg);
-					return (-1);
-				}
+				if (wg_port == 0)
+					ZF_LOGI("Disabling WebGui for --webgui 0 or -G 0 option.");
 				break;
 
 			case 'w':
@@ -766,14 +773,18 @@ int processargs(int argc, char * argv[]) {
 				break;
 
 			case 'd':
+				if (strlen(optarg) >= sizeof(DecodeWav[0])) {
+					ZF_LOGE("ERROR: length of WAV filename too long. "
+						" Skipping.");
+					break;
+				}
 				if (WavFileCount < sizeof(DecodeWav) / sizeof(DecodeWav[0]))
-					strcpy(DecodeWav[WavFileCount++], optarg);
+					strcpy(DecodeWav[WavFileCount++], optarg);  // size checked
 				else {
 					ZF_LOGE("ERROR: Too many WAV files specified with"
 						" --decodewav (or -d).  A maximum of %u may be"
-						" provided",
+						" provided.  The remaining files will be ignored.",
 						(int) (sizeof(DecodeWav) / sizeof(DecodeWav[0])));
-					return (-1);
 				}
 				break;
 
@@ -782,11 +793,13 @@ int processargs(int argc, char * argv[]) {
 				break;
 
 			case ':':
-				ZF_LOGE("ERROR: Missing argument for -%c.", optopt);
-				return (-1);
+				ZF_LOGE("ERROR: Missing argument for -%c.  Ignoring this option"
+					, optopt);
+				break;
 
 			case '?':
-				ZF_LOGE("ERROR: Unknown option -%c.", optopt);
+				ZF_LOGE("ERROR: Unknown option -%c.  Ignoring this option",
+					optopt);
 				if (optopt == '1') {
 					ZF_LOGE("If you intended to use \"-1\" as an alias for"
 						" \"NOSOUND\" as a positional parameter to specify an"
@@ -794,41 +807,41 @@ int processargs(int argc, char * argv[]) {
 						" \"NOSOUND\" as a positional parameter, but \"-1\" is"
 						" only valid as an argument to the -i or -o options.");
 				}
-
-				return (-1);
+				break;
 		}
 	}
 
 	// parse positional parameters
 	if (argc > optind + 3) {
 		ZF_LOGE("ERROR: More than three positional parameters (those that do"
-			" not begin with - or --) were provided.  Review your command line"
-			" for typos or use -h for help.");
-		return (-1);
+			" not begin with - or --) were provided.  Exccess positional"
+			" parameters will be ignored.  Review your command line for typos"
+			" or use -h for help.");
 	}
 
 	if (argc > optind) {
-		strcpy(HostPort, argv[optind]);
+		snprintf(HostPort, sizeof(HostPort), "%s", argv[optind]);
 		if ((host_port = atoi(HostPort)) <= 0) {
-			ZF_LOGE("ERROR: Invalid Host Port (expecting positive integer):"
-				" \"%s\"", HostPort);
-			return (-1);
+			ZF_LOGE("ERROR: Invalid Host Port so using default of 8515. "
+				" Expecting a positive integer but found \"%s\"",
+				HostPort);
+			host_port = 8515;
 		}
 	}
 
 	if (argc > optind + 1) {
-		if (CaptureDevice[0] != 0x00)
+		if (tmpCaptureDevice[0] != 0x00)
 			ZF_LOGW("WARNING: CaptureDevice is set to %s with positional"
 			" parameter.  So, '-i %s' is ignored.",
-			argv[optind + 1], CaptureDevice);
-		strcpy(CaptureDevice, argv[optind + 1]);
+			argv[optind + 1], tmpCaptureDevice);
+		snprintf(tmpCaptureDevice, DEVSTRSZ, "%s", argv[optind + 1]);
 	}
 	if (argc > optind + 2) {
-		if (PlaybackDevice[0] != 0x00)
+		if (tmpPlaybackDevice[0] != 0x00)
 			ZF_LOGW("WARNING: PlaybackDevice is set to %s with positional"
 			" parameter.  So, '-o %s' is ignored.",
-			argv[optind + 2], PlaybackDevice);
-		strcpy(PlaybackDevice, argv[optind + 2]);
+			argv[optind + 2], tmpPlaybackDevice);
+		snprintf(tmpPlaybackDevice, DEVSTRSZ, "%s", argv[optind + 2]);
 	}
 
 	if (wg_port < 0) {
@@ -843,34 +856,87 @@ int processargs(int argc, char * argv[]) {
 		WG_DevMode = true;
 	}
 	if (wg_port == host_port) {
-		ZF_LOGE("WebGui wg_port (%d) may not be the same as host_port (%d)",
-			wg_port, host_port);
-		return (-1);
+		ZF_LOGE("WebGui wg_port (%d) may not be the same as host_port (%d). "
+			" Setting WebGui wg_port to %d which is one less than host_port.",
+			wg_port, host_port - 1, host_port);
+		wg_port = host_port - 1;
 	}
 	if (wg_port == host_port + 1) {
 		ZF_LOGE("WebGui wg_port (%d) may not be one greater than host_port (%d)"
-			" since that is used as the host data_port.",
-			wg_port, host_port);
-		return (-1);
+			" since that is used as the host data_port.  Setting WebGui wg_port"
+			" to %d which is one less than host_port.",
+			wg_port, host_port - 1, host_port);
+		wg_port = host_port - 1;
 	}
 
-	if (CaptureDevice[0] == 0x00) {
-		ZF_LOGI("No audio input device was specified, so using default of 0.");
-		strcpy(CaptureDevice, "0");
-	} else if (strcmp(CaptureDevice, "-1") == 0)
-		snprintf(CaptureDevice, sizeof(CaptureDevice), "NOSOUND");
-	if (strcmp(CaptureDevice, "NOSOUND") == 0)
+	if (strcmp(tmpCaptureDevice, "-1") == 0)
+		snprintf(tmpCaptureDevice, sizeof(tmpCaptureDevice), "NOSOUND");
+	if (strcmp(tmpCaptureDevice, "NOSOUND") == 0)
 		ZF_LOGI("Using NOSOUND for audio input.  This is only"
 		" useful for testing/diagnostic purposes.");
 
-	if (PlaybackDevice[0] == 0x00) {
-		ZF_LOGI("No audio output device was specified, so using default of 0.");
-		strcpy(PlaybackDevice, "0");
-	} else if (strcmp(PlaybackDevice, "-1") == 0)
-		snprintf(PlaybackDevice, sizeof(PlaybackDevice), "NOSOUND");
-	if (strcmp(PlaybackDevice, "NOSOUND") == 0)
+	if (strcmp(tmpPlaybackDevice, "-1") == 0)
+		snprintf(tmpPlaybackDevice, sizeof(tmpPlaybackDevice), "NOSOUND");
+	if (strcmp(tmpPlaybackDevice, "NOSOUND") == 0)
 		ZF_LOGI("Using NOSOUND for audio output.  This is only"
 		" useful for testing/diagnostic purposes.");
+
+	if (tmpCaptureDevice[0] != 0x00) {
+		if (!OpenSoundCapture(tmpCaptureDevice, getCch(false))) {
+			ZF_LOGE("ERROR: CaptureDevice=%s could not be opened as configured.",
+				tmpCaptureDevice);
+		}
+	}
+
+	if (tmpPlaybackDevice[0] != 0x00) {
+		if (!OpenSoundPlayback(tmpPlaybackDevice, getPch(false))) {
+			ZF_LOGE("ERROR: PlaybackDevice=%s could not be opened as configured.",
+				tmpPlaybackDevice);
+		}
+	}
+
+	if (DecodeWav[0][0] != 0x00)
+		return 0;  // --decodewav, so no need to log about audio/ptt devices
+
+	// The following are very important if the user does not realize that
+	// one some devices still need to be configured.  So, while this isn't
+	// necessarily an ERROR, use ZF_LOGE() rather than a lower priority log
+	// function, and format these messages to make them stand out.
+	if (!TXEnabled && !RXEnabled)
+		ZF_LOGE("\n"
+			"  No audio devices were successfully opened based on the options\n"
+			"  specified on the command line.  Suitable devices must be\n"
+			"  configured by a host program or using the WebGUI before Ardop\n"
+			"  will be usable.\n");
+	else if (!TXEnabled)
+		ZF_LOGE("\n"
+			"  While an input/Capture/RX audio device has been opened, no\n"
+			"  output/Playback/TX was successfully opened based on the\n"
+			"  options specified on the command line.  This configuration is\n"
+			"  currently only usable receiving FEC traffic or monitoring in\n"
+			"  RXO mode.  To use ARQ mode or transmit anything, a suitable\n"
+			"  device must be configured by a host program or using the\n"
+			"  WebGUI.\n");
+	else if (!RXEnabled) {
+		ZF_LOGE("\n"
+			"  While an output/Playback/TX audio device has been opened, no\n"
+			"  input/Capture/RX was successfully opened based on the options\n"
+			"  specified on the command line.  This configuration is not\n"
+			"  suitable for typical usage.  A suitable device must be\n"
+			"  configured by a host program or using the WebGUI before Ardop\n"
+			"  will be usable.\n");
+	}
+
+	if (!isPTTmodeEnabled()) {
+		ZF_LOGE("\n"
+			"  No PTT control method has been successfully enabled based on\n"
+			"  the options specified on the command line.  This configuration\n"
+			"  is suitable for TX ONLY IF the host program is configured to\n"
+			"  handle PTT or if the radio is configured to use VOX (which is\n"
+			"  often not reliable).  Otherwise, a suitable method of PTT\n"
+			"  control must be configured by a host program or using the\n"
+			"  WebGUI before Ardop will be able to transmit.\n");
+	}
 
 	return 0;
 }
@@ -945,6 +1011,10 @@ int decode_wav() {
 		if (thisHostCommand[0] != 0x00)
 			// not an empty string
 			ProcessCommandFromHost(thisHostCommand);
+	}
+	if (HostCommands != NULL) {
+		free(HostCommands);
+		HostCommands = NULL;
 	}
 
 	// Regardless of whether this was set with a command line argument, proceed in
@@ -1067,4 +1137,339 @@ bool try_parse_long(const char* str, long* num) {
 	char* end = 0;
 	*num = strtol(s, &end, 10);
 	return (end > s && *end == '\0');
+}
+
+void InitDevices(DeviceInfo ***devicesptr) {
+	if (*devicesptr != NULL) {
+		ZF_LOGD("InitDevices() *devicesptr is not NULL, so do nothing.");
+		return;  // nothing to free
+	}
+	*devicesptr = realloc(*devicesptr, sizeof(DeviceInfo *));
+	(*devicesptr)[0] = NULL;
+}
+
+// Add an unused DeviceInfo item to the end of devicesprt and return the index
+// of this new DeviceInfo item.
+// Initialize all of the booleans in the new item to false
+int ExtendDevices(DeviceInfo ***devicesptr) {
+	int index = -1;
+	// Find size of array of devices
+	while((*devicesptr)[++index] != NULL);
+
+	// Replace NULL in the last element by the new DeviceInfo item
+	(*devicesptr)[index] = malloc(sizeof(DeviceInfo));
+	// Initialize the string pointers to NULL
+	(*devicesptr)[index]->name = NULL;
+	(*devicesptr)[index]->alias = NULL;
+	(*devicesptr)[index]->desc = NULL;
+	// Initialize all of the booleans to false
+	(*devicesptr)[index]->capture = false;
+	(*devicesptr)[index]->playback = false;
+	(*devicesptr)[index]->capturebusy = false;
+	(*devicesptr)[index]->playbackbusy = false;
+	// Expand the array
+	*devicesptr = realloc(*devicesptr, (index + 2) * sizeof(DeviceInfo *));
+	// Set last value to NULL
+	(*devicesptr)[index + 1] = NULL;
+	return index;
+}
+
+void FreeDevices(DeviceInfo ***devicesptr) {
+	if (*devicesptr == NULL)  {
+		ZF_LOGD("FreeDevices() *devicesptr is NULL, so do nothing");
+		return;  // nothing to free
+	}
+	int index = 0;
+	while((*devicesptr)[index] != NULL) {
+		if ((*devicesptr)[index]->name != NULL)
+			free((*devicesptr)[index]->name);
+		if ((*devicesptr)[index]->alias != NULL)
+			free((*devicesptr)[index]->alias);
+		if ((*devicesptr)[index]->desc != NULL)
+			free((*devicesptr)[index]->desc);
+		free((*devicesptr)[index]);
+		++index;
+	}
+	free(*devicesptr);  // Free the array of pointers
+	*devicesptr = NULL;
+}
+
+// Write a CSV string suitable for the CAPTUREDEVICES or PLAYBACKDEVICES host
+// commands.
+// Per the Ardop specification (Protocol Native TNC Commands), these commands
+// "Returns a comma delimited list of all currently installed capture/playback
+// devices."  The specification does not indicate how device names that
+// contain commas shall be handled.  Nor does it provide any explicit
+// mechanism to include a device description in addition to a device name.
+//
+// So: The following is used:
+// Device names may be wrapped in double quotes, and double double quotes
+// within double quotes shall be interpreted as a literal double quotes
+// character.  If any device name includes a linefeed (\n), then the text
+// before the linefeed shall be interpreted as the name suitable to pass to the
+// PLAYBACK or CAPTURE host command, while any text after the first linefeed
+// shall be interpreted as a description.  If the description begins with
+// "[BUSY", then this device is currently in use (by this or another program).
+//
+// Use forcapture to select whether output should be suitable for CAPTUREDEVICES
+// or PLAYBACKDEVICES.
+// The return value shall be true on success.
+// If an error occurs, such as because dstsize is too small, then return false,
+// in which case the contents of dst are undefined and should not be used.
+bool DevicesToCSV(DeviceInfo **devices, char *dst, int dstsize, bool forcapture) {
+	// dst and dstsize are updated to always point to the end of the string
+	// written so far, and the amount of remaining free space respectively
+	int index = -1;
+	while(devices[++index] != NULL) {
+		if ((forcapture && !devices[index]->capture)
+			|| (!forcapture && !devices[index]->playback)
+		)
+			continue;
+
+		char *name = devices[index]->name;
+		char *alias = devices[index]->alias;
+		char *desc = devices[index]->desc;
+		char *qptr;
+		int count;
+		bool quotewrap = ((strchr(name, ',') != NULL)
+			|| (strchr(name, '"') != NULL)
+			|| (alias != NULL && strchr(alias, ',') != NULL)
+			|| (alias != NULL && strchr(alias, '"') != NULL)
+			|| (strchr(desc, ',') != NULL)
+			|| (strchr(desc, '"') != NULL));
+		if (quotewrap) {
+			if (dstsize < 2)
+				return false;
+			*(dst++) = '"';  // Write the leading double quote to dst
+			--dstsize;
+		}
+		while ((qptr = strchr(name, '"')) != NULL) {
+			// Copy up to and including a double quote in src, and follow it
+			// with a second double quote.
+			count = snprintf(dst, dstsize, "%.*s\"",
+				(int) ((qptr + 1) - name), name);
+			if (count < 0 || count >= dstsize)
+				return false;
+			name += count - 1;  // count includes the extra double quote
+			dst += count;
+			dstsize -= count;
+		}
+		// last part of name and a linefeed to separate name from alias and desc
+		count = snprintf(dst, dstsize, "%.*s\n", (int) (strlen(name)), name);
+		if (count < 0 || count >= dstsize)
+			return false;
+		name += count - 1;  // count includes linefeed not from src
+		dst += count;
+		dstsize -= count;
+
+		if ((forcapture && devices[index]->capturebusy)
+			|| (!forcapture && devices[index]->playbackbusy)
+		) {
+			count = snprintf(dst, dstsize, "[BUSY] ");
+			if (count < 0 || count >= dstsize)
+				return false;
+			dst += count;
+			dstsize -= count;
+		}
+
+		if (alias != NULL) {
+			while ((qptr = strchr(alias, '"')) != NULL) {
+				// Copy up to and including a double quote in src, and follow it
+				// with a second double quote.
+				count = snprintf(dst, dstsize, "%.*s\"\"", (int) ((qptr + 1) - alias), alias);
+				if (count < 0 || count >= dstsize)
+					return false;
+				alias += count - 1;  // count includes the extra double quote
+				dst += count;
+				dstsize -= count;
+			}
+			// last part of alias
+			count = snprintf(dst, dstsize, "%.*s. ", (int) strlen(desc), alias);
+			if (count < 0 || count >= dstsize)
+				return false;
+			alias += count;
+			dst += count;
+			dstsize -= count;
+		}
+
+		while ((qptr = strchr(desc, '"')) != NULL) {
+			// Copy up to and including a double quote in src, and follow it
+			// with a second double quote.
+			count = snprintf(dst, dstsize, "%.*s\"\"", (int) ((qptr + 1) - desc), desc);
+			if (count < 0 || count >= dstsize)
+				return false;
+			desc += count - 1;  // count includes the extra double quote
+			dst += count;
+			dstsize -= count;
+		}
+		// last part of desc
+		count = snprintf(dst, dstsize, "%.*s", (int) strlen(desc), desc);
+		if (count < 0 || count >= dstsize)
+			return false;
+		desc += count;
+		dst += count;
+		dstsize -= count;
+		if (quotewrap) {
+			if (dstsize < 2)
+				return false;
+			*(dst++) = '"';  // Write the closing double quote to dst
+			--dstsize;
+		}
+		if (dstsize < 2)
+			return false;
+		*(dst++) = ',';  // comma separator between device strings
+		--dstsize;
+	}
+	*(--dst) = 0x00;  // replace the last comma with a terminating null.
+	return true;
+}
+
+// While AudioDevices is a single list that includes output/playback and
+// input/capture devices, the output of this function can be filtered with
+// inputonly or output only.  If both are true, then log an error and exit.
+// If neither are true, then also log devices that could be opened for neither
+// input nor output.  Regardless of inputonly and outputonly, append (capture)
+// and/or (playback) to all devices to indicate their range of use.
+void LogDevices(DeviceInfo **devices, char *headstr, bool inputonly, bool outputonly) {
+	char modestr[24];  // long enough for maximum " (*capture) (*playback)"
+	if (headstr != NULL)
+		ZF_LOGI("%s", headstr);
+	if (inputonly && outputonly) {
+		ZF_LOGE("LogDevices() cannot be used with both inputonly and outputonly"
+			" as true");
+		return;
+	}
+
+	int index = -1;
+	while(devices[++index] != NULL) {
+		if (!(inputonly || outputonly)
+			|| (inputonly && devices[index]->capture)
+			|| (outputonly && devices[index]->playback)
+		) {
+			modestr[0] = 0x00;  // empty string
+			if (devices[index]->capturebusy) {
+				strcat(modestr, " (*capture)");
+			} else if (devices[index]->capture) {
+				strcat(modestr, " (capture)");
+			}
+			if (devices[index]->playbackbusy) {
+				strcat(modestr, " (*playback)");
+			} else if (devices[index]->playback) {
+				strcat(modestr, " (playback)");
+			}
+			ZF_LOGI("   %s [%s%s%s]%s",
+				devices[index]->name,
+				devices[index]->alias != NULL ? devices[index]->alias : "",
+				devices[index]->alias != NULL ? ". " : "",
+				devices[index]->desc,
+				modestr);
+		}
+	}
+	ZF_LOGI("[* before capture or playback indicates that the device is"
+		" currently in use for that mode by this or another program]");
+}
+
+int getPch(bool quiet) {
+	if ((UseLeftTX && UseRightTX) || !(UseLeftTX || UseRightTX)) {
+		if (!quiet)
+			ZF_LOGI("Using single channel (mono) audio for playback");
+		return 1;
+	}
+	if (!quiet) {
+		if (UseLeftTX)
+			ZF_LOGI("Using Left channel of stereo audio for playback.");
+		else
+			ZF_LOGI("Using Right channel of stereo audio for playback.");
+	}
+	return 2;
+}
+
+int getCch(bool quiet) {
+	if ((UseLeftRX && UseRightRX) || !(UseLeftRX || UseRightRX)) {
+		if (!quiet)
+			ZF_LOGI("Using single channel (mono) audio for capture");
+		return 1;
+	}
+	if (!quiet) {
+		if (UseLeftRX)
+			ZF_LOGI("Using Left channel of stereo audio for capture.");
+		else
+			ZF_LOGI("Using Right channel of stereo audio for capture.");
+	}
+	return 2;
+}
+
+
+// Case insensitive substring search.
+// Return pointer to start of match, or NULL if no match found
+// Like the (GNU nonstandard) strcasestr(), which isn't available on Windows
+char *cisearch(const char *haystack, const char *needle) {
+	if (strlen(needle) > strlen(haystack))
+		return NULL;
+	if (strlen(needle) == strlen(haystack) && strcasecmp(needle, haystack) != 0)
+		return NULL;
+	for (size_t i = 0; i <= strlen(haystack) - strlen(needle); ++i) {
+		size_t j;
+		for (j = 0; j < strlen(needle); ++j) {
+			if (tolower(haystack[i + j]) != tolower(needle[j]))
+				break;
+		}
+		if (j == strlen(needle)) {
+			// no break
+			return (char *) (haystack + i);
+		}
+	}
+	return NULL;
+}
+
+// Return -1 for no matching device.
+// Return a non-negative value that is an index into AudioDevices[].
+int FindAudioDevice(char *devstr, bool iscapture) {
+	// Search for an exact match of devstr in AudioDevices[]->name or
+	// AudioDevices[]->alias.  A substring match is NOT accepted for name or
+	// alias since hw:CARD=X,DEV=0 is a substring of plughw:CARD=X,DEV=0, so
+	// that if a substring were accepted, there would be no way to ensure that
+	// the hw: device was selected.  That device is not commonly used, but where
+	// it supports the required sample rate and other parameters, it is the best
+	// choice.
+	int adevindex = -1;
+	while (AudioDevices[++adevindex] != NULL) {
+		if ((iscapture && !AudioDevices[adevindex]->capture)
+			|| (!iscapture && !AudioDevices[adevindex]->playback)
+		)
+			continue;
+		// Compare only the first DEVSTRSZ - 1 bytes (exclude terminating NUlL)
+		if (strncmp(AudioDevices[adevindex]->name, devstr, DEVSTRSZ - 1) == 0)
+			return adevindex;
+		if (AudioDevices[adevindex]->alias != NULL
+			&& strncmp(AudioDevices[adevindex]->alias, devstr, DEVSTRSZ - 1) == 0
+		)
+			return adevindex;
+	}
+	// No match found in AudioDevices[]->name, so search for the first case
+	// insensitive substring match in AudioDevices[]->desc.
+	adevindex = -1;
+	while (AudioDevices[++adevindex] != NULL) {
+		if ((iscapture && !AudioDevices[adevindex]->capture)
+			|| (!iscapture && !AudioDevices[adevindex]->playback)
+			|| (AudioDevices[adevindex]->desc == NULL)
+		)
+			continue;
+		if (cisearch(AudioDevices[adevindex]->desc, devstr) != NULL)
+			return adevindex;
+	}
+	return -1;
+}
+
+// Send updated info about audio system configuration to WebGui.  This should be
+// called whenever a change to this configuration is made (or detected due to a
+// failure).  If do_getdevices is true, then call GetDevices() first.  This
+// should normally be true, unless GetDevices() was just called.
+void updateWebGuiAudioConfig(bool do_getdevices) {
+	wg_send_rxenabled(0, RXEnabled);
+	wg_send_txenabled(0, TXEnabled);
+	if (do_getdevices)
+		GetDevices();
+	wg_send_audiodevices(0, AudioDevices, CaptureDevice, PlaybackDevice,
+		crestorable(), prestorable());
 }

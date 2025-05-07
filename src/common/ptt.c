@@ -11,14 +11,19 @@
 #include <unistd.h>
 
 #include "common/os_util.h"
+#include "common/ardopcommon.h"
 #include "common/ptt.h"
 #include "common/log.h"
+#include "common/Webgui.h"
+
+#define PTTNONCATMASK 0x0F
+#define PTTCATMASK 0x30
 
 #define PTTRTS 1
 #define PTTDTR 2
-#define PTTCAT 4
-#define PTTCM108 8
-#define PTTGPIO 16
+#define PTTCM108 4
+#define PTTGPIO 8
+#define PTTCAT 16
 #define PTTTCPCAT 32
 
 #define MAXCATLEN 64
@@ -29,21 +34,45 @@ char rigctlddefault[5] = "4532";
 
 int PTTmode = 0;  // PTT Control Flags.
 
-// port names are for comparison with each other to indicate that an device
-// handle should be used.  If the actual port name is longer than will fit, then
-// anything which matches for this length will be assumed to match.
-char CATportstr[80] = "";  // CAT port str
-char RTSportstr[80] = "";  // RTS port str
-char DTRportstr[80] = "";  // DTR port str
-char CM108str[80] = "";  // CM108 device str
-char tcpCATportstr[80] = "";  // tcpCAT port (port or address:port) str
+#define PORTSTRSZ 200
+// port names are for comparison with each other to indicate that a device
+// handle should be reused.
+char CATstr[PORTSTRSZ] = "";  // CAT port str, possibly with TCP: prefix
 
+// PTTstr does not include an RTS: or DTR: prefix, but may include a CM108: or
+// GPIO: prefix.  If it has no prefix, use PTTmode to determine whether it is
+// used for RTS or DTR.
+char PTTstr[PORTSTRSZ] = "";
+
+// Use LastGoodCATstr and LastGoodPTTstr to store the names of that last good
+// values of CATstr and PTTstr.  These are used when parse_catstr() and
+// parse_pttstr() when they get "RESTORE" as an input in response to the
+// RADIOCTRLPORT RESTORE or RADIOPTT RESTORE host commands.
+// See also LastGoodCaptureDevice and LastGoodPlaybackDevice used in
+// ALSA.c and Waveform.c.
+char LastGoodCATstr[PORTSTRSZ] = "";
+char LastGoodPTTstr[PORTSTRSZ] = "";  // Unlike PTTstr, includes DTR: or RTS: prefix
+
+// All of the following are set to 0 when inactive.
+
+// Only one of hCATdevice or tmpCATport will be active at any time.
+// The "name" used to establish either of these is stored in CATstr.
 HANDLE hCATdevice = 0;  // HANDLE/file descriptor for CAT device
-HANDLE hRTSdevice = 0;  // HANDLE/file descriptor for PTT by RTS device
-HANDLE hDTRdevice = 0;  // HANDLE/file descriptor for PTT by DTR device
-HANDLE hCM108device = 0;  // HANDLE/file descriptor for PTT by CM108 device
 int tcpCATport = 0;  // TCP port (usually on 127.0.0.1) for CAT
 
+// Only one of hPTTdevice, hCM108device, or GPIOpin will be active at any time.
+// However, one of the following may be active in addition to one of the CAT
+//   devices (which may or may not use the same physical port).  For example,
+//   PTT may be done via RTS/DTR while CAT provides the ability to control other
+//   settings (via the RADIOHEX host command).
+// The "name" sed to establish any of these is stored in PTTstr, though RTS: and
+//   DTR: prefixes are not included in PTTStr (but CM108: and GPIO: prefixes are).
+HANDLE hPTTdevice = 0;  // HANDLE/file descriptor for PTT device for RTS or DTR
+HANDLE hCM108device = 0;  // HANDLE/file descriptor for PTT by CM108 device
+// Set GPIOpin for transmit and clear GPIOpin for recieve.  Except that if
+// GPIOinvert is true, then do the opposite.  (ARM only).
+int GPIOpin = 0;  // (ARM only) GPIO pin number to be used for PTT control
+bool GPIOinvert = false;
 
 // ptt_on_cmd contains ptt_on_cmd_len bytes to send to the CAT device (if
 // available) for each transition from receive to transmit.
@@ -60,95 +89,18 @@ unsigned int ptt_off_cmd_len = 0;
 // RADIOHEX command response.
 bool CATrx = false;
 
-// Set GPIOpin for transmit and clear GPIOpin for recieve.  Except that if
-// GPIOinvert is true, then do the opposite.  (ARM only).
-int GPIOpin = 0;  // GPIO pin number to be used for PTT control
-bool GPIOinvert = false;
-
 // required external functions
 char * strlop(char * buf, char delim);
-int wg_send_pttled(int cnum, bool isOn);
 void gpioWrite(unsigned gpio, unsigned level);
 int gpioInitialise();
 void SetupGPIOPTT(int pin, bool invert);
 void SendCommandToHostQuiet(char * strText);
+void SendCommandToHost(char * strText);
 void SetLED(int LED, int State);
 int hex2bytes(char *ptr, unsigned int len, unsigned char *output);
 int bytes2hex(char *outputStr, size_t count, unsigned char *data,
 	size_t datalen, bool spaces);
 
-// If state is true, then switch to transmit.  If state is false, then switch
-// to recieve.  If none of the methods for locally controlling PTT are set, then
-// send commands to the host program which it may use to control PTT.
-// If more than one method for locally controlling PTT are set, then all of them
-// will be used.
-//
-// TODO: Should success of the various PTT state changes be checked, and
-// something (blnClosing? close device and unset PTTmode?) be done if this fails?
-// Among other things, a failure could indicate that the device has been
-// (unintentionaly?) disconnected or otherwise failed.
-void KeyPTT(bool state) {
-	if (PTTmode == 0x00) {
-		// No local PTT control
-		if (state)
-			SendCommandToHostQuiet("PTT TRUE");
-		else
-			SendCommandToHostQuiet("PTT FALSE");
-	}
-	if (PTTmode & PTTRTS) {
-		if (state)
-			COMSetRTS(hRTSdevice);
-		else
-			COMClearRTS(hRTSdevice);
-	}
-	if (PTTmode & PTTDTR) {
-		if (state)
-			COMSetDTR(hDTRdevice);
-		else
-			COMClearDTR(hDTRdevice);
-	}
-	if (PTTmode & PTTCAT) {
-		if (state) {
-			if (!WriteCOMBlock(hCATdevice, ptt_on_cmd, ptt_on_cmd_len)) {
-				// TODO: Close hCATdevice? Remove PTTCAT from PTTmode?
-				ZF_LOGE("Error writing to CAT on %s in KeyPTT(true).", CATportstr);
-			}
-		} else {
-			if (!WriteCOMBlock(hCATdevice, ptt_off_cmd, ptt_off_cmd_len)) {
-				// TODO: Close hCATdevice? Remove PTTCAT from PTTmode?
-				ZF_LOGE("Error writing to CAT on %s in KeyPTT(false).", CATportstr);
-			}
-		}
-	}
-	if (PTTmode & PTTTCPCAT) {
-		if (state) {
-			if (tcpsend(tcpCATport, ptt_on_cmd, ptt_on_cmd_len) != 0) {
-				// TODO: Close tcpCATport? Remove PTTTCPCAT from PTTmode?
-				ZF_LOGE("Error writing to TCP CAT at %s in KeyPTT(true).", tcpCATportstr);
-			}
-		} else {
-			if (tcpsend(tcpCATport, ptt_off_cmd, ptt_off_cmd_len) != 0) {
-				// TODO: Close tcpCATport? Remove PTTTCPCAT from PTTmode?
-				ZF_LOGE("Error writing to TCP CAT at %s in KeyPTT(false).", tcpCATportstr);
-			}
-		}
-	}
-	if (PTTmode & PTTCM108) {
-		if (CM108_set_ptt(hCM108device, state) != 0) {
-			// TODO: Close tcpCATport? Remove PTTTCPCAT from PTTmode?
-			ZF_LOGE("Error setting CM108 device %s in KeyPTT(false).", CM108str);
-		}
-	}
-#ifdef __ARM_ARCH
-	if (PTTmode & PTTGPIO) {
-		gpioWrite(GPIOpin, (GPIOinvert ? !state : state));
-	}
-#endif
-
-	ZF_LOGD("[Main.KeyPTT]  PTT-%s", state ? "TRUE" : "FALSE");
-	SetLED(0, state);
-	wg_send_pttled(0, state);
-}
 
 // Return true if reading from CAT is enabled.
 bool rxCAT() {
@@ -215,24 +167,32 @@ int get_ptt_on_cmd_hex(char *hexstr, int length) {
 int set_ptt_on_cmd(char *hexstr, char *descstr) {
 	if (hexstr[0] == 0x00) {
 		ptt_on_cmd_len = 0;
+		wg_send_ptton(0, NULL);
 		ZF_LOGI("PTT ON CMD set to None.");
-		PTTmode &= (0xFF - PTTCAT);  // Disable PTTCAT
-		PTTmode &= (0xFF - PTTTCPCAT);  // Disable PTTTCPCAT
+		PTTmode &= PTTNONCATMASK;  // Disable all CAT related PTT
+		wg_send_pttenabled(0, !!PTTmode);
 	}
 	unsigned char tmp_cmd[MAXCATLEN];
 	unsigned int tmp_len = parse_cmdhex(hexstr, tmp_cmd, descstr);
-	if (tmp_len == 0)
+	if (tmp_len == 0) {
+		char tmpstr[MAXCATLEN * 2 + 1];
+		get_ptt_on_cmd_hex(tmpstr, sizeof(tmpstr));
+		wg_send_ptton(0, tmpstr);
 		return (-1);  // Error alreadly logged
+	}
+	wg_send_ptton(0, hexstr);
 	memcpy(ptt_on_cmd, tmp_cmd, tmp_len);
 	ptt_on_cmd_len = tmp_len;
 	ZF_LOGI("PTT ON CMD set to %s.", hexstr);
 	if (hCATdevice != 0 && ptt_off_cmd_len > 0) {
-		PTTmode |= PTTCAT;
-		ZF_LOGI("PTT using CAT Port: %s", CATportstr);
+		PTTmode = (PTTmode & PTTNONCATMASK) + PTTCAT;
+		wg_send_pttenabled(0, !!PTTmode);
+		ZF_LOGI("PTT using CAT Port: %s", CATstr);
 	}
 	if (tcpCATport != 0 && ptt_off_cmd_len > 0) {
-		PTTmode |= PTTTCPCAT;
-		ZF_LOGI("PTT using TCP CAT port: %s", tcpCATportstr);
+		PTTmode = (PTTmode & PTTNONCATMASK) + PTTTCPCAT;
+		wg_send_pttenabled(0, !!PTTmode);
+		ZF_LOGI("PTT using TCP CAT port: %s", CATstr);
 	}
 	return 0;
 }
@@ -260,26 +220,69 @@ int get_ptt_off_cmd_hex(char *hexstr, int length) {
 int set_ptt_off_cmd(char *hexstr, char *descstr) {
 	if (hexstr[0] == 0x00) {
 		ptt_off_cmd_len = 0;
+		wg_send_pttoff(0, NULL);
 		ZF_LOGI("PTT OFF CMD set to None.");
-		PTTmode &= (0xFF - PTTCAT);  // Disable PTTCAT
-		PTTmode &= (0xFF - PTTTCPCAT);  // Disable PTTTCPCAT
+		PTTmode &= PTTNONCATMASK;  // Disable all CAT related PTT
+		wg_send_pttenabled(0, !!PTTmode);
 	}
 	unsigned char tmp_cmd[MAXCATLEN];
 	unsigned int tmp_len = parse_cmdhex(hexstr, tmp_cmd, descstr);
-	if (tmp_len == 0)
+	if (tmp_len == 0) {
+		char tmpstr[MAXCATLEN * 2 + 1];
+		get_ptt_off_cmd_hex(tmpstr, sizeof(tmpstr));
+		wg_send_pttoff(0, tmpstr);
 		return (-1);  // Error alreadly logged
+	}
+	wg_send_pttoff(0, hexstr);
 	memcpy(ptt_off_cmd, tmp_cmd, tmp_len);
 	ptt_off_cmd_len = tmp_len;
 	ZF_LOGI("PTT OFF CMD set to %s.", hexstr);
 	if (hCATdevice != 0 && ptt_on_cmd_len > 0) {
-		PTTmode |= PTTCAT;
-		ZF_LOGI("PTT using CAT Port: %s", CATportstr);
+		PTTmode = (PTTmode & PTTNONCATMASK) + PTTCAT;
+		wg_send_pttenabled(0, !!PTTmode);
+		ZF_LOGI("PTT using CAT Port: %s", CATstr);
 	}
 	if (tcpCATport != 0 && ptt_on_cmd_len > 0) {
-		PTTmode |= PTTTCPCAT;
-		ZF_LOGI("PTT using TCP CAT port: %s", tcpCATportstr);
+		PTTmode = (PTTmode & PTTNONCATMASK) + PTTTCPCAT;
+		wg_send_pttenabled(0, !!PTTmode);
+		ZF_LOGI("PTT using TCP CAT port: %s", CATstr);
 	}
 	return 0;
+}
+
+// Does nothing if no CATport or tcpCATport is open.
+// If statusmsg && ZF_LOG_ON_VERBOSE && !isPTTmodeEnabled() after closing,
+// then STATUS PTTENABLED FALSE.  So, use statusmsg=false when responding to
+// a PTTENABLED FALSE host command to avoid redundancy.
+void close_CAT(bool statusmsg) {
+	CATstr[0] = 0x00;  // empty string
+	CATrx = false;  // Don't pass data from tcpCAT to host until tx other than PTT
+	if (tcpCATport != 0) {
+		tcpclose(&tcpCATport);
+		tcpCATport = 0;
+		if (PTTmode & PTTTCPCAT)
+			ZF_LOGI("TCP CAT PTT disabled");
+	}
+	if (hCATdevice != 0) {
+		if (hCATdevice != hPTTdevice) {
+			// If this port is also being used for ptt (RTS/DTR), do not
+			// actually close the port, just stop using it for CAT.
+			CloseCOMPort(&hCATdevice);
+		}
+		hCATdevice = 0;
+		if (PTTmode & PTTCAT)
+			ZF_LOGI("CAT PTT disabled");
+	}
+	if (PTTmode & PTTCATMASK) {
+		PTTmode &= PTTNONCATMASK;  // Disable any CAT related PTT
+		wg_send_pttenabled(0, !!PTTmode);
+		if (statusmsg && ZF_LOG_ON_VERBOSE && !isPTTmodeEnabled()) {
+			// For testing with testhost.py
+			ZF_LOGV("STATUS PTTENABLED FALSE");
+			SendCommandToHost("STATUS PTTENABLED FALSE");
+		}
+	}
+	wg_send_catdevice(0, NULL);
 }
 
 // Return the number of bytes read, or -1 if an error occurs.
@@ -287,28 +290,28 @@ int set_ptt_off_cmd(char *hexstr, char *descstr) {
 // hCATdevice returns 0;
 // If neither CAT device nor TCP CAT port is open, or if no data is
 // available from either of them, return 0
+// TODO: Close connection if an error occurs?
 int readCAT(unsigned char *data, size_t len) {
 	int ret = 0;
-	if (hCATdevice == 0 && tcpCATport == 0) {
-		return ret;
-	}
 	if (hCATdevice != 0) {
-		ret = ReadCOMBlock(hCATdevice, data, len);
-		if (ret != 0)
-			return ret; // either error or some data was read;
+		if ((ret = ReadCOMBlock(hCATdevice, data, len)) == -1) {
+			ZF_LOGE("Error reading from CAT");
+			close_CAT(true);
+		}
 	}
 	if (tcpCATport != 0) {
-		// unlike recv(), nbrecv() returns 0 rather than -1 for nothing to read
-		if ((ret = nbrecv(tcpCATport, (char *) data, len)) == -1)
-			ZF_LOGE("Error reading from TCP CAT"); // TODO: close tcpCATport?
-		return ret;
+		if ((ret = nbrecv(tcpCATport, (char *) data, len)) == -1) {
+			ZF_LOGE("Error reading from TCP CAT");
+			close_CAT(true);
+		}
 	}
-	return 0;  // No data was available from hCATdevice and tcpCATport == 0
+	return ret;
 }
 
 // Send data represented by a string of hexidecimal digits to the CAT device.
 // Return -1 and log an error if no CAT device is available or an error occurs.
 // Return 0 on success.
+// TODO: Close connection if an error occurs?
 int sendCAThex(char *hexstr) {
 	if (hCATdevice == 0 && tcpCATport == 0) {
 		ZF_LOGW("No CAT device or TCP CAT port.  sendCAThex() failed.");
@@ -320,8 +323,8 @@ int sendCAThex(char *hexstr) {
 		return (-1);  // error already logged.
 	if (hCATdevice != 0) {
 		if (!WriteCOMBlock(hCATdevice, tmp_cmd, tmp_len)) {
-			// TODO: Close hCATdevice?
-			ZF_LOGE("Error writing %s to CAT on %s.", hexstr, CATportstr);
+			ZF_LOGE("Error writing %s to CAT on %s.", hexstr, CATstr);
+			close_CAT(true);
 			return (-1);
 		}
 		CATrx = true;
@@ -329,7 +332,8 @@ int sendCAThex(char *hexstr) {
 	if (tcpCATport != 0) {
 		if (tcpsend(tcpCATport, tmp_cmd, tmp_len) != 0) {
 			// TODO: Close tcpCATport?
-			ZF_LOGE("Error writing %s to TCP CAT at %s.", hexstr, tcpCATportstr);
+			ZF_LOGE("Error writing %s to TCP CAT on %s.", hexstr, CATstr);
+			close_CAT(true);
 			return (-1);
 		}
 		CATrx = true;
@@ -337,77 +341,80 @@ int sendCAThex(char *hexstr) {
 	return 0;
 }
 
+// Write up to size bytes of CATstr to catstr
+// If no CATstr is set, write nothing.but a terminating null.
+// return the number of bytes written (excluding the terminating NULL)
+int get_catstr(char *catstr, int size) {
+	if (CATstr[0] != 0x00)
+		return snprintf(catstr, size, "%s", CATstr);
+	catstr[0] = 0x00;  // empty string
+	return 0;
+}
+
+
 // Set the device to be used for CAT control.
 // If port is a zero length string, then disable CAT control.
 // On failure, log an error message and return -1;
 // On success, return 0.  If both PTT CAT commands are already set, then also
 // enable CAT control of PTT.
 int set_CATport(char *portstr) {
-	if (strcmp(CATportstr, portstr) == 0)
+	char tmpstr[PORTSTRSZ];
+	// Compare only the first PORTSTRSZ - 1 bytes (exclude terminating NUlL)
+	if (strncmp(CATstr, portstr, PORTSTRSZ - 1) == 0)
 		return 0;  // no change
-	strncpy(CATportstr, portstr, sizeof(CATportstr));
 
-	// close existing port if open
-	if (hCATdevice != 0 && hCATdevice != hRTSdevice && hCATdevice != hDTRdevice)
-		CloseCOMPort(hCATdevice);
-	if (tcpCATport != 0)
-		CATrx = false;  // Don't pass data from CAT to host until tx other than PTT
+	close_CAT(true); // close existing CATport and tcpCATport if open
 
-	if (portstr[0] == 0x00) {
-		if (PTTmode & PTTCAT)
-			ZF_LOGI("CAT PTT disabled");
-		PTTmode &= (0xFF - PTTCAT);  // Disable PTTCAT
+	if (portstr[0] == 0x00)
 		return 0; // An empty string, do nothing but close CAT port if open.
-	}
-	if (strcmp(RTSportstr, portstr) == 0)
-		hCATdevice = hRTSdevice;  // Reuse port already open for RTS
-	else if (strcmp(DTRportstr, portstr) == 0)
-		hCATdevice = hDTRdevice;  // Reuse port already open for DTR
+
+	// Create a temporary copy of portstr.  This will be copied to tcpCATportstr
+	// if successful.  portstr may be modified before then as it is parsed.
+	snprintf(tmpstr, PORTSTRSZ, "%s", portstr);
+
+	// Compare only the first PORTSTRSZ - 1 bytes (exclude terminating NUlL)
+	if (strncmp(PTTstr, portstr, PORTSTRSZ - 1) == 0)
+		hCATdevice = hPTTdevice;  // Reuse port already open for RTS/DTR PTT
 	else {
 		char *baudstr = strlop(portstr, ':');
 		int baud = baudstr == NULL ? 19200 : atoi(baudstr);
-		if ((hCATdevice = OpenCOMPort(portstr, baud)) == 0) {
-			CATportstr[0] = 0x00;  // clear invalid CATportstr
-			if (PTTmode & PTTCAT)
-				ZF_LOGI("CAT PTT disabled");
-			PTTmode &= (0xFF - PTTCAT);  // Disable PTTCAT
+		if ((hCATdevice = OpenCOMPort(portstr, baud)) == 0)
 			return (-1);  // Error msg already logged.
-		}
 	}
-	ZF_LOGI("CAT Control on port %s", CATportstr);
+	strcpy(CATstr, tmpstr);
+	wg_send_catdevice(0, CATstr);
+	strcpy(LastGoodCATstr, CATstr);
+	ZF_LOGI("CAT Control on port %s", CATstr);
 	if (ptt_on_cmd_len > 0 && ptt_off_cmd_len > 0) {
-		PTTmode |= PTTCAT;
-		ZF_LOGI("PTT using CAT Port: %s", CATportstr);
+		PTTmode = (PTTmode & PTTNONCATMASK) + PTTCAT;
+		wg_send_pttenabled(0, !!PTTmode);
+		ZF_LOGI("PTT CAT on %s", CATstr);
 	}
-}
-
-void close_tcpCAT() {
-	if (tcpCATport == 0)
-		return;  // Nothing to close
-	tcpclose(tcpCATport);
-	tcpCATport = 0;
-	if (hCATdevice != 0)
-		CATrx = false;  // Don't pass data from tcpCAT to host until tx other than PTT
+	return 0;
 }
 
 // portstr is usually a positive integer to indicate a TCP port on the
 // local machine (127.0.0.1), but may also have the form
 // ddd.ddd.ddd.ddd:port for a remote network port.
 int set_tcpCAT(char *portstr) {
-	if (strcmp(tcpCATportstr, portstr) == 0)
+	char prefix[] = "TCP:";
+	char tmpstr[PORTSTRSZ];
+	// Compare only the first PORTSTRSZ - 1 bytes (exclude terminating NUlL)
+	if (strncmp(CATstr, prefix, strlen(prefix)) == 0
+		&& strncmp(CATstr + strlen(prefix), portstr,
+			PORTSTRSZ - 1 - strlen(prefix)) == 0
+	)
 		return 0;  // no change
-	strncpy(tcpCATportstr, portstr, sizeof(tcpCATportstr));
 
-	// close existing connection if open
-	if (tcpCATport != 0)
-		close_tcpCAT();
+	close_CAT(true); // close existing CATport and tcpCATport if open
 
-	if (portstr[0] == 0x00) {
-		if (PTTmode & PTTTCPCAT)
-			ZF_LOGI("TCP CAT PTT disabled");
-		PTTmode &= (0xFF - PTTTCPCAT);  // Disable PTTTCPCAT
-		return 0; // An empty string, do nothing but close tcpCAT connection if open.
-	}
+	if (portstr[0] == 0x00)
+		return 0; // An empty string, do nothing but close all CAT connections.
+
+	// Create a temporary copy of portstr.  This will be copied to CATstr
+	// if successful.  portstr may be modified before then as it is parsed.
+	strcpy(tmpstr, prefix);
+	snprintf(tmpstr + strlen(tmpstr), PORTSTRSZ - strlen(tmpstr), "%s", portstr);
 
 	char errformat[] = "Invalid TCP CAT port.  Expected either a positive"
 		" integer for a local TCP port number or ddd.ddd.ddd.ddd:port (where each"
@@ -418,183 +425,304 @@ int set_tcpCAT(char *portstr) {
 	char *remoteportstr = strlop(portstr, ':');
 	if (remoteportstr != NULL) {
 		// portstr is address:port
-		if (strlen(portstr) > sizeof(address)) {
-			ZF_LOGE(errformat, tcpCATport);
-			tcpCATportstr[0] = 0x00;
+		if (strlen(portstr) > sizeof(address) - 1) {
+			ZF_LOGE(errformat, tmpstr + strlen(prefix));
 			return (-1);
 		}
-		strcpy(address, portstr);
+		strcpy(address, portstr);  // size checked above
 		port = atoi(remoteportstr);
 	} else
 		port = atoi(portstr);
 
 	if (port < 1) {
-		ZF_LOGE(errformat, tcpCATport);
-		tcpCATportstr[0] = 0x00;
+		ZF_LOGE(errformat, tmpstr + strlen(prefix));
 		return (-1);
 	}
 
 	// tcpconnect() may take a while to fail if address is unreachable.
 	// So, write to log that we are attempting this connection to explain
 	// the possible pause in execution.
-	ZF_LOGI("Attempting to connect to %s for TCP CAT.", tcpCATportstr);
+	// TODO: Examine what happens to rx audio if this introduces a long delay.
+	ZF_LOGI("Attempting to connect to %s for CAT.", tmpstr);
 	if ((tcpCATport = tcpconnect(address, port)) == -1) {
-		ZF_LOGI("Unable to connect to %s for TCP CAT.", tcpCATportstr);
-		tcpCATportstr[0] = 0x00;
+		ZF_LOGI("Unable to connect to %s for CAT.", tmpstr);
 		tcpCATport = 0;
 		return (-1);
 	}
-
-	ZF_LOGI("TCP CAT Control at %s", tcpCATportstr);
+	strcpy(CATstr, tmpstr);
+	wg_send_catdevice(0, CATstr);
+	strcpy(LastGoodCATstr, CATstr);
+	ZF_LOGI("CAT Control at %s", CATstr);
 	if (ptt_on_cmd_len > 0 && ptt_off_cmd_len > 0) {
-		PTTmode |= PTTTCPCAT;
-		ZF_LOGI("PTT using TCP CAT port: %s", tcpCATportstr);
+		PTTmode = (PTTmode & PTTNONCATMASK) + PTTTCPCAT;
+		wg_send_pttenabled(0, !!PTTmode);
+		ZF_LOGI("PTT using CAT on %s", CATstr);
 	}
 	return 0;
 }
 
-// Set the device to be used for PTT control by setting RTS.
-// If port is a zero length string, then disable PTT control by setting RTS.
-// On failure, log an error message and return -1;
-// On success, return 0.
-int set_RTSport(char *portstr) {
-	if (strcmp(RTSportstr, portstr) == 0)
-		return 0;  // no change
-	strncpy(RTSportstr, portstr, sizeof(RTSportstr));
 
-	// close existing port if open
-	if (hRTSdevice != 0 && hRTSdevice != hCATdevice && hRTSdevice != hDTRdevice)
-		CloseCOMPort(hRTSdevice);
+// Write up to size bytes of PTTstr to pttstr
+// If no PTTstr is set, write nothing.but a terminating null.
+// PTTstr includes prefixes for CM108: and GPIO: but not RTS: or DTR.
+// If PTTmode is PTTRTS or PTTDTR, write a RTS: or DTR: prefix to pttstr
+// before PTTstr
+// return the number of bytes written (excluding the terminating NULL)
+int get_pttstr(char *pttstr, int size) {
+	if (PTTstr[0] != 0x00)
+		return snprintf(pttstr, size, "%s%s%s",
+			PTTmode & PTTRTS ? "RTS:" : "",
+			PTTmode & PTTDTR ? "DTR:" : "",
+			PTTstr);
+	pttstr[0] = 0x00;  // empty string
+	return 0;
+}
 
-	if (portstr[0] == 0x00) {
-		PTTmode &= (0xFF - PTTRTS);  // Disable PTTRTS
-		ZF_LOGI("RTS PTT disabled");
-		return 0; // An empty string, do nothing but close RTS port if open.
-	}
-	if (strcmp(CATportstr, portstr) == 0)
-		hRTSdevice = hCATdevice;  // Reuse port already open for CAT
-	else if (strcmp(DTRportstr, portstr) == 0)
-		hRTSdevice = hDTRdevice;  // Reuse port already open for DTR
-	else {
-		char *baudstr = strlop(portstr, ':');
-		int baud = baudstr == NULL ? 19200 : atoi(baudstr);
-		if ((hRTSdevice = OpenCOMPort(portstr, baud)) == 0) {
-			RTSportstr[0] = 0x00;  // clear invalid RTSportstr
-			PTTmode &= (0xFF - PTTRTS);  // Disable PTTRTS
+// Does nothing if no PTT device/port is open.
+// If statusmsg && ZF_LOG_ON_VERBOSE && !isPTTmodeEnabled() after closing,
+// then STATUS PTTENABLED FALSE.  So, use statusmsg=false when responding to
+// a PTTENABLED FALSE host command to avoid redundancy.
+void close_PTT(bool statusmsg) {
+	PTTstr[0] = 0x00;  // empty string
+	if (hPTTdevice != 0) {
+		if (hPTTdevice != hCATdevice) {
+			// If this port is also being used for CAT, do not actually close
+			// the port, just stop using it for RTS/DTR PTT.
+			CloseCOMPort(&hPTTdevice);
+		}
+		hPTTdevice = 0;
+		if (PTTmode & PTTRTS) {
 			ZF_LOGI("RTS PTT disabled");
-			return (-1);  // Error msg already logged.
+		}
+		if (PTTmode & PTTDTR) {
+			ZF_LOGI("DTR PTT disabled");
 		}
 	}
-	// OpenCOMPort always clears RTS and DTR, so PTT is not ON due to RTS.
-	PTTmode |= PTTRTS;  // Enable PTTRTS
-	ZF_LOGI("Using RTS on port %s for PTT", RTSportstr);
-	return 0;
+	if (hCM108device != 0) {
+		CloseCM108(&hCM108device);
+		ZF_LOGI("CM108 PTT disabled");
+	}
+	if (GPIOpin != 0) {
+		GPIOpin = 0;  // nothing to explicityly close
+		ZF_LOGI("GPIO PTT disabled");
+	}
+	if (PTTmode & PTTNONCATMASK) {
+		PTTmode &= PTTCATMASK;  // Disable any non-CAT related PTT
+		wg_send_pttenabled(0, !!PTTmode);
+		if (statusmsg && ZF_LOG_ON_VERBOSE && !isPTTmodeEnabled()) {
+			// For testing with testhost.py
+			ZF_LOGV("STATUS PTTENABLED FALSE");
+			SendCommandToHost("STATUS PTTENABLED FALSE");
+		}
+	}
+	wg_send_pttdevice(0, NULL);
 }
 
-// Set the device to be used for PTT control by setting DTR.
-// If port is a zero length string, then disable PTT control by setting DTR.
+// Set/update PTTmode associated with RTS/DTR.  This is NOT for other pttModes
+void set_PTT_RTSDTR(bool useRTS) {
+	if (useRTS) {
+		if (PTTmode & PTTRTS)
+			return;  // no change
+		PTTmode = (PTTmode & PTTCATMASK) + PTTRTS;
+		wg_send_pttenabled(0, !!PTTmode);
+		ZF_LOGI("Using RTS on port %s for PTT", PTTstr);
+	} else {
+		if (PTTmode & PTTDTR)
+			return;  // no change
+		PTTmode = (PTTmode & PTTCATMASK) + PTTDTR;
+		wg_send_pttenabled(0, !!PTTmode);
+		ZF_LOGI("Using DTR on port %s for PTT", PTTstr);
+	}
+}
+
+// Set the device to be used for PTT control by setting RTS or DTR.
+// If port is a zero length string, then disable non-cat PTT control.
 // On failure, log an error message and return -1;
 // On success, return 0.
-int set_DTRport(char *portstr) {
-	if (strcmp(DTRportstr, portstr) == 0)
+int set_PTTport(char *portstr, bool useRTS) {
+	char tmpstr[PORTSTRSZ];
+	// Compare only the first PORTSTRSZ - 1 bytes (exclude terminating NUlL)
+	if (strncmp(PTTstr, portstr, PORTSTRSZ - 1) == 0) {
+		set_PTT_RTSDTR(useRTS);  // port OK, but PTTmode may need to be updated
 		return 0;  // no change
-	strncpy(DTRportstr, portstr, sizeof(RTSportstr));
-
-	// close existing port if open
-	if (hDTRdevice != 0 && hDTRdevice != hCATdevice && hDTRdevice != hRTSdevice)
-		CloseCOMPort(hDTRdevice);
-
-	if (portstr[0] == 0x00) {
-		PTTmode &= (0xFF - PTTDTR);  // Disable PTTDTR
-		ZF_LOGI("DTR PTT disabled");
-		return 0; // An empty string, do nothing but close DTR port if open.
 	}
-	if (strcmp(CATportstr, portstr) == 0)
-		hDTRdevice = hCATdevice;  // Reuse port already open for CAT
-	else if (strcmp(RTSportstr, portstr) == 0)
-		hDTRdevice = hRTSdevice;  // Reuse port already open for RTS
-	else {
+	snprintf(tmpstr, PORTSTRSZ, "%s", portstr);
+
+	close_PTT(true);  // close port used for RTS/DTR, CM108, or GPIO if open
+
+	if (portstr[0] == 0x00)
+		return 0; // An empty string, do nothing but close PTT port if open.
+
+	// Compare only the first PORTSTRSZ - 1 bytes (exclude terminating NUlL)
+	if (strncmp(CATstr, portstr, PORTSTRSZ - 1) == 0) {
+		hPTTdevice = hCATdevice;  // Reuse port already open for CAT
+	} else {
 		char *baudstr = strlop(portstr, ':');
 		int baud = baudstr == NULL ? 19200 : atoi(baudstr);
-		if ((hDTRdevice = OpenCOMPort(portstr, baud)) == 0) {
-			DTRportstr[0] = 0x00;  // clear invalid RTSportstr
-			PTTmode &= (0xFF - PTTDTR);  // Disable PTTDTR
-			ZF_LOGI("DTR PTT disabled");
+		if ((hPTTdevice = OpenCOMPort(portstr, baud)) == 0)
 			return (-1);  // Error msg already logged.
-		}
 	}
-	// OpenCOMPort always clears RTS and DTR, so PTT is not ON due to DTR.
-	PTTmode |= PTTDTR;  // Enable PTTDTR
-	ZF_LOGI("Using DTR on port %s for PTT", DTRportstr);
+	// OpenCOMPort always clears RTS and DTR, so PTT is not ON due to RTS or DTR.
+	set_PTT_RTSDTR(useRTS);  // updates PTTmode and logs change
+	strcpy(PTTstr, tmpstr);
+	wg_send_pttdevice(0, PTTstr);
+	// Since LastGoodPTTstr includes a prefix while PTTstr does not, a long
+	// PTTstr may be truncated when copied to LastGoodPTTstr
+	snprintf(LastGoodPTTstr, PORTSTRSZ, "%s%s%s",
+			PTTmode & PTTRTS ? "RTS:" : "",
+			PTTmode & PTTDTR ? "DTR:" : "",
+			PTTstr);
 	return 0;
 }
 
-int set_GPIOpin(int pin) {
+// Expect pinstr to have a GPIO: prefix
+int set_GPIOpin(char *pinstr) {
 #ifdef __ARM_ARCH
-	if (pin == 0) {
-		PTTmode &= (0xFF - PTTGPIO);  // Disable GPIO PTT
-		ZF_LOGI("GPIO PTT disabled");
-		return 0;
+	// Compare only the first PORTSTRSZ - 1 bytes (exclude terminating NUlL)
+	if (strncmp(PTTstr, pinstr, PORTSTRSZ - 1) == 0)
+		return 0;  // no change
+
+	close_PTT(true);  // close port used for RTS/DTR, CM108, or GPIO if open
+
+	long pin;
+	if (strncmp(pinstr, "GPIO:", 5) != 0 || !try_parse_long(pinstr + 5, &pin)) {
+		ZF_LOGW("Error extracting a pin number from %s for GPIO.", pinstr);
+		return (-1);
 	}
+	if (pin == 0)
+		return 0; // Do nothing but close PTT port if open.
 	if (pin < 0) {
-		GPIOpin = -pin;
+		GPIOpin = (int) -pin;
 		GPIOinvert = true;
 	} else {
-		GPIOpin = pin;
+		GPIOpin = (int) pin;
 		GPIOinvert = false;
+	}
+	if (GPIOpin > 26) {
+		ZF_LOGW("Error: GPIO pin number (%i) may not exceed 26", GPIOpin);
+		return (-1);
 	}
 	if (gpioInitialise() == 0) {
 		SetupGPIOPTT(GPIOpin, GPIOinvert);
-		PTTmode |= PTTGPIO;  // Enable PTTGPIO
+		PTTmode = (PTTmode & PTTCATMASK) + PTTGPIO;  // Enable PTTGPIO
+		wg_send_pttenabled(0, !!PTTmode);
 		ZF_LOGI("Using %sGPIO pin %i for PTT",
 			GPIOinvert ? "inverted " : "", GPIOpin);
+		snprintf(PTTstr, PORTSTRSZ, "%s", pinstr);
+		wg_send_pttdevice(0, PTTstr);
+		strcpy(LastGoodPTTstr, PTTstr);
+		return 0;
 	} else {
 		ZF_LOGE("Couldn't initialise GPIO interface for PTT");
-		PTTmode &= (0xFF - PTTGPIO);  // disable GPIO PTT
 		return (-1);
 	}
 #else
-	(void) pin;  // to avoid unused variable warning
+	(void) pinstr;  // to avoid unused variable warning
 	ZF_LOGE("GPIO interface for PTT not available on this platform");
-	PTTmode &= (0xFF - PTTGPIO);  // disable GPIO PTT
 	return (-1);
 #endif
 }
 
+// Expect devstr to have a CM108: prefix
 int set_cm108(char *devstr) {
-	if (strcmp(CM108str, devstr) == 0)
+	// Compare only the first PORTSTRSZ - 1 bytes (exclude terminating NUlL)
+	if (strncmp(PTTstr, devstr, PORTSTRSZ - 1) == 0)
 		return 0;  // no change
-	strncpy(CM108str, devstr, sizeof(CM108str));
 
-	// close existing device if open
-	if (hCM108device != 0)
-		CloseCM108(hCM108device);
+	close_PTT(true);  // close port used for RTS/DTR, CM108, or GPIO if open
 
-	if (devstr[0] == 0x00) {
-		PTTmode &= (0xFF - PTTCM108);  // disable CM108 PTT
-		ZF_LOGI("CM108 Device PTT disabled");
+	if (devstr[0] == 0x00)
 		return 0; // An empty string, do nothing but disable CM108 PTT
-	}
 
-	if ((hCM108device = OpenCM108(devstr)) == 0) {
-		// On Windows, if devstr is "?" or "??"
-		CM108str[0] = 0x00;  // clear invalid CM108str
-		PTTmode &= (0xFF - PTTCM108);  // Disable PTTCM108
-		ZF_LOGI("CM108 PTT disabled");
+	// skip CM108: prefix when passing to OpenCM108
+	if ((hCM108device = OpenCM108(devstr + 6)) == 0) {
+		// Invalid devstr.  On Windows, also when devstr is "?" or "??"
 		return (-1);  // Error msg already logged.
 	}
-	PTTmode |= PTTCM108;  // Enable PTTCM108
-	ZF_LOGI("Using CM108 device %s for PTT", CM108str);
+	PTTmode = (PTTmode & PTTCATMASK) + PTTCM108;  // Enable PTTCM108
+	wg_send_pttenabled(0, !!PTTmode);
+	snprintf(PTTstr, PORTSTRSZ, "%s", devstr);
+	wg_send_pttdevice(0, PTTstr);
+	strcpy(LastGoodPTTstr, PTTstr);
+	ZF_LOGI("Using CM108 device %s for PTT", PTTstr);
 	return 0;
 }
 
 
-// Take the argument to the -ptt or -p command line option and pass it to the
-// appropriate function for control of PTT by RTS, DTR, or CM108.
+// Take the argument to the -ptt or -p command line option or the RADIOPTT host
+// command and pass it to the appropriate function for control of PTT by
+// RTS/DTR, CM108, or GPIO.
 // Return the result returned by the appropriate function, which should be 0 for
 // success or -1 for failure
 int parse_pttstr(char *pttstr) {
-	if (strcmp(pttstr, "RIGCTLD") == 0) {
+	if (pttstr[0] == 0x00) {
+		// empty string, so just close.
+		close_PTT(true);
+		return 0;  // success
+	}
+	if (strcmp(pttstr, "RESTORE") == 0) {
+		if (PTTstr[0] != 0x00) {
+			ZF_LOGW("parse_pttstr(RESTORE) called, but PTTstr is %s (not"
+				" empty).  So, do nothing",
+				PTTstr);
+			// Don't leave RESTORE shown for PTT Device in WebGUI
+			wg_send_pttdevice(0, PTTstr);
+			return 0;  // this is success
+		}
+		if (LastGoodPTTstr[0] == 0x00) {
+			ZF_LOGW("parse_pttstr(RESTORE) called, but LastGoodPTTstr is empty,"
+				"  So, unable to restore.");
+			// Don't leave RESTORE shown for PTT Device in WebGUI
+			wg_send_pttdevice(0, NULL);
+			return -1;
+		}
+		char *tmpstr = strdup(LastGoodPTTstr);
+		int ret = parse_pttstr(tmpstr);
+		free(tmpstr);
+		return ret;
+	}
+	// Notice that RTS: or DTR: prefix is stripped from pttstr when calling
+	// setPTTport(), but CM108: and GPIO: prefixes are not stripped.
+	if (strncmp(pttstr, "CM108:", 6) == 0 && strlen(pttstr) > 6)
+		return set_cm108(pttstr);
+	if (strncmp(pttstr, "RTS:", 4) == 0 && strlen(pttstr) > 4)
+		return set_PTTport(pttstr + 4, true);  // This strips the RTS: prefix
+	if (strncmp(pttstr, "DTR:", 4) == 0 && strlen(pttstr) > 4)
+		return set_PTTport(pttstr + 4, false);  // This strips the DTR: prefix
+	if (strncmp(pttstr, "GPIO:", 5) == 0 && strlen(pttstr) > 5)
+		return set_GPIOpin(pttstr);
+	return set_PTTport(pttstr, true);  // Assume RTS if no prefix isprovided.
+}
+
+// return 0 on success (including close if catstr is an empty string)
+int parse_catstr(char *catstr) {
+	if (catstr[0] == 0x00) {
+		// empty string, so just close
+		close_CAT(true);
+		return 0;  // success
+	}
+	if (strcmp(catstr, "RESTORE") == 0) {
+		if (CATstr[0] != 0x00) {
+			ZF_LOGW("parse_catstr(RESTORE) called, but CATstr is %s (not"
+				" empty).  So, do nothing",
+				CATstr);
+			// Don't leave RESTORE shown for CAT Device in WebGUI
+			wg_send_catdevice(0, CATstr);
+			return 0;  // This is success
+		}
+		if (LastGoodCATstr[0] == 0x00) {
+			ZF_LOGW("parse_catstr(RESTORE) called, but LastGoodCATstr is empty,"
+				"  So, unable to restore.");
+			// Don't leave RESTORE shown for CAT Device in WebGUI
+			wg_send_catdevice(0, CATstr);
+			return -1;
+		}
+		char *tmpstr = strdup(LastGoodCATstr);
+		int ret = parse_catstr(tmpstr);
+		free(tmpstr);
+		return ret;
+	}
+	if (strcmp(catstr, "RIGCTLD") == 0) {
 		// This is equivalent to
 		// -c TCP:4532 -k 5420310A -u 5420300A
 		// to use hamlib/rigctld running on its default
@@ -606,19 +734,121 @@ int parse_pttstr(char *pttstr) {
 		if (ret == 0)
 			ret = set_ptt_off_cmd("5420300A",
 				"command line option --ptt RIGCTLD");
+		if (ret == 0)
+			// LastGoodCATstr has been set to TCP:4532.  Change this to RIGCTLD
+			// so that RADIOCTRLPORT RESTORE will ensure that both TCP:4532 is
+			// opened and that the PTTON and PTTOFF strings are set.
+			strcpy(LastGoodCATstr, "RIGCTLD");
 		return ret;
 	}
-	if (strncmp(pttstr, "CM108:", 6) == 0 && strlen(pttstr) > 6)
-		return set_cm108(pttstr + 6);
-	if (strncmp(pttstr, "RTS:", 4) == 0 && strlen(pttstr) > 4)
-		return set_RTSport(pttstr + 4);
-	if (strncmp(pttstr, "DTR:", 4) == 0 && strlen(pttstr) > 4)
-		return set_DTRport(pttstr + 4);
-	return set_RTSport(pttstr);  // default
-}
-
-int parse_catstr(char *catstr) {
 	if (strncmp(catstr, "TCP:", 4) == 0 && strlen(catstr) > 4)
 		return set_tcpCAT(catstr + 4);
 	return set_CATport(catstr);  // default without prefix
+}
+
+bool isPTTmodeEnabled() {
+	return !!PTTmode;
+}
+
+// If state is true, then switch to transmit.  If state is false, then switch
+// to recieve.  If none of the methods for locally controlling PTT are set, then
+// send commands to the host program which it may use to control PTT.
+void KeyPTT(bool state) {
+	bool done = false;
+
+	if (PTTmode & PTTRTS) {
+		if (state) {
+			if (COMSetRTS(hPTTdevice)) {
+				done = true;
+			} else {
+				ZF_LOGE("Error setting RTS %s in KeyPTT(true).", PTTstr);
+				close_PTT(true);
+			}
+		} else {
+			if (COMClearRTS(hPTTdevice)) {
+				done = true;
+			} else {
+				ZF_LOGE("Error clearing RTS %s in KeyPTT(true).", PTTstr);
+				close_PTT(true);
+			}
+		}
+	}
+	if (PTTmode & PTTDTR) {
+		if (state) {
+			if (COMSetDTR(hPTTdevice)) {
+				done = true;
+			} else {
+				ZF_LOGE("Error setting DTR %s in KeyPTT(true).", PTTstr);
+				close_PTT(true);
+			}
+		} else {
+			if (COMClearDTR(hPTTdevice)) {
+				done = true;
+			} else {
+				ZF_LOGE("Error clearing DTR %s in KeyPTT(true).", PTTstr);
+				close_PTT(true);
+			}
+		}
+	}
+	if (PTTmode & PTTCAT) {
+		if (state) {
+			if (WriteCOMBlock(hCATdevice, ptt_on_cmd, ptt_on_cmd_len)) {
+				done = true;
+			} else {
+				ZF_LOGE("Error writing to CAT on %s in KeyPTT(true).", CATstr);
+				close_CAT(true);
+			}
+		} else {
+			if (WriteCOMBlock(hCATdevice, ptt_off_cmd, ptt_off_cmd_len)) {
+				done = true;
+			} else {
+				ZF_LOGE("Error writing to CAT on %s in KeyPTT(false).", CATstr);
+				close_CAT(true);
+			}
+		}
+	}
+	if (PTTmode & PTTTCPCAT) {
+		if (state) {
+			if (tcpsend(tcpCATport, ptt_on_cmd, ptt_on_cmd_len) == 0) {
+				done = true;
+			} else {
+				ZF_LOGE("Error writing to CAT on %s in KeyPTT(true).", CATstr);
+				close_CAT(true);
+			}
+		} else {
+			if (tcpsend(tcpCATport, ptt_off_cmd, ptt_off_cmd_len) == 0) {
+				done = true;
+			} else {
+				ZF_LOGE("Error writing to CAT on %s in KeyPTT(false).", CATstr);
+				close_CAT(true);
+			}
+		}
+	}
+	if (PTTmode & PTTCM108) {
+		if (CM108_set_ptt(hCM108device, state) == 0) {
+			done = true;
+		} else {
+			ZF_LOGE("Error setting CM108 device %s in KeyPTT(%s).",
+				PTTstr, state ? "true" : "false");
+			close_PTT(true);
+		}
+	}
+#ifdef __ARM_ARCH
+	if (PTTmode & PTTGPIO) {
+		gpioWrite(GPIOpin, (GPIOinvert ? !state : state));
+		done = true;
+	}
+#endif
+
+	if (!done) {
+		// This handles PTTmode == 0x00 as well as failure of another mode
+		// Require host or VOX to manage PTT
+		if (state)
+			SendCommandToHostQuiet("PTT TRUE");
+		else
+			SendCommandToHostQuiet("PTT FALSE");
+	}
+	ZF_LOGD("[Main.KeyPTT]  PTT-%s", state ? "TRUE" : "FALSE");
+	SetLED(0, state);
+	wg_send_pttled(0, state);
 }

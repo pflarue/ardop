@@ -9,10 +9,12 @@
 
 #include "common/os_util.h"
 #include "common/ARDOPC.h"
+#include "common/Modulate.h"
 #include "common/wav.h"
 #include "common/Locator.h"
 #include "common/RXO.h"
 #include "common/sdft.h"
+#include "common/Webgui.h"
 #include "common/eutf8.h"
 #include "rockliff/rrs.h"
 
@@ -297,7 +299,6 @@ int EnvelopeCorrelator();
 bool DecodeFrame(int intFrameType, uint8_t bytData[MAX_DATA_LENGTH]);
 
 void Update4FSKConstellation(int * intToneMags, int * intQuality);
-void ProcessPingFrame(char * bytData);
 int Compute4FSKSN();
 
 void DemodPSK();
@@ -882,6 +883,20 @@ void UpdateCurrentLevel(bool clipped, short * Samples, int nSamples) {
 		}
 	}
 
+	if (!RXSilent && max == 0 && min == 0
+		&& strcmp(CaptureDevice, "NOSOUND") != 0
+	) {
+		ZF_LOGD("RX audio from CaptureDevice=%s is silent.  Device failure?",
+			CaptureDevice);
+		RXSilent = true;
+		wg_send_rxsilent(0);
+	} else if (RXSilent && max > 0 && min < 0) {
+		ZF_LOGD("RX audio from CaptureDevice=%s is no longer silent.",
+			CaptureDevice);
+		RXSilent = false;
+		wg_send_rxenabled(0, true);
+	}
+
 	CurrentLevel = ((max - min) * 75) /32768;  // Scale to 150 max
 	wg_send_currentlevel(0, CurrentLevel);
 
@@ -1438,6 +1453,7 @@ void ProcessNewSamples(short * Samples, int nSamples) {
 				ZF_LOGE("ERROR: In ProcessNewSamples() Invalid EncLen (%d).", EncLen);
 				goto skipDecode;
 			}
+			// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 			Mod4FSKDataAndPlay(BREAK, &bytEncodedBytes[0], EncLen, intARQDefaultDlyMs);  // only returns when all sent
 
 			goto skipDecode;
@@ -1455,6 +1471,7 @@ void ProcessNewSamples(short * Samples, int nSamples) {
 				ZF_LOGE("ERROR: In ProcessNewSamples() Invalid EncLen (%d).", EncLen);
 				goto skipDecode;
 			}
+			// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 			Mod4FSKDataAndPlay(BREAK, &bytEncodedBytes[0], EncLen, intARQDefaultDlyMs);  // only returns when all sent
 			goto skipDecode;
 		}
@@ -1518,7 +1535,7 @@ ProcessFrame:
 				else if (intFrameType >= ConReqmin && intFrameType <= ConReqmax)
 					ProcessUnconnectedConReqFrame(intFrameType, bytData);
 				else if (intFrameType == PING)
-					ProcessPingFrame(bytData);
+					ProcessPingFrame();
 				else if (intFrameType == DISCFRAME)
 				{
 					// Special case to process DISC from previous connection (Ending station must have missed END reply to DISC) Handles protocol rule 1.5
@@ -1532,6 +1549,7 @@ ProcessFrame:
 						ZF_LOGE("ERROR: In ProcessNewSamples() Invalid EncLen (%d).", EncLen);
 						goto skipDecode;
 					} else
+						// TODO: Do anything different if Mod4FSKDataAndPlay() fails returning false?
 						Mod4FSKDataAndPlay(END, &bytEncodedBytes[0], EncLen, LeaderLength);  // only returns when all sent
 
 					// Drop through

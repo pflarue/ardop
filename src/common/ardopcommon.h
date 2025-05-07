@@ -9,11 +9,18 @@ extern const char ProductVersion[];
 // #define USE_SOUNDMODEM
 
 // Sound interface buffer size
-
-#define SendSize 1200  // 100 mS for now
 #define ReceiveSize 240  // Must be 1024 for FFT (or we will need torepack frames)
 #define NumberofinBuffers 4
 
+#define DEVSTRSZ 80
+extern char CaptureDevice[DEVSTRSZ];
+extern int Cch;  // Number of channels used to open CaptureDevice
+extern char PlaybackDevice[DEVSTRSZ];
+extern int Pch;  // Number of channels used to open PlaybackDevice
+extern bool UseLeftRX;
+extern bool UseRightRX;
+extern bool UseLeftTX;
+extern bool UseRightTX;
 
 #ifndef _WIN32_WINNT  // Allow use of features specific to Windows XP or later.
 #define _WIN32_WINNT 0x0501  // Change this to the appropriate value to target other versions of Windows.
@@ -27,7 +34,7 @@ extern const char ProductVersion[];
 #define min(x, y) ((x) < (y) ? (x) : (y))
 #endif
 
-void txSleep(int mS);
+void txSleep(unsigned int mS);
 
 #include <time.h>
 
@@ -110,10 +117,7 @@ int EncodeFSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigne
 int EncodePSKData(UCHAR bytFrameType, UCHAR * bytDataToSend, int Length, unsigned char * bytEncodedBytes);
 int EncodeDATAACK(int intQuality, UCHAR bytSessionID, UCHAR * bytreturn);
 int EncodeDATANAK(int intQuality , UCHAR bytSessionID, UCHAR * bytreturn);
-void Mod4FSK600BdDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int intLeaderLen);
 bool IsDataFrame(UCHAR intFrameType);
-void StartCodec(char * strFault);
-void StopCodec(char * strFault);
 bool SendARQConnectRequest(const StationId* mycall, const StationId* target);
 void AddDataToDataToSend(UCHAR * bytNewData, int Len);
 bool StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, bool blnSendID);
@@ -131,17 +135,13 @@ bool BusyDetect3(float * dblMag, int intStart, int intStop);
 void displayState(const char * State);
 void displayCall(int dirn, const char * call);
 
-void SampleSink(short Sample);
-void SoundFlush();
 void StopCapture();
 void DiscardOldSamples();
 void ClearAllMixedSamples();
 
 void SetFilter(void * Filter());
 
-void AddTrailer();
 void CWID(char * strID, short * intSamples, bool blnPlay);
-void sendCWID(const StationId * id);
 UCHAR ComputeTypeParity(UCHAR bytFrameType);
 void GenCRC16FrameType(char * Data, int Length, UCHAR bytFrameType);
 bool CheckCRC16FrameType(unsigned char * Data, int Length, UCHAR bytFrameType);
@@ -185,14 +185,12 @@ void AddTagToDataAndSendToHost(UCHAR * Msg, char * Type, int Len);
 void TCPAddTagToDataAndSendToHost(UCHAR * Msg, char * Type, int Len);
 
 void RemoveDataFromQueue(int Len);
-void RemodulateLastFrame();
 
 void GetSemaphore();
 void FreeSemaphore();
 const char * Name(UCHAR bytID);
 const char * shortName(UCHAR bytID);
 bool InitSound();
-void initFilter(int Width, int centerFreq);
 void FourierTransform(int NumSamples, float * RealIn, float * RealOut, float * ImagOut, int InverseTransform);
 VOID LostHost();
 VOID ProcessDEDModeFrame(UCHAR * rxbuffer, unsigned int Length);
@@ -333,7 +331,6 @@ extern bool blnPINGrepeating;
 extern bool blnFramePending;
 extern int intPINGRepeats;
 
-extern int dttCodecStarted;
 extern int dttStartRTMeasure;
 
 extern int intCalcLeader;  // the computed leader to use based on the reported Leader Length
@@ -343,7 +340,6 @@ extern bool SoundIsPlaying;
 extern bool blnAbort;
 extern bool blnClosing;
 extern int closedByPosixSignal;
-extern bool blnCodecStarted;
 extern bool blnInitializing;
 extern bool blnARQDisconnect;
 extern int DriveLevel;
@@ -361,8 +357,6 @@ extern bool blnListen;
 extern bool Monitor;
 extern bool AutoBreak;
 extern bool BusyBlock;
-
-extern int DecodeCompleteTime;
 
 extern bool AccumulateStats;
 
@@ -463,4 +457,37 @@ int EncodeARQConRequest(const StationId* mycall, const StationId* target, enum _
 #endif
 
 int decode_wav();
+
+#ifndef DEVICEINFO_H
+#define DEVICEINFO_H
+
+typedef struct DI {
+	// name and alias shall be truncated to DEVSTRSZ bytes including a
+	// terminating null.
+	char *name;
+	char *alias;  // An alternative, equally valid, name
+	char *desc;
+	bool capture;
+	bool playback;
+	bool capturebusy;
+	bool playbackbusy;
+} DeviceInfo;
+
+#endif
+
+extern DeviceInfo **AudioDevices;  // A list of all audio devices (Capture and Playback)
+void InitDevices(DeviceInfo ***devicesptr);
+int ExtendDevices(DeviceInfo ***devicesptr);
+void FreeDevices(DeviceInfo ***devicesptr);
+bool DevicesToCSV(DeviceInfo **devices, char *dst, int dstsize, bool forcapture);
+void LogDevices(DeviceInfo **devices, char *headstr, bool inputonly, bool outputonly);
+int FindAudioDevice(char *devstr, bool iscapture);
+int getPch(bool quiet);
+int getCch(bool quiet);
+
+// Send updated info about audio system configuration to WebGui.  This should be
+// called whenever a change to this configuration is made (or detected due to a
+// failure).  If do_getdevices is true, then call GetDevices() first.  This
+// should normally be true, unless GetDevices() was just called.
+void updateWebGuiAudioConfig(bool do_getdevices);
 

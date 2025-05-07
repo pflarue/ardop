@@ -3,19 +3,19 @@
 
 #include <stdbool.h>
 
-#include "linux/ALSA.h"
 #include "common/ARDOPC.h"
 #include "common/ardopcommon.h"
+#include "common/audio.h"
 #include "common/wav.h"
 #include "common/ptt.h"  // PTT and CAT
+#include "common/Webgui.h"
 #include "common/eutf8.h"
 
 bool blnHostRDY = false;
 extern int intFECFramesSent;
 
-extern char CaptureDevice[80];
-extern char PlaybackDevice[80];
-
+extern bool UseSDFT;  // Enable use of the alternative Sliding DFT demodulator
+extern bool WriteTxWav;  // Record TX
 extern bool WriteRxWav;  // Record RX controlled by Command line/TX/Timer
 extern bool HWriteRxWav;  // Record RX controlled by host command RECRX
 extern struct WavFile *rxwf;  // For recording of RX audio
@@ -44,12 +44,6 @@ extern bool WG_DevMode;
 extern int intARQDefaultDlyMs;
 
 unsigned char *utf8_check(unsigned char *s, size_t slen);
-int wg_send_mycall(int cnum, char *call);
-int wg_send_bandwidth(int cnum);
-int wg_send_hostmsg(int cnum, char msgtype, char *strText);
-int wg_send_hostdatab(int cnum, char *prefix, unsigned char *data, int datalen);
-int wg_send_hostdatat(int cnum, char *prefix, unsigned char *data, int datalen);int wg_send_drivelevel(int cnum);
-int wg_send_wavrx(int cnum, bool isRecording);
 
 extern bool NeedTwoToneTest;
 extern short InputNoiseStdDev;
@@ -130,7 +124,7 @@ void AddDataToDataToSend(UCHAR * bytNewData, int Len)
 char strFault[100] = "";
 
 /*
- * Evaluates command with TRUE/false argument
+ * Evaluates command with TRUE/FALSE argument
  *
  * At the input, Value must be set to the current setting for
  * the option named in strCMD.
@@ -251,6 +245,54 @@ bool parse_station_and_nattempts(
 	return true;
 }
 
+bool process_capturechannel(char *param) {
+	if (strcmp(param, "MONO") == 0) {
+		UseLeftRX = true;
+		UseRightRX = true;
+	} else if (strcmp(param, "LEFT") == 0) {
+		UseLeftRX = true;
+		UseRightRX = false;
+	} else if (strcmp(param, "RIGHT") == 0) {
+		UseLeftRX = false;
+		UseRightRX = true;
+	} else {
+		return false;
+	}
+	wg_send_capturechannel(0);
+	ZF_LOGD("CAPTURECHANNEL now %s", param);
+	if (RXEnabled && Cch != getCch(true)) {
+		CloseSoundCapture(true);  // calls updateWebGuiAudioConfig(true);
+		// It is possible that the following will fail due to this new
+		// setting or because of a problem with the device.
+		OpenSoundCapture("RESTORE", getCch(true));
+	}
+	return true;
+}
+
+bool process_playbackchannel(char *param) {
+	if (strcmp(param, "MONO") == 0) {
+		UseLeftTX = true;
+		UseRightTX = true;
+	} else if (strcmp(param, "LEFT") == 0) {
+		UseLeftTX = true;
+		UseRightTX = false;
+	} else if (strcmp(param, "RIGHT") == 0) {
+		UseLeftTX = false;
+		UseRightTX = true;
+	} else {
+		return false;
+	}
+	wg_send_playbackchannel(0);
+	ZF_LOGD("PLAYBACKCHANNEL now %s", param);
+	if (TXEnabled && Pch != getPch(true)) {
+		CloseSoundPlayback(true);  // calls updateWebGuiAudioConfig(true);
+		// It is possible that the following will fail due to this new
+		// setting or because of a problem with the device.
+		OpenSoundPlayback("RESTORE", getPch(true));
+	}
+	return true;
+}
+
 // Function for processing a command from Host
 
 void ProcessCommandFromHost(char * strCMD)
@@ -260,7 +302,12 @@ void ProcessCommandFromHost(char * strCMD)
 	// TXFRAME with data up to 1024 bytes written as hex
 	// requiring 2 string chars per data byte
 	char cmdCopy[3000] = "";
-	char cmdReply[1024];
+	// cmdReply expanded to accomodate long string response to CAPTUREDEVICES
+	// AND PLAYBACKDEVICES commands.
+	// TODO: Is cmdReply long enough now?  Should DevicesToCSV() be modified to
+	// produce a truncated valid response if dstsize is too small?
+	char cmdReply[4096];
+
 	if (WG_DevMode)
 		wg_send_hostmsg(0, 'F', strCMD);
 
@@ -469,29 +516,107 @@ void ProcessCommandFromHost(char * strCMD)
 		goto cmddone;
 	}
 
-	if (strcmp(strCMD, "CAPTURE") == 0)
-	{
-		if (ptrParams == 0)
-		{
-			sprintf(cmdReply, "%s %s", strCMD, CaptureDevice);
+	// Warning: If a CaptureDevice is currently open and the value provided
+	// with this command is not identical to the current value of
+	// CaptureDevice, then the device will be closed so that this new
+	// CaptureDevice can be opened.  This is true even if using the same device
+	// is specified by another name.  This may result in loss of received data.
+	// If the special device name "NONE" is used, close any existing CAPTURE
+	// device if one is open.  This is similar to RXENABLED FALSE.
+	// If the special device name "RESTORE" is used, do nothing if RXEnabled is
+	// true.  However, if RXEnabled is false, but a CAPTURE device has
+	// previously been successfully opened, then try to reopen that device.
+	// Unlike most commands, the arguments to CAPTURE and PLAYBACK are case
+	// sensitive.
+	if (strcmp(strCMD, "CAPTURE") == 0) {
+		char *ptrCaseParams = strlop(cmdCopy, ' ');
+		if (ptrParams == 0) {
+			sprintf(cmdReply, "%s %s", strCMD,
+				CaptureDevice[0] == 0x00 ? "NONE" : CaptureDevice);
 			SendReplyToHost(cmdReply);
-		}
-		else
-		{
-			strcpy(CaptureDevice, ptrParams);
-			sprintf(cmdReply, "%s now %s", strCMD, CaptureDevice);
-			SendReplyToHost(cmdReply);
+		} else {
+			bool ret;
+			if (strcmp(ptrCaseParams, "NONE") == 0)
+				ret = OpenSoundCapture("", getCch(true));
+			else
+				ret = OpenSoundCapture(ptrCaseParams, getCch(true));
+			if (ret) {
+				sprintf(cmdReply, "%s now %s", strCMD, CaptureDevice);
+				SendReplyToHost(cmdReply);
+			} else {
+				snprintf(strFault, sizeof(strFault),
+					"Cannot open CaptureDevice as configured: %s %s",
+					strCMD, ptrCaseParams);
+			}
 		}
 		goto cmddone;
 	}
 
-	if (strcmp(strCMD, "CAPTUREDEVICES") == 0)
-	{
+
+	// Warning: If a CaptureDevice is currently open and the value provided
+	// with this command is not identical to the current value, then the device
+	// may be closed so that it can be re-opened with this new configuration.
+	// This may result in loss of received data.
+	// With no parameter, respond with  CAPTURECHANNEL LEFT, RIGHT, or MONO.
+	// With a parameter of LEFT, RIGHT, or MONO, set the channel used by
+	// CaptureDevice.
+	if (strcmp(strCMD, "CAPTURECHANNEL") == 0) {
+		if (ptrParams == 0) {
+			if (UseLeftRX && UseRightRX)
+				sprintf(cmdReply, "%s MONO", strCMD);
+			else if (UseLeftRX)
+				sprintf(cmdReply, "%s LEFT", strCMD);
+			else // UseRightRX
+				sprintf(cmdReply, "%s RIGHT", strCMD);
+			SendReplyToHost(cmdReply);
+			goto cmddone;
+		}
+		if (!process_capturechannel(ptrParams)) {
+			snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
+			goto cmddone;
+		}
+		sprintf(cmdReply, "%s now %s", strCMD, ptrParams);
+		SendReplyToHost(cmdReply);
+		goto cmddone;
+	}
+
+	// Per the Ardop specification (Protocol Native TNC Commands), this command
+	// "Returns a comma delimited list of all currently installed capture
+	// devices."  The specification does not indicate how device names that
+	// contain commas shall be handled.  Nor does it provide any explicit
+	// mechanism to include a device description in addition to a device name.
+	//
+	// So: The following is used:
+	// Device names may be wrapped in double quotes, and double double quotes
+	// within double quotes shall be interpreted as a literal double quotes
+	// character.  If any device name includes a linefeed (\n), then the text
+	// before the linefeed shall be interpreted as the name, while any text
+	// after the first linefeed shall be interpreted as a description.  The name
+	// portion of this value is suitable to pass to the CAPTURE command.
+	//
+	// Furthermore:
+	// If the description begins with "[BUSY", then this is an indicaton that the
+	// device is currently in use (by this or another program).  This may be
+	// followed immediately by a closing bracket "]" or additional details may be
+	// included before that closing bracket.
+	//
+	// The response CSV text is preceeded by the command string and a space.
+	// The host should probably discard all whitespace after the command string.
+	if (strcmp(strCMD, "CAPTUREDEVICES") == 0) {
+		GetDevices();
+		LogDevices(AudioDevices, "Capture (input) Devices for host command",
+			true, false);
+
+		// TODO: Should DevicesToCSV() be modified to produce a valid but
+		// truncated response if dstsize is inadequate?
 		snprintf(cmdReply, sizeof(cmdReply), "%s ", strCMD);
-		for (int i; i < CaptureDevicesCount; ++i)
-			snprintf(cmdReply + strlen(cmdReply),
-				sizeof(cmdReply) - strlen(cmdReply),
-				"%s", CaptureDevices[i]);
+		if (!DevicesToCSV(AudioDevices, cmdReply + strlen(cmdReply),
+			sizeof(cmdReply) - strlen(cmdReply), true)
+		) {
+			snprintf(strFault, sizeof(strFault),
+				"%s failed because buffer is too small", strCMD);
+			goto cmddone;
+		}
 		SendReplyToHost(cmdReply);
 		goto cmddone;
 	}
@@ -515,22 +640,62 @@ void ProcessCommandFromHost(char * strCMD)
 		goto cmddone;
 	}
 
-	// I'm not sure what CODEC is intended to do, but using it causes a
-	// segfault.  It doesn't seem to be required for normal use, so disable
-	// this command until it is better understood.  -LaRue May 2024
-	/*
-	if (strcmp(strCMD, "CODEC") == 0)
-	{
-		DoTrueFalseCmd(strCMD, ptrParams, &blnCodecStarted);
+	// Set/get RXState and TXState
+	if (strcmp(strCMD, "CODEC") == 0) {
+		// Typically RXEnabled == TXEnabled, in which case this works entirely
+		// as expected.  However, if one or both are false, CODEC will return
+		// FALSE
+		bool codec = (RXEnabled && TXEnabled);
+		// This is similar to DoTrueFalseCmd(strCMD, ptrParams, &codec), but
+		// with a wider range of responses
+		if (ptrParams == NULL) {
+			snprintf(cmdReply, sizeof(cmdReply), "%s %s", strCMD,
+				codec ? "TRUE" : "FALSE");
+			SendReplyToHost(cmdReply);
+			goto cmddone;
+		}
 
-		if (strcmp(ptrParams, "TRUE") == 0)
-			StartCodec(strFault);
-		else if (strcmp(ptrParams, "FALSE") == 0)
-			StopCodec(strFault);
-
+		if (strcmp(ptrParams, "TRUE") == 0) {
+			if (!RXEnabled)
+				OpenSoundCapture("RESTORE", getCch(true));
+			if (!TXEnabled)
+				OpenSoundPlayback("RESTORE", getPch(true));
+			if (RXEnabled && TXEnabled) {
+				snprintf(cmdReply, sizeof(cmdReply), "%s now TRUE", strCMD);
+				SendReplyToHost(cmdReply);
+				ZF_LOGD("%s now TRUE", strCMD);
+				goto cmddone;
+			}
+			if (!RXEnabled && !TXEnabled) {
+				snprintf(strFault, sizeof(strFault),
+					"%s cannot be set to TRUE.  CAPTURE and PLAYBACK required"
+					, strCMD);
+			} else if (RXEnabled) {
+				snprintf(strFault, sizeof(strFault),
+					"%s cannot be set to TRUE.  CAPTURE required", strCMD);
+			} else if (TXEnabled) {
+				snprintf(strFault, sizeof(strFault),
+					"%s cannot be set to TRUE.  PLAYBACK required", strCMD);
+			} else {
+				snprintf(cmdReply, sizeof(cmdReply), "%s now TRUE", strCMD);
+				SendReplyToHost(cmdReply);
+				ZF_LOGD("%s now TRUE", strCMD);
+			}
+			goto cmddone;
+		} else if (strcmp(ptrParams, "FALSE") == 0) {
+			// Set RXEnabled and TXEnabled to false
+			CloseSoundCapture(true);  // calls updateWebGuiAudioConfig(true);
+			CloseSoundPlayback(false);  // calls updateWebGuiAudioConfig(false);
+			snprintf(cmdReply, sizeof(cmdReply), "%s now FALSE", strCMD);
+			SendReplyToHost(cmdReply);
+			ZF_LOGD("%s now FALSE", strCMD);
+			goto cmddone;
+		} else {
+			snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
+			goto cmddone;
+		}
 		goto cmddone;
 	}
-	*/
 
 	if (strcmp(strCMD, "CONSOLELOG") == 0)
 	{
@@ -554,8 +719,6 @@ void ProcessCommandFromHost(char * strCMD)
 		}
 		goto cmddone;
 	}
-
-
 
 	if (strcmp(strCMD, "CWID") == 0)
 	{
@@ -715,15 +878,15 @@ void ProcessCommandFromHost(char * strCMD)
 		goto cmddone;
 	}
 
-	if (strcmp(strCMD, "FECID") == 0)
-	{
-		DoTrueFalseCmd(strCMD, ptrParams, &FECId);
-		goto cmddone;
-	}
-
 	if (strcmp(strCMD, "FASTSTART") == 0)
 	{
 		DoTrueFalseCmd(strCMD, ptrParams, &fastStart);
+		goto cmddone;
+	}
+
+	if (strcmp(strCMD, "FECID") == 0)
+	{
+		DoTrueFalseCmd(strCMD, ptrParams, &FECId);
 		goto cmddone;
 	}
 
@@ -857,6 +1020,22 @@ void ProcessCommandFromHost(char * strCMD)
 		blnInitializing = false;
 
 		SendReplyToHost("INITIALIZE");
+		goto cmddone;
+	}
+
+	// Set the standard deviation of AWGN to be added to 16-bit input audio.
+	// Set it to 0 for no noise.
+	if (strcmp(strCMD, "INPUTNOISE") == 0)
+	{
+		if (ptrParams == 0) {
+			sprintf(cmdReply, "%s %d", strCMD, InputNoiseStdDev);
+			SendReplyToHost(cmdReply);
+		} else {
+			// TODO: error checking of value
+			InputNoiseStdDev = atoi(ptrParams);
+			sprintf(cmdReply, "%s now %hd", strCMD, InputNoiseStdDev);
+			SendReplyToHost(cmdReply);
+		}
 		goto cmddone;
 	}
 
@@ -1043,29 +1222,110 @@ void ProcessCommandFromHost(char * strCMD)
 		goto cmddone;
 	}
 
-	if (strcmp(strCMD, "PLAYBACK") == 0)
-	{
-		if (ptrParams == 0)
-		{
-			sprintf(cmdReply, "%s %s", strCMD, PlaybackDevice);
+	// Warning: If a PlaybackDevice is currently open and the value provided
+	// with this command is not identical to the current value of
+	// PlaybackDevice, then the device will be closed so that this new
+	// PlaybackDevice can be opened.  This is true even if using the same device
+	// is specified by another name.  If this occurs while transmitting, it will
+	// result in a failed transmission.
+	// If the special device name "NONE" is used, close any existing PLAYBACK
+	// device if one is open.  This is similar to TXENABLED FALSE.
+	// If the special device name "RESTORE" is used, do nothing if TXEnabled is
+	// true.  However, if TXEnabled is false, but a PLAYBACK device has
+	// previously been successfully opened, then try to reopen that device.
+	// Unlike most commands, the arguments to CAPTURE and PLAYBACK are case
+	// sensitive.
+	if (strcmp(strCMD, "PLAYBACK") == 0) {
+		char *ptrCaseParams = strlop(cmdCopy, ' ');
+		if (ptrParams == 0) {
+			ZF_LOGV("%s %s", strCMD,
+				PlaybackDevice[0] == 0x00 ? "NONE" : PlaybackDevice);
+			sprintf(cmdReply, "%s %s", strCMD,
+				PlaybackDevice[0] == 0x00 ? "NONE" : PlaybackDevice);
 			SendReplyToHost(cmdReply);
-		}
-		else
-		{
-			strcpy(PlaybackDevice, ptrParams);
-			sprintf(cmdReply, "%s now %s", strCMD, PlaybackDevice);
-			SendReplyToHost(cmdReply);
+		} else {
+			bool ret;
+			if (strcmp(ptrCaseParams, "NONE") == 0)
+				ret = OpenSoundPlayback("", getPch(true));
+			else
+				ret = OpenSoundPlayback(ptrCaseParams, getPch(true));
+			if (ret) {
+				sprintf(cmdReply, "%s now %s", strCMD, PlaybackDevice);
+				SendReplyToHost(cmdReply);
+			} else {
+				snprintf(strFault, sizeof(strFault),
+					"Cannot open PlaybackDevice as configured: %s %s",
+					strCMD, ptrCaseParams);
+			}
 		}
 		goto cmddone;
 	}
 
-	if (strcmp(strCMD, "PLAYBACKDEVICES") == 0)
-	{
+	// Warning: If a PlaybackDevice is currently open and the value provided
+	// with this command is not identical to the current value, then the device
+	// may be closed so that it can be re-opened with this new configuration.
+	// If this occurs while transmitting, it will
+	// result in a failed transmission.
+	// With no parameter, respond with  PLAYBACKCHANNEL LEFT, RIGHT, or MONO.
+	// With a parameter of LEFT, RIGHT, or MONO, set the channel used by
+	// PlaybackDevice.
+	if (strcmp(strCMD, "PLAYBACKCHANNEL") == 0) {
+		if (ptrParams == 0) {
+			if (UseLeftTX && UseRightTX)
+				sprintf(cmdReply, "%s MONO", strCMD);
+			else if (UseLeftTX)
+				sprintf(cmdReply, "%s LEFT", strCMD);
+			else // UseRightTX
+				sprintf(cmdReply, "%s RIGHT", strCMD);
+			SendReplyToHost(cmdReply);
+			goto cmddone;
+		}
+		if (!process_playbackchannel(ptrParams)) {
+			snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
+			goto cmddone;
+		}
+		sprintf(cmdReply, "%s now %s", strCMD, ptrParams);
+		SendReplyToHost(cmdReply);
+		goto cmddone;
+	}
+
+	// Per the Ardop specification (Protocol Native TNC Commands), this command
+	// "Returns a comma delimited list of all currently installed playback
+	// devices."  The specification does not indicate how device names that
+	// contain commas shall be handled.  Nor does it provide any explicit
+	// mechanism to include a device description in addition to a device name.
+	//
+	// So: The following is used:
+	// Device names may be wrapped in double quotes, and double double quotes
+	// within double quotes shall be interpreted as a literal double quotes
+	// character.  If any device name includes a linefeed (\n), then the text
+	// before the linefeed shall be interpreted as the name, while any text
+	// after the first linefeed shall be interpreted as a description.  The name
+	// portion of this value is suitable to pass to the PLAYBACK command.
+	//
+	// Futhermore:
+	// If the description begins with "[BUSY", then this is an indicaton that the
+	// device is currently in use (by this or another program).  This may be
+	// followed immediately by a closing bracket "]" or additional details may be
+	// included before that closing bracket.
+	//
+	// The response CSV text is preceeded by the command string and a space.
+	// The host should probably discard all whitespace after the command string.
+	if (strcmp(strCMD, "PLAYBACKDEVICES") == 0) {
+		GetDevices();
+		LogDevices(AudioDevices, "Playback (output) Devices for host command",
+			false, true);
+
+		// TODO: Should DevicesToCSV() be modified to produce a valid but
+		// truncated response if dstsize is inadequate?
 		snprintf(cmdReply, sizeof(cmdReply), "%s ", strCMD);
-		for (int i; i < PlaybackDevicesCount; ++i)
-			snprintf(cmdReply + strlen(cmdReply),
-				sizeof(cmdReply) - strlen(cmdReply),
-				"%s", PlaybackDevices[i]);
+		if (!DevicesToCSV(AudioDevices, cmdReply + strlen(cmdReply),
+			sizeof(cmdReply) - strlen(cmdReply), false)
+		) {
+			snprintf(strFault, sizeof(strFault),
+				"%s failed because buffer is too small", strCMD);
+			goto cmddone;
+		}
 		SendReplyToHost(cmdReply);
 		goto cmddone;
 	}
@@ -1098,6 +1358,82 @@ void ProcessCommandFromHost(char * strCMD)
 		SendReplyToHost(cmdReply);
 
 		SetARDOPProtocolState(DISC);  // set state to DISC on any Protocol mode change.
+		goto cmddone;
+	}
+
+	// Set/get PTTEnabled
+	// A PTTENABLED TRUE command responds PTTENABLED now TRUE but does nothing
+	// else if already true.  If currently false, parse_pttstr("RESTORE")
+	// is tried.  On success, respond with PTTENABLED now TRUE.  If that doesn't
+	// work, parse_catstr("RESTORE") is tried. On success, respond with
+	// PTTENABLED now TRUE.  If both of these fail, or if parse_catstr()
+	// succeeds but isPTTmodeEnabled() still returns false (probably because
+	// the PTTON and PTTOFF strings are not also set) respond with PTTENABLED
+	// cannot be set to TRUE.  RADIOPTT or RADIOCTRLPORT, RADIOPTTON,
+	// RADIOPTTOFF required.  The assumption is that if CAT PTT was used, but is
+	// now not usable, that the PTTON and PTTOFF strings are probably still
+	// valid so that restoring RADIOCTRLPORT is suffient to restore usability of
+	// CAT PTT.  TX may still be possible when PTTEnabled is false if a host
+	// program is configured to to PTT control or if the radio is configured to
+	// use VOX.  Ardopcf has no way of detecting whether either of these is
+	// true, so it cannot detect whether or not TX has actually occured.
+	if (strcmp(strCMD, "PTTENABLED") == 0) {
+		bool PTTEnabled = isPTTmodeEnabled();
+		// This is similar to DoTrueFalseCmd(strCMD, ptrParams, &PTTEnabled),
+		// but with a wider range of responses
+		if (ptrParams == NULL) {
+			snprintf(cmdReply, sizeof(cmdReply), "%s %s", strCMD,
+				PTTEnabled ? "TRUE" : "FALSE");
+			SendReplyToHost(cmdReply);
+			goto cmddone;
+		}
+
+		if (strcmp(ptrParams, "TRUE") == 0) {
+			if (PTTEnabled) {
+				snprintf(cmdReply, sizeof(cmdReply), "%s now TRUE", strCMD);
+				SendReplyToHost(cmdReply);
+				ZF_LOGD("%s now TRUE", strCMD);
+				goto cmddone;
+			}
+			// !PTTEnabled
+			if (parse_pttstr("RESTORE") == 0) {
+				snprintf(cmdReply, sizeof(cmdReply), "%s now TRUE", strCMD);
+				SendReplyToHost(cmdReply);
+				ZF_LOGD("%s now TRUE after parse_pttstr(\"RESTORE\")", strCMD);
+				goto cmddone;
+			}
+			// !PTTEnabled and parse_pttstr("RESTORE") failed failed
+			if (parse_catstr("RESTORE") == 0) {
+				snprintf(cmdReply, sizeof(cmdReply), "%s now TRUE", strCMD);
+				SendReplyToHost(cmdReply);
+				ZF_LOGD("%s now TRUE after parse_catstr(\"RESTORE\")", strCMD);
+				goto cmddone;
+			}
+			if (!isPTTmodeEnabled()) {
+				// maybe both parse_catstr("RESTORE") failed, or maybe it
+				// succeeded, but PTTON or PTTOFF is not set so that CAT PTT
+				// isn't usable.
+				snprintf(strFault, sizeof(strFault),
+					"%s cannot be set to TRUE.  RADIOPTT or RADIOCTRLPORT,"
+					" RADIOPTTON, RADIOPTTOFF required.",
+					strCMD);
+			}
+			goto cmddone;
+		} else if (strcmp(ptrParams, "FALSE") == 0) {
+			close_PTT(false);  // Closes PTT port if one was open.
+			if (isPTTmodeEnabled()) {
+				// Since PTT port has been closed, but PTTEnabled is still true,
+				// PTT must be using CAT conrol.
+				close_CAT(false);  // Closes CAT port if one was open.
+			}
+			snprintf(cmdReply, sizeof(cmdReply), "%s now FALSE", strCMD);
+			SendReplyToHost(cmdReply);
+			ZF_LOGD("%s now FALSE", strCMD);
+			goto cmddone;
+		} else {
+			snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
+			goto cmddone;
+		}
 		goto cmddone;
 	}
 
@@ -1136,6 +1472,75 @@ void ProcessCommandFromHost(char * strCMD)
 			strFault = "Syntax Err:" & strCMD
 		End If
 */
+
+	// WARNING: If this command fails (especiaily if a remote TCP port is
+	// selected and the address is unreachable), it may introduce an extended
+	// delay that will cause an overrun in the RX audio system.  So, DO NOT
+	// DO THIS while there is an active ARQ session.  If done when there is no
+	// active ARQ session, expect that incoming frames such a ConReq or FEC data
+	// may be missed.
+	if (strcmp(strCMD, "RADIOCTRLPORT") == 0) {
+		// Set the port to use for CAT commands.  The argument takes the same
+		// form as the --cat/-c command line option, including the use of the
+		// TCP: prefix to select a TCP port rather than a harware device/port.
+		// Like the command line option, this command also accepts the RIGCTLD
+		// special shortcut which is equivalent to the host commands:
+		// RADIOCTRLPORT TCP:4532, RADIOPTTON 5420310A, and
+		// RADIOPTTOFF 5420300A.
+		// Two special arguments may be used that are not valid to use from the
+		// command line:
+		// A value of NONE closes any existing CAT connection.
+		// A value of RESTORE has no effect if there is currently an open CAT
+		// connection or if a valid CAT connection has not previously been set.
+		// However, if a CAT connection was previously set but is now closed
+		// (due to a failure or use of the NONE option to close it), then this
+		// attempts to restore that connection.  The use case for
+		// RADIOCTRLPORT RESTORE for a CAT connection is similar to CODEC TRUE
+		// for the audio devices.
+		// A hardware device/port used for CAT control may be the same
+		// device/port used non-cat PTT control with the RADIOPTT command.
+		// If no argument is provided, it returns the string used to open the
+		// current CAT connection if one exists, or NONE if no CAT connection
+		// is open.
+		// The port opened with this command is used for any subsequent RADIOHEX
+		// host command.  If a CAT port is open and hex strings have been set
+		// with both the RADIOPTTON and RADIOPTTOFF host commands, then those
+		// commands are sent to this port for PTT control.
+		// Unlike most Host commands, the arguments to this command are case
+		// sensitive.
+		if (ptrParams == NULL) {
+			sprintf(cmdReply, "%s ", strCMD);
+			int catlen = get_catstr(cmdReply + strlen(cmdReply),
+				sizeof(cmdReply) - strlen(cmdReply));
+			if (catlen == 0) {
+				snprintf(cmdReply + strlen(cmdReply),
+					sizeof(cmdReply) - strlen(cmdReply), "NONE");
+			}
+			SendReplyToHost(cmdReply);
+		} else {
+			char *ptrCaseParams = strlop(cmdCopy, ' ');
+			int ret;
+			if (strcmp(ptrCaseParams, "NONE") == 0)
+				ret = parse_catstr("");
+			else
+				ret = parse_catstr(ptrCaseParams);
+			if (ret == 0) {
+				sprintf(cmdReply, "%s now ", strCMD);
+				int catlen = get_catstr(cmdReply + strlen(cmdReply),
+					sizeof(cmdReply) - strlen(cmdReply));
+				if (catlen == 0) {
+					snprintf(cmdReply + strlen(cmdReply),
+						sizeof(cmdReply) - strlen(cmdReply), "NONE");
+				}
+				SendReplyToHost(cmdReply);
+			} else {
+				snprintf(strFault, sizeof(strFault), "%s cannot be set to %s",
+					strCMD, ptrCaseParams);
+			}
+		}
+		goto cmddone;
+	}
+
 	if (strcmp(strCMD, "RADIOFREQ") == 0)
 	{
 		// Currently only used for setting GUI Freq field
@@ -1251,6 +1656,61 @@ void ProcessCommandFromHost(char * strCMD)
 		// End of optional Radio Commands
 */
 
+	if (strcmp(strCMD, "RADIOPTT") == 0) {
+		// Set the device to use for non-cat PTT control.  The argument takes
+		// the same form as the --ptt/-p command line option, including the use
+		// of RTS: DTR: and CM108: prefixes.  An argument of CM108:? will fail,
+		// but like the command line option, on Windows, this will write a list
+		// of available CM108 devices to the log.
+		// Two special arguments may be used that are not valid to use from the
+		// command line:
+		// A value of NONE closes any existing non-cat PTT control connection.
+		// A value of RESTORE has no effect if there is currently an open
+		// non-cat PTT control connection or if a valid non-cat PTT control
+		// connection has not previously been set.  However, if a non-cat PTT
+		// control connection was previously set but is now inactive (due to a
+		// failure or use of the NONE option to close it), then this attempts to
+		// restore that connection.  The use case for RADIOPTT RESTORE for
+		// non-cat PTT control is similar to CODEC TRUE for the audio devices.
+		// A hardware device/port used for RTS or DTR PTT conrol may be the same
+		// device/port used CAT control with the RADIOCTRLPORT command.
+		// If no argument is provided, return the string used to set the current
+		// non-cat PTT control connection if one exists, or NONE if no non-cat
+		// PTT control connection is open.
+		// Unlike most Host commands, the arguments to this command are case
+		// sensitive.
+		if (ptrParams == NULL) {
+			sprintf(cmdReply, "%s ", strCMD);
+			int pttlen = get_pttstr(cmdReply + strlen(cmdReply),
+				sizeof(cmdReply) - strlen(cmdReply));
+			if (pttlen == 0) {
+				snprintf(cmdReply + strlen(cmdReply),
+					sizeof(cmdReply) - strlen(cmdReply), "NONE");
+			}
+			SendReplyToHost(cmdReply);
+		} else {
+			char *ptrCaseParams = strlop(cmdCopy, ' ');
+			int ret;
+			if (strcmp(ptrCaseParams, "NONE") == 0)
+				ret = parse_pttstr("");
+			else
+				ret = parse_pttstr(ptrCaseParams);
+			if (ret == 0) {
+				sprintf(cmdReply, "%s now ", strCMD);
+				int pttlen = get_pttstr(cmdReply + strlen(cmdReply),
+					sizeof(cmdReply) - strlen(cmdReply));
+				if (pttlen == 0) {
+					snprintf(cmdReply + strlen(cmdReply),
+						sizeof(cmdReply) - strlen(cmdReply), "NONE");
+				}
+				SendReplyToHost(cmdReply);
+			} else {
+				snprintf(strFault, sizeof(strFault), "%s cannot be set to %s",
+					strCMD, ptrCaseParams);
+			}
+		}
+		goto cmddone;
+	}
 
 	if (strcmp(strCMD, "RADIOPTTOFF") == 0) {
 		// Parameter is a hex string representing the radio specific command to
@@ -1316,7 +1776,102 @@ void ProcessCommandFromHost(char * strCMD)
 		goto cmddone;
 	}
 
+	// Start/Stop recording of RX audio to a WAV file.
+	// Use TRUE to start, use FALSE to stop, or provide no argument to query.
+	//
+	// Writing of audio data to the WAV file is paused while transmitting, but
+	// it resumes automatically upon switching from transmit to receive,
+	// continuing to write to the same WAV file.
+	//
+	// This command will fail if Ardop is currently recording receive audio due
+	// to use of the -w or --writewav command line option.  Similarly, while
+	// RECRX is TRUE, the -w or --writewav command line option is temporarily
+	// disabled (but such recording may begin at the end of the next TX after
+	// RECRX is set to FALSE).
+	//
+	// Do nothing if argument is TRUE when RECRX is already TRUE, or argument is
+	// FALSE when RECRX is already FALSE.
+	if (strcmp(strCMD, "RECRX") == 0)
+	{
+		if (rxwf != NULL && !HWriteRxWav) {
+			// Currently recording due to -w or --writewav
+			snprintf(strFault, sizeof(strFault),
+				"RECRX IGNORED while recording due to -w or --writewav.");
+			goto cmddone;
+		}
+		DoTrueFalseCmd(strCMD, ptrParams, &HWriteRxWav);  // Also sends reply
+		if (HWriteRxWav && rxwf == NULL) {
+			StartRxWav();  // This also updates WebGui
+		} else if (rxwf != NULL && !HWriteRxWav) {
+			// This is same condition that was checked before updating
+			// HWriteRxWav.  If true then, it indicated that recording due
+			// to -w or --writewav was active, so nothing was done.  If true
+			// here (and not there), it indicates that recording due to
+			// RECRX is active, but that RECRX FALSE has just been received.
+			// So, stop recording.
+			CloseWav(rxwf);
+			rxwf = NULL;
+			wg_send_wavrx(0, false);  // update "RECORDING RX" indicator on WebGui
+		}
+		goto cmddone;
+	}
+
+	// Set/get RXEnabled
+	// An RXENABLED TRUE command responds RXENABLED now TRUE but does nothing
+	// else if already true.  If currently false, OpenSoundCapture("RESTORE")
+	// is tried.  On success, respond with RXENABLED now TRUE.  On failure
+	// respond with RXENABLED cannot be set to TRUE.  CAPTURE required.  So
+	// RXENABLED TRUE is similar in effect to CAPURE RESTORE, but the command
+	// responses are different.
+	if (strcmp(strCMD, "RXENABLED") == 0) {
+		// This is similar to DoTrueFalseCmd(strCMD, ptrParams, &RXEnabled), but
+		// with a wider range of responses
+		if (ptrParams == NULL) {
+			snprintf(cmdReply, sizeof(cmdReply), "%s %s", strCMD,
+				RXEnabled ? "TRUE" : "FALSE");
+			SendReplyToHost(cmdReply);
+			goto cmddone;
+		}
+
+		if (strcmp(ptrParams, "TRUE") == 0) {
+			if (RXEnabled) {
+				snprintf(cmdReply, sizeof(cmdReply), "%s now TRUE", strCMD);
+				SendReplyToHost(cmdReply);
+				ZF_LOGD("%s now TRUE", strCMD);
+				goto cmddone;
+			}
+			// !RXEnabled
+			if (OpenSoundCapture("RESTORE", getCch(true))) {
+				snprintf(cmdReply, sizeof(cmdReply), "%s now TRUE", strCMD);
+				SendReplyToHost(cmdReply);
+				ZF_LOGD("%s now TRUE", strCMD);
+				goto cmddone;
+			}
+			// !RXEnabled, and OpenSoundCapture("RESTORE") failed
+			snprintf(strFault, sizeof(strFault),
+				"%s cannot be set to TRUE.  CAPTURE required", strCMD);
+			goto cmddone;
+		} else if (strcmp(ptrParams, "FALSE") == 0) {
+			// sets RXEnabled = false
+			CloseSoundCapture(true);  // calls updateWebGuiAudioConfig(true);
+			snprintf(cmdReply, sizeof(cmdReply), "%s now FALSE", strCMD);
+			SendReplyToHost(cmdReply);
+			ZF_LOGD("%s now FALSE", strCMD);
+			goto cmddone;
+		} else {
+			snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
+			goto cmddone;
+		}
+		goto cmddone;
+	}
+
 	// RXLEVEL command previously provided for TEENSY support removed
+
+	if (strcmp(strCMD, "SDFTENABLED") == 0)
+	{
+		DoTrueFalseCmd(strCMD, ptrParams, &UseSDFT);
+		goto cmddone;
+	}
 
 	if (strcmp(strCMD, "SENDID") == 0)
 	{
@@ -1418,29 +1973,6 @@ void ProcessCommandFromHost(char * strCMD)
 		goto cmddone;
 	}
 
-	if (strcmp(strCMD, "TWOTONETEST") == 0)
-	{
-		// Previously this was permitted without MYCALL being set.  However,
-		// this new restriction helps ensure that an IDFrame can be sent to
-		// identify all transmissions including this two tone test signal.
-		if (!stationid_ok(&Callsign)) {
-			snprintf(strFault, sizeof(strFault), "MYCALL not set");
-			goto cmddone;
-		}
-
-		if (ProtocolState == DISC)
-		{
-			NeedTwoToneTest = true;  // Send from background
-			SendReplyToHost(strCMD);
-		}
-		else
-			snprintf(strFault, sizeof(strFault), "Not from state %s", ARDOPStates[ProtocolState]);
-
-		goto cmddone;
-
-	}
-
-
 
 	if (strcmp(strCMD, "TUNINGRANGE") == 0)
 	{
@@ -1468,21 +2000,76 @@ void ProcessCommandFromHost(char * strCMD)
 		goto cmddone;
 	}
 
-	// TXLEVEL command previously provided for TEENSY support removed
-
-	if (strcmp(strCMD, "USE600MODES") == 0)
+	if (strcmp(strCMD, "TWOTONETEST") == 0)
 	{
-		DoTrueFalseCmd(strCMD, ptrParams, &Use600Modes);
+		// Previously this was permitted without MYCALL being set.  However,
+		// this new restriction helps ensure that an IDFrame can be sent to
+		// identify all transmissions including this two tone test signal.
+		if (!stationid_ok(&Callsign)) {
+			snprintf(strFault, sizeof(strFault), "MYCALL not set");
+			goto cmddone;
+		}
+
+		if (ProtocolState == DISC)
+		{
+			NeedTwoToneTest = true;  // Send from background
+			SendReplyToHost(strCMD);
+		}
+		else
+			snprintf(strFault, sizeof(strFault), "Not from state %s", ARDOPStates[ProtocolState]);
+
 		goto cmddone;
+
 	}
 
-	if (strcmp(strCMD, "VERSION") == 0)
-	{
-		sprintf(cmdReply, "VERSION %s_%s", ProductName, ProductVersion);
-		SendReplyToHost(cmdReply);
+	// Set/get TXEnabled
+	// A TXENABLED TRUE command responds TXENABLED now TRUE but does nothing
+	// else if already true.  If currently false, OpenSoundPlayback("RESTORE")
+	// is tried.  On success, respond with TXENABLED now TRUE.  On failure
+	// respond with TXENABLED cannot be set to TRUE.  PLAYBACK required.  So
+	// TXENABLED TRUE is similar in effect to PLAYBACK RESTORE, but the command
+	// responses are different.
+	if (strcmp(strCMD, "TXENABLED") == 0) {
+		// This is similar to DoTrueFalseCmd(strCMD, ptrParams, &TXEnabled), but
+		// with a wider range of responses
+		if (ptrParams == NULL) {
+			snprintf(cmdReply, sizeof(cmdReply), "%s %s", strCMD,
+				TXEnabled ? "TRUE" : "FALSE");
+			SendReplyToHost(cmdReply);
+			goto cmddone;
+		}
+
+		if (strcmp(ptrParams, "TRUE") == 0) {
+			if (TXEnabled) {
+				snprintf(cmdReply, sizeof(cmdReply), "%s now TRUE", strCMD);
+				SendReplyToHost(cmdReply);
+				ZF_LOGD("%s now TRUE", strCMD);
+				goto cmddone;
+			}
+			// !TXEnabled
+			if (OpenSoundPlayback("RESTORE", getCch(true))) {
+				snprintf(cmdReply, sizeof(cmdReply), "%s now TRUE", strCMD);
+				SendReplyToHost(cmdReply);
+				ZF_LOGD("%s now TRUE", strCMD);
+				goto cmddone;
+			}
+			// !TXEnabled, and OpenSoundPlayback("RESTORE") failed
+			snprintf(strFault, sizeof(strFault),
+				"%s cannot be set to TRUE.  PLAYBACK required", strCMD);
+			goto cmddone;
+		} else if (strcmp(ptrParams, "FALSE") == 0) {
+			// sets TXEnabled = false
+			CloseSoundPlayback(true);  // calls updateWebGuiAudioConfig(true);
+			snprintf(cmdReply, sizeof(cmdReply), "%s now FALSE", strCMD);
+			SendReplyToHost(cmdReply);
+			ZF_LOGD("%s now FALSE", strCMD);
+			goto cmddone;
+		} else {
+			snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
+			goto cmddone;
+		}
 		goto cmddone;
 	}
-	// RDY processed earlier Case "RDY".  no response required for RDY
 
 	///////////////////////////////////////////////////////////////
 	// The TXFRAME command is intended for development and debugging.
@@ -1512,59 +2099,31 @@ void ProcessCommandFromHost(char * strCMD)
 		goto cmddone;
 	}
 
-	// Set the standard deviation of AWGN to be added to 16-bit input audio.
-	// Set it to 0 for no noise.
-	if (strcmp(strCMD, "INPUTNOISE") == 0)
+	// TXLEVEL command previously provided for TEENSY support removed
+
+	if (strcmp(strCMD, "USE600MODES") == 0)
 	{
-		if (ptrParams == 0) {
-			sprintf(cmdReply, "%s %d", strCMD, InputNoiseStdDev);
-			SendReplyToHost(cmdReply);
-		} else {
-			// TODO: error checking of value
-			InputNoiseStdDev = atoi(ptrParams);
-			sprintf(cmdReply, "%s now %hd", strCMD, InputNoiseStdDev);
-			SendReplyToHost(cmdReply);
-		}
+		DoTrueFalseCmd(strCMD, ptrParams, &Use600Modes);
 		goto cmddone;
 	}
 
-	// Start/Stop recording of RX audio to a WAV file.
-	// Use TRUE to start, use FALSE to stop, or provide no argument to query.
-	//
-	// Writing of audio data to the WAV file is paused while transmitting, but
-	// it resumes automatically upon switching from transmit to receive,
-	// continuing to write to the same WAV file.
-	//
-	// This command will fail if Ardop is currently recording receive audio due
-	// to use of the -w or --writewav command line option.  Similarly, while
-	// RECRX is TRUE, the -w or --writewav command line option is temporarily
-	// disabled (but such recording may begin at the end of the next TX after
-	// RECRX is set to FALSE).
-	//
-	// Do nothing if argument is TRUE when RECRX is already TRUE, or argument is
-	// FALSE when RECRX is already FALSE.
-	if (strcmp(strCMD, "RECRX") == 0)
+	if (strcmp(strCMD, "VERSION") == 0)
 	{
-		if (rxwf != NULL && !HWriteRxWav) {
-			// Currently recording due to -w or --writewav
-			snprintf(strFault, sizeof(strFault),
-				"RECRX IGNORED while recording due to -w or --writewav.");
-			goto cmddone;
-		}
-		DoTrueFalseCmd(strCMD, ptrParams, &HWriteRxWav);  // Also sends reply
-		if (HWriteRxWav && rxwf == NULL) {
-			StartRxWav();  // This also updates WebGui
-		} else if (rxwf != NULL && !HWriteRxWav) {
-			// This is same condition that was checked before updating
-			// HWriteRxWav.  If true then, it indicated that recording due
-			// to -w or --writewav was active, so nothing was done.  If true
-			// here (and not there), it indicates that recording due to
-			// RECRX is active, but that RECRX FALSE has just been received.
-			// So, stop recording.
-			CloseWav(rxwf);
-			rxwf = NULL;
-			wg_send_wavrx(0, false);  // update "RECORDING RX" indicator on WebGui
-		}
+		sprintf(cmdReply, "VERSION %s_%s", ProductName, ProductVersion);
+		SendReplyToHost(cmdReply);
+		goto cmddone;
+	}
+	// RDY processed earlier Case "RDY".  no response required for RDY
+
+	if (strcmp(strCMD, "WRITERXWAV") == 0)
+	{
+		DoTrueFalseCmd(strCMD, ptrParams, &WriteRxWav);
+		goto cmddone;
+	}
+
+	if (strcmp(strCMD, "WRITETXWAV") == 0)
+	{
+		DoTrueFalseCmd(strCMD, ptrParams, &WriteTxWav);
 		goto cmddone;
 	}
 
