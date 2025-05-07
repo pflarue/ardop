@@ -142,3 +142,18 @@ The first time that you run `ardopcf` without the `-h` option,  Windows will ask
 6. You may leave `ardopcf.exe` where it is or copy or move it to a different directory.  The choice is yours.  One option is to put it in `C:\Users\<USERNAME>\ardop` and also create a `C:\Users\<USERNAME>\ardop\logs` directory for the log files that ardopcf creates.  If you copy `ardopcf.exe` to a directory other than where you built it from source, you may choose to delete the source directory and even the MinGW directory.
 
 See [USAGE_windows.md](USAGE_windows.md) for guidance on use of **ardopcf** with Windows.  This includes instructions for determining what command line options you should use, how to set up a Desktop Shortcut to start **ardopcf**, and how to adjust your audio settings.
+
+
+## Building ardopcf for Windows by cross-compiling on a Linux machine:
+
+Before using Linux to cross-compile an executable for Windows, follow the instructions above to build ardopcf for Linux.
+
+Then:
+```
+sudo apt install mingw-w64
+make CC_NATIVE=gcc CC=i686-w64-mingw32-gcc-posix WIN32=1
+```
+
+While cross-compiling Windows binaries using Linux using this procedure has been shown to work, this is not how the Windows binaries are normally produced.  Nor are cross-compiled binaries regularly tested.  So, if cross-compiling exposes bugs not encountered when ardopcf is compiled normally, these are less likely to be identified and fixed.
+
+These instructions for cross-compiling are primarily intended to allow a Linux user makeing changes to the ardopcf source code to help identify whether those changes are likely to cause problems for Windows users.
