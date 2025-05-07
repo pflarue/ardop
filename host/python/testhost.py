@@ -1,34 +1,8 @@
-""" A diagnostic command line host program for Ardop
-
-This module provides a simple command line interface that can be used to control and monitor
-Ardop for diagnostic purposes. It is NOT intended for actual communication using Ardop. Its use
-requires an understanding of the host commands supported by Ardop. It was built to use with
-ardopcf, but should also work with other Ardop implementations.
-
-This host program does not attempt to do any CAT control or activate the radio's PTT. So, the user
-must manually adjust the radio's frequency, mode, and any other required settings. Also, Ardop must
-be configured to control PTT itself. Alternatively, PTT may be controled using the radio's VOX
-feature.
-
-This python module can run on the same machine where Ardop is running, in which case the default
-host of "localhost" can be used.  It can also be run on a different machine on the same local
-network using an ip address or machine name for the --host argument.
-
-This should work on both Linux and Windows if a python command line tool is available.  On Linux,
-it has been tested in a terminal window using the python command line program typically installed
-by default.  On windows, it has been tested using the WinPython Command Prompt from an installation
-of Python from https://winpython.github.io.  It may or may not work with other configurations. This
-module may be run as a script with no installation required. Only modules included in the python
-standard library are required.
-
-Using the --strings and/or --files option, this can also be used to send commands non-interactively
-to a running Ardop instance from the command line. For non-interactive use, include "!!quit" at the
-end of the last string. Without "!!quit", --strings and/or --files can be used to configure some
-settings before beginning interactive use.  See the example_input.txt file for additional details
-and commentary on using --files.
-"""
+#! /usr/bin/python
+""" A derivative of diagnostichost.py to automate testing of config host commands."""
 
 import argparse
+from datetime import datetime
 import os
 from random import randbytes, choices
 import re
@@ -37,6 +11,8 @@ import socket
 import sys
 import time
 
+from eutf8 import to_eutf8
+
 if os.name == 'posix':
     import termios
     import tty
@@ -44,8 +20,8 @@ else:
     # Windows
     import msvcrt
 
-class DiagnosticHost():
-    """A diagnostic command line host program for Ardop"""
+class TestHost():
+    """A program to run config testing as a hosts program for Ardop"""
     _READ_SIZE = 1024
     _INPUT_PROMPT = 'INPUT: '
     _PROMPT_LEN = len(_INPUT_PROMPT)
@@ -57,6 +33,26 @@ class DiagnosticHost():
         self._dbuf = b''  # Buffer for input from Ardop's data port
         self._inbuf = ''  # Buffer for user input
         self._old_inbuf = ''  # Backup copy of self._inbuf for change detection and erasure.
+        self._last_cbuf_str = ''  # A copy of the last string extracted from cbuf.
+        self._userwaiting = False
+        self._waiting = False
+        self._waitingms = False
+        self._starttimems = None
+        self._waitms = 0
+        self._waitstr = ""
+        self._waitingip = False
+        self._starttimeip = None  # hard wired for 11.0 second timeout
+        self._waitingall = False
+        self._waitstrs = []
+        self._expecting = False
+        self._expectstr = ""
+        self._dwaiting = False
+        self._dwaitbytes = b""
+        self._dexpecting = False
+        self._dexpectbytes = b""
+        self._starttime = None
+        self._timeout = 2.0  # time (in seconds) past self._starttime to quit.
+
         # Keep a copy of recent input lines which can be accessed using up and down arrow keys.
         self._history = [''] + [None] * 10
         self._hindex = 0  # Index into self._history
@@ -109,6 +105,30 @@ class DiagnosticHost():
         self._process_inbuf()  # Process input from files and/or strings before starting main loop.
 
         while self._state == 1:  # running
+            now = datetime.now()
+            if self._starttimems is not None:
+                if (((datetime.now() - self._starttimems).seconds
+                    + (datetime.now() - self._starttimems).microseconds / 1000000)
+                    > self._waitms / 1000.0
+                ) :
+                    self._println('(done with waitms)')
+                    self._starttimems = None
+                    self._waitingms = False
+                    self._waitms = 0
+            if self._starttime is not None:
+                if (((datetime.now() - self._starttime).seconds
+                    + (datetime.now() - self._starttime).microseconds / 1000000)
+                    > self._timeout
+                ) :
+                    self._println('(quitting due to timeout)')
+                    self.close()
+            if self._starttimeip is not None:
+                if (((datetime.now() - self._starttimeip).seconds
+                    + (datetime.now() - self._starttimeip).microseconds / 1000000)
+                    > 11.0
+                ) :
+                    self._println('(quitting due to INPUTPEAKS timeout)')
+                    self.close()
             self._from_kbd()  # Get and process input from keyboard
             self._from_ardop()  # Get and process (print) input from Ardop
             time.sleep(0.02)  # Pause before repeating this loop since nothing in loop is blocking.
@@ -118,7 +138,7 @@ class DiagnosticHost():
         if self._state == -1:
             return  # already closed
         self._state = -1  # closed
-        if os.name == 'posix' and hasattr("_ttyattr"):
+        if os.name == 'posix' and hasattr(self, "_ttyattr"):
             # restore tty attributes to prior settings.
             termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self._ttyattr)
         if hasattr(self, "_sel"):
@@ -166,6 +186,12 @@ class DiagnosticHost():
         # Process the contents of self._inbuf.
         if self._state != 1:
             return  # Not running
+        if (self._waiting or self._waitingms or self._waitingip
+            or self._waitingall or self._expecting or self._dwaiting
+            or self._dexpecting or self._userwaiting
+        ):
+            # Don't process anything more from inbuf while waiting
+            return
         # Parse _inbuf for ansi terminal code \x1b[A for up arrow and \x1b[B
         if '\x1b[A' in self._inbuf:  # Up arrow
             # Replace current contents in self._inbuf with a recent input line
@@ -194,6 +220,12 @@ class DiagnosticHost():
         while '\n\n' in self._inbuf:
             self._inbuf = self._inbuf.replace('\n\n', '\n')
         while '\n' in self._inbuf:
+            # Don't process anything more from inbuf while waiting
+            if (self._waiting or self._waitingms or self._waitingip
+                or self._waitingall or self._expecting or self._dwaiting
+                or self._dexpecting or self._userwaiting
+            ):
+                return
             # Process a completed input line that ends with \n.
             linelen = self._inbuf.index('\n')
             inputline = self._inbuf[:linelen]
@@ -227,8 +259,110 @@ class DiagnosticHost():
                 data = bytes(choices(range(0x20, 0x7E), k=int(m.group(1))))  # printable text
             elif (m := re.fullmatch('!!zeros([0-9]+)', inputline.rstrip().lower())) is not None:
                 data = b'\x00' * int(m.group(1))  # zero bytes
+            elif inputline.rstrip().lower().startswith('!!print '):
+                # Replace '\\n' (but not '\\\\n') in data with '\n'
+                printstr = re.sub(r"(?<!\\)\\n", '\n', inputline.rstrip()[8:])
+                self._println(f'({printstr})')
+            elif inputline.rstrip().lower().startswith('!!userwait '):
+                self._userwaiting = True
+                self._println(f'({inputline.rstrip()[11:]})\n(Press any key to continue.)')
+            elif inputline.rstrip().lower().startswith('!!quserwait '):
+                # !!quserwait is like !!userwait, but it quits if no user
+                # response occurs withing self_timeout seconds.  It is usually
+                # appropriate to set self_timeout to a larger value than the
+                # default for this.
+                self._starttime = datetime.now()
+                self._userwaiting = True
+                self._println(f'({inputline.rstrip()[12:]})\n(Press any key to continue.)')
+            elif inputline.rstrip().lower().startswith('!!waitms '):
+                self._waitingms = True
+                self._starttimems = datetime.now()
+                self._waitms = float(inputline.rstrip()[9:])
+                self._println(f'(waitms {self._waitms} ms)')
+            elif inputline.rstrip().lower().startswith('!!waitfor '):
+                self._waiting = True
+                self._waitstr = inputline.rstrip()[10:]
+                self._println(f'(waitfor {self._waitstr})')
+            elif inputline.rstrip().lower().startswith('!!qwaitfor '):
+                # !!qwaitfor is like !!waitfor, but it quits if self._waitstr
+                # is not found within self._timeout seconds.
+                self._starttime = datetime.now()
+                self._waiting = True
+                self._waitstr = inputline.rstrip()[11:]
+                self._println(f'(waitfor {self._waitstr})')
+            elif inputline.rstrip().lower() == '!!waitforinputpeaks':
+                self._waitingip = True
+                self._println(f'(waitfor INPUTPEAKS)')
+            elif inputline.rstrip().lower() == '!!qwaitforinputpeaks':
+                # !!qwaitforinputpeaks is like !!waitforinputpeaks, but it quits
+                # if INPUTPEAKS are not found within 11 seconds.  An 11 second
+                # timeout, indepenedent of self._timeout is used for this since
+                # this is the interval at which INPUTPEAKS messages are
+                # produced, and this is longer than the values normally used for
+                # self._timeout to detect the response to most other acctions.
+                # This will normally fail if at least one of CONSOLELOG or
+                # LOGLEVEL is set to 1 or 2.  Display and processing of
+                # INPUTPEAKS are normally suppressed in this host program to
+                # avoid display clutter.  So, while this command works,
+                # !!waitfor INPUTPEAKS.* does not.
+                self._starttimeip = datetime.now()
+                self._waitingip = True
+                self._println(f'(waitfor INPUTPEAKS - this can take up to 10 sec.)')
+            elif inputline.rstrip().lower().startswith('!!waitforall '):
+                # multiple regex patterns to wait for (in any order) separated
+                # by two pipes ||
+                self._waitingall = True
+                self._waitstrs = re.split('\|\|', inputline.rstrip()[13:])
+                self._println(f'(waitfor {self._waitstrs})')
+            elif inputline.rstrip().lower().startswith('!!qwaitforall '):
+                # !!qwaitforall is like !!waitforall, but it quits if all of
+                # self._waitstrs are not found within self._timeout seconds.
+                # multiple regex patterns to wait for (in any order) separated
+                # by two pipes ||
+                self._starttime = datetime.now()
+                self._waitingall = True
+                self._waitstrs = re.split('\|\|', inputline.rstrip()[14:])
+                self._println(f'(waitfor {self._waitstrs})')
+            elif inputline.rstrip().lower().startswith('!!dwaitfor '):
+                self._dwaiting = True
+                self._dwaitbytes = inputline.rstrip()[11:].encode()
+                self._println(f'(dwaitfor {self._dwaitbytes.decode()})')
+            elif inputline.rstrip().lower().startswith('!!qdwaitfor '):
+                # !!qwaitfor is like !!waitfor, but it quits if self._waitstr
+                # is not found within self._timeout seconds.
+                self._starttime = datetime.now()
+                self._dwaiting = True
+                self._dwaitbytes = inputline.rstrip()[12:].encode()
+                self._println(f'(dwaitfor {self._dwaitbytes.decode()})')
+            elif inputline.rstrip().lower().startswith('!!expect '):
+                self._expecting = True
+                self._expectstr = inputline.rstrip()[9:]
+                self._println(f'(expect {self._expectstr})')
+            elif inputline.rstrip().lower().startswith('!!qexpect '):
+                # !!qexpect is like !!expect, but it quits if
+                # self._expectstr is not found within self._timeout seconds
+                self._expecting = True
+                self._expectstr = inputline.rstrip()[10:]
+                self._println(f'(expect {self._expectstr})')
+            elif inputline.rstrip().lower().startswith('!!dexpect '):
+                self._dexpecting = True
+                self._dexpectbytes = inputline.rstrip()[10:].encode()
+                self._println(f'(dexpect {self._dexpectbytes.decode()})')
+            elif inputline.rstrip().lower().startswith('!!qdexpect '):
+                # !!qdexpect is like !!dexpect, but it quits if
+                # self._dexpectbytes is not found within self._timeout seconds
+                self._dexpecting = True
+                self._dexpectbytes = inputline.rstrip()[11:].encode()
+                self._println(f'(dexpect {self._dexpectbytes.decode()})')
+            elif inputline.rstrip().lower().startswith('!!timeout '):
+                try:
+                    self._timeout = float(inputline.rstrip()[10:])
+                    self._println(f"(timeout={self._timeout} seconds)")
+                except ValueError:
+                    self._println("(error setting timeout.  use 2.0 seconds)")
             else:
-                self._println(f'Ingoring invalid internal command: {inputline}')
+                self._println(f'Invalid internal command: {inputline}.  Quitting')
+                self.close()
         elif inputline.startswith('!'):
             # Send to Ardop as a host command
             self._println(f'CMD  >>>> "{inputline[1:]}"')
@@ -240,6 +374,7 @@ class DiagnosticHost():
         else:
             # Send to Ardop as data
             data = inputline.encode()
+            # TODO: Expect eutf8 encoded data instead of this format?
             # Replace '\\n' (but not '\\\\n') in data with '\n'
             data = re.sub(rb"(?<!\\)\\n", b'\n', data)
             # Replace '\\xHH' (but not '\\\\xHH') in data byte values
@@ -269,9 +404,22 @@ class DiagnosticHost():
         # for Windows, so handle keyboard input here for both OS.
         if os.name == 'posix':
             # stdin has been set to non-blocking
-            self._inbuf += sys.stdin.read(self._READ_SIZE)
+            if self._userwaiting:
+                newinput = sys.stdin.read(self._READ_SIZE)
+                if newinput:
+                    self._starttime = None
+                    self._userwaiting = False
+                    self._println("(Key pressed.  Continuing.)")
+                    self._inbuf += newinput[1:]
+            else:
+                self._inbuf += sys.stdin.read(self._READ_SIZE)
         else:
             if msvcrt.kbhit():
+                if self._userwaiting:
+                    self._starttime = None
+                    self._userwaiting = False
+                    self._println("(Key pressed.  Continuing.)")
+                    return
                 key = msvcrt.getch()
                 if key in b'\x00\xe0':
                     key = msvcrt.getch()
@@ -297,6 +445,8 @@ class DiagnosticHost():
         # handled separately and timeout=0 is used to make select() non-blocking.
         events = self._sel.select(timeout=0)
         for key, _ in events:
+            if self._state != 1:
+                return  # Not running
             if key.fileobj == self._csock:
                 self._cbuf += (new_data := self._csock.recv(self._READ_SIZE))
                 if len(new_data) == 0:
@@ -319,9 +469,43 @@ class DiagnosticHost():
         # Input lines from the Ardop command socket end with b'\r'
         while b'\r' in self._cbuf:
             cmdlen = self._cbuf.index(b'\r')
-            if b'INPUTPEAKS' not in self._cbuf[:cmdlen]:
+            if b'INPUTPEAKS' in self._cbuf[:cmdlen]:
+                if self._waitingip:
+                    self._starttimeip = None
+                    self._waitingip = False
+                    self._println(f'(match for INPUTPEAKS: "{to_eutf8(self._cbuf[:cmdlen]).decode()}")')
+            else:
+                # Store this response from Ardop so that it can be compared to
+                # an expected response.
+                self._last_cbuf_str = to_eutf8(self._cbuf[:cmdlen]).decode()
                 # Print all CMD except INPUTPEAKS (which clutter the screen)
-                self._println(f'CMD  << "{self._cbuf[:cmdlen].decode()}"')
+                self._println(f'CMD  << "{to_eutf8(self._cbuf[:cmdlen]).decode()}"')
+                if self._waiting and re.fullmatch(self._waitstr, self._last_cbuf_str) is not None:
+                    self._starttime = None
+                    self._waitstr = ""
+                    self._waiting = False
+                    #self._println(f'(Match for waitstr found.  Continuing)')
+                if self._waitingall:
+                    for thiswaitstr in self._waitstrs:
+                        if re.fullmatch(thiswaitstr, self._last_cbuf_str) is not None:
+                            self._println('(Match for one of waitstrs found.)')
+                            self._waitstrs.remove(thiswaitstr)
+                            if len(self._waitstrs) == 0:
+                                self._starttime = None
+                                self._waitingall = False
+                                self._println(f'(Match for last of waitstrs found.  Continuing)')
+                            else:
+                                self._println(f'(Remaining waitstrs={self._waitstrs})')
+                            break
+                if self._expecting and re.fullmatch(self._expectstr, self._last_cbuf_str) is not None:
+                    self._starttime = None
+                    self._expectstr = ""
+                    self._expecting = False
+                    #self._println(f'(Match for expectstr found.  Continuing)')
+                elif self._expecting:
+                    self._println(f'(Match for expectstr not found in'
+                        + f' "{self._last_cbuf_str}"\n"Exiting.)')
+                    self.close()
             self._cbuf = self._cbuf[cmdlen + 1:]
 
     def _process_dbuf(self):
@@ -335,18 +519,21 @@ class DiagnosticHost():
         while len(self._dbuf) >= 5:
             if len(self._dbuf) < 2 + (size := (self._dbuf[0] << 8) + self._dbuf[1]):
                 return  # Data block is incomplete
+            if self._dwaiting and re.fullmatch(self._dwaitbytes, self._dbuf[5:size+2]) is not None:
+                self._starttime = None
+                self._dwaitbytes = ""
+                self._dwaiting = False
+                self._println(f'(Match for dwaitbytes found.  Continuing)')
+            if self._dexpecting and re.fullmatch(self._dexpectbytes, self._dbuf[5:size+2]) is not None:
+                self._starttime = None
+                self._dexpectbytes = ""
+                self._dexpecting = False
+                self._println(f'(Match for dexpectbytes found.  Continuing)')
             is_utf8 = True
-            try:  # Try printing this as utf-8 (default encoding) text.
-                self._println(
-                    f'DATA << (size={size-3} type={self._dbuf[2:5]}) (UTF8 text)'
-                    f' : "{self._dbuf[5:size+2].decode()}"')
-            except UnicodeDecodeError:
-                is_utf8 = False  # Something in the received data cannot be decoded as utf-8.
-            if not is_utf8:
-                # Print as a bytes object which will display non-ascii characters as \xHH hex bytes.
-                self._println(
-                    f'DATA << (size={size-3} type={self._dbuf[2:5]}) (bytes) :'
-                    f' {self._dbuf[5:size+2]}')
+            # Print this as eutf8 encoded data.
+            self._println(
+                f'DATA << (size={size-3} type={self._dbuf[2:5]}) (eutf8)'
+                f' : "{to_eutf8(self._dbuf[5:size+2]).decode()}"')
             self._dbuf = self._dbuf[size + 2:]
 
     helpstr = (
@@ -391,7 +578,7 @@ if __name__ == '__main__':
             ' Each string is treated as if <ENTER> was pressed after it was typed.'))
     args = parser.parse_args()
 
-    with DiagnosticHost(
+    with TestHost(
             host=args.host,
             port=args.port,
             files=args.files,

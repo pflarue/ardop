@@ -1,0 +1,2707 @@
+# See host/python/example_testinput.txt for info about the format of this file
+# intended to be read by host/python/testhost.py
+
+# This script tests a QRPLabs QMX or QMX+ radio connected to the computer via a
+# single USB-C connection that provides both audio and CAT control.  While the
+# QMX CAT interface can be used for PTT control using native QMX commands, it
+# can also be used with Hamlib/rigctld.  This test script uses rigctld.  It
+# should be very easy to create a variant of this script to test other radios
+# that are supported by Hamlib/rigctld.
+
+# This script tests the behavior of several host commands intended to query and
+# modify the audio/PTT/CAT configuration of ardopcf.  It should be initiated
+# after starting ardopcf without configuring any audio, PTT, or CAT devices.
+
+!!print For the following, the radio used should be connected to a dummy load.
+!!print You must be able to detect whether a radio has transmitted.
+!!print Ideally, do this with a radio receiver close to the dummy load so that
+!!print you can hear the signal.  Watching measures of power output from the
+!!print radio or a meter between the transmitter and the dummy load is almost as
+!!print good when using a SSB transceiver since audio is required to produce any
+!!print power.  Watching only a PTT indicator or hearing a PTT relay on the
+!!print radio is less desirable since it confirms PTT action but does not
+!!print confirm that TX audio is produced.  A message like "** OK if PTT engaged
+!!print and audio was transmitted. [QMX1] **" is printed each time a
+!!print transmission is made.  If there was no indication that the radio
+!!print transmitted when you see this, press CTRL-C to stop the testing and
+!!print investigate the reason for the failure.  The text in square brackets at
+!!print the end of this message is there to help you identify where in this
+!!print script the failure occured.  This message is always followed by a
+!!print request to do something such as disconnecting or turning off a radio, or
+!!print a request to press a key.  This should be done AFTER the end of the
+!!print transmission.  You may open an instance of the WebGUI in a browser
+!!print window and use the "Show Config Controls" button to monitor how the
+!!print display changes during this test.  However, do not use those controls
+!!userwait to make any changes while the test is running.
+
+# Setting CONSOLELOG 1 produces STATUS host commands when RXENABLED, TXENABLED,
+# and PTTENABLED are changed to FALSE due to a failure.  Setting it to 1 (or 2)
+# also ensures that an INPUTPEAKS message is sent to the host every 10 seconds.
+!CONSOLELOG 1
+!!qexpect CONSOLELOG now 1
+
+# SENDID is used to test ability to control PTT and play audio.  So, set CWID
+# to false so that additional TX is not produced to also send a CW ID after the
+# IDFrame
+!CWID FALSE
+!!qexpect CWID now FALSE
+
+# Set wait timeout to 12.0 seconds.  This does not affect !!qwaitforinputpeaks
+# which uses a hard coded limit of 11.0 seconds rather that this value.
+!!timeout 12.0
+
+# MYCALL must be set to enable TX to verify that TX audio and PTT are working
+!MYCALL AI7YN
+!!qexpect MYCALL now AI7YN
+
+# This test is only expected to work for ardopcf version 1.x
+!VERSION
+!!qexpect .*VERSION ardopcf_1\..*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!RADIOPTTON
+!!qexpect RADIOPTTON VALUE NOT SET
+!RADIOPTTOFF
+!!qexpect RADIOPTTOFF VALUE NOT SET
+
+!!print \nInitial configuration is OK.\n
+!!print ** Connect the QMX to the computer with a USB cable and turn it on [QMX1].
+!!print If it is not already running, start rigctld using something like
+!!userwait rigctld -vvv -m 2052 -r COM10
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!CAPTUREDEVICES
+!!qexpect (?s).*QMX.*
+!CAPTURE QMX
+!!qexpect CAPTURE now QMX
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+# Verify RX enabled by waiting for INPUTPEAKS
+!!qwaitforinputpeaks
+
+!PLAYBACKDEVICES
+!!qexpect (?s).*QMX.*
+!PLAYBACK QMX
+!!qexpect PLAYBACK now QMX
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!RADIOCTRLPORT TCP:4532
+!!qexpect RADIOCTRLPORT now TCP:4532
+
+# Check all status values
+## PTTENABLED is still FALSE because both RADIOPTTON and RADIOPTTOFF are not yet set
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!RADIOPTTON
+!!qexpect RADIOPTTON VALUE NOT SET
+!RADIOPTTOFF
+!!qexpect RADIOPTTOFF VALUE NOT SET
+
+# Note that 5420310A is the Hamlib/rigctl CAT command for PTT TRUE, not the
+# native QMX CAT command.
+!RADIOPTTON 5420310A
+!!qexpect RADIOPTTON now 5420310A
+!RADIOPTTON
+!!qexpect RADIOPTTON 5420310A
+!RADIOPTTOFF
+!!qexpect RADIOPTTOFF VALUE NOT SET
+
+# Check all status values
+## PTTENABLED is still FALSE because both RADIOPTTON and RADIOPTTOFF are not yet set
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+# Note that 5420300A is the Hamlib/rigctl CAT command for PTT TRUE, not the
+# native QMX CAT command.
+!RADIOPTTOFF 5420300A
+!!qexpect RADIOPTTOFF now 5420300A
+!RADIOPTTOFF
+!!qexpect RADIOPTTOFF 5420300A
+!RADIOPTTON
+!!qexpect RADIOPTTON 5420310A
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+# When a device is already enabled, setting it to RESTORE should do nothing
+
+!CAPTURE RESTORE
+!!qexpect CAPTURE now QMX
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!PLAYBACK RESTORE
+!!qexpect PLAYBACK now QMX
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!RADIOCTRLPORT RESTORE
+!!qexpect RADIOCTRLPORT now TCP:4532
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+# Trying to restore something that hasn't ever been set fails
+!RADIOPTT RESTORE
+!!qexpect FAULT RADIOPTT cannot be set to RESTORE.*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!SENDID
+!!qexpect SENDID
+# SENDID takes about 1.6 seconds.  So, use !!waitms 1800 to wait until it should
+# have finished playing before rechecking status values.  This way, if a problem
+# occurs during KeyPTT(TRUE), playback, or KeyPTT(FALSE), the effects will be
+# observed with these checks.
+!!waitms 1800
+
+# Check all status values
+## If there was a problem in TX audio or PTT control, it might be detected when
+## attempting to transmit
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!!print ** OK if PTT engaged and audio was transmitted. [QMX2] **
+!!print ** Turn off QMX to continue test. **
+!!waitforall STATUS RXENABLED FALSE||STATUS TXENABLED FALSE
+
+################################################################################
+# When using rigctld for TCP CAT control, the following differs from direct CAT
+# control because as long as rigctld is running, PTTENABLED remains TRUE and
+# RADIOCTRLPORT remains TCP:4532.  However, this does not mean that a usable
+# connection to the QMX is established.  Thus, PTTENABLED shows as TRUE, but is
+# mistaken.
+################################################################################
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+# While QMX remains off, any attempt to re-enable audio or PTT devices should
+# fail.  Verify responses:
+
+!RXENABLED TRUE
+!!qexpect FAULT RXENABLED cannot be set to TRUE\..*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!TXENABLED TRUE
+!!qexpect FAULT TXENABLED cannot be set to TRUE\..*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!CODEC TRUE
+!!qexpect FAULT CODEC cannot be set to TRUE\..*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!CAPTURE RESTORE
+!!qexpect FAULT Cannot open CaptureDevice as configured:.*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!PLAYBACK RESTORE
+!!qexpect FAULT Cannot open PlaybackDevice as configured:.*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!PTTENABLED TRUE
+!!qexpect PTTENABLED now TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!RADIOCTRLPORT RESTORE
+!!qexpect RADIOCTRLPORT now TCP:4532
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!RADIOPTT RESTORE
+!!qexpect FAULT RADIOPTT cannot be set to RESTORE.*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+# Failed attempts to set CAPTURE, PLAYBACK, RADIOCTRLPORT, and RADIOPTT should
+# also have no effect on later use of RESTORE or *ENABLED TRUE.
+
+!CAPTURE Anything invalid
+!!qexpect FAULT Cannot open CaptureDevice as configured:.*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!PLAYBACK Anything invalid
+!!qexpect FAULT Cannot open PlaybackDevice as configured:.*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+# Since RADIOCTRLPORT is still valid, this will disable it
+!RADIOCTRLPORT Anything invalid
+!!qwaitforall STATUS PTTENABLED FALSE||FAULT RADIOCTRLPORT cannot be set to Anything invalid.*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!RADIOPTT Anything invalid
+!!qexpect FAULT RADIOPTT cannot be set to Anything invalid.*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!!userwait ** Turn QMX back on. [QMX3] **
+
+# Use RESTORE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!CAPTURE RESTORE
+!!qwaitfor CAPTURE now QMX
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+# Verify RX enabled by waiting for INPUTPEAKS
+!!qwaitforinputpeaks
+
+!PLAYBACK RESTORE
+!!qwaitfor PLAYBACK now QMX
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!RADIOCTRLPORT RESTORE
+!!qwaitfor RADIOCTRLPORT now TCP:4532
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!SENDID
+!!qexpect SENDID
+!!waitms 1800
+
+# Check all status values
+## If there was a problem in TX audio or PTT control, it might be detected when
+## attempting to transmit
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!!print ** OK if PTT engaged and audio was transmitted. [QMX4] **
+!!print ** Turn off QMX to continue test. **
+!!waitforall STATUS RXENABLED FALSE||STATUS TXENABLED FALSE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!!userwait ** Turn QMX back on. [QMX5] **
+
+# Use RX/TXENABLED TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!RXENABLED TRUE
+!!qwaitfor RXENABLED now TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+# Verify RX enabled by waiting for INPUTPEAKS
+!!qwaitforinputpeaks
+
+!TXENABLED TRUE
+!!qwaitfor TXENABLED now TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!SENDID
+!!qexpect SENDID
+!!waitms 1800
+
+# Check all status values
+## If there was a problem in TX audio or PTT control, it might be detected when
+## attempting to transmit
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!!print ** OK if PTT engaged and audio was transmitted. [QMX6] **
+!!print ** Turn off QMX to continue test. **
+!!waitforall STATUS RXENABLED FALSE||STATUS TXENABLED FALSE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!!userwait ** Turn QMX back on. [QMX7] **
+
+# Use CODEC TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!CODEC TRUE
+!!qwaitfor CODEC now TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+# Verify RX enabled by waiting for INPUTPEAKS
+!!qwaitforinputpeaks
+
+!SENDID
+!!qexpect SENDID
+!!waitms 1800
+
+# Check all status values
+## If there was a problem in TX audio or PTT control, it might be detected when
+## attempting to transmit
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!!userwait ** OK if PTT engaged and audio was transmitted. [QMX8] **
+
+################################################################################
+# Repeat the above tests, but using CODEC FALSE, and PTTENABLED FALSE rather
+# than turning off the radio
+################################################################################
+
+!CODEC FALSE
+!!qexpect CODEC now FALSE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!PTTENABLED FALSE
+!!qwaitfor PTTENABLED now FALSE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+# Failed attempts to set CAPTURE, PLAYBACK, RADIOCTRLPORT, and RADIOPTT should
+# have no effect on later use of RESTORE or *ENABLED TRUE.
+
+!CAPTURE Anything invalid
+!!qexpect FAULT Cannot open CaptureDevice as configured:.*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!PLAYBACK Anything invalid
+!!qexpect FAULT Cannot open PlaybackDevice as configured:.*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!RADIOCTRLPORT Anything invalid
+!!qwaitfor FAULT RADIOCTRLPORT cannot be set to Anything invalid.*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!RADIOPTT Anything invalid
+!!qexpect FAULT RADIOPTT cannot be set to Anything invalid.*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!!print ** RESTORE QMX. [QMX9] **
+
+# Use RESTORE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!CAPTURE RESTORE
+!!qwaitfor CAPTURE now QMX
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+# Verify RX enabled by waiting for INPUTPEAKS
+!!qwaitforinputpeaks
+
+!PLAYBACK RESTORE
+!!qwaitfor PLAYBACK now QMX
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!RADIOCTRLPORT RESTORE
+!!qwaitfor RADIOCTRLPORT now TCP:4532
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!SENDID
+!!qexpect SENDID
+!!waitms 1800
+
+# Check all status values
+## If there was a problem in TX audio or PTT control, it might be detected when
+## attempting to transmit
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!!userwait ** OK if PTT engaged and audio was transmitted. [QMX10] **
+
+!CODEC FALSE
+!!qexpect CODEC now FALSE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!PTTENABLED FALSE
+!!qexpect PTTENABLED now FALSE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!!print ** RESTORE QMX. [QMX11] **
+
+# Use RX/TXENABLED TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!RXENABLED TRUE
+!!qwaitfor RXENABLED now TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+# Verify RX enabled by waiting for INPUTPEAKS
+!!qwaitforinputpeaks
+
+!TXENABLED TRUE
+!!qwaitfor TXENABLED now TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!PTTENABLED TRUE
+!!qwaitfor PTTENABLED now TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!SENDID
+!!qexpect SENDID
+!!waitms 1800
+
+# Check all status values
+## If there was a problem in TX audio or PTT control, it might be detected when
+## attempting to transmit
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!!userwait ** OK if PTT engaged and audio was transmitted. [QMX12] **
+
+!CODEC FALSE
+!!qexpect CODEC now FALSE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!PTTENABLED FALSE
+!!qexpect PTTENABLED now FALSE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!!print ** RESTORE QMX. [QMX13] **
+
+# Use CODEC TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!CODEC TRUE
+!!qwaitfor CODEC now TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+# Verify RX enabled by waiting for INPUTPEAKS
+!!qwaitforinputpeaks
+
+!PTTENABLED TRUE
+!!qwaitfor PTTENABLED now TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!SENDID
+!!qexpect SENDID
+!!waitms 1800
+
+# Check all status values
+## If there was a problem in TX audio or PTT control, it might be detected when
+## attempting to transmit
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!!userwait ** OK if PTT engaged and audio was transmitted. [QMX14] **
+
+################################################################################
+# Repeat the above tests, but using RXENABLED FALSE, TXENABLED FALSE, and
+# PTTENABLED FALSE rather than turning off the radio or CODEC FALSE
+################################################################################
+
+!RXENABLED FALSE
+!!qexpect RXENABLED now FALSE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!TXENABLED FALSE
+!!qexpect TXENABLED now FALSE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!PTTENABLED FALSE
+!!qexpect PTTENABLED now FALSE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+# Failed attempts to set CAPTURE, PLAYBACK, RADIOCTRLPORT, and RADIOPTT should
+# have no effect on later use of RESTORE or *ENABLED TRUE.
+
+!CAPTURE Anything invalid
+!!qexpect FAULT Cannot open CaptureDevice as configured:.*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!PLAYBACK Anything invalid
+!!qexpect FAULT Cannot open PlaybackDevice as configured:.*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!RADIOCTRLPORT Anything invalid
+!!qexpect FAULT RADIOCTRLPORT cannot be set to Anything invalid.*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!RADIOPTT Anything invalid
+!!qexpect FAULT RADIOPTT cannot be set to Anything invalid.*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!!print ** RESTORE QMX. [QMX15] **
+
+# Use RESTORE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!CAPTURE RESTORE
+!!qwaitfor CAPTURE now QMX
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+# Verify RX enabled by waiting for INPUTPEAKS
+!!qwaitforinputpeaks
+
+!PLAYBACK RESTORE
+!!qwaitfor PLAYBACK now QMX
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!RADIOCTRLPORT RESTORE
+!!qwaitfor RADIOCTRLPORT now TCP:4532
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!SENDID
+!!qexpect SENDID
+!!waitms 1800
+
+# Check all status values
+## If there was a problem in TX audio or PTT control, it might be detected when
+## attempting to transmit
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!!userwait ** OK if PTT engaged and audio was transmitted. [QMX16] **
+
+!RXENABLED FALSE
+!!qexpect RXENABLED now FALSE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!TXENABLED FALSE
+!!qexpect TXENABLED now FALSE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!PTTENABLED FALSE
+!!qexpect PTTENABLED now FALSE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!!print ** RESTORE QMX. [QMX17] **
+
+# Use RX/TXENABLED TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!RXENABLED TRUE
+!!qwaitfor RXENABLED now TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+# Verify RX enabled by waiting for INPUTPEAKS
+!!qwaitforinputpeaks
+
+!TXENABLED TRUE
+!!qwaitfor TXENABLED now TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!PTTENABLED TRUE
+!!qwaitfor PTTENABLED now TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!SENDID
+!!qexpect SENDID
+!!waitms 1800
+
+# Check all status values
+## If there was a problem in TX audio or PTT control, it might be detected when
+## attempting to transmit
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!!userwait ** OK if PTT engaged and audio was transmitted. [QMX18] **
+
+!RXENABLED FALSE
+!!qexpect RXENABLED now FALSE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!TXENABLED FALSE
+!!qexpect TXENABLED now FALSE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!PTTENABLED FALSE
+!!qexpect PTTENABLED now FALSE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!!print ** RESTORE QMX. [QMX19] **
+
+# Use CODEC TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!CODEC TRUE
+!!qwaitfor CODEC now TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+# Verify RX enabled by waiting for INPUTPEAKS
+!!qwaitforinputpeaks
+
+!PTTENABLED TRUE
+!!qwaitfor PTTENABLED now TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!SENDID
+!!qexpect SENDID
+!!waitms 1800
+
+# Check all status values
+## If there was a problem in TX audio or PTT control, it might be detected when
+## attempting to transmit
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!!userwait ** OK if PTT engaged and audio was transmitted. [QMX20] **
+
+################################################################################
+# Repeat the above tests, but using CAPTURE NONE, PLAYBACK NONE,
+# RADIOCTRLPORT NONE, RADIOPTT NONE rather than turning off the radio or CODEC
+# FALSE or RXENABLED FALSE, TXENABLED FALSE, and  PTTENABLED FALSE
+################################################################################
+
+!CAPTURE NONE
+!!qexpect FAULT Cannot open CaptureDevice as configured: CAPTURE NONE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!PLAYBACK NONE
+!!qexpect FAULT Cannot open PlaybackDevice as configured: PLAYBACK NONE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!RADIOCTRLPORT NONE
+!!qwaitforall STATUS PTTENABLED FALSE||RADIOCTRLPORT now NONE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+# Failed attempts to set CAPTURE, PLAYBACK, RADIOCTRLPORT, and RADIOPTT should
+# have no effect on later use of RESTORE or *ENABLED TRUE.
+
+!CAPTURE Anything invalid
+!!qexpect FAULT Cannot open CaptureDevice as configured:.*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!PLAYBACK Anything invalid
+!!qexpect FAULT Cannot open PlaybackDevice as configured:.*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!RADIOCTRLPORT Anything invalid
+!!qexpect FAULT RADIOCTRLPORT cannot be set to Anything invalid.*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!RADIOPTT Anything invalid
+!!qexpect FAULT RADIOPTT cannot be set to Anything invalid.*
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!!print ** RESTORE QMX. [QMX21] **
+
+# Use RESTORE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!CAPTURE RESTORE
+!!qwaitfor CAPTURE now QMX
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+# Verify RX enabled by waiting for INPUTPEAKS
+!!qwaitforinputpeaks
+
+!PLAYBACK RESTORE
+!!qwaitfor PLAYBACK now QMX
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!RADIOCTRLPORT RESTORE
+!!qwaitfor RADIOCTRLPORT now TCP:4532
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!SENDID
+!!qexpect SENDID
+!!waitms 1800
+
+# Check all status values
+## If there was a problem in TX audio or PTT control, it might be detected when
+## attempting to transmit
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!!userwait ** OK if PTT engaged and audio was transmitted. [QMX22] **
+
+!CAPTURE NONE
+!!qexpect FAULT Cannot open CaptureDevice as configured: CAPTURE NONE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!PLAYBACK NONE
+!!qexpect FAULT Cannot open PlaybackDevice as configured: PLAYBACK NONE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!RADIOCTRLPORT NONE
+!!qwaitforall STATUS PTTENABLED FALSE||RADIOCTRLPORT now NONE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!!print ** RESTORE QMX. [QMX23] **
+
+# Use RX/TXENABLED TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!RXENABLED TRUE
+!!qwaitfor RXENABLED now TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+# Verify RX enabled by waiting for INPUTPEAKS
+!!qwaitforinputpeaks
+
+!TXENABLED TRUE
+!!qwaitfor TXENABLED now TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!PTTENABLED TRUE
+!!qwaitfor PTTENABLED now TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!SENDID
+!!qexpect SENDID
+!!waitms 1800
+
+# Check all status values
+## If there was a problem in TX audio or PTT control, it might be detected when
+## attempting to transmit
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!!userwait ** OK if PTT engaged and audio was transmitted. [QMX24] **
+
+!CAPTURE NONE
+!!qexpect FAULT Cannot open CaptureDevice as configured: CAPTURE NONE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!PLAYBACK NONE
+!!qexpect FAULT Cannot open PlaybackDevice as configured: PLAYBACK NONE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!RADIOCTRLPORT NONE
+!!qwaitforall STATUS PTTENABLED FALSE||RADIOCTRLPORT now NONE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!!print ** RESTORE QMX. [QMX25] **
+
+# Use CODEC TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED FALSE
+!TXENABLED
+!!qwaitfor TXENABLED FALSE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC FALSE
+!CAPTURE
+!!qwaitfor CAPTURE NONE
+!PLAYBACK
+!!qwaitfor PLAYBACK NONE
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+!CODEC TRUE
+!!qwaitfor CODEC now TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED FALSE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT NONE
+
+# Verify RX enabled by waiting for INPUTPEAKS
+!!qwaitforinputpeaks
+
+!PTTENABLED TRUE
+!!qwaitfor PTTENABLED now TRUE
+
+# Check all status values
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!SENDID
+!!qexpect SENDID
+!!waitms 1800
+
+# Check all status values
+## If there was a problem in TX audio or PTT control, it might be detected when
+## attempting to transmit
+!RXENABLED
+!!qwaitfor RXENABLED TRUE
+!TXENABLED
+!!qwaitfor TXENABLED TRUE
+!PTTENABLED
+!!qwaitfor PTTENABLED TRUE
+!CODEC
+!!qwaitfor CODEC TRUE
+!CAPTURE
+!!qwaitfor CAPTURE QMX
+!PLAYBACK
+!!qwaitfor PLAYBACK QMX
+!RADIOPTT
+!!qwaitfor RADIOPTT NONE
+!RADIOCTRLPORT
+!!qwaitfor RADIOCTRLPORT TCP:4532
+
+!!userwait ** OK if PTT engaged and audio was transmitted. [QMX26] **
+
+!!print ** Done.  QMX test successful. **
+!CLOSE
+!!quit
