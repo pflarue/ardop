@@ -1,9 +1,11 @@
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <termios.h>
 #include <time.h>
@@ -14,8 +16,10 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
+#include <sys/types.h>
 
 #include "common/os_util.h"
+#include "common/ardopcommon.h"
 #include "common/log.h"
 
 
@@ -301,7 +305,8 @@ int nbrecv(int sockfd, char *data, size_t len) {
 // mostly to produce better error messages if something fails.
 // Return a file descriptor on success.  If an error occurs, log the error
 // and return -1;
-int tcpconnect(char *address, int port) {
+// However, if testing is true, then do not log an error if unable to open.
+int tcpconnect(char *address, int port, bool testing) {
 	struct sockaddr_in addr;
 	int fd = 0;
 
@@ -317,9 +322,9 @@ int tcpconnect(char *address, int port) {
 		return (-1);
 	}
 	if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-		ZF_LOGE("Error connecting to TCP port at %s:%i. %s",
-			address, port, strerror(errno));
-		close(fd);
+		if (!testing)
+			ZF_LOGE("Error connecting to TCP port at %s:%i. %s",
+				address, port, strerror(errno));
 		return (-1);
 	}
 	// set socket to be non-blocking
@@ -382,6 +387,147 @@ int CM108_set_ptt(HANDLE fd, bool State) {
 	return 0;
 }
 
+// Return an alternating list of the names and descriptions of available CM108
+// devices, or NULL if an error occurs or none are found.  The name is suitable
+// for passing to parse_pttstr() and thus must include the CM108: prefix.  The
+// description is optional, and shall be an empty string ("") if no description
+// is available, as is the case here.  The windows version of this function
+// provides a description corresponding to each name.
+// So, returned lists shall have an even number of non-null strings, followed
+// by one or more null pointers.
+// Unless the return value is NULL, use FreeStrlist() to free it when done.
+char** GetCM108Strlist() {
+	char **slist = NULL;
+	int slistsize = 0;
+	DIR *d;
+	struct dirent *dir;
+	long devnum;
+	int namesz;
+	char pathstr[] = "/dev/";
+	char prefix[] = "CM108:";
+	if ((d = opendir(pathstr)) == NULL) {
+		ZF_LOGD("Directory of devices %snot found (%s).", pathstr,
+			strerror(errno));
+		return slist;
+	}
+	while ((dir = readdir(d)) != NULL) {
+		if (dir->d_type == DT_DIR || dir->d_name[0] == '.')
+			continue;
+		if (strncmp(dir->d_name, "hidraw", strlen("hidraw")) != 0)
+			continue;  // not a CM108 device
+		if (!try_parse_long(dir->d_name + strlen("hidraw"), &devnum))
+			continue;  // not a valid CM108 device (missing/invalid number)
+		if (slist == NULL) {
+			if ((slist = (char **) malloc(sizeof(char *))) == NULL) {
+				ZF_LOGE("Error from malloc() in GetCM108Strlist() (%s)",
+					strerror(errno));
+				closedir(d);
+				return slist;
+			}
+			slistsize = 1;
+			slist[slistsize - 1] = NULL;  // Last pointer must always be null
+		}
+		slistsize += 2;
+		if ((slist = (char **) realloc(slist, slistsize * sizeof(char *)))
+			== NULL
+		) {
+			ZF_LOGE("Error from realloc() in GetCM108Strlist() (%s)",
+				strerror(errno));
+			closedir(d);
+			return slist;
+		}
+		namesz = strlen(prefix) + strlen(pathstr) + strlen(dir->d_name) + 1;
+		if ((slist[slistsize - 3] = malloc((namesz) * sizeof(char *)))
+			== NULL
+		) {
+			ZF_LOGE("Error from malloc() in GetSerialStrlist() (%s)",
+				strerror(errno));
+			closedir(d);
+			return slist;
+		}
+		snprintf(slist[slistsize - 3], namesz, "%s%s%s", prefix, pathstr,
+			dir->d_name);
+		slist[slistsize - 2] = strdup("");  // No description available
+		slist[slistsize - 1] = NULL;  // Last pointer must always be null
+	}
+	closedir(d);
+	return slist;
+}
+
+
+// Return an alternating list of the names and descriptions of available serial
+// devices, or NULL if an error occurs or none are found.  The name is suitable
+// for passing to parse_catstr() or parse_pttstr() where an optional RTS: or
+// DTR: prefix may be applied.  The description is optional, and shall be an
+// empty string ("") if no description is available, as is the case here.  The
+// windows version of this function provides a description corresponding to each
+// name. Include everything in /dev/serial/by_id/ and /dev/serial/by_path/, as
+// well as /dev/ttyUSB* and /dev/ttyACM*.  The by-id values are better choices
+// since they are usually more descriptive.  The ttyUSB and ttyACM and the
+// by-path values are equally valid, and must be included to allow the select
+// controls in the webgui to have something to point to if that is the current
+// CATstr or PTTstr.
+// So, returned lists shall have an even number of non-null strings, followed
+// by one or more null pointers.
+// Unless the return value is NULL, use FreeStrlist() to free it when done.
+char** GetSerialStrlist() {
+	char **slist = NULL;
+	int slistsize = 0;
+	DIR *d;
+	struct dirent *dir;
+	int namesz;
+	char *pathstrs[] = {"/dev/serial/by-id/", "/dev/serial/by-path/", "/dev/"};
+	for (int pnum = 0; pnum < 3; ++pnum) {
+		if ((d = opendir(pathstrs[pnum])) == NULL) {
+			ZF_LOGD("Directory of serial devices %s not found (%s).",
+				pathstrs[pnum], strerror(errno));
+			return slist;
+		}
+		while ((dir = readdir(d)) != NULL) {
+			if (dir->d_type == DT_DIR || dir->d_name[0] == '.')
+				continue;
+			if (pnum == 2
+				&& strncmp("ttyUSB", dir->d_name, strlen("ttyUSB")) != 0
+				&& strncmp("ttyACM", dir->d_name, strlen("ttyACM")) != 0
+			)
+				continue;  // not a serial port
+			if (slist == NULL) {
+				if ((slist = (char **) malloc(sizeof(char *))) == NULL) {
+					ZF_LOGE("Error from malloc() in GetSerialStrlist() (%s)",
+						strerror(errno));
+					closedir(d);
+					return slist;
+				}
+				slistsize = 1;
+				slist[slistsize - 1] = NULL;  // Last pointer must always be null
+			}
+			slistsize += 2;
+			if ((slist = (char **) realloc(slist, slistsize * sizeof(char *)))
+				== NULL
+			) {
+				ZF_LOGE("Error from realloc() in GetSerialStrlist() (%s)",
+					strerror(errno));
+				closedir(d);
+				return slist;
+			}
+			namesz = strlen(pathstrs[pnum]) + strlen(dir->d_name) + 1;
+			if ((slist[slistsize - 3] = malloc((namesz) * sizeof(char *)))
+				== NULL
+			) {
+				ZF_LOGE("Error from malloc() in GetSerialStrlist() (%s)",
+					strerror(errno));
+				closedir(d);
+				return slist;
+			}
+			snprintf(slist[slistsize - 3], namesz, "%s%s", pathstrs[pnum],
+				dir->d_name);
+			slist[slistsize - 2] = strdup("");  // no description provided
+			slist[slistsize - 1] = NULL;  // Last pointer must always be null
+		}
+		closedir(d);
+	}
+	return slist;
+}
 
 #ifdef __ARM_ARCH
 // ARM Linux specific stuff

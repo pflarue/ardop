@@ -1396,23 +1396,45 @@ void ProcessCommandFromHost(char * strCMD)
 				goto cmddone;
 			}
 			// !PTTEnabled
-			if (parse_pttstr("RESTORE") == 0) {
-				snprintf(cmdReply, sizeof(cmdReply), "%s now TRUE", strCMD);
-				SendReplyToHost(cmdReply);
-				ZF_LOGD("%s now TRUE after parse_pttstr(\"RESTORE\")", strCMD);
-				goto cmddone;
-			}
-			// !PTTEnabled and parse_pttstr("RESTORE") failed failed
-			if (parse_catstr("RESTORE") == 0) {
-				snprintf(cmdReply, sizeof(cmdReply), "%s now TRUE", strCMD);
-				SendReplyToHost(cmdReply);
-				ZF_LOGD("%s now TRUE after parse_catstr(\"RESTORE\")", strCMD);
-				goto cmddone;
+			// PTT can be controlled via CAT or from a PTT device.  It is
+			// possible that since ardopcf was started, both CAT and PTT devices
+			// have been successfully used, such that both
+			// parse_pttstr("RESTORE") and parse_catstr("RESTORE") might both
+			// succeed.  Try parse_catstr("RESTORE") first if
+			// wasLastGoodControlCAT() returns true, else try
+			// parse_pttstr("RESTORE") first.  In either case, if the first
+			// fails, try the other.
+			if (wasLastGoodControlCAT()) {
+				// parse_catstr() can succeed while PTTENABLED remains FALSE
+				// if RADIOPTTON and RADIOPTTOFF are not also both set.  So,
+				// check isPTTmodeEnabled() to be sure
+				if (parse_catstr("RESTORE") == 0 && isPTTmodeEnabled()) {
+					snprintf(cmdReply, sizeof(cmdReply), "%s now TRUE", strCMD);
+					SendReplyToHost(cmdReply);
+					ZF_LOGD("%s now TRUE after parse_catstr(\"RESTORE\")", strCMD);
+					goto cmddone;
+				}
+				if (parse_pttstr("RESTORE") == 0) {
+					snprintf(cmdReply, sizeof(cmdReply), "%s now TRUE", strCMD);
+					SendReplyToHost(cmdReply);
+					ZF_LOGD("%s now TRUE after parse_pttstr(\"RESTORE\")", strCMD);
+					goto cmddone;
+				}
+			} else {
+				if (parse_pttstr("RESTORE") == 0) {
+					snprintf(cmdReply, sizeof(cmdReply), "%s now TRUE", strCMD);
+					SendReplyToHost(cmdReply);
+					ZF_LOGD("%s now TRUE after parse_pttstr(\"RESTORE\")", strCMD);
+					goto cmddone;
+				}
+				if (parse_catstr("RESTORE") == 0 && isPTTmodeEnabled()) {
+					snprintf(cmdReply, sizeof(cmdReply), "%s now TRUE", strCMD);
+					SendReplyToHost(cmdReply);
+					ZF_LOGD("%s now TRUE after parse_catstr(\"RESTORE\")", strCMD);
+					goto cmddone;
+				}
 			}
 			if (!isPTTmodeEnabled()) {
-				// maybe both parse_catstr("RESTORE") failed, or maybe it
-				// succeeded, but PTTON or PTTOFF is not set so that CAT PTT
-				// isn't usable.
 				snprintf(strFault, sizeof(strFault),
 					"%s cannot be set to TRUE.  RADIOPTT or RADIOCTRLPORT,"
 					" RADIOPTTON, RADIOPTTOFF required.",
@@ -1420,11 +1442,16 @@ void ProcessCommandFromHost(char * strCMD)
 			}
 			goto cmddone;
 		} else if (strcmp(ptrParams, "FALSE") == 0) {
-			close_PTT(false);  // Closes PTT port if one was open.
-			if (isPTTmodeEnabled()) {
-				// Since PTT port has been closed, but PTTEnabled is still true,
-				// PTT must be using CAT conrol.
+			// If both are open, close both PTT and CAT.
+			// The order in whcih they are closed can change
+			// wasLastGoodControlCAT().  So, choose the order of closing them
+			// so as not to change this result.
+			if (wasLastGoodControlCAT()) {
+				close_PTT(false);  // Closes PTT port if one was open.
 				close_CAT(false);  // Closes CAT port if one was open.
+			} else {
+				close_CAT(false);  // Closes CAT port if one was open.
+				close_PTT(false);  // Closes PTT port if one was open.
 			}
 			snprintf(cmdReply, sizeof(cmdReply), "%s now FALSE", strCMD);
 			SendReplyToHost(cmdReply);

@@ -114,7 +114,8 @@
 			only briefly).  So, making changes while transmitting or receiving
 			is not recommended.</b><br /><br />
 
-			<button id="codectoggle">ENABLE Audio Processing</button><br /><br />
+			<button id="codectoggle">ENABLE Audio Processing</button>
+			<button id="ptttoggle">ENABLE PTT/CAT Control</button><br /><br />
 
 			RX Audio Device:
 			<select name="rxselect" id="rxselect"></select><br />
@@ -122,14 +123,26 @@
 			<select name="txselect" id="txselect"></select><br />
 			<button id="getdevices">Refresh audio devices list</button><br />
 			<br />
-			For these settings, type a new value and press enter to change.
-			Device names should be the same as would be entered on the
-			command line or the special values of NONE or RESTORE<br />
+			The next two selectors include available and commonly used devices
+			that may be suitable for CAT/PTT.  Some listed devices may not
+			actually be usable.<br />
+			PTT Selector:
+			<select name="pttselect" id="pttselect"></select><br />
+			CAT Selector:
+			<select name="catselect" id="catselect"></select><br />
+			<button id="getnadevices">Refresh CAT/PTT devices list</button><br />
+			<small>Because some less commonly used devices may not be included
+			in the selectors above, you may also type a device name into the
+			text inputs below.  These accept any value that can be used with the
+			--cat and --ptt command line options, as well as the special values
+			of NONE and RESTORE.  It may also be necessary to use these inputs
+			if non-default baud rates are required for serial devices.</small>
+			<br />
 			PTT device: <input type="text" id="pttdev"></input><br />
 			CAT device: <input type="text" id="catdev"></input><br />
 			CAT PTTON string (hex): <input type="text" id="ptton"></input><br />
-			CAT PTTONFFstring (hex): <input type="text" id="pttoff"></input><br /><br />
-
+			CAT PTTONFFstring (hex): <input type="text" id="pttoff"></input>
+			<br /><br />
 			MONO is usually used, except when using a dual VFO system that has
 			audio from VFO A on one channel and VFO B on the other.
 			<br />
@@ -378,12 +391,14 @@
 			to configure or reconfigure the audio and CAT/PTT devices used by ardopcf.
 			As indicated by the warning at the top of this section <b>Changing these settings
 			may disrupt audio processing (maybe only briefly). So, making changes while
-			transmitting or receiving is not recommended.</b>  Of these controls, the item
-			most likely to be useful is the <b>DISABLE/ENABLE Audio Processing</b> button.
-			This button can be used to temporily disable, and later re-enable audio processing.
+			transmitting or receiving is not recommended.</b>  Of these controls, the items
+			most likely to be useful are the <b>DISABLE/ENABLE Audio Processing</b> and
+			<b>DISABLE/ENABLE PTT/CAT Control</b> buttons. These buttons can be used to
+			temporarily disable, and later re-enable audio processing and PTT/CAT control.
 			Disabling audio processing reduces CPU/power usage by the computer that ardopcf is
-			running on, and should also be done before disconnecting or turning off the audio
-			devices used.
+			running on.  Both of these should also be disabled before disconnecting or turning
+			off the audio and control devices used.  In most cases, disconnecting without first
+			disabling them will also work, but in certain cases this may cause problems.
 			</p><p>
 			The <b>ENABLE Audio Processing</b> button doesn't work unless the audio devices
 			were previously successfully configured, and then <b>DISABLED</b>.  To initially
@@ -398,14 +413,88 @@
 			also included in the list of devices.  Selecting <b>RESTORE</b> causes ardopcf
 			to attempt to re-open the last device that was successfully opened and configured.
 			</p><p>
-			The remaining configuration controls duplicate the functionality of
-			some commandline options.  See the documentation for those options for more
-			details.  By providing these controls within the WebGUI, ardopcf can be started
+			The <b>ENABLE PTT/CAT Control</b> button doesn't work unless a PTT control device
+			or CAT control device plus the CAT PTTON and CAT PTTOFF settings were previously
+			successfully configured, and then <b>DISABLED</b>.  To initially configure the
+			PTT or CAT devices, or select devices different from what were previously
+			configured, select appropriate devices from the <b>PTT Selector</b> and/or
+			<b>CAT Selector</b> controls.  These include detected serial and CM108 devices as
+			well as available connections to the default TCP:4532 port used by Hamlib/rigctld.
+			</p><p>
+			If the <b>RX Audio Device</b>, <b>TX Audio Device</b>, <b>PTT Selector</b>, or
+			<b>CAT Selector</b> still shows <b>NONE</b> after you use one of the <b>ENABLE</b>
+			buttons or choose another value from one of these selectors, this indicates that
+			an attempt to open and configure the device failed.  You might find additional
+			details in the debug log file to help you understand why it failed.
+			</p><p>
+			It is likely that only one or two of the CAT/PTT items is actually usable.  Unlike
+			the audio device selectors that, with a bit of trial an error, can probably be
+			used to configure a working system without knowing too much about the details of
+			your hardware, the PTT/CAT device selectors are probably not as intuitive.  The
+			selectors are better than having to type in device names because they are quicker
+			and avoid typos.  However, to use them effectively, you still need to understand
+			the capabilities of the hardware that you are using.  For example, many serial
+			devices can use either RTS or DTR for PTT control.  Both are listed, but only one
+			will work.  On Linux, all hidraw human interface devices will be listed as
+			possible CM108 PTT control devices, including completely unrelated devices.
+			Similarly, on Windows, any CM108 compatible audio device will be listed as a
+			CM108 PTT control device even if, like the Digirig Mobile, pin 3 of that board is
+			not wired to control the radio's PTT.
+			<b>NONE</b> can be used to close the current PTT or CAT device if one is open.
+			If a device has previously been successfully configured, then a special
+			<b>RESTORE</b> item is also included in the list of devices.  Selecting
+			<b>RESTORE</b> causes ardopcf to attempt to re-open the last device that was
+			successfully opened.
+			</p><p>
+			The <b>PTT Selector</b> and <b>CAT Selector</b> controls do not include every
+			possible value that you might need to use.  So, the <b>PTT device</b> and
+			<b>CAT device</b> text inputs are also provided.  These accept any value that can
+			be used with the --cat and --ptt command line options, as well as the special
+			values of NONE and RESTORE.  For example, on Raspberry Pi computers, it is
+			possible to connect custom hardware to one of the GPIO electrical connectors and
+			use that for PTT control.  This option is not listed in the <b>PTT Selector</b>
+			by default, but it may be entered into the <b>PTT device</b> text input as
+			'GPIO:N', where N is the GPIO pin number.  It may also be necessary to use these
+			inputs if non-default baud rates are required for serial devices.  See the
+			documentation for the --ptt and --cat command line options for more details.
+			</p><p>
+			Even for devices such as GPIO pins or serial devices that require manual
+			configuration because they do not appear in the selector lists, once
+			successfully configured either from the text input fields in the Webgui or from
+			the command line, the <b>ENABLE/DISABLE CAT/PTT</b> button and/or the <b>NONE</b>
+			and <b>RESTORE</b> values in the selectors can be used to temporarily disable them,
+			and then later re-enable them.
+			<p></p>
+			I see a few use cases for this ability to disable and later re-enable PTT control.
+			The first is that, especially during portable operations, it may be convenient to
+			disconnect and later reconnect the cable between the radio and computer.  You
+			should disable the PTT/CAT device (as well as the audio devices) before
+			disconnecting.  In most cases, disconnecting without first disabling them will
+			also work, but in certain cases this may cause problems.  Then, after reconnecting,
+			you can re-enable the devices.  A second use case for temporarily disabling
+			PTT/CAT is to temporarily prevent unplanned transmitting, such as might occur to
+			meet ID requirements, when doing so might cause equipment damage or injury because
+			you need to make adjustments to your antenna or feedline.
+			</p><p>
+			To use CAT for PTT control, unless you are used the RIGCTRL shortcut to set up
+			TCP CAT via Hamlib/rigctld, you must also provide <b>PTTON</b> and <b>PTTOFF</b>
+			commands expressed as hex strings.  The required values are specific to the make
+			and model of radio being used.  So, you must search the internet or the manual
+			for your radio to discover what is required.  Text inputs are provided for these.
+			</p><p>
+			The <b>RX Audio Channel</b> and <b>TX Audio Channel</b> selectors control whether
+			the audio devices are opened as mono or stereo devices, and when opened as stereo
+			devices, whether the left or right channel is used.  In most cases, the <b>MONO</b>
+			setting is appropriate.  The <b>LEFT</b> or <b>RIGHT</b> setting for
+			<b>RX Audio Channel</b> may be necessary when using a dual VFO radio that provides
+			audio from one VFO on the left channel and audio from the other VFO on the right
+			channel.  I am not currently aware of a use case for other than <b>MONO</b> on the
+			<b>TX Audio Channel</b> selector.
+			</p><p>
+			By providing these controls within the WebGUI, ardopcf can be started
 			without specifying these options, and it may be reconfigured to change which
 			devices are used and how they are configured without having to exit and restart
-			ardopcf.  Unlike the command line options, special values of <b>NONE</b> and
-			<b>RESTORE</b> may also be used in the <b>PTT device</b> and <b>CAT device</b>
-			input fields.
+			ardopcf.
 			</p><p>
 			The various items displayed in this WebGUI can change quickly during an Ardop ARQ
 			connection.  The debug log file created by ardopcf contains most of this same

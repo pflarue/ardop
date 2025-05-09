@@ -669,6 +669,20 @@ int processargs(int argc, char * argv[]) {
 	// options are parsed.
 	InitAudio(false);
 
+	// Log the list of available non-audio devices.  Notice that this is
+	// done after logging has been started, but before CAT/PTT device related
+	// options are parsed.
+	char **seriallist = GetSerialStrlist();
+	char **cm108list = GetCM108Strlist();
+	if (cm108list != NULL) {
+		LogStrlist(cm108list, "CM108 Devices:", true);
+		FreeStrlist(&cm108list);
+	}
+	if (seriallist != NULL) {
+		LogStrlist(seriallist, "Serial Devices:", true);
+		FreeStrlist(&seriallist);
+	}
+
 	// Now consider all other command line options.  Logging related options
 	// already handled will be ignored.
 	optind = 1;  // This resets getopt_long() to start at the beginning
@@ -1194,6 +1208,55 @@ void FreeDevices(DeviceInfo ***devicesptr) {
 	*devicesptr = NULL;
 }
 
+void FreeStrlist(char ***slistptr) {
+	if (*slistptr == NULL)  {
+		ZF_LOGD("FreeStrlist() *slistptr is NULL, so do nothing");
+		return;  // nothing to free
+	}
+	int index = 0;
+	while((*slistptr)[index] != NULL) {
+		free((*slistptr)[index]);  // Free the string
+		++index;
+	}
+	free(*slistptr);  // Free the array of pointers
+	*slistptr = NULL;
+}
+
+void LogStrlist(char **slist, char *headstr, bool asnamedesc) {
+	if (headstr != NULL)
+		ZF_LOGI("%s", headstr);
+	if (slist == NULL)
+		return;
+	int index = -1;
+	while(true) {
+		++index;
+		if (asnamedesc) {
+			// slist contains pairs of name and description
+			if (slist[2 * index] == NULL)
+				break;
+			if (slist[2 * index + 1] == NULL) {
+				ZF_LOGE("Invalid slist passed to LogStrList with asnamedesc"
+					" true.  A NULL pointer was found where a description"
+					" string for %s was expected.",
+					slist[2 * index + 1]);
+				break;
+			}
+			if (slist[2 * index + 1][0] == 0x00) {
+				// no description provided
+				ZF_LOGI("  %s", slist[2 * index]);
+			} else {
+				ZF_LOGI("  %s [%s]", slist[2 * index], slist[2 * index + 1]);
+			}
+		} else {
+			// This is useful to show the full contents of slist for diagnostic
+			// pursposes
+			if (slist[index] == NULL)
+				break;
+			ZF_LOGI("  \"%s\"", slist[index]);
+		}
+	}
+}
+
 // Write a CSV string suitable for the CAPTUREDEVICES or PLAYBACKDEVICES host
 // commands.
 // Per the Ardop specification (Protocol Native TNC Commands), these commands
@@ -1472,4 +1535,26 @@ void updateWebGuiAudioConfig(bool do_getdevices) {
 		GetDevices();
 	wg_send_audiodevices(0, AudioDevices, CaptureDevice, PlaybackDevice,
 		crestorable(), prestorable());
+}
+
+// Send updated info about non-audio system configuration to WebGui.  This
+// should be called whenever a change to this configuration is made (or detected
+// due to a failure).
+void updateWebGuiNonAudioConfig() {
+	char **seriallist = GetSerialStrlist();
+	char **cm108list = GetCM108Strlist();
+	wg_send_devices(0, seriallist, cm108list);
+	if (cm108list != NULL) {
+		// LogStrlist(cm108list, "CM108 Devices:", false);
+		FreeStrlist(&cm108list);
+	}
+	if (seriallist != NULL) {
+		// LogStrlist(seriallist, "Serial Devices:", false);
+		FreeStrlist(&seriallist);
+	}
+	char tmpstr[200];
+	get_ptt_on_cmd_hex(tmpstr, sizeof(tmpstr));
+	wg_send_ptton(0, tmpstr);
+	get_ptt_off_cmd_hex(tmpstr, sizeof(tmpstr));
+	wg_send_pttoff(0, tmpstr);
 }
