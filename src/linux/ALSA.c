@@ -169,7 +169,11 @@ void GetDevices() {
 	// advanced to cycle through values.
 	nexthint = hints;
 	while (*nexthint != NULL) {
-		name = snd_device_name_get_hint(*nexthint, "NAME");
+		if ((name = snd_device_name_get_hint(*nexthint, "NAME")) == NULL) {
+			ZF_LOGV("Skipping unnamed audio device");
+			++nexthint;
+			continue;
+		}
 		// Skip any 'surroundXX:' items (not appropriate for radio use)
 		if (strncmp(name, SURROUND, strlen(SURROUND)) == 0) {
 			free(name);
@@ -232,11 +236,14 @@ void GetDevices() {
 				}
 			}
 		}
-		desc = snd_device_name_get_hint(*nexthint, "DESC");
-		// If desc has more than one line, use only the first line.
-		strlop(desc, '\n');
-		dev->desc = strdup(desc);
-		free(desc);
+		if ((desc = snd_device_name_get_hint(*nexthint, "DESC")) == NULL) {
+			dev->desc = strdup("No description available.");
+		} else {
+			// If desc has more than one line, use only the first line.
+			strlop(desc, '\n');
+			dev->desc = strdup(desc);
+			free(desc);
+		}
 		io = snd_device_name_get_hint(*nexthint, "IOID");
 
 		// Test to determine whether some or all of the booleans should be
