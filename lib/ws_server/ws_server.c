@@ -1139,7 +1139,7 @@ int client_handler(char *data, int data_size)
 	int data_len;
 	int opcode;
 	if (state[cnum] == WS_HTTP)
-		return process_http_req(cnum);
+		return process_http_req();
 
 	if ((data_len = read_websocket_frame(data, data_size, &opcode)) < 0)
 		return (-1);
