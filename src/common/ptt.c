@@ -37,11 +37,20 @@ int PTTmode = 0;  // PTT Control Flags.
 #define PORTSTRSZ 200
 // port names are for comparison with each other to indicate that a device
 // handle should be reused.
-char CATstr[PORTSTRSZ] = "";  // CAT port str, possibly with TCP: prefix
+// CAT port str, possibly with TCP: prefix  If a baudrate is used when
+// selecting the PTT port, this is also included in PTTstr (and
+// LastGoodPTTstr).  Assume that if a baudrate is required/used to select
+// a CAT device and that same device is also used for RTS/DTR PTT, that
+// the same baudrate will be specified when selecting it.
+char CATstr[PORTSTRSZ] = "";
 
 // PTTstr does not include an RTS: or DTR: prefix, but may include a CM108: or
 // GPIO: prefix.  If it has no prefix, use PTTmode to determine whether it is
-// used for RTS or DTR.
+// used for RTS or DTR.  If a baudrate is used when selecting the PTT port,
+// this is also included in PTTstr (and LastGoodPTTstr).  Assume that if a
+// baudrate is required/used to select a PTT device and that same device is
+// also used for CAT, that the same baudrate will be specified when selecting
+// it.
 char PTTstr[PORTSTRSZ] = "";
 
 // Use LastGoodCATstr and LastGoodPTTstr to store the names of that last good
@@ -51,7 +60,16 @@ char PTTstr[PORTSTRSZ] = "";
 // See also LastGoodCaptureDevice and LastGoodPlaybackDevice used in
 // ALSA.c and Waveform.c.
 char LastGoodCATstr[PORTSTRSZ] = "";
-char LastGoodPTTstr[PORTSTRSZ] = "";  // Unlike PTTstr, includes DTR: or RTS: prefix
+// Unlike PTTstr, LastGoodPTTstr includes DTR: or RTS: prefix
+char LastGoodPTTstr[PORTSTRSZ] = "";
+// PTT can be controlled via CAT or from a PTT device.  It is possible that
+// since ardopcf was started, both CAT and PTT devices have been successfully
+// used, such that LastGoodCATstr and LastGoodPTTstr both contain possibly
+// useful values.  The TXENABLED TRUE host command should try parse_catstr()
+// first if LastGoodControlWasCAT is true.  Otherwise, it should try
+// parse_pttstr() first.  In either case, if the first fails, it should try
+// the other.
+bool LastGoodControlWasCAT = false;  // If neither, value is unimportant
 
 // All of the following are set to 0 when inactive.
 
@@ -188,11 +206,13 @@ int set_ptt_on_cmd(char *hexstr, char *descstr) {
 		PTTmode = (PTTmode & PTTNONCATMASK) + PTTCAT;
 		wg_send_pttenabled(0, !!PTTmode);
 		ZF_LOGI("PTT using CAT Port: %s", CATstr);
+		LastGoodControlWasCAT = true;
 	}
 	if (tcpCATport != 0 && ptt_off_cmd_len > 0) {
 		PTTmode = (PTTmode & PTTNONCATMASK) + PTTTCPCAT;
 		wg_send_pttenabled(0, !!PTTmode);
 		ZF_LOGI("PTT using TCP CAT port: %s", CATstr);
+		LastGoodControlWasCAT = true;
 	}
 	return 0;
 }
@@ -241,11 +261,13 @@ int set_ptt_off_cmd(char *hexstr, char *descstr) {
 		PTTmode = (PTTmode & PTTNONCATMASK) + PTTCAT;
 		wg_send_pttenabled(0, !!PTTmode);
 		ZF_LOGI("PTT using CAT Port: %s", CATstr);
+		LastGoodControlWasCAT = true;
 	}
 	if (tcpCATport != 0 && ptt_on_cmd_len > 0) {
 		PTTmode = (PTTmode & PTTNONCATMASK) + PTTTCPCAT;
 		wg_send_pttenabled(0, !!PTTmode);
 		ZF_LOGI("PTT using TCP CAT port: %s", CATstr);
+		LastGoodControlWasCAT = true;
 	}
 	return 0;
 }
@@ -255,6 +277,9 @@ int set_ptt_off_cmd(char *hexstr, char *descstr) {
 // then STATUS PTTENABLED FALSE.  So, use statusmsg=false when responding to
 // a PTTENABLED FALSE host command to avoid redundancy.
 void close_CAT(bool statusmsg) {
+	if (PTTmode & PTTCATMASK)
+		LastGoodControlWasCAT = !(PTTmode & PTTNONCATMASK);
+
 	CATstr[0] = 0x00;  // empty string
 	CATrx = false;  // Don't pass data from tcpCAT to host until tx other than PTT
 	if (tcpCATport != 0) {
@@ -282,7 +307,7 @@ void close_CAT(bool statusmsg) {
 			SendCommandToHost("STATUS PTTENABLED FALSE");
 		}
 	}
-	wg_send_catdevice(0, NULL);
+	updateWebGuiNonAudioConfig();
 }
 
 // Return the number of bytes read, or -1 if an error occurs.
@@ -382,14 +407,15 @@ int set_CATport(char *portstr) {
 			return (-1);  // Error msg already logged.
 	}
 	strcpy(CATstr, tmpstr);
-	wg_send_catdevice(0, CATstr);
 	strcpy(LastGoodCATstr, CATstr);
 	ZF_LOGI("CAT Control on port %s", CATstr);
 	if (ptt_on_cmd_len > 0 && ptt_off_cmd_len > 0) {
 		PTTmode = (PTTmode & PTTNONCATMASK) + PTTCAT;
 		wg_send_pttenabled(0, !!PTTmode);
 		ZF_LOGI("PTT CAT on %s", CATstr);
+		LastGoodControlWasCAT = true;
 	}
+	updateWebGuiNonAudioConfig();
 	return 0;
 }
 
@@ -444,20 +470,21 @@ int set_tcpCAT(char *portstr) {
 	// the possible pause in execution.
 	// TODO: Examine what happens to rx audio if this introduces a long delay.
 	ZF_LOGI("Attempting to connect to %s for CAT.", tmpstr);
-	if ((tcpCATport = tcpconnect(address, port)) == -1) {
+	if ((tcpCATport = tcpconnect(address, port, false)) == -1) {
 		ZF_LOGI("Unable to connect to %s for CAT.", tmpstr);
 		tcpCATport = 0;
 		return (-1);
 	}
 	strcpy(CATstr, tmpstr);
-	wg_send_catdevice(0, CATstr);
 	strcpy(LastGoodCATstr, CATstr);
 	ZF_LOGI("CAT Control at %s", CATstr);
 	if (ptt_on_cmd_len > 0 && ptt_off_cmd_len > 0) {
 		PTTmode = (PTTmode & PTTNONCATMASK) + PTTTCPCAT;
 		wg_send_pttenabled(0, !!PTTmode);
 		ZF_LOGI("PTT using CAT on %s", CATstr);
+		LastGoodControlWasCAT = true;
 	}
+	updateWebGuiNonAudioConfig();
 	return 0;
 }
 
@@ -483,6 +510,9 @@ int get_pttstr(char *pttstr, int size) {
 // then STATUS PTTENABLED FALSE.  So, use statusmsg=false when responding to
 // a PTTENABLED FALSE host command to avoid redundancy.
 void close_PTT(bool statusmsg) {
+	if (PTTmode & PTTNONCATMASK)
+		LastGoodControlWasCAT = PTTmode & PTTCATMASK;
+
 	PTTstr[0] = 0x00;  // empty string
 	if (hPTTdevice != 0) {
 		if (hPTTdevice != hCATdevice) {
@@ -515,7 +545,7 @@ void close_PTT(bool statusmsg) {
 			SendCommandToHost("STATUS PTTENABLED FALSE");
 		}
 	}
-	wg_send_pttdevice(0, NULL);
+	updateWebGuiNonAudioConfig();
 }
 
 // Set/update PTTmode associated with RTS/DTR.  This is NOT for other pttModes
@@ -526,12 +556,14 @@ void set_PTT_RTSDTR(bool useRTS) {
 		PTTmode = (PTTmode & PTTCATMASK) + PTTRTS;
 		wg_send_pttenabled(0, !!PTTmode);
 		ZF_LOGI("Using RTS on port %s for PTT", PTTstr);
+		LastGoodControlWasCAT = false;
 	} else {
 		if (PTTmode & PTTDTR)
 			return;  // no change
 		PTTmode = (PTTmode & PTTCATMASK) + PTTDTR;
 		wg_send_pttenabled(0, !!PTTmode);
 		ZF_LOGI("Using DTR on port %s for PTT", PTTstr);
+		LastGoodControlWasCAT = false;
 	}
 }
 
@@ -542,8 +574,9 @@ void set_PTT_RTSDTR(bool useRTS) {
 int set_PTTport(char *portstr, bool useRTS) {
 	char tmpstr[PORTSTRSZ];
 	// Compare only the first PORTSTRSZ - 1 bytes (exclude terminating NUlL)
-	if (strncmp(PTTstr, portstr, PORTSTRSZ - 1) == 0) {
+	if (portstr[0] != 0x00 && strncmp(PTTstr, portstr, PORTSTRSZ - 1) == 0) {
 		set_PTT_RTSDTR(useRTS);  // port OK, but PTTmode may need to be updated
+		updateWebGuiNonAudioConfig();
 		return 0;  // no change
 	}
 	snprintf(tmpstr, PORTSTRSZ, "%s", portstr);
@@ -563,15 +596,15 @@ int set_PTTport(char *portstr, bool useRTS) {
 			return (-1);  // Error msg already logged.
 	}
 	// OpenCOMPort always clears RTS and DTR, so PTT is not ON due to RTS or DTR.
+	strcpy(PTTstr, tmpstr);  // Do this before set_PTT_RTSDTR()
 	set_PTT_RTSDTR(useRTS);  // updates PTTmode and logs change
-	strcpy(PTTstr, tmpstr);
-	wg_send_pttdevice(0, PTTstr);
 	// Since LastGoodPTTstr includes a prefix while PTTstr does not, a long
 	// PTTstr may be truncated when copied to LastGoodPTTstr
 	snprintf(LastGoodPTTstr, PORTSTRSZ, "%s%s%s",
 			PTTmode & PTTRTS ? "RTS:" : "",
 			PTTmode & PTTDTR ? "DTR:" : "",
 			PTTstr);
+	updateWebGuiNonAudioConfig();
 	return 0;
 }
 
@@ -609,8 +642,9 @@ int set_GPIOpin(char *pinstr) {
 		ZF_LOGI("Using %sGPIO pin %i for PTT",
 			GPIOinvert ? "inverted " : "", GPIOpin);
 		snprintf(PTTstr, PORTSTRSZ, "%s", pinstr);
-		wg_send_pttdevice(0, PTTstr);
 		strcpy(LastGoodPTTstr, PTTstr);
+		LastGoodControlWasCAT = false;
+		updateWebGuiNonAudioConfig();
 		return 0;
 	} else {
 		ZF_LOGE("Couldn't initialise GPIO interface for PTT");
@@ -642,9 +676,10 @@ int set_cm108(char *devstr) {
 	PTTmode = (PTTmode & PTTCATMASK) + PTTCM108;  // Enable PTTCM108
 	wg_send_pttenabled(0, !!PTTmode);
 	snprintf(PTTstr, PORTSTRSZ, "%s", devstr);
-	wg_send_pttdevice(0, PTTstr);
 	strcpy(LastGoodPTTstr, PTTstr);
+	LastGoodControlWasCAT = false;
 	ZF_LOGI("Using CM108 device %s for PTT", PTTstr);
+	updateWebGuiNonAudioConfig();
 	return 0;
 }
 
@@ -666,14 +701,14 @@ int parse_pttstr(char *pttstr) {
 				" empty).  So, do nothing",
 				PTTstr);
 			// Don't leave RESTORE shown for PTT Device in WebGUI
-			wg_send_pttdevice(0, PTTstr);
+			updateWebGuiNonAudioConfig();
 			return 0;  // this is success
 		}
 		if (LastGoodPTTstr[0] == 0x00) {
 			ZF_LOGW("parse_pttstr(RESTORE) called, but LastGoodPTTstr is empty,"
 				"  So, unable to restore.");
 			// Don't leave RESTORE shown for PTT Device in WebGUI
-			wg_send_pttdevice(0, NULL);
+			updateWebGuiNonAudioConfig();
 			return -1;
 		}
 		char *tmpstr = strdup(LastGoodPTTstr);
@@ -682,7 +717,7 @@ int parse_pttstr(char *pttstr) {
 		return ret;
 	}
 	// Notice that RTS: or DTR: prefix is stripped from pttstr when calling
-	// setPTTport(), but CM108: and GPIO: prefixes are not stripped.
+	// set_PTTport(), but CM108: and GPIO: prefixes are not stripped.
 	if (strncmp(pttstr, "CM108:", 6) == 0 && strlen(pttstr) > 6)
 		return set_cm108(pttstr);
 	if (strncmp(pttstr, "RTS:", 4) == 0 && strlen(pttstr) > 4)
@@ -698,7 +733,7 @@ int parse_pttstr(char *pttstr) {
 int parse_catstr(char *catstr) {
 	if (catstr[0] == 0x00) {
 		// empty string, so just close
-		close_CAT(true);
+		close_CAT(true);  // also does updateWebGuiNonAudioConfig()
 		return 0;  // success
 	}
 	if (strcmp(catstr, "RESTORE") == 0) {
@@ -707,33 +742,36 @@ int parse_catstr(char *catstr) {
 				" empty).  So, do nothing",
 				CATstr);
 			// Don't leave RESTORE shown for CAT Device in WebGUI
-			wg_send_catdevice(0, CATstr);
+			updateWebGuiNonAudioConfig();
 			return 0;  // This is success
 		}
 		if (LastGoodCATstr[0] == 0x00) {
 			ZF_LOGW("parse_catstr(RESTORE) called, but LastGoodCATstr is empty,"
 				"  So, unable to restore.");
 			// Don't leave RESTORE shown for CAT Device in WebGUI
-			wg_send_catdevice(0, CATstr);
+			updateWebGuiNonAudioConfig();
 			return -1;
 		}
 		char *tmpstr = strdup(LastGoodCATstr);
-		int ret = parse_catstr(tmpstr);
+		int ret = parse_catstr(tmpstr);  // does updateWebGuiNonAudioConfig();
 		free(tmpstr);
 		return ret;
 	}
 	if (strcmp(catstr, "RIGCTLD") == 0) {
 		// This is equivalent to
 		// -c TCP:4532 -k 5420310A -u 5420300A
-		// to use hamlib/rigctld running on its default
-		// TCP port 4532 for PTT.
-		int ret = set_tcpCAT(rigctlddefault);
-		if (ret == 0)
-			ret = set_ptt_on_cmd("5420310A",
-				"command line option --ptt RIGCTLD");
+		// Set ptt commands first.  That way, if rigctld is being used on some
+		// other port, then setting CAT to RIGCTLD (which will fail), and then
+		// to the correct port will produce the desired result.
+		int ret = set_ptt_on_cmd("5420310A",
+			"command line option --ptt RIGCTLD");
 		if (ret == 0)
 			ret = set_ptt_off_cmd("5420300A",
 				"command line option --ptt RIGCTLD");
+		// to use hamlib/rigctld running on its default
+		// TCP port 4532 for PTT.
+		if (ret == 0)
+			ret = set_tcpCAT(rigctlddefault);
 		if (ret == 0)
 			// LastGoodCATstr has been set to TCP:4532.  Change this to RIGCTLD
 			// so that RADIOCTRLPORT RESTORE will ensure that both TCP:4532 is
@@ -748,6 +786,358 @@ int parse_catstr(char *catstr) {
 
 bool isPTTmodeEnabled() {
 	return !!PTTmode;
+}
+
+bool wasLastGoodControlCAT() {
+	return LastGoodControlWasCAT;
+}
+
+// Return true if TCP:4532 is either currently being used for TCP CAT control
+// or if it can be opened.
+bool isTCP4532available() {
+	int testport;
+	if (strcmp(CATstr, "TCP:4532") == 0)
+		return true;
+	if ((testport = tcpconnect("127.0.0.1", 4532, true)) == -1)
+		return false;
+	tcpclose(&testport);
+	return true;
+}
+
+// Encode a list of devices to the format required by wg_send_devices().
+// Return the number of bytes written to dst.
+// On return, dst is NOT a null terminated string.
+// Include found serial and CM108 devices, as well as RIGCTLD and TCP:4532
+// if available.  If CATstr or PTTstr is not an empty string and does not
+// match any value in the encoded device list, then also include them.  This
+// is required for the WebGui to correctly show the current device if it is
+// not something that is detected, such as a new/unusual Windows CM108 device
+// or a serial device selected with a specific baud rate.
+// cs and ss should include an ever number of non-null strings (names and
+// descriptions of devices) followed by one or more NULL pointers.  The
+// strings with odd index numbers (descriptions) may be empty strings,
+// indicating that no description is available.
+size_t EncodeDeviceStrlist(char *dst, int dstsize, char **ss, char **cs) {
+	// dst and dstsize are updated to always point to the end of the string
+	// written so far, and the amount of remaining free space respectively
+	char *lenptr = dst;
+	int thislen;
+	// If encodepttstr and/or encodecatstr is true after all known devices
+	// have been encoded, then encode these values.
+	bool encodepttstr = PTTstr[0] != 0x00;  // true if a PTT device is open
+	bool encodecatstr = CATstr[0] != 0x00;  // true if a CAT device is open
+	if (dstsize < 3)
+		return 0;
+	dst[0] = 0x00;  // placeholder for number of entries written (2 str per dev)
+	// 0xFE for none but restorable.  0xFF for none and not restorable
+	if (LastGoodCATstr[0] != 0x00)
+		dst[1] = 0xFE;  // index of current CAT device
+	else
+		dst[1] = 0xFF;  // index of current CAT device
+	if (LastGoodPTTstr[0] != 0x00)
+		dst[2] = 0xFE;  // index of current PTT device
+	else
+		dst[2] = 0xFF;  // index of current PTT device
+	dst += 3;
+	dstsize -= 3;
+	int index;  // ss[2 * index] is name, ss[2 * index + 1] is desc
+	int dstcount = 0;  // number of name/desc pairs encoded
+
+	if (isTCP4532available()) {
+		if (dstsize < 12 + (int) (strlen("RIGCTLD")
+			+ strlen("Hamlib/rigctld with PTTON and PTTOFF commands")
+			+ strlen("TCP:4532") + strlen("default TCP port for Hamlib/rigctld"))
+		) {
+			ZF_LOGE("ERROR: Not including RIGCTLD or TCP:4532 in list of"
+				" devices due to excess size");
+			return dst - lenptr;
+		}
+		if ((thislen = encodeUvint(dst, 3, strlen("RIGCTLD"))) == -1) {
+			ZF_LOGE("ERROR: Failure encoding length of device name"
+				" \"RIGCTLD\" for wg_send_devices()");
+			return dst - lenptr;
+		}
+		memcpy(dst + thislen, "RIGCTLD", strlen("RIGCTLD"));
+		dst += thislen + strlen("RIGCTLD");
+		dstsize -= thislen + strlen("RIGCTLD");
+		// encode the description
+		if ((thislen = encodeUvint(dst, 3,
+			strlen("Hamlib/rigctld with PTTON and PTTOFF commands"))) == -1
+		) {
+			ZF_LOGE("ERROR: Failure encoding length of device description"
+				" \"RIGCTLD\" for wg_send_devices()");
+			// Don't send this name without the description
+			return (dst - (thislen + strlen("RIGCTLD"))) - lenptr;
+		}
+		memcpy(dst + thislen, "Hamlib/rigctld with PTTON and PTTOFF commands",
+			strlen("Hamlib/rigctld with PTTON and PTTOFF commands"));
+		dst += thislen + strlen("Hamlib/rigctld with PTTON and PTTOFF commands");
+		dstsize -= thislen
+			+ strlen("Hamlib/rigctld with PTTON and PTTOFF commands");
+		// name and description for an entry have been encoded
+		lenptr[0] = ++dstcount;
+
+		if ((thislen = encodeUvint(dst, 3, strlen("TCP:4532"))) == -1) {
+			ZF_LOGE("ERROR: Failure encoding length of device name"
+				" \"TCP:4532\" for wg_send_devices()");
+			return dst - lenptr;
+		}
+		memcpy(dst + thislen, "TCP:4532", strlen("TCP:4532"));
+		dst += thislen + strlen("TCP:4532");
+		dstsize -= thislen + strlen("TCP:4532");
+		// encode the description
+		if ((thislen = encodeUvint(dst, 3,
+			strlen("default TCP port for Hamlib/rigctld"))) == -1
+		) {
+			ZF_LOGE("ERROR: Failure encoding length of device description"
+				" \"TCP:4532\" for wg_send_devices()");
+			// Don't send this name without the description
+			return (dst - (thislen + strlen("TCP:4532")))
+				- lenptr;
+		}
+		memcpy(dst + thislen, "default TCP port for Hamlib/rigctld",
+			strlen("default TCP port for Hamlib/rigctld"));
+		dst += thislen + strlen("default TCP port for Hamlib/rigctld");
+		dstsize -= thislen + strlen("default TCP port for Hamlib/rigctld");
+		if (strcmp(CATstr, "TCP:4532") == 0) {
+			encodecatstr = false;
+			if (ptt_on_cmd_len == 4 && ptt_off_cmd_len == 4
+				&& memcmp(ptt_on_cmd, "\x54\x20\x31\x0A", 4) == 0
+				&& memcmp(ptt_off_cmd, "\x54\x20\x31\x0A", 4) == 0
+			)
+				lenptr[1] = dstcount - 1;  // RIGCTLD
+			else
+				lenptr[1] = dstcount;  // TCP:4532
+		}
+		// name and description for an entry have been encoded
+		lenptr[0] = ++dstcount;
+	}
+	index = 0;
+	while(cs != NULL && cs[2 * index] != NULL) {
+		// A name/desc pairs will be added for each CM108 device.  If no
+		// desciption is available as indicated by a zero length string in cs,
+		// provide a Uvint of 0.
+		int memreq = 4 + strlen(cs[2 * index]);
+		if (cs[2 * index + 1][0] != 0x00) {
+			// a description is available
+			memreq += 2 + strlen(cs[2 * index + 1]);  // desc
+		}
+		if (dstsize < memreq) {
+			ZF_LOGE("ERROR: Truncating list of devices due to excess size");
+			return dst - lenptr;
+		}
+		if ((thislen = encodeUvint(dst, 3, strlen(cs[2 * index]))) == -1) {
+			ZF_LOGE("ERROR: Failure encoding length of device name"
+				" \"%s\" for wg_send_devices()", cs[2 * index]);
+			return dst - lenptr;
+		}
+		memcpy(dst + thislen, cs[2 *  index], strlen(cs[2 * index]));
+		dst += thislen + strlen(cs[2 * index]);
+		dstsize -= thislen + strlen(cs[2 * index]);
+		if (cs[2 * index + 1] == NULL) {
+			ZF_LOGE("Invalid cs[] passed to EncodeDeviceStrlist.  A NULL pointer"
+				" was found where a description string for %s was expected.",
+				cs[2 * index]);
+				// Don't send this name without the description
+				return (dst - (thislen + strlen(cs[2 * index]))) - lenptr;
+		}
+		if (cs[2 * index + 1][0] == 0x00) {  // a zero length description string
+			*dst = 0x00;  // Uvint value of 0
+			++dst;
+			--dstsize;
+		} else {
+			// encode the description
+			if ((thislen = encodeUvint(dst, 3,
+				strlen(cs[2 * index + 1]))) == -1
+			) {
+				ZF_LOGE("ERROR: Failure encoding length of device description"
+					" \"%s\" for wg_send_devices()", cs[2 * index + 1]);
+				// Don't send this name without the description
+				return (dst - (thislen + strlen(cs[2 * index]))) - lenptr;
+			}
+			memcpy(dst + thislen, cs[2 * index + 1], strlen(cs[2 * index + 1]));
+			dst += thislen + strlen(cs[2 * index + 1]);
+			dstsize -= thislen + strlen(cs[2 * index + 1]);
+		}
+		if (strcmp(cs[2 * index], PTTstr) == 0) {
+			lenptr[2] = dstcount;  // index of current PTT device
+			encodepttstr = false;
+		}
+		// name and description for an entry have been encoded
+		lenptr[0] = ++dstcount;
+		++index;  // next name and description in cs
+	}
+
+	index = 0;
+	while(ss != NULL && ss[2 * index] != NULL) {
+		// Two name/desc pairs will be added for each serial device.  One with
+		// no prefix suitable for CAT and RTS PTT.  A second one with a "DTR:"
+		// prefix is suitable for DTR PTT.  If no desciption is available as
+		// indicated by a zero length string in ss, provide a Uvint of 0.
+		int memreq = 8 + strlen("DTR:") + 2 * strlen(ss[2 * index]);
+		if (ss[2 * index + 1][0] != 0x00) {
+			// a description is available
+			memreq += 4 + 2 * strlen(ss[2 * index + 1]);  // desc
+		}
+		if (dstsize < memreq) {
+			ZF_LOGE("ERROR: Truncating list of devices due to excess size");
+			return dst - lenptr;
+		}
+		if ((thislen = encodeUvint(dst, 3, strlen(ss[2 * index]))) == -1) {
+			ZF_LOGE("ERROR: Failure encoding length of device name"
+				" \"%s\" for wg_send_devices()", ss[2 * index]);
+			return dst - lenptr;
+		}
+		memcpy(dst + thislen, ss[2 *  index], strlen(ss[2 * index]));
+		dst += thislen + strlen(ss[2 * index]);
+		dstsize -= thislen + strlen(ss[2 * index]);
+		if (ss[2 * index + 1] == NULL) {
+			ZF_LOGE("Invalid ss[] passed to EncodeDeviceStrlist.  A NULL pointer"
+				" was found where a description string for %s was expected.",
+				ss[2 * index]);
+				// Don't send this name without the description
+				return (dst - (thislen + strlen(ss[2 * index]))) - lenptr;
+		}
+		if (ss[2 * index + 1][0] == 0x00) {  // a zero length description string
+			*dst = 0x00;  // Uvint value of 0
+			++dst;
+			--dstsize;
+		} else {
+			// encode the description
+			if ((thislen = encodeUvint(dst, 3,
+				strlen(ss[2 * index + 1]))) == -1
+			) {
+				ZF_LOGE("ERROR: Failure encoding length of device description"
+					" \"%s\" for wg_send_devices()", ss[2 * index + 1]);
+				// Don't send this name without the description
+				return (dst - (thislen + strlen(ss[2 * index]))) - lenptr;
+			}
+			memcpy(dst + thislen, ss[2 * index + 1], strlen(ss[2 * index + 1]));
+			dst += thislen + strlen(ss[2 * index + 1]);
+			dstsize -= thislen + strlen(ss[2 * index + 1]);
+		}
+		if (strcmp(ss[2 * index], CATstr) == 0) {
+			lenptr[1] = dstcount;  // index of current CAT device
+			encodecatstr = false;
+		}
+		if (strcmp(ss[2 * index], PTTstr) == 0 && (PTTmode & PTTRTS)) {
+			lenptr[2] = dstcount;  // index of current PTT device
+			encodepttstr = false;
+		}
+		// name and description for an entry have been encoded
+		lenptr[0] = ++dstcount;
+
+		if ((thislen = encodeUvint(dst, 3,
+			strlen("DTR:") + strlen(ss[2 * index]))) == -1
+		) {
+			ZF_LOGE("ERROR: Failure encoding length of device name"
+				" \"DTR:%s\" for wg_send_devices()", ss[2 * index]);
+			return dst - lenptr;
+		}
+		memcpy(dst + thislen, "DTR:", strlen("DTR:"));
+		memcpy(dst + thislen + strlen("DTR:"), ss[2 *  index],
+			strlen(ss[2 * index]));
+		dst += thislen + strlen("DTR:") + strlen(ss[2 * index]);
+		dstsize -= thislen + strlen("DTR:")+ strlen(ss[2 * index]);
+		if (ss[2 * index + 1][0] == 0x00) {  // a zero length description string
+			*dst = 0x00;  // Uvint value of 0
+			++dst;
+			--dstsize;
+		} else {
+			// encode the description
+			if ((thislen = encodeUvint(dst, 3,
+				strlen(ss[2 * index + 1]))) == -1
+			) {
+				ZF_LOGE("ERROR: Failure encoding length of device description"
+					" \"DTR:%s\" for wg_send_devices()", ss[2 * index + 1]);
+				// Don't send this name without the description
+				return (dst - (thislen+ strlen("DTR:") + strlen(ss[2 * index])))
+					- lenptr;
+			}
+			memcpy(dst + thislen, ss[2 * index + 1], strlen(ss[2 * index + 1]));
+			dst += thislen + strlen(ss[2 * index + 1]);
+			dstsize -= thislen + strlen(ss[2 * index + 1]);
+		}
+		if (strcmp(ss[2 * index], PTTstr) == 0 && (PTTmode & PTTDTR)) {
+			lenptr[2] = dstcount;  // index of current PTT device
+			encodecatstr = false;
+		}
+		// name and description for an entry have been encoded
+		lenptr[0] = ++dstcount;
+		++index;  // next name and description in ss
+	}
+
+	if (encodecatstr) {
+		// include contents of CATstr
+		if (dstsize < 6 + (int) (strlen(CATstr) + strlen("current CAT device"))) {
+			ZF_LOGE("ERROR: Not including %s in list of devices due to excess size",
+				CATstr);
+			return dst - lenptr;
+		}
+		if ((thislen = encodeUvint(dst, 3, strlen(CATstr))) == -1) {
+			ZF_LOGE("ERROR: Failure encoding length of device name"
+				" \"%s\" for wg_send_devices()", CATstr);
+			return dst - lenptr;
+		}
+		memcpy(dst + thislen, CATstr, strlen(CATstr));
+		dst += thislen + strlen(CATstr);
+		dstsize -= thislen + strlen(CATstr);
+		// encode a description
+		if ((thislen = encodeUvint(dst, 3, strlen("current CAT device"))) == -1) {
+			ZF_LOGE("ERROR: Failure encoding length of device description"
+				" \"%s\" for wg_send_devices()", CATstr);
+			// Don't send this name without the description
+			return (dst - (thislen + strlen(CATstr))) - lenptr;
+		}
+		memcpy(dst + thislen, "current CAT device", strlen("current CAT device"));
+		dst += thislen + strlen("current CAT device");
+		dstsize -= thislen + strlen("current CAT device");
+		lenptr[1] = dstcount;  // index of current CAT device
+		if (strcmp(CATstr, PTTstr) == 0) {
+			lenptr[2] = dstcount;  // index of current PTT device
+			encodepttstr = false;  // just encoded, so re-encode for PTT
+		}
+		// name and description for an entry have been encoded
+		lenptr[0] = ++dstcount;
+	}
+
+	if (encodepttstr) {
+		// include contents of LastGoodPTTstr which is equal to PTTstr, but also
+		// includes an RTS: or DTR: prefix if needed.
+		if (dstsize < 6 + (int) (strlen(LastGoodPTTstr)
+			+ strlen("current PTT device"))
+		) {
+			ZF_LOGE("ERROR: Not including %s in list of"
+				" devices due to excess size", LastGoodPTTstr);
+			return dst - lenptr;
+		}
+		if ((thislen = encodeUvint(dst, 3, strlen(LastGoodPTTstr))) == -1) {
+			ZF_LOGE("ERROR: Failure encoding length of device name"
+				" \"%s\" for wg_send_devices()", LastGoodPTTstr);
+			return dst - lenptr;
+		}
+		memcpy(dst + thislen, LastGoodPTTstr, strlen(LastGoodPTTstr));
+		dst += thislen + strlen(LastGoodPTTstr);
+		dstsize -= thislen + strlen(LastGoodPTTstr);
+		// encode a description
+		if ((thislen = encodeUvint(dst, 3,
+			strlen("current PTT device"))) == -1
+		) {
+			ZF_LOGE("ERROR: Failure encoding length of device description"
+				" \"%s\" for wg_send_devices()", LastGoodPTTstr);
+			// Don't send this name without the description
+			return (dst - (thislen + strlen(LastGoodPTTstr)))
+				- lenptr;
+		}
+		memcpy(dst + thislen, "current PTT device",
+			strlen("current PTT device"));
+		dst += thislen + strlen("current PTT device");
+		dstsize -= thislen + strlen("current PTT device");
+		lenptr[2] = dstcount;  // index of current PTT device
+		// name and description for an entry have been encoded
+		lenptr[0] = ++dstcount;
+	}
+	return dst - lenptr;
 }
 
 // If state is true, then switch to transmit.  If state is false, then switch

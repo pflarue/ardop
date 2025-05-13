@@ -1685,7 +1685,7 @@ void ProcessRcvdARQFrame(UCHAR intFrameType, UCHAR * bytData, int DataLen, bool 
 
 				SetARDOPProtocolState(ISS);
 				ARQState = ISSData;
-				SendData(false);
+				SendData();
 				return;
 			}
 			// In an active ARQ Connection, only send an IDFrame when ProtocolState

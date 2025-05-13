@@ -51,3 +51,16 @@ void close_CAT(bool statusmsg);
 // that either the host program must do PTT control or the radio must be
 // configured to use VOX, which is not recommended.
 bool isPTTmodeEnabled();
+
+// Return true PTT control CAT via CAT was usable more recently than via a
+// non-CAT control device.
+bool wasLastGoodControlCAT();
+
+// Encode a list of devices to the format required by wg_send_devices().  Return
+// the number of bytes written to dst.
+// On return, dst is NOT a null terminated string.
+// Include found serial and CM108 devices, as well as RIGCTLD and TCP:4532
+// (without attepting to verify that they are available).  If LastGoodCATstr or
+// LastGoodPTTstr is not an empty string and does not match any value in the
+// encoded device list, then also include them.
+size_t EncodeDeviceStrlist(char *dst, int dstsize, char **ss, char **cs);

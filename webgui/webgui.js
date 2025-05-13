@@ -289,7 +289,10 @@ window.addEventListener("load", function(evt) {
 	//    'k' to set CAT PTTON Hex string
 	//    'u' to set CAT PTTOFF Hex string
 	//   followed by a string.
-	// "d~" no additional data: Request ardopcf to provide list of audio devices
+	// "d~"
+	//   followed by a character:
+	//    'A' to get audio devices
+	//    'N' to get non-audio devices
 	// "E~"
 	//   followed by a character:
 	//    'L' for CAPTURECHANNEL LEFT
@@ -298,6 +301,8 @@ window.addEventListener("load", function(evt) {
 	//    'y' for PLAYBACKCHANNEL LEFT
 	//    'z' for PLAYBACKCHANNEL RIGHT
 	//    'm' for PLABACKCHANNEL MONO
+	//    'P' for PTTENABLED TRUE
+	//    'p' for PTTENABLED FALSE
 	// 0x8D7E followed by one additional byte interpreted as an unsigned
 	//   char in the range 0 to 100: Set DriveLevel
 	// 0x9A7E followed by one additional byte interpreted as an unsigned
@@ -477,6 +482,20 @@ window.addEventListener("load", function(evt) {
 		//     uvint of the length of a string containing the device description
 		//     a non-null terminated string containing the device description
 		//     a byte indicating usage 'C' for capture, 'P' for playback, 'B' for both
+		// 0x9C7C list of non-audio devices (serial, CM108, etc)
+		//   followed by an unsigned char: number of devices listed
+		//   followed by an unsigned char: the index of the device currently used for
+		//     CAT control, or 0xFE for none but restorable, or 0xFF for none
+		//     and not restorable
+		//   followed by an unsigned char: the index of the device currently used for
+		//     PTT, or 0xFE for none but restorable, or 0xFF for none and not
+		//     restorable
+		//   followed by that number of the following pattern:
+		//     uvint of the length of a string containing the device name
+		//     a non-null terminated string containing the device name
+		//     uvint of the length of a string containing the device description
+		//     a non-null terminated string containing the device description
+		//       If no description is available, the uvint of its length is 0.
 
 		if(!(wsdata instanceof ArrayBuffer)) {
 			alert("Unexpected WS data format.  Closing connection.");
@@ -596,11 +615,6 @@ window.addEventListener("load", function(evt) {
 							+ "  PTTstr " + tmpstr + "\n";
 						document.getElementById("pttdev").value = tmpstr;
 						break;
-					case "c":
-						txtlog.value += "[" + (new Date().toISOString()) + "]"
-							+ "  CATstr " + tmpstr + "\n";
-						document.getElementById("catdev").value = tmpstr;
-						break;
 					case "k":
 						txtlog.value += "[" + (new Date().toISOString()) + "]"
 							+ "  CAT PTTON string (hex) " + tmpstr + "\n";
@@ -623,6 +637,8 @@ window.addEventListener("load", function(evt) {
 						document.getElementById("pttenabled").innerHTML = "ENABLED";
 						document.getElementById("pttenabled").classList.remove("voxhost");
 						document.getElementById("pttenabled").classList.add("enabled");
+						document.getElementById("ptttoggle").innerHTML
+							= "DISABLE PTT/CAT Control";
 						break;
 					case "p":
 						txtlog.value += "[" + (new Date().toISOString()) + "]"
@@ -630,6 +646,8 @@ window.addEventListener("load", function(evt) {
 						document.getElementById("pttenabled").innerHTML = "VOX/HOST";
 						document.getElementById("pttenabled").classList.remove("enabled");
 						document.getElementById("pttenabled").classList.add("voxhost");
+						document.getElementById("ptttoggle").innerHTML
+							= "ENABLE PTT/CAT Control";
 						break;
 					case "C":
 						txtlog.value += "[" + (new Date().toISOString()) + "]"
@@ -1089,6 +1107,94 @@ window.addEventListener("load", function(evt) {
 					}
 					break;
 				}
+				case "\x9C": {
+					// list of non-audio devices
+					let catselect = document.getElementById("catselect");
+					catselect.innerHTML = "";  // clear prior options
+					let option = document.createElement("option");
+					option.value = "NONE";
+					option.text = "NONE [Close the current device (if open)]";
+					catselect.add(option);
+					catselect.value = "NONE";
+					document.getElementById("catdev").value = "NONE";
+					let pttselect = document.getElementById("pttselect");
+					pttselect.innerHTML = "";  // clear prior options
+					option = document.createElement("option");
+					option.value = "NONE";
+					option.text = "NONE [Close the current device (if open)]";
+					pttselect.add(option);
+					pttselect.value = "NONE";
+					document.getElementById("pttdev").value = "NONE";
+					let devcount = decodebyte(rdata);
+					let cindex = decodebyte(rdata);
+					let pindex = decodebyte(rdata);
+					if (cindex != 0xFF) {
+						option = document.createElement("option");
+						option.value = "RESTORE";
+						option.text = "RESTORE [Last successfully opened device]";
+						catselect.add(option);
+					}
+					if (pindex != 0xFF) {
+						option = document.createElement("option");
+						option.value = "RESTORE";
+						option.text = "RESTORE [Last successfully opened device]";
+						pttselect.add(option);
+					}
+					for (let i = 0; i < devcount; ++i) {
+						option = document.createElement("option");
+						let nsz = decodeUvint(rdata);
+						let name = decodestr(rdata, nsz);
+						option.value = name;
+						let dsz = decodeUvint(rdata);
+						option.text = name
+						let desc;
+						if (dsz != 0) {
+							desc = decodestr(rdata, dsz);
+							option.text += " [" + desc + "]";
+						}
+						let pttrts = false;
+						// handle device according to its prefix or lack of prefix
+						if (name.startsWith("DTR:"))
+							pttselect.add(option);  // PTT only
+						else if (name.startsWith("TCP:"))
+							catselect.add(option);  // CAT only
+						else if (name.startsWith("RIGCTLD"))
+							catselect.add(option);  // CAT only
+						else if (name.startsWith("CM108:"))
+							pttselect.add(option);  // PTT only
+						else if (name.startsWith("GPIO:"))
+							pttselect.add(option);  // PTT only
+						else {
+							pttrts = true;
+							catselect.add(option);  // CAT
+							option = document.createElement("option");
+							option.value = "RTS:" + name;
+							option.text = "RTS:" + name;
+							if (dsz != 0) {
+								option.text += " [" + desc + "]";
+							}
+							pttselect.add(option);  // RTS PTT
+						}
+						if (i == cindex) {
+							catselect.value = name;
+							txtlog.value += "[" + (new Date().toISOString()) + "]"
+								+ "  CATstr " + name + "\n";
+							document.getElementById("catdev").value = name;
+						}
+						if (i == pindex && pttrts) {
+							pttselect.value = "RTS:" + name;
+							txtlog.value += "[" + (new Date().toISOString()) + "]"
+								+ "  PTTstr RTS:" + name + "\n";
+							document.getElementById("pttdev").value = "RTS:" + name;
+						} else if (i == pindex) {
+							pttselect.value = name;
+							txtlog.value += "[" + (new Date().toISOString()) + "]"
+								+ "  PTTstr " + name + "\n";
+							document.getElementById("pttdev").value = name;
+						}
+					}
+					break;
+				}
 				default:
 					txtlog.value +=
 						"WARNING: Received an unexpected message of type="
@@ -1127,7 +1233,8 @@ window.addEventListener("load", function(evt) {
 		txtlog.value = "";
 	};
 	document.getElementById("confighider").onclick = function() {
-		send_msg(encoder.encode("d~"), 2);  // update contents of rxselect and txselect
+		send_msg(encoder.encode("d~A"), 3);  // update contents of rxselect and txselect
+		send_msg(encoder.encode("d~N"), 3);  // update contents of catselect and pttselect
 		if (document.getElementById("confighider").innerHTML == "Show Config Controls") {
 			document.getElementById("configdiv").classList.remove("dnone");
 			document.getElementById("confighider").innerHTML = "Hide Config Controls";
@@ -1187,8 +1294,25 @@ window.addEventListener("load", function(evt) {
 		}
 	};
 
+	document.getElementById("ptttoggle").onclick = function() {
+		// The text on this button is changed when E|P or E|p
+		// are received.  Attempting PTTENABLED TRUE does not always
+		// succeed, so don't assume that it has.
+		if (document.getElementById("ptttoggle").innerHTML == "ENABLE PTT/CAT Control") {
+			// This applied the host command PTTENABLED TRUE
+			send_msg(encoder.encode("E~P"), 3);
+		} else {
+			// This applied the host command PTTENABLED FALSE
+			send_msg(encoder.encode("E~p"), 3);
+		}
+	};
+
 	document.getElementById("getdevices").onclick = function() {
-		send_msg(encoder.encode("d~"), 2);
+		send_msg(encoder.encode("d~A"), 3);
+	};
+
+	document.getElementById("getnadevices").onclick = function() {
+		send_msg(encoder.encode("d~N"), 3);
 	};
 
 	document.getElementById("rxselect").onchange = function() {
@@ -1219,6 +1343,19 @@ window.addEventListener("load", function(evt) {
 		var text = evt.target.value;
 		send_msg(encoder.encode("D~c" + text), 3 + text.length);
 	};
+
+	document.getElementById("catselect").onchange = function() {
+		let catstr = document.getElementById("catselect").value;
+		document.getElementById("catdev").value = catstr;
+		send_msg(encoder.encode("D~c" + catstr), 3 + catstr.length);
+	}
+
+	document.getElementById("pttselect").onchange = function() {
+		let pttstr = document.getElementById("pttselect").value;
+		document.getElementById("pttdev").value = pttstr;
+		send_msg(encoder.encode("D~p" + pttstr), 3 + pttstr.length);
+	}
+
 	document.getElementById("ptton").onkeydown = function(evt) {
 		if (evt.keyCode != 13)
 			// User has not pressed Enter.  Do nothing.

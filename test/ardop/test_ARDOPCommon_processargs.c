@@ -189,15 +189,28 @@ HANDLE __wrap_OpenCOMPort(void * Port, int speed) {
 	return (HANDLE) ((size_t) mock());
 }
 
-int __wrap_tcpconnect(char *address, int port) {
+int __wrap_tcpconnect(char *address, int port, bool testing) {
 	(void) address;  // This line avoids an unused parameter warning
 	(void) port;  // This line avoids an unused parameter warning
+	(void) testing;  // This line avoids an unused parameter warning
 	return (int) ((size_t) mock());
 }
 
 int __wrap_OpenCM108(char * devstr) {
 	(void) devstr;  // This line avoids an unused parameter warning
 	return (int) ((size_t) mock());
+}
+
+void __wrap_updateWebGuiNonAudioConfig() {
+	return;
+}
+
+char** __wrap_GetCM108Strlist() {
+	return NULL;
+}
+
+char** __wrap_GetSerialStrlist() {
+	return NULL;
 }
 
 // For diagnostic purposes, print the results capture by some of the __wrap
@@ -218,6 +231,7 @@ void reset_defaults() {
 	PTTstr[0] = 0x00;
 
 	hCATdevice = 0;
+	tcpCATport = 0;
 	hPTTdevice = 0;
 	hCM108device = 0;
 	GPIOpin = 0;
@@ -1071,9 +1085,9 @@ static void test_processargs(void** state) {
 		ret = processargs(testargc, testargv);
 		//print_printstrs();
 		//__real_printf("%i: %s\n", printindex, printstrs[printindex]);
-		// nstartstrings=3 + cmdstr + 2*TCPCAT ERR + 2*info about no audio/ptt
-		//  devices specified.
-		assert_int_equal(printindex, 7);
+		// nstartstrings=3 + cmdstr + 2*CATPTT + 2*TCPCAT ERR + 2*info about
+		//  no audio/ptt devices specified.
+		assert_int_equal(printindex, 9);
 		assert_string_equal(PTTstr, "");
 		assert_string_equal(CATstr, "");
 		assert_int_equal(hPTTdevice, 0);
@@ -1081,8 +1095,8 @@ static void test_processargs(void** state) {
 		assert_int_equal(hCATdevice, 0);
 		assert_int_equal(tcpCATport, 0);
 		assert_int_equal(PTTmode, 0x00);
-		assert_int_equal(ptt_on_cmd_len, 0);
-		assert_int_equal(ptt_off_cmd_len, 0);
+		assert_int_equal(ptt_on_cmd_len, 4);
+		assert_int_equal(ptt_off_cmd_len, 4);
 	}
 	reset_defaults();  // reset global variables changed by processargs
 	reset_printstrs();  // reset captured strings from last test
@@ -1120,9 +1134,9 @@ static void test_processargs(void** state) {
 		ret = processargs(testargc, testargv);
 		//print_printstrs();
 		//__real_printf("%i: %s\n", printindex, printstrs[printindex]);
-		// nstartstrings=3 + cmdstr + 2*TCPCAT ERR + 2*info about no audio/ptt
-		//  devices specified.
-		assert_int_equal(printindex, 7);
+		// nstartstrings=3 + cmdstr + 2*CATPTT + 2*TCPCAT ERR + 2*info about
+		//  no audio/ptt devices specified.
+		assert_int_equal(printindex, 9);
 		assert_string_equal(PTTstr, "");
 		assert_string_equal(CATstr, "");
 		assert_int_equal(hPTTdevice, 0);
@@ -1130,8 +1144,8 @@ static void test_processargs(void** state) {
 		assert_int_equal(hCATdevice, 0);
 		assert_int_equal(tcpCATport, 0);
 		assert_int_equal(PTTmode, 0x00);
-		assert_int_equal(ptt_on_cmd_len, 0);
-		assert_int_equal(ptt_off_cmd_len, 0);
+		assert_int_equal(ptt_on_cmd_len, 4);
+		assert_int_equal(ptt_off_cmd_len, 4);
 	}
 	reset_defaults();  // reset global variables changed by processargs
 	reset_printstrs();  // reset captured strings from last test

@@ -479,6 +479,8 @@ extern DeviceInfo **AudioDevices;  // A list of all audio devices (Capture and P
 void InitDevices(DeviceInfo ***devicesptr);
 int ExtendDevices(DeviceInfo ***devicesptr);
 void FreeDevices(DeviceInfo ***devicesptr);
+void FreeStrlist(char ***slistptr);
+void LogStrlist(char **slist, char *headstr, bool asnamedesc);
 bool DevicesToCSV(DeviceInfo **devices, char *dst, int dstsize, bool forcapture);
 void LogDevices(DeviceInfo **devices, char *headstr, bool inputonly, bool outputonly);
 int FindAudioDevice(char *devstr, bool iscapture);
@@ -491,3 +493,7 @@ int getCch(bool quiet);
 // should normally be true, unless GetDevices() was just called.
 void updateWebGuiAudioConfig(bool do_getdevices);
 
+// Send updated info about non-audio system configuration to WebGui.  This
+// should be called whenever a change to this configuration is made (or detected
+// due to a failure).
+void updateWebGuiNonAudioConfig();

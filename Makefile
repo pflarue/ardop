@@ -194,6 +194,7 @@ test/ardop/test_log: OBJS := \
 test/ardop/test_log: WRAP := fopen fclose fwrite fflush freopen
 test/ardop/test_ARDOPCommon_processargs: WRAP := \
 	printf puts ardop_log_start InitAudio \
+	GetCM108Strlist GetSerialStrlist updateWebGuiNonAudioConfig \
 	OpenCOMPort tcpconnect OpenCM108 OpenSoundCapture OpenSoundPlayback \
 
 -include *.d

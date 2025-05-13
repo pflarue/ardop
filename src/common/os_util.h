@@ -53,7 +53,8 @@ int nbrecv(int sockfd, char *data, size_t len);
 // mostly to produce better error messages if something fails.
 // Return a file descriptor on success.  If an error occurs, log the error
 // and return -1;
-int tcpconnect(char *address, int port);
+// However, if testing is true, then do not log an error if unable to open.
+int tcpconnect(char *address, int port, bool testing);
 // Return 0 on success.  If an error occurs, log the error
 // and return -1;
 int tcpsend(int fd, unsigned char *data, size_t datalen);
@@ -66,6 +67,9 @@ HANDLE OpenCM108(char *devstr);
 // and return -1;
 int CM108_set_ptt(HANDLE fd, bool State);
 void CloseCM108(HANDLE *fd);
+
+char** GetSerialStrlist();
+char** GetCM108Strlist();
 
 // Items below are platform specific
 #ifdef WIN32

@@ -6,6 +6,7 @@
 extern int WebGuiNumConnected;
 
 // TODO: Add documentation for these functions
+int encodeUvint(char *buf, int size, unsigned int uvalue);
 void WebguiInit();
 void WebguiPoll();
 int wg_send_hostdatat(int cnum, char *prefix, unsigned char *data, int datalen);
@@ -35,10 +36,9 @@ int wg_send_rxsilent(int cnum);
 int wg_send_txenabled(int cnum, bool enabled);
 int wg_send_capturechannel(int cnum);
 int wg_send_playbackchannel(int cnum);
+int wg_send_devices(int cnum, char **ss, char **cs);
 int wg_send_audiodevices(int cnum, DeviceInfo **devices, char *cdevice,
 	char *pdevice, bool crestore, bool prestore);
-int wg_send_pttdevice(int cnum, char *devstr);
-int wg_send_catdevice(int cnum, char *devstr);
 int wg_send_ptton(int cnum, char *hexstr);
 int wg_send_pttoff(int cnum, char *hexstr);
 int wg_send_pixels(int cnum, unsigned char *data, size_t datalen);

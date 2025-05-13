@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include "common/os_util.h"
 #include "common/ardopcommon.h"
 #include "common/StationId.h"
 #include "common/audio.h"
@@ -292,7 +293,7 @@ int decodeUvint(struct wg_receive_data *rdata) {
 //	 data type 'FEC', 'ARQ', 'RXO', 'ERR', etc.
 // 0x9A7C followed by one additional byte interpreted as an unsigned
 //   char in the range 1 to MAX_AVGLEN: Set display averaging length
-// 0x9B7C"
+// 0x9B7C  list of audio devices
 //   followed by an unsigned char: number of devices listed
 //   followed by an unsigned char: the index of the currently open capture
 //    device, or 0xFF for none.
@@ -304,6 +305,20 @@ int decodeUvint(struct wg_receive_data *rdata) {
 //     uvint of the length of a string containing the device description
 //     a non-null terminated string containing the device description
 //     a byte indicating usage 'C' for capture, 'P' for playback, 'B' for both
+// 0x9C7C list of non-audio devices (serial, CM108, etc)
+//   followed by an unsigned char: number of devices listed
+//   followed by an unsigned char: the index of the device currently used for
+//     CAT control, or 0xFE for none but restorable, or 0xFF for none
+//     and not restorable
+//   followed by an unsigned char: the index of the device currently used for
+//     PTT, or 0xFE for none but restorable, or 0xFF for none and not
+//     restorable
+//   followed by that number of the following pattern:
+//     uvint of the length of a string containing the device name
+//     a non-null terminated string containing the device name
+//     uvint of the length of a string containing the device description
+//     a non-null terminated string containing the device description
+//       If no description is available, the uvint of its length is 0.
 
 // For all of wg_send_*
 // cnum = 0 to send to all Webgui clients.
@@ -609,6 +624,12 @@ int wg_send_playbackchannel(int cnum) {
 		return wg_send_msg(cnum, "E|z", 3);
 }
 
+int wg_send_devices(int cnum, char **ss, char **cs) {
+	char msg[WG_SSIZE - 2] = "\x9C\x7C";
+	size_t sz = EncodeDeviceStrlist(msg + 2, sizeof(msg) - 2, ss, cs);
+	return wg_send_msg(cnum, msg, sz + 2);
+}
+
 int wg_send_audiodevices(int cnum, DeviceInfo **devices, char *cdevice,
 	char *pdevice, bool crestore, bool prestore
 ) {
@@ -742,30 +763,6 @@ int wg_send_audiodevices(int cnum, DeviceInfo **devices, char *cdevice,
 	}
 	msg[2] = (unsigned char) devicecount;
 	return wg_send_msg(cnum, msg, msglen);
-}
-
-int wg_send_pttdevice(int cnum, char *devstr) {
-	char msg[203] = "d|pNONE";  // size based on PTTstr[200] in ptt.c
-	if (devstr == NULL || devstr[0] == 0x00)
-		return wg_send_msg(cnum, msg, 7);
-	if (strlen(devstr) > sizeof(msg) - 3) {
-		ZF_LOGE("Error in wg_send_pttdevice().  devstr too long.");
-		return 0;
-	}
-	memcpy(msg + 3, devstr, strlen(devstr));
-	return wg_send_msg(cnum, msg, strlen(devstr) + 3);
-}
-
-int wg_send_catdevice(int cnum, char *devstr) {
-	char msg[203] = "d|cNONE";  // size based on CATstr[200] in ptt.c
-	if (devstr == NULL || devstr[0] == 0x00)
-		return wg_send_msg(cnum, msg, 7);
-	if (strlen(devstr) > sizeof(msg) - 3) {
-		ZF_LOGE("Error in wg_send_catdevice().  devstr too long.");
-		return 0;
-	}
-	memcpy(msg + 3, devstr, strlen(devstr));
-	return wg_send_msg(cnum, msg, strlen(devstr) + 3);
 }
 
 int wg_send_ptton(int cnum, char *hexstr) {
@@ -978,7 +975,10 @@ void WebguiPoll() {
 	//    'k' to set CAT PTTON Hex string
 	//    'u' to set CAT PTTOFF Hex string
 	//   followed by a string.
-	// "d~" no additional data: Request ardopcf to provide list of audio devices
+	// "d~"
+	//   followed by a character:
+	//    'A' to get audio devices
+	//    'N' to get non-audio devices
 	// "E~"
 	//   followed by a character:
 	//    'L' for CAPTURECHANNEL LEFT
@@ -987,6 +987,8 @@ void WebguiPoll() {
 	//    'y' for PLAYBACKCHANNEL LEFT
 	//    'z' for PLAYBACKCHANNEL RIGHT
 	//    'm' for PLABACKCHANNEL MONO
+	//    'P' for PTTENABLED TRUE
+	//    'p' for PTTENABLED FALSE
 	// 0x8D7E followed by one additional byte interpreted as an unsigned
 	//   char in the range 0 to 100: Set DriveLevel
 	// 0x9A7E followed by one additional byte interpreted as an unsigned
@@ -1057,19 +1059,7 @@ void WebguiPoll() {
 			wg_send_pttenabled(cnum, isPTTmodeEnabled());
 			wg_send_capturechannel(cnum);
 			wg_send_playbackchannel(cnum);
-			{
-				char tmpstr[200];
-				get_pttstr(tmpstr, sizeof(tmpstr));
-				wg_send_pttdevice(cnum, tmpstr);
-
-				get_catstr(tmpstr, sizeof(tmpstr));
-				wg_send_catdevice(cnum, tmpstr);
-
-				get_ptt_on_cmd_hex(tmpstr, sizeof(tmpstr));
-				wg_send_ptton(cnum, tmpstr);
-				get_ptt_off_cmd_hex(tmpstr, sizeof(tmpstr));
-				wg_send_pttoff(cnum, tmpstr);
-			}
+			updateWebGuiNonAudioConfig();
 			break;
 		case '2':
 			if (ProtocolMode == RXO)
@@ -1108,10 +1098,12 @@ void WebguiPoll() {
 					PlaybackDevice, crestorable(), prestorable());
 				break;
 			case 'p':
-				parse_pttstr(tmpdata);  // also does wg_send_pttdevice()
+				// also does updateWebGuiNonAudioConfig()
+				parse_pttstr(strcmp(tmpdata, "NONE") == 0 ? "" : tmpdata);
 				break;
 			case 'c':
-				parse_catstr(tmpdata);  // also does wg_send_catdevice()
+				// also does updateWebGuiNonAudioConfig()
+				parse_catstr(strcmp(tmpdata, "NONE") == 0 ? "" : tmpdata);
 				break;
 			case 'k':
 				set_ptt_on_cmd(tmpdata, "Webgui PTTON str");  // also does wg_send_ptton()
@@ -1126,11 +1118,23 @@ void WebguiPoll() {
 			}
 			break;
 		}
-		case 'd':
-			GetDevices();
-			wg_send_audiodevices(cnum, AudioDevices, CaptureDevice,
-				PlaybackDevice, crestorable(), prestorable());
+		case 'd': {
+			switch (rdata->buf[rdata->offset + 2]) {
+				case 'A':  // get Audio devices
+					GetDevices();
+					wg_send_audiodevices(cnum, AudioDevices, CaptureDevice,
+						PlaybackDevice, crestorable(), prestorable());
+					break;
+				case 'N':  // get non-Audio devices
+					updateWebGuiNonAudioConfig();
+					break;
+				default:
+					ZF_LOGE("Invalid device type=%1s from cnum=%d with type=d. Ignoring.",
+						&(rdata->buf[rdata->offset + 2]), cnum);
+					break;
+			}
 			break;
+		}
 		case 'E':
 			if (msglen != 3) {
 				ZF_LOGW(
@@ -1158,6 +1162,22 @@ void WebguiPoll() {
 				case 'm':
 					process_playbackchannel("MONO");
 					break;
+				case 'P': {
+					char cmd[] = "PTTENABLED TRUE";
+					// Because ProcessCommandFromHost() modifies the command
+					// string while processing it, this function cannot be
+					// called with a literal string argument.
+					ProcessCommandFromHost(cmd);
+					break;
+				}
+				case 'p': {
+					char cmd[] = "PTTENABLED FALSE";
+					// Because ProcessCommandFromHost() modifies the command
+					// string while processing it, this function cannot be
+					// called with a literal string argument.
+					ProcessCommandFromHost(cmd);
+					break;
+				}
 			}
 			break;
 		case 'H':
