@@ -9,6 +9,7 @@
 
 extern const char ProductName[];
 extern const char ProductVersion[];
+extern const char OSName[];
 
 // #define USE_SOUNDMODEM
 

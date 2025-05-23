@@ -454,8 +454,8 @@ char HelpScreen[] =
 	" for more information, especially for cat and ptt options.\n\n";
 
 static const char *startstrings[] = {
-	// [0] requires ProductName, ProductVersion.
-	"%s Version %s (https://www.github.com/pflarue/ardop)",
+	// [0] requires ProductName, ProductVersion, OSName.
+	"%s Version %s_%s (https://www.github.com/pflarue/ardop)",
 	"Copyright (c) 2014-2025 Rick Muething, John Wiseman, Peter LaRue",
 	"See https://github.com/pflarue/ardop/blob/master/LICENSE for licence"
 	" details including\n information about authors of external libraries"
@@ -530,7 +530,7 @@ int processargs(int argc, char * argv[]) {
 		if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
 			// help screen and exit.
 			// Do not start logging.  Instead, print the start strings and
-			printf(startstrings[0], ProductName, ProductVersion);
+			printf(startstrings[0], ProductName, ProductVersion, OSName);
 			for (int i = 1; i < nstartstrings; ++i) {
 				printf("%s%s\n", i == 1 ? "\n" : "", startstrings[i]);
 			}
@@ -657,7 +657,7 @@ int processargs(int argc, char * argv[]) {
 	// running on different host ports to each create their own log file.
 	ardop_log_start(enable_log_files, enable_syslog);
 	// Always begin log with startstrings and cmdstr
-	ZF_LOGI(startstrings[0], ProductName, ProductVersion);
+	ZF_LOGI(startstrings[0], ProductName, ProductVersion, OSName);
 	for (int j = 1; j < nstartstrings; ++j)
 		ZF_LOGI("%s", startstrings[j]);
 	ZF_LOGD("Command line: %s", cmdstr);
