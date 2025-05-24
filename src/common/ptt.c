@@ -15,6 +15,7 @@
 #include "common/ptt.h"
 #include "common/log.h"
 #include "common/Webgui.h"
+#include "common/txframe.h"
 
 #define PTTNONCATMASK 0x0F
 #define PTTCATMASK 0x30
@@ -115,75 +116,118 @@ void SetupGPIOPTT(int pin, bool invert);
 void SendCommandToHostQuiet(char * strText);
 void SendCommandToHost(char * strText);
 void SetLED(int LED, int State);
-int hex2bytes(char *ptr, unsigned int len, unsigned char *output);
-int bytes2hex(char *outputStr, size_t count, unsigned char *data,
-	size_t datalen, bool spaces);
-
 
 // Return true if reading from CAT is enabled.
 bool rxCAT() {
 	return CATrx;
 }
 
-// Parse a hex string intended to be sent to the CAT device or TCP CAT port.
+// Parse a string intended to be sent to the CAT device or TCP CAT port.
+// If the string contains only an even number of valid hex characters (upper or
+// lower case with no whitespace), then it is intrepreted as hex.  Otherwise, if
+// it contains only printable ASCII characters 0x20-0x7E, it is interpreted as
+// ASCII text with substition for "\\n" and "\\r".  A prefix of "ASCII:" may be
+// used to force the string to be interpreted as ASCII text, and this is
+// required for ASCII text that contains only an even number of valid hex
+// characters.
 //
-// If an error occurs, then write an appropriate msg to the log and return 0.
+// This is backward compatible with the prior implementation that accepted only
+// hex input, except that what would have been invalid hex, may now be accepted
+// as valid ASCII.
 //
-// descstr describes the source of hexstr, and is only used if an error must be
+// If an error occurs, including for an empty string or any string that contains
+// other than printable ASCII characters, then write an appropriate msg to the
+// log and return 0.
+//
+// descstr describes the source of str, and is only used if an error must be
 // logged.
 //
 // Return the length of the cmd (or 0 if an error occured)
-static unsigned int parse_cmdhex(char *hexstr, unsigned char *cmd, char *descstr) {
-	if (strlen(hexstr) > 2 * MAXCATLEN) {
-		ZF_LOGE(
-			"ERROR: Hex string for %s may not exceed %i characters (to describe"
-			" a %d byte key sequence).  The provided string, \"%s\" has a"
-			" length of %u characters.",
-			descstr, 2 * MAXCATLEN, MAXCATLEN, hexstr,
-			(unsigned int) strlen(hexstr));
+static unsigned int parse_cmd(char *str, unsigned char *cmd, char *descstr) {
+	int ret;
+	if (strncmp(str, "ASCII:", strlen("ASCII:")) == 0) {
+		if ((ret = parseeol((char *)cmd, MAXCATLEN, str + strlen("ASCII:")))
+			== -1
+		) {
+			ZF_LOGE("ERROR: Failure to parse command string for %s with an"
+				" ASCII: prefix.", descstr);
+			return 0;
+		}
+		return ret;
+	}
+	if (strlen(str) % 2 != 0) {
+		if ((ret = parseeol((char *)cmd, MAXCATLEN, str)) == -1) {
+			ZF_LOGE("ERROR: Failure to parse command string for %s as ASCII"
+				" text (because it did not contain an even number of hex"
+				" characters)", descstr);
+			return 0;
+		}
+		return ret;
+	}
+	if (strlen(str) > 2 * MAXCATLEN) {
+		ZF_LOGE("ERROR: Command string for %s may not exceed %i hex characters"
+			" or an ASCII string of %i characters (to describe a %i byte"
+			" sequence).  The provided string, \"%s\" has a length of %zu"
+			" characters.",
+			descstr, 2 * MAXCATLEN, MAXCATLEN, MAXCATLEN, str, strlen(str));
 		return 0;
 	}
 
-	if (strlen(hexstr) % 2 != 0) {
-		ZF_LOGE(
-			"ERROR: Hex string for %s must contain an even number of"
-			" hexidecimal [0-9A-F] characters, but \"%s\" has an odd number"
-			" (%u).",
-			descstr, hexstr, (unsigned int) strlen(hexstr));
-		return 0;
-	}
+	if (hex2bytes(str, strlen(str) / 2, cmd) == 0)
+		return strlen(str) / 2;
 
-	if (hex2bytes(hexstr, strlen(hexstr) / 2, cmd) != 0) {
-		ZF_LOGE(
-			"ERROR: Invalid string for %s.  Expected a hexidecimal string with"
-			" an even number of [0-9A-F] characters but found \"%s\".",
-			descstr, hexstr);
+	// hex2bytes() failed, so parse as ASCII
+	if ((ret = parseeol((char *)cmd, MAXCATLEN, str)) == -1) {
+		ZF_LOGE("ERROR: Failure to parse command string for %s as ASCII"
+			" text (because it did not contain an even number of hex"
+			" characters)", descstr);
 		return 0;
 	}
-	return strlen(hexstr) / 2;
+	return ret;
 }
 
-// Write to hexstr up to length bytes (including a terminating NULL) of the hex
-// representation of the CAT command used to switch from receive to transmit.
+// Write to str up to length bytes (including a terminating NULL)
+// representing the CAT command used to switch from receive to transmit.
+// If this command can be written using only printable ASCII 0x20-0x7F with
+// "\\r" and "\\n", then return this string with a prefix of "ASCII:".
+// Otherwise, return a hex string.
 // On success, return 0.
 // On failure (length insuficient to hold entire command string), return -1.
-// If no command has been set, return 0 with hexstr set to a zero length string.
-int get_ptt_on_cmd_hex(char *hexstr, int length) {
-	int ret = bytes2hex(hexstr, length, ptt_on_cmd, ptt_on_cmd_len, false);
+// If no command has been set, return 0 with str set to a zero length string.
+int get_ptt_on_cmd(char *str, int length) {
+	// Allow for "ASCII:" prefix and terminating NULL
+	char tmpcmd[MAXCATLEN + 7];
+	int ret;
+	if (length < (int) ptt_on_cmd_len + 1)
+		return -1;
+	if (ptt_on_cmd_len == 0) {
+		str[0] = 0x00;  // zero length string
+		return 0;
+	}
+	if (snprintf(tmpcmd, sizeof(tmpcmd), "ASCII:%.*s",
+		ptt_on_cmd_len, ptt_on_cmd) < (int) sizeof(tmpcmd)
+		&& (ret = escapeeol(str, length, tmpcmd)) != -1
+	) {
+		return 0;
+	}
+	// ptt_on_cmd could not be expressed as ASCII text.  So, return hex
+	ret = bytes2hex(str, length, ptt_on_cmd, ptt_on_cmd_len, false);
 	if (ret < 0 || ret + 1 <= length)
 		return 0;
 	return (-1);
 }
 
-// Set the CAT command for switching from receive to transmit to a hex string.
+// Set the CAT command for switching from receive to transmit to a hex or
+// ASCII string (see parse_cmd() for requirements).
 // On success, return 0.  If a CAT port and the CAT command for switching from
 // transmit to receive are already set, then also enable CAT control of PTT.
-// On failure, leave the existing command unchanged, write an error to the log,
-// and return -1.  descstr indicates the source of hexstr, to be used in the log
-// message if an error occurs.
-// A zero length hexstr erases the existing command, and returns 0 for success.
-int set_ptt_on_cmd(char *hexstr, char *descstr) {
-	if (hexstr[0] == 0x00) {
+// On failure, leave the existing command value unchanged, write an error to the
+// log, and return -1.  descstr indicates the source of str, to be used in the
+// log message if an error occurs.
+// A zero length str erases the existing command value, and returns 0 for
+// success.
+int set_ptt_on_cmd(char *str, char *descstr) {
+	if (str[0] == 0x00) {
 		ptt_on_cmd_len = 0;
 		wg_send_ptton(0, NULL);
 		ZF_LOGI("PTT ON CMD set to None.");
@@ -191,17 +235,20 @@ int set_ptt_on_cmd(char *hexstr, char *descstr) {
 		wg_send_pttenabled(0, !!PTTmode);
 	}
 	unsigned char tmp_cmd[MAXCATLEN];
-	unsigned int tmp_len = parse_cmdhex(hexstr, tmp_cmd, descstr);
+	unsigned int tmp_len = parse_cmd(str, tmp_cmd, descstr);
+	if (tmp_len != 0) {
+		memcpy(ptt_on_cmd, tmp_cmd, tmp_len);
+		ptt_on_cmd_len = tmp_len;
+	}
+	// update WebGui
+	char tmpstr[MAXCATLEN * 2 + 1];
+	get_ptt_on_cmd(tmpstr, sizeof(tmpstr));
+	wg_send_ptton(0, tmpstr);
 	if (tmp_len == 0) {
-		char tmpstr[MAXCATLEN * 2 + 1];
-		get_ptt_on_cmd_hex(tmpstr, sizeof(tmpstr));
-		wg_send_ptton(0, tmpstr);
+		// error in parse_cmd.  PTT ON CMD unchanged
 		return (-1);  // Error alreadly logged
 	}
-	wg_send_ptton(0, hexstr);
-	memcpy(ptt_on_cmd, tmp_cmd, tmp_len);
-	ptt_on_cmd_len = tmp_len;
-	ZF_LOGI("PTT ON CMD set to %s.", hexstr);
+	ZF_LOGI("PTT ON CMD set to %s.", tmpstr);
 	if (hCATdevice != 0 && ptt_off_cmd_len > 0) {
 		PTTmode = (PTTmode & PTTNONCATMASK) + PTTCAT;
 		wg_send_pttenabled(0, !!PTTmode);
@@ -217,28 +264,49 @@ int set_ptt_on_cmd(char *hexstr, char *descstr) {
 	return 0;
 }
 
-// Write to hexstr up to length bytes (including a terminating NULL) of the hex
-// representation of the CAT command used to switch from transmit to receive.
+// Write to str up to length bytes (including a terminating NULL)
+// representing the CAT command used to switch from transmit to receive.
+// If this command can be written using only printable ASCII 0x20-0x7F with
+// "\\r" and "\\n", then return this string with a prefix of "ASCII:".
+// Otherwise, return a hex string.
 // On success, return 0.
 // On failure (length insuficient to hold entire command string), return -1.
-// If no command has been set, return 0 with hexstr set to a zero length string.
-int get_ptt_off_cmd_hex(char *hexstr, int length) {
-	int ret = bytes2hex(hexstr, length, ptt_off_cmd, ptt_off_cmd_len, false);
+// If no command has been set, return 0 with str set to a zero length string.
+int get_ptt_off_cmd(char *str, int length) {
+	// Allow for "ASCII:" prefix and terminating NULL
+	char tmpcmd[MAXCATLEN + 7];
+	int ret;
+	if (length < (int) ptt_off_cmd_len + 1)
+		return -1;
+	if (ptt_off_cmd_len == 0) {
+		str[0] = 0x00;  // zero length string
+		return 0;
+	}
+	if (snprintf(tmpcmd, sizeof(tmpcmd), "ASCII:%.*s",
+		ptt_off_cmd_len, ptt_off_cmd) < (int) sizeof(tmpcmd)
+		&& (ret = escapeeol(str, length, tmpcmd)) != -1
+	) {
+		return 0;
+	}
+	// ptt_on_cmd could not be expressed as ASCII text.  So, return hex
+	ret = bytes2hex(str, length, ptt_off_cmd, ptt_off_cmd_len, false);
 	if (ret < 0 || ret + 1 <= length)
 		return 0;
 	return (-1);
 }
 
-// Set the CAT command for switching from transmit to receive to a hex string.
+// Set the CAT command for switching from transmit to receive to a hex or
+// ASCII string (see parse_cmd() for requirements).
 // On success, return 0.  If a CAT port or tcpCATport and the CAT command for
 // switching from receive to transmit are already set, then also enable CAT
 // control of PTT.
-// On failure, leave the existing command unchanged, write an error to the log,
-// and return -1.  descstr indicates the source of hexstr, to be used in the log
-// message if an error occurs.
-// A zero length hexstr erases the existing command, and returns 0 for success.
-int set_ptt_off_cmd(char *hexstr, char *descstr) {
-	if (hexstr[0] == 0x00) {
+// On failure, leave the existing command value unchanged, write an error to the
+// log, and return -1.  descstr indicates the source of str, to be used in the
+// log message if an error occurs.
+// A zero length str erases the existing command value, and returns 0 for
+// success.
+int set_ptt_off_cmd(char *str, char *descstr) {
+	if (str[0] == 0x00) {
 		ptt_off_cmd_len = 0;
 		wg_send_pttoff(0, NULL);
 		ZF_LOGI("PTT OFF CMD set to None.");
@@ -246,17 +314,20 @@ int set_ptt_off_cmd(char *hexstr, char *descstr) {
 		wg_send_pttenabled(0, !!PTTmode);
 	}
 	unsigned char tmp_cmd[MAXCATLEN];
-	unsigned int tmp_len = parse_cmdhex(hexstr, tmp_cmd, descstr);
+	unsigned int tmp_len = parse_cmd(str, tmp_cmd, descstr);
+	if (tmp_len != 0) {
+		memcpy(ptt_off_cmd, tmp_cmd, tmp_len);
+		ptt_off_cmd_len = tmp_len;
+	}
+	// update WebGui
+	char tmpstr[MAXCATLEN * 2 + 1];
+	get_ptt_off_cmd(tmpstr, sizeof(tmpstr));
+	wg_send_pttoff(0, tmpstr);
 	if (tmp_len == 0) {
-		char tmpstr[MAXCATLEN * 2 + 1];
-		get_ptt_off_cmd_hex(tmpstr, sizeof(tmpstr));
-		wg_send_pttoff(0, tmpstr);
+		// error in parse_cmd.  PTT OFF CMD unchanged
 		return (-1);  // Error alreadly logged
 	}
-	wg_send_pttoff(0, hexstr);
-	memcpy(ptt_off_cmd, tmp_cmd, tmp_len);
-	ptt_off_cmd_len = tmp_len;
-	ZF_LOGI("PTT OFF CMD set to %s.", hexstr);
+	ZF_LOGI("PTT OFF CMD set to %s.", tmpstr);
 	if (hCATdevice != 0 && ptt_on_cmd_len > 0) {
 		PTTmode = (PTTmode & PTTNONCATMASK) + PTTCAT;
 		wg_send_pttenabled(0, !!PTTmode);
@@ -333,22 +404,23 @@ int readCAT(unsigned char *data, size_t len) {
 	return ret;
 }
 
-// Send data represented by a string of hexidecimal digits to the CAT device.
+// Send data represented by a hex or ASCII string to the CAT device.
+// See parse_cmd() for str requirements
 // Return -1 and log an error if no CAT device is available or an error occurs.
 // Return 0 on success.
 // TODO: Close connection if an error occurs?
-int sendCAThex(char *hexstr) {
+int sendCAT(char *str) {
 	if (hCATdevice == 0 && tcpCATport == 0) {
-		ZF_LOGW("No CAT device or TCP CAT port.  sendCAThex() failed.");
+		ZF_LOGW("No CAT device or TCP CAT port.  sendCAT() failed.");
 		return (-1);
 	}
 	unsigned char tmp_cmd[MAXCATLEN];
-	unsigned int tmp_len = parse_cmdhex(hexstr, tmp_cmd, "RADIOHEX host comand");
+	unsigned int tmp_len = parse_cmd(str, tmp_cmd, "RADIOHEX host comand");
 	if (tmp_len == 0)
 		return (-1);  // error already logged.
 	if (hCATdevice != 0) {
 		if (!WriteCOMBlock(hCATdevice, tmp_cmd, tmp_len)) {
-			ZF_LOGE("Error writing %s to CAT on %s.", hexstr, CATstr);
+			ZF_LOGE("Error writing %s to CAT on %s.", str, CATstr);
 			close_CAT(true);
 			return (-1);
 		}
@@ -357,7 +429,7 @@ int sendCAThex(char *hexstr) {
 	if (tcpCATport != 0) {
 		if (tcpsend(tcpCATport, tmp_cmd, tmp_len) != 0) {
 			// TODO: Close tcpCATport?
-			ZF_LOGE("Error writing %s to TCP CAT on %s.", hexstr, CATstr);
+			ZF_LOGE("Error writing %s to TCP CAT on %s.", str, CATstr);
 			close_CAT(true);
 			return (-1);
 		}

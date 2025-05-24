@@ -1583,17 +1583,29 @@ void ProcessCommandFromHost(char * strCMD)
 	}
 
 	if (strcmp(strCMD, "RADIOHEX") == 0) {
-		// Parameter is a hex string representing a radio specific command to
-		// be immediately sent to the radio.
+		// Parameter is a hex or ASCII string representing a radio specific
+		// command to be immediately sent to the radio.
+		// If the string contains only an even number of valid hex characters
+		// (upper or lower case with no whitespace), then it is intrepreted as
+		// hex.  Otherwise, if it contains only printable ASCII characters
+		// 0x20-0x7E, it is interpreted as ASCII text with substition for "\\n"
+		// and "\\r".  A prefix of "ASCII:" may be used to force the string to
+		// be interpreted as ASCII text, and this is required for ASCII text
+		// that contains only an even number of valid hex characters.
+		// Unlike most Host commands, the arguments to this command are case
+		// sensitive (because required ascii values may be case sensitive).
 		if (ptrParams == NULL) {
-			snprintf(strFault, sizeof(strFault), "RADIOHEX command string missing");
+			snprintf(strFault, sizeof(strFault),
+				"RADIOHEX command string missing");
 			goto cmddone;
 		}
-		if (sendCAThex(ptrParams) == -1) {
-			snprintf(strFault, sizeof(strFault), "RADIOHEX %s failed.", ptrParams);
+		char *ptrCaseParams = strlop(cmdCopy, ' ');
+		if (sendCAT(ptrParams) == -1) {
+			snprintf(strFault, sizeof(strFault), "RADIOHEX %s failed.",
+				ptrCaseParams);
 			goto cmddone;
 		}
-		sprintf(cmdReply, "%s %s", strCMD, ptrParams);
+		sprintf(cmdReply, "%s %s", strCMD, ptrCaseParams);
 		SendReplyToHost(cmdReply);
 		goto cmddone;
 	}
@@ -1740,65 +1752,87 @@ void ProcessCommandFromHost(char * strCMD)
 	}
 
 	if (strcmp(strCMD, "RADIOPTTOFF") == 0) {
-		// Parameter is a hex string representing the radio specific command to
-		// be sent to the radio to transition from TX to RX.  The special value
-		// of NONE may be used discard an existing value.
+		// Parameter is a hex or ASCII string representing a radio specific
+		// command to be send to the radio to transition from TX to RX.
+		// If the string contains only an even number of valid hex characters
+		// (upper or lower case with no whitespace), then it is intrepreted as
+		// hex.  Otherwise, if it contains only printable ASCII characters
+		// 0x20-0x7E, it is interpreted as ASCII text with substitution for
+		// "\\n" and "\\r".  A prefix of "ASCII:" may be used to force the
+		// string to be interpreted as ASCII text, and this is required for
+		// ASCII text that contains only an even number of valid hex characters.
+		// The special value of NONE may be used discard an existing value.
+		// Unlike most Host commands, the arguments to this command are case
+		// sensitive (because required ascii values may be case sensitive).
 		if (ptrParams == NULL) {
-			char hexstr[MAXCATLEN * 2 + 1];
-			get_ptt_off_cmd_hex(hexstr, sizeof(hexstr));
-			if (strlen(hexstr) == 0) {
+			char tmpstr[MAXCATLEN * 2 + 1];
+			if (get_ptt_off_cmd(tmpstr, sizeof(tmpstr)) == -1
+				|| strlen(tmpstr) == 0
+			) {
 				sprintf(cmdReply, "%s VALUE NOT SET", strCMD);
 				SendReplyToHost(cmdReply);
 				goto cmddone;
 			}
-			sprintf(cmdReply, "%s %s", strCMD, hexstr);
+			sprintf(cmdReply, "%s %s", strCMD, tmpstr);
 			SendReplyToHost(cmdReply);
 			goto cmddone;
 		}
-		if (strcmp(ptrParams, "NONE") == 0) {
+		char *ptrCaseParams = strlop(cmdCopy, ' ');
+		if (strcmp(ptrCaseParams, "NONE") == 0) {
 			set_ptt_off_cmd("", "RADIOPTTOFF host command");
-			sprintf(cmdReply, "%s now %s", strCMD, ptrParams);
+			sprintf(cmdReply, "%s now %s", strCMD, ptrCaseParams);
 			SendReplyToHost(cmdReply);
 			goto cmddone;
 		}
-		if (set_ptt_off_cmd(ptrParams, "RADIOPTTOFF host command") == -1) {
+		if (set_ptt_off_cmd(ptrCaseParams, "RADIOPTTOFF host command") == -1) {
 			snprintf(strFault, sizeof(strFault),
 				"RADIOPTTOFF command string is invalid.");
 			goto cmddone;
 		}
-		sprintf(cmdReply, "%s now %s", strCMD, ptrParams);
+		sprintf(cmdReply, "%s now %s", strCMD, ptrCaseParams);
 		SendReplyToHost(cmdReply);
 		goto cmddone;
 	}
 
 	if (strcmp(strCMD, "RADIOPTTON") == 0) {
-		// Parameter is a hex string representing the radio specific command to
-		// be sent to the radio to transition from RX to TX.  The special value
-		// of NONE may be used discard an existing value.
+		// Parameter is a hex or ASCII string representing a radio specific
+		// command to be send to the radio to transition from RX to TX.
+		// If the string contains only an even number of valid hex characters
+		// (upper or lower case with no whitespace), then it is intrepreted as
+		// hex.  Otherwise, if it contains only printable ASCII characters
+		// 0x20-0x7E, it is interpreted as ASCII text with substitution for
+		// "\\n" and "\\r".  A prefix of "ASCII:" may be used to force the
+		// string to be interpreted as ASCII text, and this is required for
+		// ASCII text that contains only an even number of valid hex characters.
+		// The special value of NONE may be used discard an existing value.
+		// Unlike most Host commands, the arguments to this command are case
+		// sensitive (because required ascii values may be case sensitive).
 		if (ptrParams == NULL) {
-			char hexstr[MAXCATLEN * 2 + 1];
-			get_ptt_on_cmd_hex(hexstr, sizeof(hexstr));
-			if (strlen(hexstr) == 0) {
+			char tmpstr[MAXCATLEN * 2 + 1];
+			if (get_ptt_on_cmd(tmpstr, sizeof(tmpstr)) == -1
+				|| strlen(tmpstr) == 0
+			) {
 				sprintf(cmdReply, "%s VALUE NOT SET", strCMD);
 				SendReplyToHost(cmdReply);
 				goto cmddone;
 			}
-			sprintf(cmdReply, "%s %s", strCMD, hexstr);
+			sprintf(cmdReply, "%s %s", strCMD, tmpstr);
 			SendReplyToHost(cmdReply);
 			goto cmddone;
 		}
-		if (strcmp(ptrParams, "NONE") == 0) {
+		char *ptrCaseParams = strlop(cmdCopy, ' ');
+		if (strcmp(ptrCaseParams, "NONE") == 0) {
 			set_ptt_on_cmd("", "RADIOPTTON host command");
-			sprintf(cmdReply, "%s now %s", strCMD, ptrParams);
+			sprintf(cmdReply, "%s now %s", strCMD, ptrCaseParams);
 			SendReplyToHost(cmdReply);
 			goto cmddone;
 		}
-		if (set_ptt_on_cmd(ptrParams, "RADIOPTTON host command") == -1) {
+		if (set_ptt_on_cmd(ptrCaseParams, "RADIOPTTON host command") == -1) {
 			snprintf(strFault, sizeof(strFault),
 				"RADIOPTTON command string is invalid.");
 			goto cmddone;
 		}
-		sprintf(cmdReply, "%s now %s", strCMD, ptrParams);
+		sprintf(cmdReply, "%s now %s", strCMD, ptrCaseParams);
 		SendReplyToHost(cmdReply);
 		goto cmddone;
 	}

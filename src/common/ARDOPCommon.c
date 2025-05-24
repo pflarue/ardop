@@ -433,8 +433,8 @@ char HelpScreen[] =
 	// For Linux, CM108 devices like /dev/hidraw0 are used.
 	"                                     or CM108:device of CM108-like device to use for PTT.\n"
 #endif
-	"-k string or --keystring string      String (In HEX) to send to the radio to key PTT\n"
-	"-u string or --unkeystring string    String (In HEX) to send to the radio to unkey PTT\n"
+	"-k string or --keystring string      String (hex or ASCII) to send to the radio to key PTT\n"
+	"-u string or --unkeystring string    String (hex or ASCII) to send to the radio to unkey PTT\n"
 	"-L use Left Channel of Soundcard for receive in stereo mode\n"
 	"-R use Right Channel of Soundcard for receive in stereo mode\n"
 	"-y use Left Channel of Soundcard for transmit in stereo mode\n"
@@ -1553,8 +1553,8 @@ void updateWebGuiNonAudioConfig() {
 		FreeStrlist(&seriallist);
 	}
 	char tmpstr[200];
-	get_ptt_on_cmd_hex(tmpstr, sizeof(tmpstr));
+	get_ptt_on_cmd(tmpstr, sizeof(tmpstr));
 	wg_send_ptton(0, tmpstr);
-	get_ptt_off_cmd_hex(tmpstr, sizeof(tmpstr));
+	get_ptt_off_cmd(tmpstr, sizeof(tmpstr));
 	wg_send_pttoff(0, tmpstr);
 }

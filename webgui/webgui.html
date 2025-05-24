@@ -109,7 +109,6 @@
 			<button id="infohider">Show Help</button>
 		</div>
 		<div id="configdiv" class="dnone">
-			<br /><br />
 			<b>WARNING: Changing these settings may disrupt audio processing (maybe
 			only briefly).  So, making changes while transmitting or receiving
 			is not recommended.</b><br /><br />
@@ -140,11 +139,11 @@
 			<br />
 			PTT device: <input type="text" id="pttdev"></input><br />
 			CAT device: <input type="text" id="catdev"></input><br />
-			CAT PTTON string (hex): <input type="text" id="ptton"></input><br />
-			CAT PTTONFFstring (hex): <input type="text" id="pttoff"></input>
+			CAT PTTON string: <input type="text" id="ptton"></input> <small>(HEX or ASCII)</small><br />
+			CAT PTTOFF string: <input type="text" id="pttoff"></input> <small>(HEX or ASCII)</small>
 			<br /><br />
-			MONO is usually used, except when using a dual VFO system that has
-			audio from VFO A on one channel and VFO B on the other.
+			<small>MONO is usually used, except when using a dual VFO system that has
+			audio from VFO A on one channel and VFO B on the other.</small>
 			<br />
 			RX Audio Channel:
 			<select name="rxch" id="rxch">
@@ -476,11 +475,20 @@
 			meet ID requirements, when doing so might cause equipment damage or injury because
 			you need to make adjustments to your antenna or feedline.
 			</p><p>
-			To use CAT for PTT control, unless you are used the RIGCTRL shortcut to set up
+			To use CAT for PTT control, unless you used the RIGCTRL shortcut to set up
 			TCP CAT via Hamlib/rigctld, you must also provide <b>PTTON</b> and <b>PTTOFF</b>
-			commands expressed as hex strings.  The required values are specific to the make
-			and model of radio being used.  So, you must search the internet or the manual
-			for your radio to discover what is required.  Text inputs are provided for these.
+			commands expressed as hex or ASCII strings.  The required values are specific to
+			the make and model of radio being used.  So, you must search the internet or the
+			manual for your radio to discover what is required.  Text inputs are provided for
+			these.  If you enter an even number of valid hex characters (upper or lower case
+			with no whitespace), then it is intrepreted as hex.  Otherwise, if you enter only
+			printable ASCII characters 0x20-0x7E, it is interpreted as ASCII text with
+			substition for \n and \r.  A prefix of ASCII: may be used to force the string to
+			be interpreted as ASCII text, and this is required for ASCII text that contains
+			only an even number of valid hex characters.  If you enter non-ASCII text (such
+			as UTF8 or extended ASCII), it will fail, and the previous value (which may be
+			blank) will be retained.  If you successfully enter an ASCII string without the
+			ASCII: prefix, it will be updated to include the ASCII: prefix.
 			</p><p>
 			The <b>RX Audio Channel</b> and <b>TX Audio Channel</b> selectors control whether
 			the audio devices are opened as mono or stereo devices, and when opened as stereo

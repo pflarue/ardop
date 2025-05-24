@@ -49,11 +49,88 @@ int parse_params(char *paramstr, char *parsed[10]) {
 	return paramcount;
 }
 
+// Write a copy of src to dst with any instances of "\r" or "\n" replaced with
+// "\\r" and "\\n".  If src contains any character that is not a printable ASCII
+// character in the range of 0x20 to 0x7E, or if after the above substitutions
+// dst would would require more than size bytes (including the terminating
+// NULL), then return -1 with the contents of dst undefined.  Else return
+// the length of dst excluding the terminating NULL on success.
+int escapeeol(char *dst, size_t size, const char *src) {
+	if (strlen(src) >= size)
+		return -1;
+	// Copy src to dst, then escape eol characters in dst
+	strcpy(dst, src);
+	for (size_t i = 0; i < strlen(dst); ++i) {
+		if (dst[i] == '\n') {
+			if (strlen(dst) + 1 >= size)
+				return -1;  // escaping \n would exceed size
+			memmove(dst + i + 2, dst + i + 1, strlen(dst + i + 1) + 1);
+			dst[i] = '\\';
+			dst[i + 1] = 'n';
+			continue;
+		}
+		if (dst[i] == '\r') {
+			if (strlen(dst) + 1 >= size)
+				return -1;  // escaping \r would exceed size
+			memmove(dst + i + 2, dst + i + 1, strlen(dst + i + 1) + 1);
+			dst[i] = '\\';
+			dst[i + 1] = 'r';
+			continue;
+		}
+		if (dst[i] < 0x20 || dst[i] > 0x7E)
+			return -1;
+	}
+	return strlen(dst);
+}
+
+// Write a copy of src to dst with any instances of "\\r" or "\\n" replaced with
+// "\r" and "\n". except that any instances of \\\\r" or "\\\\n" are replaced
+// "\\r" and "\\n" instead.  All other instances of "\\" remain unchanged.  If
+// src contains any character that is not a printable ASCII character in the
+// range of 0x20 to 0x7E, then return -1 with the contents of dst undefined.
+// Else return the length of dst excluding the terminating NULL on success.
+int parseeol(char *dst, size_t size, const char *src) {
+	if (strlen(src) >= size)
+		return -1;
+	// Copy src to dst, then escape parse eol characters in dst
+	strcpy(dst, src);
+	for (size_t i = 0; i < strlen(dst); ++i) {
+		if (dst[i] < 0x20 || dst[i] > 0x7E)
+			return -1;
+		if (strlen(dst) > i + 1 && dst[i] == '\\' && dst[i + 1] == 'n') {
+			if (i == 0 || dst[i - 1] != '\\') {
+				// replace "\\n" with "\n"
+				dst[i] = '\n';
+				memmove(dst + i + 1, dst + i + 2, strlen(dst + i + 2) + 1);
+			} else {
+				// replace "\\\\n" with "\\n"
+				memmove(dst + i - 1, dst + i, strlen(dst + i) + 1);
+			}
+			continue;
+		}
+		if (strlen(dst) > i + 1 && dst[i] == '\\' && dst[i + 1] == 'r') {
+			if (i == 0 || dst[i - 1] != '\\') {
+				// replace "\\r" with "\r"
+				dst[i] = '\r';
+				memmove(dst + i + 1, dst + i + 2, strlen(dst + i + 2) + 1);
+			} else {
+				// replace "\\\\r" with "\\r"
+				memmove(dst + i - 1, dst + i, strlen(dst + i) + 1);
+			}
+			continue;
+		}
+	}
+	return strlen(dst);
+}
+
 // return 0 on success, 1 on failure
 // len is the number of bytes to return which required
 // 2*len hex digits.
+// ptr must be a null terminated string of length >= 2*len
 int hex2bytes(char *ptr, unsigned int len, unsigned char *output) {
 	unsigned char half;
+	if (strlen(ptr) < len * 2)
+		return 1;
 	for (unsigned int i = 0; i < len; i++) {
 		output[i] = 0;
 		for (unsigned int j = 0; j < 2; j++) {
@@ -79,7 +156,9 @@ int hex2bytes(char *ptr, unsigned int len, unsigned char *output) {
 // write all of data, write as much as will fit.
 // Return the length of outputStr (excluding the terminating null), or -1 if
 // count == 0 so that outputStr could not even be set to a zero length string.
-int bytes2hex(char *outputStr, size_t count, unsigned char *data, size_t datalen, bool spaces) {
+int bytes2hex(char *outputStr, size_t count, unsigned char *data,
+	size_t datalen, bool spaces
+) {
 	if (count < 3) {
 		if (count == 0)
 			return -1;
@@ -94,14 +173,15 @@ int bytes2hex(char *outputStr, size_t count, unsigned char *data, size_t datalen
 	if (!spaces)
 		strcpy(formatstr, "%02X");  // no space
 	sprintf(outputStr, "%02X", data[0]);
-	for (unsigned int i=1; i<datalen; i++) {
-		if (strlen(outputStr) + (strlen(formatstr) - 1) >= count)
+	for (unsigned int i = 1; i < datalen; ++i) {
+		if (strlen(outputStr) + (strlen(formatstr) - 2) >= count)
 			return strlen(outputStr);
 		sprintf(outputStr + strlen(outputStr), formatstr, data[i]);
 	}
 	return strlen(outputStr);
 }
 
+// transmit a single frame for diagnostic purposes
 // return 0 on success, 1 on failure
 int txframe(char * frameParams) {
 	if (!TXEnabled) {

@@ -602,8 +602,13 @@ void TCPHostPoll() {
 
 	// Check for data from Rig CAT control
 	const char radiohex[] = "RADIOHEX ";
+	const char status[] = "STATUS RADIOHEX as UTF8: ";
 	unsigned char data[500];
+	// Mess is used to send the expected RADIOHEX response with HEX values
 	char Mess[2 * sizeof(data) + sizeof(radiohex) + 1];
+	// StatusMess is used to send a STATUS message containing the received
+	// message response as text if appropriate
+	char StatusMess[sizeof(data) + sizeof(status) + 1];
 	int bytesread = 0;
 	// readCAT() reads from CAT device and/or TCP CAT address.
 	// If both are in use and have data to read, it is necessary
@@ -622,13 +627,16 @@ void TCPHostPoll() {
 			snprintf(Mess, sizeof(Mess), radiohex);
 			bytes2hex(Mess + strlen(Mess), sizeof(Mess) - strlen(Mess),
 				data, bytesread, false);
+			if (rxCAT())
+				SendCommandToHost(Mess);
 			ZF_LOGV("Hex data from CAT device or TCP CAT: %s", Mess + strlen(radiohex));
 			if (utf8_check(data, bytesread) == NULL) {
 				data[bytesread] = 0x00;  // make it a null terminated string.
 				ZF_LOGV("As UTF8 text: %s", data);
+				snprintf(StatusMess, sizeof(StatusMess), "%s%s", status, data);
+				if (rxCAT())
+					SendCommandToHost(StatusMess);
 			}
-			if (rxCAT())
-				SendCommandToHost(Mess);
 		}
 	}
 

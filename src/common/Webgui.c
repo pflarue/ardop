@@ -1106,10 +1106,12 @@ void WebguiPoll() {
 				parse_catstr(strcmp(tmpdata, "NONE") == 0 ? "" : tmpdata);
 				break;
 			case 'k':
-				set_ptt_on_cmd(tmpdata, "Webgui PTTON str");  // also does wg_send_ptton()
+				set_ptt_on_cmd(strcmp(tmpdata, "NONE") == 0 ? "" : tmpdata,
+					"Webgui PTTON str");  // also does wg_send_ptton()
 				break;
 			case 'u':
-				set_ptt_off_cmd(tmpdata, "Webgui PTTOFF str");  // also does wg_send_pttdevice()
+				set_ptt_off_cmd(strcmp(tmpdata, "NONE") == 0 ? "" : tmpdata,
+					"Webgui PTTOFF str");  // also does wg_send_pttdevice()
 				break;
 			default:
 				ZF_LOGE("Invalid device type=%1s from cnum=%d with type=D. Ignoring.",
