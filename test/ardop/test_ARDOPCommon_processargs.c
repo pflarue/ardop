@@ -1054,6 +1054,7 @@ static void test_processargs(void** state) {
 	if (true) {
 		// --cat with the pseudo-device RIGCTLD.  This is equivalent to
 		// -c TCP:4532 -k 5420310A -u 5420300A
+		// OR -c TCP:4532 -k "T 1\n" -u "T 0\n"
 		will_return(__wrap_tcpconnect, 5);  // fd for success, -1 for error
 		int testargc = 3;
 		char *testargv[] = {"ardopcf", "--cat", "RIGCTLD"};
@@ -1077,7 +1078,8 @@ static void test_processargs(void** state) {
 	reset_printstrs();  // reset captured strings from last test
 	if (true) {
 		// --cat with the pseudo-device RIGCTLD.  This is equivalent to
-		// -c TCP:4532 -k 5420310A -u 5420300A.
+		// -c TCP:4532 -k 5420310A -u 5420300A
+		// OR -c TCP:4532 -k "T 1\n" -u "T 0\n"
 		// Test failure due to failure in tcpconnect()
 		will_return(__wrap_tcpconnect, -1);  // fd for success, -1 for error
 		int testargc = 3;
@@ -1103,6 +1105,7 @@ static void test_processargs(void** state) {
 	if (true) {
 		// -c with the pseudo-device RIGCTLD.  This is equivalent to
 		// -c TCP:4532 -k 5420310A -u 5420300A
+		// OR -c TCP:4532 -k "T 1\n" -u "T 0\n"
 		will_return(__wrap_tcpconnect, 5);  // fd for success, -1 for error
 		int testargc = 3;
 		char *testargv[] = {"ardopcf", "-c", "RIGCTLD"};
@@ -1126,7 +1129,8 @@ static void test_processargs(void** state) {
 	reset_printstrs();  // reset captured strings from last test
 	if (true) {
 		// -c with the pseudo-device RIGCTLD.  This is equivalent to
-		// -c TCP:4532 -k 5420310A -u 5420300A.
+		// -c TCP:4532 -k 5420310A -u 5420300A
+		// OR -c TCP:4532 -k "T 1\n" -u "T 0\n"
 		// Test failure due to failure in tcpconnect()
 		will_return(__wrap_tcpconnect, -1);  // fd for success, -1 for error
 		int testargc = 3;
@@ -1380,7 +1384,7 @@ static void test_processargs(void** state) {
 	reset_defaults();  // reset global variables changed by processargs
 	reset_printstrs();  // reset captured strings from last test
 	if (true) {
-		// -c and --keystring and --unkeystring
+		// -c and --keystring and --unkeystring as HEX
 		will_return(__wrap_OpenCOMPort, 5);
 		int testargc = 7;
 		char *testargv[] = {
@@ -1407,6 +1411,37 @@ static void test_processargs(void** state) {
 		bytes2hex(pttoffhex, sizeof(pttoffhex), ptt_off_cmd, ptt_off_cmd_len, false);
 		assert_string_equal(pttonhex, "54583B");
 		assert_string_equal(pttoffhex, "523B");
+	}
+	reset_defaults();  // reset global variables changed by processargs
+	reset_printstrs();  // reset captured strings from last test
+	if (true) {
+		// -c and --keystring and --unkeystring as ASCII text
+		will_return(__wrap_OpenCOMPort, 5);
+		int testargc = 7;
+		char *testargv[] = {
+			"ardopcf", "-c", "/dev/ttyUSB0", "--keystring", "TX;",
+			"--unkeystring", "R\\n"};
+		ret = processargs(testargc, testargv);
+		//print_printstrs();
+		//__real_printf("%i: %s\n", printindex, printstrs[printindex]);
+		// nstartstrings=3 + cmdstr + CAT + 3*PTTCAT + info about no
+		// audio devices specified.
+		assert_int_equal(printindex, 8);
+		assert_string_equal(PTTstr, "");
+		assert_string_equal(CATstr, "/dev/ttyUSB0");
+		assert_int_equal(hPTTdevice, 0);
+		assert_int_equal(hCM108device, 0);
+		assert_int_equal(hCATdevice, 5);
+		assert_int_equal(tcpCATport, 0);
+		assert_int_equal(PTTmode, PTTCAT);
+		assert_int_equal(ptt_on_cmd_len, 3);
+		assert_int_equal(ptt_off_cmd_len, 2);
+		char pttontxt[MAXCATLEN + 7] = "";
+		char pttofftxt[MAXCATLEN + 7] = "";
+		get_ptt_on_cmd(pttontxt, sizeof(pttontxt));
+		get_ptt_off_cmd(pttofftxt, sizeof(pttofftxt));
+		assert_string_equal(pttontxt, "ASCII:TX;");
+		assert_string_equal(pttofftxt, "ASCII:R\\n");
 	}
 	reset_defaults();  // reset global variables changed by processargs
 	reset_printstrs();  // reset captured strings from last test
@@ -1730,11 +1765,11 @@ static void test_processargs(void** state) {
 	reset_defaults();  // reset global variables changed by processargs
 	reset_printstrs();  // reset captured strings from last test
 	if (true) {
-		// -c and -k (odd length) and -u
+		// -c and -k (invalid non-ASCII) and -u
 		will_return(__wrap_OpenCOMPort, 5);
 		int testargc = 7;
 		char *testargv[] = {
-			"ardopcf", "-c", "/dev/ttyUSB0", "-k", "54583", "-u", "523B"};
+			"ardopcf", "-c", "/dev/ttyUSB0", "-k", "5458\xF3", "-u", "523B"};
 		ret = processargs(testargc, testargv);
 		//print_printstrs();
 		//__real_printf("%i: %s\n", printindex, printstrs[printindex]);
@@ -1760,71 +1795,11 @@ static void test_processargs(void** state) {
 	reset_defaults();  // reset global variables changed by processargs
 	reset_printstrs();  // reset captured strings from last test
 	if (true) {
-		// -c and -k and -u (odd length) without -p
+		// -c and -k and -u (invalid non-ASCII) without -p
 		will_return(__wrap_OpenCOMPort, 5);
 		int testargc = 7;
 		char *testargv[] = {
-			"ardopcf", "-c", "/dev/ttyUSB0", "-k", "54583B", "-u", "523"};
-		ret = processargs(testargc, testargv);
-		//print_printstrs();
-		//__real_printf("%i: %s\n", printindex, printstrs[printindex]);
-		// nstartstrings=3 + cmdstr + CAT + hexerr + hex + 2*info about no
-		// audio/ptt devices specified.
-		assert_int_equal(printindex, 8);
-		assert_string_equal(PTTstr, "");
-		assert_string_equal(CATstr, "/dev/ttyUSB0");
-		assert_int_equal(hPTTdevice, 0);
-		assert_int_equal(hCM108device, 0);
-		assert_int_equal(hCATdevice, 5);
-		assert_int_equal(tcpCATport, 0);
-		assert_int_equal(PTTmode, 0x00);
-		assert_int_equal(ptt_on_cmd_len, 3);  // -k before failed -u
-		assert_int_equal(ptt_off_cmd_len, 0);
-		char pttonhex[MAXCATLEN * 2 + 1] = "";  // Can produce MAXCATLEN bytes
-		char pttoffhex[MAXCATLEN * 2 + 1] = "";  // Can produce MAXCATLEN bytes
-		bytes2hex(pttonhex, sizeof(pttonhex), ptt_on_cmd, ptt_on_cmd_len, false);
-		bytes2hex(pttoffhex, sizeof(pttoffhex), ptt_off_cmd, ptt_off_cmd_len, false);
-		assert_string_equal(pttonhex, "54583B");
-		assert_string_equal(pttoffhex, "");
-	}
-	reset_defaults();  // reset global variables changed by processargs
-	reset_printstrs();  // reset captured strings from last test
-	if (true) {
-		// -c and -k (non-hex) and -u without -p
-		will_return(__wrap_OpenCOMPort, 5);
-		int testargc = 7;
-		char *testargv[] = {
-			"ardopcf", "-c", "/dev/ttyUSB0", "-k", "54583X", "-u", "523B"};
-		ret = processargs(testargc, testargv);
-		//print_printstrs();
-		//__real_printf("%i: %s\n", printindex, printstrs[printindex]);
-		// nstartstrings=3 + cmdstr + CAT + hexerr + hex + 2*info about no
-		// audio/ptt devices specified.
-		assert_int_equal(printindex, 8);
-		assert_string_equal(PTTstr, "");
-		assert_string_equal(CATstr, "/dev/ttyUSB0");
-		assert_int_equal(hPTTdevice, 0);
-		assert_int_equal(hCM108device, 0);
-		assert_int_equal(hCATdevice, 5);
-		assert_int_equal(tcpCATport, 0);
-		assert_int_equal(PTTmode, 0x00);
-		assert_int_equal(ptt_on_cmd_len, 0);  // failed -k before -u
-		assert_int_equal(ptt_off_cmd_len, 2);
-		char pttonhex[MAXCATLEN * 2 + 1] = "";  // Can produce MAXCATLEN bytes
-		char pttoffhex[MAXCATLEN * 2 + 1] = "";  // Can produce MAXCATLEN bytes
-		bytes2hex(pttonhex, sizeof(pttonhex), ptt_on_cmd, ptt_on_cmd_len, false);
-		bytes2hex(pttoffhex, sizeof(pttoffhex), ptt_off_cmd, ptt_off_cmd_len, false);
-		assert_string_equal(pttonhex, "");
-		assert_string_equal(pttoffhex, "523B");
-	}
-	reset_defaults();  // reset global variables changed by processargs
-	reset_printstrs();  // reset captured strings from last test
-	if (true) {
-		// -c and -k and -u (non-hex) without -p
-		will_return(__wrap_OpenCOMPort, 5);
-		int testargc = 7;
-		char *testargv[] = {
-			"ardopcf", "-c", "/dev/ttyUSB0", "-k", "54583B", "-u", "523X"};
+			"ardopcf", "-c", "/dev/ttyUSB0", "-k", "54583B", "-u", "52\xF3"};
 		ret = processargs(testargc, testargv);
 		//print_printstrs();
 		//__real_printf("%i: %s\n", printindex, printstrs[printindex]);
