@@ -618,12 +618,18 @@ window.addEventListener("load", function(evt) {
 					case "k":
 						txtlog.value += "[" + (new Date().toISOString()) + "]"
 							+ "  CAT PTTON string (hex) " + tmpstr + "\n";
-						document.getElementById("ptton").value = tmpstr;
+							+ tmpstr.replace(/\r/g, "\\r").replace(/\n/g, "\\n")
+							+ "\n";
+						document.getElementById("ptton").value =
+							tmpstr.replace(/\r/g, "\\r").replace(/\n/g, "\\n");
 						break;
 					case "u":
 						txtlog.value += "[" + (new Date().toISOString()) + "]"
-							+ "  CAT PTTOFF string (hex) " + tmpstr + "\n";
-						document.getElementById("pttoff").value = tmpstr;
+							+ "  CAT PTTOFF string (hex) "
+							+ tmpstr.replace(/\r/g, "\\r").replace(/\n/g, "\\n")
+							+ "\n";
+						document.getElementById("pttoff").value =
+							tmpstr.replace(/\r/g, "\\r").replace(/\n/g, "\\n");
 						break;
 					}
 					break;

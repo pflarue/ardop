@@ -198,7 +198,7 @@ If the special device name "NONE" is used, close any existing CAPTURE device if 
 
 If the special device name "RESTORE" is used, do nothing if RXENEABLED is TRUE.  However, if RXENEABLED is FALSE, but a CAPTURE device has previously been successfully opened, then try to reopen that device.
 
-Unlike many other comands, the arguments to CAPTURE, PLAYBACK, RADIOCTRLPORT, and RADIOPTT are case sensitive.
+Unlike many other commands, the arguments to CAPTURE, PLAYBACK, RADIOCTRLPORT, RADIOPTT, RADIOPTTON, RADIOPTTOFF, and RADIOHEX are case sensitive.
 
 - Mode: ANY
 - Arguments: None, String of the capture device.
@@ -517,7 +517,7 @@ If the special device name "NONE" is used, close any existing PLAYBACK device if
 
 If the special device name "RESTORE" is used, do nothing if TXENEABLED is TRUE.  However, if TXENEABLED is FALSE, but a PLAYBACK device has previously been successfully opened, then try to reopen that device.
 
-Unlike many other comands, the arguments to CAPTURE, PLAYBACK, RADIOCTRLPORT, and RADIOPTT are case sensitive.
+Unlike many other commands, the arguments to CAPTURE, PLAYBACK, RADIOCTRLPORT, RADIOPTT, RADIOPTTON, RADIOPTTOFF, and RADIOHEX are case sensitive.
 
 - Mode: ANY
 - Arguments: None, String of the playback device.
@@ -587,6 +587,8 @@ The special device name `NONE` closes the current device if one is open.
 
 The special device name `RESTORE` attempts to reopens the last successfully opened device.
 
+Unlike many other commands, the arguments to CAPTURE, PLAYBACK, RADIOCTRLPORT, RADIOPTT, RADIOPTTON, RADIOPTTOFF, and RADIOHEX are case sensitive.
+
 - Mode: ANY
 - Arguments: None, String of the cat device name, NONE, RESTORE
 - `RADIOCTRLPORT` returns `RADIOCTRLPORT /dev/ttyUSB0` or `RADIOCTRLPORT NONE`
@@ -606,17 +608,35 @@ Currently only used for setting GUI Freq field
 
 #### RADIOHEX
 
-Immediately send a radio specific CAT command, defined by a hex string, to the
-connected radio.
+Immediately send a radio specific CAT command, defined by a hex or ASCII string,
+to the connected radio.
+
+If the string contains only an even number of valid hex characters (upper or
+lower case with no whitespace), then it is intrepreted as hex.  Otherwise, if
+it contains only printable ASCII characters 0x20-0x7E, it is interpreted as
+ASCII text with substition for "\n" and "\r".  A prefix of "ASCII:" may be
+used to force the string to be interpreted as ASCII text, and this is
+required for ASCII text that contains only an even number of valid hex
+characters.
+
+This is backward compatible with the prior implementation that accepted only
+hex input, except that what would have been invalid hex, may now be accepted
+as valid ASCII.
+
+Unlike many other commands, the arguments to CAPTURE, PLAYBACK, RADIOCTRLPORT,
+RADIOPTT, RADIOPTTON, RADIOPTTOFF, and RADIOHEX are case sensitive.
 
 - Mode: ANY
-- Arguments: Hex string
+- Arguments: string
 - `RADIOHEX` Returns `FAULT RADIOHEX command string missing`
 - `RADIOHEX XXX` Returns `FAULT RADIOHEX XXX failed` if
-a CAT port was not set with the -c or --cat command line option, if XXX is not
-a valid hex string, or if XXX is too long to be sent as a CAT command.
+a CAT port was not set with the -c or --cat command line option or if XXX is too
+long to be sent as a CAT command.
 - `RADIOHEX XXX` Returns `RADIOHEX XXX` and sends the command to the radio if
-XXX is a valid hex string.
+XXX is a valid hex or ASCII string.
+- `RADIOHEX ASCII:XXX` Returns `RADIOHEX ASCII:XXX` and sends XXX interpreted as
+ASCII text to the radio.  The `ASCII:` prefix may always be used when providing
+ASCII text, but is required if the ASCII text contains only valid hex characters.
 
 #### RADIOPTT
 
@@ -625,6 +645,8 @@ Set the port to use for non-CAT PTT control.  The device name, including an opti
 The special device name `NONE` closes the current device if one is open.
 
 The special device name `RESTORE` attempts to reopens the last successfully opened device.
+
+Unlike many other commands, the arguments to CAPTURE, PLAYBACK, RADIOCTRLPORT, RADIOPTT, RADIOPTTON, RADIOPTTOFF, and RADIOHEX are case sensitive.
 
 - Mode: ANY
 - Arguments: None, String of the ptt device name, NONE, RESTORE
@@ -635,9 +657,22 @@ The special device name `RESTORE` attempts to reopens the last successfully open
 
 #### RADIOPTTOFF
 
-Gets or Sets the radio specific hex string that can be sent to the radio as a
-CAT command to switch from transmit to receive (PTT Off).  With a hex string
-argument, this is equivalent to the -u or --unkeystring command line option.
+Gets or Sets the radio specific hex or ASCII string that can be sent to the
+radio as a CAT command to switch from transmit to receive (PTT Off).  With a
+string argument, this is equivalent to the -u or --unkeystring command line
+option.
+
+If the string contains only an even number of valid hex characters (upper or
+lower case with no whitespace), then it is intrepreted as hex.  Otherwise, if
+it contains only printable ASCII characters 0x20-0x7E, it is interpreted as
+ASCII text with substition for "\n" and "\r".  A prefix of "ASCII:" may be
+used to force the string to be interpreted as ASCII text, and this is
+required for ASCII text that contains only an even number of valid hex
+characters.
+
+This is backward compatible with the prior implementation that accepted only
+hex input, except that what would have been invalid hex, may now be accepted
+as valid ASCII.
 
 If a CAT PTT Off string was previously set and is being used for PTT control,
 then a new valid string will immediately replace it and be used for future
@@ -646,46 +681,77 @@ corresponding CAT PTT On command has been set, then a new valid string will
 not be used immediately.  In that case, it will not be used until a CAT device
 and a CAT PTT On command are also set.
 
+Unlike many other commands, the arguments to CAPTURE, PLAYBACK, RADIOCTRLPORT,
+RADIOPTT, RADIOPTTON, RADIOPTTOFF, and RADIOHEX are case sensitive.
+
 - Mode: ANY
-- Arguments: None or Hex string
+- Arguments: None or string
 - `RADIOPTTOFF` Returns `RADIOPTTOFF VALUE NOT SET` if no PTT Off CAT string is
 already defined.
-- `RADIOPTTOFF` Returns `RADIOPTTOFF XXX` where XXX is the hex string of the
+- `RADIOPTTOFF` Returns `RADIOPTTOFF XXX` where XXX is the string of the
 current CAT PTT Off command.
 - `RADIOPTTOFF XXX` Returns `FAULT RADIOPTTOFF command string is invalid.` if
-XXX is not a valid hex string.  When this occurs, the previously defined CAT PTT
-Off command, if one was set, remains unchanged.
-- `RADIOPTTOFF XXX` Returns `RADIOPTTOFF now XXX`, where XXX is a valid hex
-string.  As described above, this does not necessarily indicate that Ardop will
-begin using CAT PTT control if it was not already doing so.
+XXX contains non-ASCII text, or if XXX is too long to be sent as a CAT command.
+When this occurs, the previously defined CAT PTT Off command, if one was set,
+remains unchanged.
+- `RADIOPTTOFF XXX` Returns `RADIOPTTOFF now XXX`, where XXX is a valid hex or
+ASCII string.  As described above, this does not necessarily indicate that Ardop
+will begin using CAT PTT control if it was not already doing so.
+- `RADIOPTTOFF ASCII:XXX` Returns `RADIOPTTOFF now ASCII:XXX`, where XXX is a
+valid ASCII string.  The `ASCII:` prefix may always be used when providing ASCII
+text, but is required if the ASCII text contains only valid hex characters.  As
+described above, this does not necessarily indicate that Ardop will begin using
+CAT PTT control if it was not already doing so.
 - `RADIOPTTOFF NONE` Returns `RADIOPTTOFF now NONE`.  This discards the previous
 CAT PTT Off command.  If CAT PTT control was being used, it is disabled.
 
 #### RADIOPTTON
 
-Gets or Sets the radio specific hex string that can be sent to the radio as a
-CAT command to switch from receive to transmit (PTT On).  With a hex string
-argument, this is equivalent to the -k or --keystring command line option.
+Gets or Sets the radio specific hex or ASCII string that can be sent to the
+radio as a CAT command to switch from receive to transmit (PTT On).  With a
+string argument, this is equivalent to the -k or --keystring command line
+option.
+
+If the string contains only an even number of valid hex characters (upper or
+lower case with no whitespace), then it is intrepreted as hex.  Otherwise, if
+it contains only printable ASCII characters 0x20-0x7E, it is interpreted as
+ASCII text with substition for "\n" and "\r".  A prefix of "ASCII:" may be
+used to force the string to be interpreted as ASCII text, and this is
+required for ASCII text that contains only an even number of valid hex
+characters.
+
+This is backward compatible with the prior implementation that accepted only
+hex input, except that what would have been invalid hex, may now be accepted
+as valid ASCII.
 
 If a CAT PTT On string was previously set and is being used for PTT control,
 then a new valid string will immediately replace it and be used for future
-transitions from receive to transmit.  If no CAT device is set or If no
- corresponding CAT PTT Off command has been set, then a new valid string will
+transitions from receive to transmit.  If no CAT device is set or if no
+corresponding CAT PTT Off command has been set, then a new valid string will
 not be used immediately.  In that case, it will not be used until a CAT device
-and a CAT PTT Off command is also set.
+and a CAT PTT Off command are also set.
+
+Unlike many other commands, the arguments to CAPTURE, PLAYBACK, RADIOCTRLPORT,
+RADIOPTT, RADIOPTTON, RADIOPTTOFF, and RADIOHEX are case sensitive.
 
 - Mode: ANY
-- Arguments: None or Hex string
+- Arguments: None or string
 - `RADIOPTTON` Returns `RADIOPTTON VALUE NOT SET` if no PTT On CAT string is
 already defined.
-- `RADIOPTTON` Returns `RADIOPTTON XXX` where XXX is the hex string of the
+- `RADIOPTTON` Returns `RADIOPTTON XXX` where XXX is the string of the
 current CAT PTT On command.
 - `RADIOPTTON XXX` Returns `FAULT RADIOPTTON command string is invalid.` if
-XXX is not a valid hex string.  When this occurs, the previously defined CAT PTT
-On command, if one was set, remains unchanged.
-- `RADIOPTTON XXX` Returns `RADIOPTTON now XXX`, where XXX is a valid hex
-string.  As described above, this does not necessarily indicate that Ardop will
-begin using CAT PTT control if it was not already doing so.
+XXX contains non-ASCII text, or if XXX is too long to be sent as a CAT command.
+When this occurs, the previously defined CAT PTT On command, if one was set,
+remains unchanged.
+- `RADIOPTTON XXX` Returns `RADIOPTTON now XXX`, where XXX is a valid hex or
+ASCII string.  As described above, this does not necessarily indicate that Ardop
+will begin using CAT PTT control if it was not already doing so.
+- `RADIOPTTON ASCII:XXX` Returns `RADIOPTTON now ASCII:XXX`, where XXX is a
+valid ASCII string.  The `ASCII:` prefix may always be used when providing ASCII
+text, but is required if the ASCII text contains only valid hex characters.  As
+described above, this does not necessarily indicate that Ardop will begin using
+CAT PTT control if it was not already doing so.
 - `RADIOPTTON NONE` Returns `RADIOPTTON now NONE`.  This discards the previous
 CAT PTT On command.  If CAT PTT control was being used, it is disabled.
 

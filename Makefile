@@ -97,6 +97,7 @@ TESTS = \
 	test/ardop/test_StationId \
 	test/ardop/test_ARDOPCommon_processargs \
 	test/ardop/test_eutf8 \
+	test/ardop/test_txframe \
 
 # unit test common code
 TEST_OBJS_COMMON = \

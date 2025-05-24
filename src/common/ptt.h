@@ -16,11 +16,11 @@
 // TODO: Add documentation for these functions
 void KeyPTT(bool state);
 bool rxCAT();
-int set_ptt_on_cmd(char *hexstr, char *descstr);
-int set_ptt_off_cmd(char *hexstr, char *descstr);
-int get_ptt_on_cmd_hex(char *hexstr, int length);
-int get_ptt_off_cmd_hex(char *hexstr, int length);
-int sendCAThex(char *hexstr);
+int set_ptt_on_cmd(char *str, char *descstr);
+int set_ptt_off_cmd(char *str, char *descstr);
+int get_ptt_on_cmd(char *str, int length);
+int get_ptt_off_cmd(char *str, int length);
+int sendCAT(char *str);
 int readCAT(unsigned char *data, size_t len);
 int parse_catstr(char *catstr);
 // Write up to size bytes of the CAT string as provided to parse_catstr to
