@@ -2136,7 +2136,8 @@ void ProcessCommandFromHost(char * strCMD)
 
 	if (strcmp(strCMD, "VERSION") == 0)
 	{
-		sprintf(cmdReply, "VERSION %s_%s", ProductName, ProductVersion);
+		sprintf(cmdReply, "VERSION %s_%s_%s",
+			ProductName, ProductVersion, OSName);
 		SendReplyToHost(cmdReply);
 		goto cmddone;
 	}
