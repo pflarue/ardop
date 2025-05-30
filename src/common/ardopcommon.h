@@ -482,7 +482,7 @@ void FreeDevices(DeviceInfo ***devicesptr);
 void FreeStrlist(char ***slistptr);
 void LogStrlist(char **slist, char *headstr, bool asnamedesc);
 bool DevicesToCSV(DeviceInfo **devices, char *dst, int dstsize, bool forcapture);
-void LogDevices(DeviceInfo **devices, char *headstr, bool inputonly, bool outputonly);
+void LogDevices(DeviceInfo **devices, const char *headstr, bool inputonly, bool outputonly);
 int FindAudioDevice(char *devstr, bool iscapture);
 int getPch(bool quiet);
 int getCch(bool quiet);

@@ -1393,7 +1393,7 @@ bool DevicesToCSV(DeviceInfo **devices, char *dst, int dstsize, bool forcapture)
 // If neither are true, then also log devices that could be opened for neither
 // input nor output.  Regardless of inputonly and outputonly, append (capture)
 // and/or (playback) to all devices to indicate their range of use.
-void LogDevices(DeviceInfo **devices, char *headstr, bool inputonly, bool outputonly) {
+void LogDevices(DeviceInfo **devices, const char *headstr, bool inputonly, bool outputonly) {
 	char modestr[24];  // long enough for maximum " (*capture) (*playback)"
 	if (headstr != NULL)
 		ZF_LOGI("%s", headstr);
