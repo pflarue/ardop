@@ -649,7 +649,9 @@ bool OpenSoundCapture(char *devstr, int ch) {
 
 	// FindAudioDevice searches for an exact match of device name, and if this
 	// fails, searches for a case insensitive match of device description.
-	if ((aindex = FindAudioDevice(devstr, true)) < 0) {
+	if ((aindex = FindAudioDevice(altdevstr[0] != 0x00 ? altdevstr : devstr,
+		true)) < 0
+	) {
 		ZF_LOGW("Error opening capture audio device %s.  This does not appear"
 			" to be a valid audio device name, nor was a match found using a"
 			" case insensitive substring search in the descriptions of"
