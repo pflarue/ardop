@@ -11,6 +11,11 @@
 
 #include "common/log_file.h"
 
+// Fix zf_log buffer size issue on macOS
+#ifdef __APPLE__
+#define ZF_LOG_BUF_SZ 512
+#endif
+
 // Configure log decoration, see zf_log.c
 #define ZF_LOG_MESSAGE_CTX_FORMAT (\
 	HOUR, S(":"), MINUTE, S(":"), SECOND, S("."), MILLISECOND, S(ZF_LOG_DEF_DELIMITER), \

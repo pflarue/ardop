@@ -1,6 +1,6 @@
 # Troubleshooting Suggestions
 
-First, ensure that you are invoking ardopcf correctly.  See [USAGE_linux.md](USAGE_linux.md) or [USAGE_windows.md](USAGE_windows.md) for basic instructions to install, configure, and run **ardopcf**.
+First, ensure that you are invoking ardopcf correctly.  See [USAGE_linux.md](USAGE_linux.md), [USAGE_windows.md](USAGE_windows.md), or [USAGE_macos.md](USAGE_macos.md) for basic instructions to install, configure, and run **ardopcf**.
 
 Then, review your logs to see if you can figure out why an issue is happening.
 
@@ -28,6 +28,72 @@ You may run into issues as well (device or resource busy) if you have another pr
 ## Audio Device Related Issues (Windows)
 
 Stub.
+
+## Audio Device Related Issues (macOS)
+
+### Core Audio Device Access Issues
+
+If you get an error message like this:
+```
+Opening Playback Device Built-in Output Rate 12000
+cannot open playback audio device Built-in Output (Invalid argument)
+Error in InitSound().  Stopping ardop.
+```
+
+This typically means one of the following:
+
+1. **Audio device name is incorrect**: Run `ardopcf` with no arguments to see the list of available audio devices. Device names must match exactly, including spaces and capitalization. Use quotes around device names with spaces: `"Built-in Input"` or `"USB Audio Device"`.
+
+2. **Audio device is in use by another application**: macOS may prevent ardopcf from accessing an audio device if another application is already using it. Close other applications that might be using audio (like music players, video conferencing software, or other digital mode programs).
+
+3. **Permission issues**: macOS may require microphone permission for audio input devices. Go to System Preferences > Security & Privacy > Privacy > Microphone and ensure Terminal (or your application launcher) has permission to access the microphone.
+
+### macOS Security and Permission Issues
+
+**Gatekeeper Blocking ardopcf**:
+If macOS shows a security warning when running ardopcf, you have several options:
+1. Right-click on the `ardopcf` file in Finder and select "Open" - this gives you an option to override the security warning
+2. Go to System Preferences > Security & Privacy > General and click "Allow Anyway" next to the message about ardopcf being blocked
+3. For repeated use, you can remove the quarantine attribute: `xattr -d com.apple.quarantine /path/to/ardopcf`
+
+**Microphone Permission Denied**:
+If ardopcf cannot access input devices, grant microphone permissions:
+1. Go to System Preferences > Security & Privacy > Privacy > Microphone
+2. Add Terminal (or your launcher application) to the list of allowed applications
+3. Restart ardopcf after granting permissions
+
+### Serial Device Access Issues
+
+**Serial device not found**:
+If you get errors about serial devices not being found:
+
+1. **Check device connection**: Use `ls /dev/cu.*` to list available serial devices. Connect/disconnect your radio interface to identify the correct device.
+
+2. **Common device names**: Look for devices like `/dev/cu.usbserial-A12345`, `/dev/cu.SLAB_USBtoUART`, or `/dev/cu.wchusbserial1410`.
+
+3. **Driver issues**: Some USB-to-serial adapters require drivers. Check the manufacturer's website for macOS drivers for your specific device.
+
+4. **Permission issues**: Ensure you have permission to access the serial device. The device should be readable/writable by your user account.
+
+### Core Audio Sample Rate Issues
+
+If you experience audio quality issues or connection problems:
+
+1. **Check Audio MIDI Setup**: Open Applications > Utilities > Audio MIDI Setup and verify your audio interface is set to a supported sample rate (44.1kHz or 48kHz work well).
+
+2. **Disable audio enhancements**: In Audio MIDI Setup, ensure no special processing or effects are enabled for your audio interface.
+
+3. **Buffer size issues**: If you experience audio dropouts, try adjusting the buffer size in Audio MIDI Setup or closing other audio applications.
+
+### CM108 HID Device Issues
+
+If using CM108-style PTT control via HID:
+
+1. **Device detection**: Use `system_profiler SPUSBDataType | grep -A5 -B5 0d8c` to verify your CM108 device is detected.
+
+2. **HID permissions**: macOS may require additional permissions for HID device access. Some CM108 devices may need drivers or may work better with different PTT methods.
+
+3. **Alternative PTT methods**: If CM108 HID doesn't work, try using serial RTS PTT or CAT control PTT instead.
 
 ## Over-the-air Connection Issues
 
@@ -80,22 +146,28 @@ Please be sure to include your log files.
 | ARQ connection | Automatic Repeat reQuest connection, a reliable data transfer protocol. |
 | ardopcf | The name of the program being discussed in this document. |
 | audio passband | The range of frequencies that are used for audio transmission. |
+| Audio MIDI Setup | macOS application for configuring audio devices, sample rates, and audio routing. |
 | capturedevice | The audio device used for receiving. |
 | CAT/Hamlib | Computer Aided Transceiver (CAT) and Hamlib, software interfaces for controlling amateur radio transceivers. |
 | center frequency | The frequency used in software processing that specifies the middle of the audio passband (1500hz for ardop) |
+| CM108 | A USB audio chip commonly used in radio interfaces that supports HID-based PTT control. |
 | console/tty/virtual terminal | The interface where ardopcf is launched and displays debug information. |
+| Core Audio | macOS's low-level audio framework that provides real-time audio I/O capabilities. |
 | dial frequency | The actual frequency used for communication. |
 | device or resource busy | An error that occurs when another program is already using the audio device. |
-| dial frequency | The actual frequency used for communication. |
 | dsnoop | An ALSA plugin that allows multiple programs to access the same audio device simultaneously. |
 | FEC frames | Forward Error Correction frames, connectionless data frames that contains extra information used to correct errors in transmission. |
+| Gatekeeper | macOS security feature that blocks unsigned or unrecognized applications from running. |
+| HID | Human Interface Device, a protocol used for PTT control with devices like CM108. |
 | jack/pulseaudio/portaudio/oss/pipewire | Different audio frameworks used in Linux. |
 | pcm | Pulse Code Modulation, a method used to digitally represent analog audio signals. |
 | playbackdevice | The audio device used for transmitting. |
 | port | The port number used for the ardop-compatible tcp interface. |
 | PTT | Push-to-Talk, a method used to control when the radio transmits. |
 | ~/.asoundrc | A configuration file in Linux that specifies audio device settings. |
+| /dev/cu.* | macOS device naming pattern for serial communication devices (Call-Up devices). |
 | /etc/asound.conf | A system-wide configuration file in Linux that specifies audio device settings. |
 | user group | A community of users who discuss and support a specific software or technology, in this case on groups.io website, which is a lot like a mailing list. |
 | VOX | Voice Operated eXchange, a method of transmitting where the radio automatically starts transmitting when it detects audio. |
 | Winlink nodes | Nodes in the Winlink network, a global radio email system. |
+| xattr | macOS command for viewing and modifying extended file attributes, including quarantine flags. |

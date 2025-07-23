@@ -358,7 +358,7 @@ int HID_Read_Block()
 #ifdef WIN32
 	Len = rawhid_recv(0, Msg, 64, 100);
 #else
-	Len = read(CM108Handle, Msg, 64);
+	Len = hid_read_timeout(CM108Handle, Msg, 64, 100);
 #endif
 
 	if (Len <= 0)
@@ -411,13 +411,13 @@ int HID_Write_Block()
 			return 0;
 		}
 #else
-		ret = write(CM108Handle, Msg, 64);
+		ret = hid_write(CM108Handle, Msg, 64);
 
 		if (ret != 64)
 		{
-			printf ("Write to %s failed, n=%d, errno=%d\n", HIDDevice, ret, errno);
-			close (CM108Handle);
-			CM108Handle = 0;
+			printf ("Write to %s failed, n=%d\n", HIDDevice, ret);
+			hid_close(CM108Handle);
+			CM108Handle = NULL;
 			return 0;
 		}
 
@@ -446,28 +446,23 @@ BOOL OpenHIDPort()
 //	hid_set_nonblocking(handle, 1);
 
 //	CM108Handle = handle;
-	=
-#else
-	int fd;
-	unsigned int param = 1;
 
-	if (HIDDevice== NULL)
+#else
+	if (HIDDevice == NULL)
 		return FALSE;
 
-	fd = open (HIDDevice, O_RDWR);
+	CM108Handle = hid_open_path(HIDDevice);
 
-	if (fd == -1)
+	if (CM108Handle == NULL)
 	{
-		printf ("Could not open %s, errno=%d\n", HIDDevice, errno);
+		printf ("Could not open HID device %s\n", HIDDevice);
 		return FALSE;
 	}
 
-	ioctl(fd, FIONBIO, &param);
-	printf("Rigcontrol HID Device %s opened", HIDDevice);
-
-	CM108Handle = fd;
+	hid_set_nonblocking(CM108Handle, 1);
+	printf("Rigcontrol HID Device %s opened\n", HIDDevice);
 #endif
-	if (CM108Handle == 0)
+	if (CM108Handle == NULL)
 		return (FALSE);
 
 	return TRUE;

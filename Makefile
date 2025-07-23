@@ -4,6 +4,11 @@
 #			sudo apt install build-essential libasound2-dev
 #			make
 #
+#		For macOS, the default build requires Xcode Command Line Tools.
+#		The build uses Core Audio framework (no additional packages needed).
+#			xcode-select --install
+#			make
+#
 #		Fow Windows, the default build requires installation of a MinGW build
 #		environment.  The easily installable packages from https://winlibs.com
 #		available for 32-bit or 64-bit builds are suggested.  These are used to
@@ -82,18 +87,33 @@ OBJS_WIN = \
 	src/windows/Waveout.o \
 	lib/hid/hid.o \
 
+# macOS-only object files
+OBJS_MAC = \
+	src/macos/CoreAudioSound.o \
+	src/macos/MacSerial.o \
+
 # user-facing executables, like ardopcf
 OBJS_EXE = \
 	src/common/ardopcf.o \
 
 # unit test executables
+ifeq ($(UNAME_S),Darwin)
+# Exclude tests that require --wrap (not supported on macOS)
+TESTS = \
+	test/ardop/test_ARDOPCommon \
+	test/ardop/test_HostInterface \
+	test/ardop/test_Locator \
+	test/ardop/test_Packed6 \
+	test/ardop/test_StationId
+else
 TESTS = \
 	test/ardop/test_ARDOPCommon \
 	test/ardop/test_HostInterface \
 	test/ardop/test_Locator \
 	test/ardop/test_log \
 	test/ardop/test_Packed6 \
-	test/ardop/test_StationId \
+	test/ardop/test_StationId
+endif
 
 # unit test common code
 TEST_OBJS_COMMON = \
@@ -109,12 +129,16 @@ endef
 CPPFLAGS += -Isrc -Ilib
 CFLAGS = -g -MMD
 LDLIBS = -lm -lpthread
-LDFLAGS = -Xlinker -Map=output.map
 CC = gcc
 CC_NATIVE ?= $(CC)
 
 # How to wrap a symbol with ld
+ifeq ($(UNAME_S),Darwin)
+# macOS linker doesn't support --wrap, so disable it
+LDWRAP := 
+else
 LDWRAP := -Wl,--wrap=
+endif
 
 # Path to txt2c executable; will be built if it does not already exist
 TXT2C ?=
@@ -123,9 +147,28 @@ TXT2C ?=
 # Leave empty for OS auto-detection
 WIN32 ?= $(filter $(OS),Windows_NT)
 
+# Detect operating system
+UNAME_S := $(shell uname -s)
+
+# Set platform-specific linker flags
+ifeq ($(UNAME_S),Darwin)
+LDFLAGS = 
+# Add cmocka paths for macOS tests
+CMOCKA_PREFIX = $(shell brew --prefix cmocka 2>/dev/null)
+ifneq ($(CMOCKA_PREFIX),)
+TEST_CPPFLAGS = -I$(CMOCKA_PREFIX)/include
+TEST_LDFLAGS = -L$(CMOCKA_PREFIX)/lib
+endif
+else
+LDFLAGS = -Xlinker -Map=output.map
+endif
+
 ifneq ($(WIN32),)
 OBJS += $(OBJS_WIN)
 LDLIBS += -lwsock32 -lwinmm -lsetupapi -lws2_32
+else ifeq ($(UNAME_S),Darwin)
+OBJS += $(OBJS_MAC)
+LDLIBS += -framework CoreAudio -framework AudioUnit -framework CoreFoundation -framework IOKit
 else
 OBJS += $(OBJS_LIN)
 LDLIBS += -lrt -lasound
@@ -167,9 +210,9 @@ test: buildtest
 # rule to make test-case executables from their sources
 test/ardop/test_%: test/ardop/test_%.c $(OBJS) $(TEST_OBJS_COMMON)
 	$(CC) \
-		$(CPPFLAGS) \
+		$(CPPFLAGS) $(TEST_CPPFLAGS) \
 		$(CFLAGS) \
-		$(LDFLAGS) \
+		$(LDFLAGS) $(TEST_LDFLAGS) \
 		$(patsubst %,$(LDWRAP)%,$(WRAP)) \
 		$< \
 		$(OBJS) \
@@ -190,6 +233,13 @@ test/ardop/test_log: OBJS := \
 	src/common/log.o
 test/ardop/test_log: WRAP := fopen fclose fwrite fflush freopen
 
+# Skip building test_log on macOS (--wrap not supported)
+ifeq ($(UNAME_S),Darwin)
+test/ardop/test_log:
+	@echo "Skipping test_log build on macOS: --wrap linker option not supported"
+	@touch $@
+endif
+
 -include *.d
 
 # 'make clean' deletes files produced by the build process.
@@ -206,6 +256,8 @@ CLEAN += \
 	$(OBJS_LIN:.o=.d) \
 	$(OBJS_WIN) \
 	$(OBJS_WIN:.o=.d) \
+	$(OBJS_MAC) \
+	$(OBJS_MAC:.o=.d) \
 	$(OBJS_EXE) \
 	$(OBJS_EXE:.o=.d) \
 	$(TESTS) \
