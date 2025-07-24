@@ -48,6 +48,11 @@ static pthread_mutex_t gAudioMutex = PTHREAD_MUTEX_INITIALIZER;
 // External variables
 extern BOOL WriteTxWav;
 extern int port;
+extern char * CM108Device;
+extern void DecodeCM108(char * ptr);
+extern void CM108_set_ptt(int PTTState);
+extern int PTTMode;
+extern char PTTPort[80];
 
 // WAV file for writing transmitted audio
 struct WavFile *txwff = NULL;
@@ -71,6 +76,9 @@ UCHAR CurrentLevel = 0;
 
 // Audio system variables
 float InputNoiseStdDev = 1.0;
+
+// DMA-style buffer for transmission - used by the modulation code
+static short gDMABuffer[BUFFER_SIZE];
 
 // Platform and timing variables
 unsigned int PKTLEDTimer = 0;
@@ -97,8 +105,51 @@ void ARDOP_Main()
 }
 
 int CloseSoundCard() { return 0; }
-int PackSamplesAndSend(short *input, int nSamples) { return 0; }
-VOID RadioPTT(int PTTState) {}
+
+int PackSamplesAndSend(short *input, int nSamples)
+{
+	// Convert and send audio samples to Core Audio output
+	// This is called from SampleSink when DMA buffer is full
+
+	ZF_LOGD("PackSamplesAndSend: Called with %d samples", nSamples);
+
+	if (strcmp(PlaybackDevice, "NOSOUND") == 0 || !gAudioInitialized)
+	{
+		ZF_LOGD("PackSamplesAndSend: NOSOUND mode or audio not initialized");
+		return nSamples; // Pretend success in NOSOUND mode
+	}
+
+	pthread_mutex_lock(&gAudioMutex);
+
+	int samplesQueued = 0;
+	// Queue samples for output (similar to SendtoCard but more direct)
+	for (int i = 0; i < nSamples; i++)
+	{
+		if (gOutputSamplesQueued < BUFFER_SIZE * NUM_BUFFERS)
+		{
+			gOutputBuffer[gOutputWriteIndex / BUFFER_SIZE][gOutputWriteIndex % BUFFER_SIZE] = input[i];
+			gOutputWriteIndex = (gOutputWriteIndex + 1) % (BUFFER_SIZE * NUM_BUFFERS);
+			gOutputSamplesQueued++;
+			samplesQueued++;
+		}
+		else
+		{
+			// Buffer full - this shouldn't happen often but can in burst transmissions
+			ZF_LOGW("PackSamplesAndSend: Output buffer full, dropping samples");
+			break;
+		}
+	}
+
+	pthread_mutex_unlock(&gAudioMutex);
+
+	ZF_LOGD("PackSamplesAndSend: Queued %d samples, total queued: %d", samplesQueued, gOutputSamplesQueued);
+	return nSamples;
+}
+VOID RadioPTT(int PTTState) {
+	// Handle CM108 PTT control
+	if (PTTMode & PTTCM108)
+		CM108_set_ptt(PTTState);
+}
 VOID SerialHostPoll() {}
 
 // Display/GUI function stubs - these will be no-ops for now
@@ -114,26 +165,28 @@ void updateDisplay() {}
 // Audio system functions
 BOOL InitSound()
 {
+	ZF_LOGD("InitSound(): Called - PlaybackDevice='%s'", PlaybackDevice);
+
 	if (strcmp(PlaybackDevice, "NOSOUND") == 0)
 	{
-		printf("InitSound(): NOSOUND mode enabled\n");
+		ZF_LOGI("InitSound(): NOSOUND mode enabled");
 		return TRUE;
 	}
 
 	if (gAudioInitialized)
 	{
-		printf("InitSound(): Already initialized\n");
+		ZF_LOGD("InitSound(): Already initialized");
 		return TRUE;
 	}
 
-	printf("InitSound(): Initializing Core Audio system\n");
+	ZF_LOGD("InitSound(): Initializing Core Audio system");
 
 	OSStatus status;
 
-	// Create RemoteIO audio unit description
+	// Create DefaultOutput audio unit description for macOS
 	AudioComponentDescription desc;
 	desc.componentType = kAudioUnitType_Output;
-	desc.componentSubType = kAudioUnitSubType_RemoteIO;
+	desc.componentSubType = kAudioUnitSubType_DefaultOutput;
 	desc.componentManufacturer = kAudioUnitManufacturer_Apple;
 	desc.componentFlags = 0;
 	desc.componentFlagsMask = 0;
@@ -141,38 +194,14 @@ BOOL InitSound()
 	AudioComponent component = AudioComponentFindNext(NULL, &desc);
 	if (!component)
 	{
-		printf("InitSound(): No RemoteIO component found\n");
+		ZF_LOGE("InitSound(): No RemoteIO component found");
 		return FALSE;
 	}
 
 	status = AudioComponentInstanceNew(component, &gAudioUnit);
 	if (status != noErr)
 	{
-		printf("InitSound(): Failed to create audio unit: %d\n", (int)status);
-		return FALSE;
-	}
-
-	// Enable input and output
-	UInt32 enableInput = 1;
-	UInt32 enableOutput = 1;
-
-	status = AudioUnitSetProperty(gAudioUnit, kAudioOutputUnitProperty_EnableIO,
-																kAudioUnitScope_Input, 1, &enableInput, sizeof(enableInput));
-	if (status != noErr)
-	{
-		printf("InitSound(): Failed to enable input: %d\n", (int)status);
-		AudioComponentInstanceDispose(gAudioUnit);
-		gAudioUnit = NULL;
-		return FALSE;
-	}
-
-	status = AudioUnitSetProperty(gAudioUnit, kAudioOutputUnitProperty_EnableIO,
-																kAudioUnitScope_Output, 0, &enableOutput, sizeof(enableOutput));
-	if (status != noErr)
-	{
-		printf("InitSound(): Failed to enable output: %d\n", (int)status);
-		AudioComponentInstanceDispose(gAudioUnit);
-		gAudioUnit = NULL;
+		ZF_LOGE("InitSound(): Failed to create audio unit: %d", (int)status);
 		return FALSE;
 	}
 
@@ -188,44 +217,19 @@ BOOL InitSound()
 	format.mChannelsPerFrame = 1;
 	format.mBitsPerChannel = 16;
 
-	// Set format for input (bus 1 output scope - from device to callback)
-	status = AudioUnitSetProperty(gAudioUnit, kAudioUnitProperty_StreamFormat,
-																kAudioUnitScope_Output, 1, &format, sizeof(format));
-	if (status != noErr)
-	{
-		printf("InitSound(): Failed to set input format: %d\n", (int)status);
-		AudioComponentInstanceDispose(gAudioUnit);
-		gAudioUnit = NULL;
-		return FALSE;
-	}
-
 	// Set format for output (bus 0 input scope - from callback to device)
+	// DefaultOutput only supports output, no input configuration needed
 	status = AudioUnitSetProperty(gAudioUnit, kAudioUnitProperty_StreamFormat,
 																kAudioUnitScope_Input, 0, &format, sizeof(format));
 	if (status != noErr)
 	{
-		printf("InitSound(): Failed to set output format: %d\n", (int)status);
+		ZF_LOGE("InitSound(): Failed to set output format: %d", (int)status);
 		AudioComponentInstanceDispose(gAudioUnit);
 		gAudioUnit = NULL;
 		return FALSE;
 	}
 
-	// Set input callback
-	AURenderCallbackStruct inputCallback;
-	inputCallback.inputProc = InputCallback;
-	inputCallback.inputProcRefCon = NULL;
-
-	status = AudioUnitSetProperty(gAudioUnit, kAudioOutputUnitProperty_SetInputCallback,
-																kAudioUnitScope_Global, 0, &inputCallback, sizeof(inputCallback));
-	if (status != noErr)
-	{
-		printf("InitSound(): Failed to set input callback: %d\n", (int)status);
-		AudioComponentInstanceDispose(gAudioUnit);
-		gAudioUnit = NULL;
-		return FALSE;
-	}
-
-	// Set output callback
+	// Set output callback (DefaultOutput doesn't support input callbacks)
 	AURenderCallbackStruct outputCallback;
 	outputCallback.inputProc = OutputCallback;
 	outputCallback.inputProcRefCon = NULL;
@@ -234,7 +238,7 @@ BOOL InitSound()
 																kAudioUnitScope_Input, 0, &outputCallback, sizeof(outputCallback));
 	if (status != noErr)
 	{
-		printf("InitSound(): Failed to set output callback: %d\n", (int)status);
+		ZF_LOGE("InitSound(): Failed to set output callback: %d", (int)status);
 		AudioComponentInstanceDispose(gAudioUnit);
 		gAudioUnit = NULL;
 		return FALSE;
@@ -244,17 +248,18 @@ BOOL InitSound()
 	status = AudioUnitInitialize(gAudioUnit);
 	if (status != noErr)
 	{
-		printf("InitSound(): Failed to initialize audio unit: %d\n", (int)status);
+		ZF_LOGE("InitSound(): Failed to initialize audio unit: %d", (int)status);
 		AudioComponentInstanceDispose(gAudioUnit);
 		gAudioUnit = NULL;
 		return FALSE;
 	}
 
 	// Start audio processing
+	ZF_LOGD("InitSound(): Starting Core Audio unit...");
 	status = AudioOutputUnitStart(gAudioUnit);
 	if (status != noErr)
 	{
-		printf("InitSound(): Failed to start audio unit: %d\n", (int)status);
+		ZF_LOGE("InitSound(): Failed to start audio unit: %d", (int)status);
 		AudioUnitUninitialize(gAudioUnit);
 		AudioComponentInstanceDispose(gAudioUnit);
 		gAudioUnit = NULL;
@@ -262,7 +267,8 @@ BOOL InitSound()
 	}
 
 	gAudioInitialized = true;
-	printf("InitSound(): Core Audio initialized successfully\n");
+	ZF_LOGI("InitSound(): SUCCESS - Core Audio initialized and started successfully");
+	ZF_LOGD("InitSound(): gAudioInitialized = %s", gAudioInitialized ? "true" : "false");
 	return TRUE;
 }
 
@@ -271,11 +277,11 @@ BOOL KeyPTT(BOOL State)
 {
 	// PTT keying is handled through serial port RTS/DTR or CM108 HID
 	// This function is called when PTT state needs to change
-	
+
 	// RadioPTT() in common code handles the actual PTT control
 	// based on configured PTTMode (PTTCI-V, PTTRTS, PTTDTR, PTTCM108)
 	RadioPTT(State);
-	
+
 	return TRUE;
 }
 
@@ -284,38 +290,70 @@ const char *PlatformSignalAbbreviation(int sig)
 	// Return signal name abbreviation for logging/debugging
 	switch (sig)
 	{
-		case SIGHUP:    return "HUP";
-		case SIGINT:    return "INT";
-		case SIGQUIT:   return "QUIT";
-		case SIGILL:    return "ILL";
-		case SIGTRAP:   return "TRAP";
-		case SIGABRT:   return "ABRT";
-		case SIGEMT:    return "EMT";
-		case SIGFPE:    return "FPE";
-		case SIGKILL:   return "KILL";
-		case SIGBUS:    return "BUS";
-		case SIGSEGV:   return "SEGV";
-		case SIGSYS:    return "SYS";
-		case SIGPIPE:   return "PIPE";
-		case SIGALRM:   return "ALRM";
-		case SIGTERM:   return "TERM";
-		case SIGURG:    return "URG";
-		case SIGSTOP:   return "STOP";
-		case SIGTSTP:   return "TSTP";
-		case SIGCONT:   return "CONT";
-		case SIGCHLD:   return "CHLD";
-		case SIGTTIN:   return "TTIN";
-		case SIGTTOU:   return "TTOU";
-		case SIGIO:     return "IO";
-		case SIGXCPU:   return "XCPU";
-		case SIGXFSZ:   return "XFSZ";
-		case SIGVTALRM: return "VTALRM";
-		case SIGPROF:   return "PROF";
-		case SIGWINCH:  return "WINCH";
-		case SIGINFO:   return "INFO";
-		case SIGUSR1:   return "USR1";
-		case SIGUSR2:   return "USR2";
-		default:        return "UNKNOWN";
+	case SIGHUP:
+		return "HUP";
+	case SIGINT:
+		return "INT";
+	case SIGQUIT:
+		return "QUIT";
+	case SIGILL:
+		return "ILL";
+	case SIGTRAP:
+		return "TRAP";
+	case SIGABRT:
+		return "ABRT";
+	case SIGEMT:
+		return "EMT";
+	case SIGFPE:
+		return "FPE";
+	case SIGKILL:
+		return "KILL";
+	case SIGBUS:
+		return "BUS";
+	case SIGSEGV:
+		return "SEGV";
+	case SIGSYS:
+		return "SYS";
+	case SIGPIPE:
+		return "PIPE";
+	case SIGALRM:
+		return "ALRM";
+	case SIGTERM:
+		return "TERM";
+	case SIGURG:
+		return "URG";
+	case SIGSTOP:
+		return "STOP";
+	case SIGTSTP:
+		return "TSTP";
+	case SIGCONT:
+		return "CONT";
+	case SIGCHLD:
+		return "CHLD";
+	case SIGTTIN:
+		return "TTIN";
+	case SIGTTOU:
+		return "TTOU";
+	case SIGIO:
+		return "IO";
+	case SIGXCPU:
+		return "XCPU";
+	case SIGXFSZ:
+		return "XFSZ";
+	case SIGVTALRM:
+		return "VTALRM";
+	case SIGPROF:
+		return "PROF";
+	case SIGWINCH:
+		return "WINCH";
+	case SIGINFO:
+		return "INFO";
+	case SIGUSR1:
+		return "USR1";
+	case SIGUSR2:
+		return "USR2";
+	default:
+		return "UNKNOWN";
 	}
 }
 
@@ -323,7 +361,7 @@ const char *PlatformSignalAbbreviation(int sig)
 void printtick(char *msg)
 {
 	// Debug function - print timestamp with message
-	printf("[%u] %s\n", (unsigned int)time(NULL), msg);
+	ZF_LOGI("[%u] %s", (unsigned int)time(NULL), msg);
 }
 
 void PlatformSleep(int ms)
@@ -389,39 +427,105 @@ void PollReceivedSamples()
 	pthread_mutex_unlock(&gAudioMutex);
 }
 
-void SendtoCard(short *samples, int nSamples)
+short *SendtoCard(short *samples, int nSamples)
 {
+	ZF_LOGD("SendtoCard: Called with %d samples", nSamples);
+	ZF_LOGD("SendtoCard: PlaybackDevice='%s', gAudioInitialized=%s",
+				 PlaybackDevice, gAudioInitialized ? "true" : "false");
+
 	if (strcmp(PlaybackDevice, "NOSOUND") == 0 || !gAudioInitialized)
 	{
+		ZF_LOGD("SendtoCard: NOSOUND mode or audio not initialized - returning early");
 		// Even in NOSOUND mode, we still need to write to WAV file if enabled
 		if (txwff != NULL)
 			WriteWav(samples, nSamples, txwff);
-		return;
+		// Return the DMA buffer for next use
+		return gDMABuffer;
 	}
 
-	pthread_mutex_lock(&gAudioMutex);
+	// Implement proper flow control like Linux/Windows - wait for buffer space instead of dropping
+	// This mimics the blocking behavior of ALSA and WaveOut implementations
 
-	// Queue samples for output
-	for (int i = 0; i < nSamples; i++)
+	int retryCount = 0;
+	const int maxRetries = 100; // Maximum 100ms wait (100 * 1ms sleeps)
+
+	while (retryCount < maxRetries)
 	{
-		if (gOutputSamplesQueued < BUFFER_SIZE * NUM_BUFFERS)
+		pthread_mutex_lock(&gAudioMutex);
+
+		// Check if we have space for all samples (leave 20% headroom like ALSA does)
+		int availableSpace = (BUFFER_SIZE * NUM_BUFFERS) - gOutputSamplesQueued;
+		int spaceThreshold = (BUFFER_SIZE * NUM_BUFFERS) * 0.8; // 80% threshold
+
+		if (gOutputSamplesQueued <= spaceThreshold)
 		{
-			gOutputBuffer[gOutputWriteIndex / BUFFER_SIZE][gOutputWriteIndex % BUFFER_SIZE] = samples[i];
-			gOutputWriteIndex = (gOutputWriteIndex + 1) % (BUFFER_SIZE * NUM_BUFFERS);
-			gOutputSamplesQueued++;
+			// We have space - queue all samples
+			int samplesQueued = 0;
+			for (int i = 0; i < nSamples; i++)
+			{
+				if (gOutputSamplesQueued < BUFFER_SIZE * NUM_BUFFERS)
+				{
+					gOutputBuffer[gOutputWriteIndex / BUFFER_SIZE][gOutputWriteIndex % BUFFER_SIZE] = samples[i];
+					gOutputWriteIndex = (gOutputWriteIndex + 1) % (BUFFER_SIZE * NUM_BUFFERS);
+					gOutputSamplesQueued++;
+					samplesQueued++;
+				}
+				else
+				{
+					break; // Should not happen with our threshold check above
+				}
+			}
+
+			ZF_LOGD("SendtoCard: Successfully queued %d samples, total queued: %d", samplesQueued, gOutputSamplesQueued);
+			pthread_mutex_unlock(&gAudioMutex);
+			break; // Success - exit retry loop
 		}
 		else
 		{
-			// Buffer full - drop samples (could log this)
-			break;
+			// Buffer too full - wait like Linux/Windows do
+			pthread_mutex_unlock(&gAudioMutex);
+			ZF_LOGD("SendtoCard: Buffer %d%% full, waiting for space (retry %d/%d)",
+						 (gOutputSamplesQueued * 100) / (BUFFER_SIZE * NUM_BUFFERS), retryCount + 1, maxRetries);
+			usleep(1000); // Wait 1ms like Linux txSleep
+			retryCount++;
 		}
 	}
 
+	if (retryCount >= maxRetries)
+	{
+		ZF_LOGW("SendtoCard: WARNING - Timeout waiting for buffer space, may drop samples");
+		// As last resort, try to queue what we can without waiting
+		pthread_mutex_lock(&gAudioMutex);
+		int samplesQueued = 0;
+		for (int i = 0; i < nSamples; i++)
+		{
+			if (gOutputSamplesQueued < BUFFER_SIZE * NUM_BUFFERS)
+			{
+				gOutputBuffer[gOutputWriteIndex / BUFFER_SIZE][gOutputWriteIndex % BUFFER_SIZE] = samples[i];
+				gOutputWriteIndex = (gOutputWriteIndex + 1) % (BUFFER_SIZE * NUM_BUFFERS);
+				gOutputSamplesQueued++;
+				samplesQueued++;
+			}
+			else
+			{
+				break;
+			}
+		}
+		ZF_LOGD("SendtoCard: Queued %d/%d samples after timeout", samplesQueued, nSamples);
+		pthread_mutex_unlock(&gAudioMutex);
+	}
+
+	// Log final state
+	pthread_mutex_lock(&gAudioMutex);
+	ZF_LOGD("SendtoCard: Final state - total queued: %d samples", gOutputSamplesQueued);
 	pthread_mutex_unlock(&gAudioMutex);
 
 	// Write transmitted audio to WAV file if enabled (like Linux/Windows)
 	if (txwff != NULL)
 		WriteWav(samples, nSamples, txwff);
+
+	// Return the DMA buffer for next use (like Linux/Windows)
+	return gDMABuffer;
 }
 
 // LED/Status functions
@@ -429,7 +533,7 @@ void SetLED(int LED, BOOL State)
 {
 	// On macOS, we don't have direct hardware LED control like on Raspberry Pi
 	// This function is mainly used for status indication on embedded systems
-	// 
+	//
 	// LED values typically used:
 	// 0 = PTT LED (transmit indicator)
 	// 1 = Data LED (activity indicator)
@@ -442,36 +546,39 @@ void SetLED(int LED, BOOL State)
 	// - Update the dock icon badge
 	//
 	// For now, we'll just log significant state changes for debugging
-	
+
 	static BOOL lastPTTState = FALSE;
 	static BOOL lastDataState = FALSE;
-	
+
 	switch (LED)
 	{
-		case 0: // PTT LED
-			if (State != lastPTTState)
-			{
-				lastPTTState = State;
-				if (State)
-					ZF_LOGD("PTT ON - Transmitting");
-				else
-					ZF_LOGD("PTT OFF - Receiving");
-			}
-			break;
-			
-		case 1: // Data LED
-			if (State != lastDataState)
-			{
-				lastDataState = State;
-				// Data activity is too frequent to log every change
-			}
-			break;
-			
-		case 2: // Status LED
-			// Connection status changes are already logged elsewhere
-			break;
+	case 0: // PTT LED
+		if (State != lastPTTState)
+		{
+			lastPTTState = State;
+			if (State)
+				ZF_LOGD("PTT ON - Transmitting");
+			else
+				ZF_LOGD("PTT OFF - Receiving");
+		}
+		break;
+
+	case 1: // Data LED
+		if (State != lastDataState)
+		{
+			lastDataState = State;
+			// Data activity is too frequent to log every change
+		}
+		break;
+
+	case 2: // Status LED
+		// Connection status changes are already logged elsewhere
+		break;
 	}
 }
+
+// Forward declaration for AddTrailer from common code
+void AddTrailer();
 
 // More audio functions
 void SoundFlush()
@@ -479,14 +586,42 @@ void SoundFlush()
 	if (!gAudioInitialized)
 		return;
 
+	// Add trailer to complete transmission (like Linux implementation)
+	AddTrailer();
+
+	// Let the audio system finish playing any queued samples
+	// On Core Audio, we need to wait for the output buffer to drain
 	pthread_mutex_lock(&gAudioMutex);
 
-	// Clear output buffers
-	gOutputWriteIndex = 0;
-	gOutputReadIndex = 0;
-	gOutputSamplesQueued = 0;
+	// Calculate approximate time to wait based on queued samples
+	int samplesToWait = gOutputSamplesQueued;
 
 	pthread_mutex_unlock(&gAudioMutex);
+
+	if (samplesToWait > 0)
+	{
+		// Wait for samples to play out (12000 samples per second = 12 samples per ms)
+		int waitTimeMs = (samplesToWait / 12) + 20; // Add 20ms TXTAIL like Linux
+
+		ZF_LOGD("SoundFlush: Waiting %d ms for %d samples to complete", waitTimeMs, samplesToWait);
+
+		// Wait for transmission to complete
+		int elapsed = 0;
+		while (elapsed < waitTimeMs)
+		{
+			txSleep(10);
+			elapsed += 10;
+
+			// Check if buffer has drained
+			pthread_mutex_lock(&gAudioMutex);
+			if (gOutputSamplesQueued == 0)
+			{
+				pthread_mutex_unlock(&gAudioMutex);
+				break;
+			}
+			pthread_mutex_unlock(&gAudioMutex);
+		}
+	}
 
 	// Close WAV file if open (like Linux/Windows)
 	if (txwff != NULL)
@@ -494,9 +629,11 @@ void SoundFlush()
 		CloseWav(txwff);
 		txwff = NULL;
 	}
+
+	ZF_LOGD("SoundFlush: Transmission completed");
 }
 
-void SoundInit()
+unsigned short *SoundInit()
 {
 	// Initialize buffer indices
 	pthread_mutex_lock(&gAudioMutex);
@@ -511,8 +648,12 @@ void SoundInit()
 	// Clear buffers
 	memset(gInputBuffer, 0, sizeof(gInputBuffer));
 	memset(gOutputBuffer, 0, sizeof(gOutputBuffer));
+	memset(gDMABuffer, 0, sizeof(gDMABuffer));
 
 	pthread_mutex_unlock(&gAudioMutex);
+
+	// Return the DMA buffer for modulation code to use
+	return (unsigned short *)gDMABuffer;
 }
 
 void StartTxWav()
@@ -566,27 +707,41 @@ void StartTxWav()
 		// Logpath too long likely to also prevent writing to log files.
 		// So, print this error directly to console instead of using
 		// WriteDebugLog.
-		printf("Unable to write WAV file, invalid pathname. Logpath may be too long.\n");
+		ZF_LOGE("Unable to write WAV file, invalid pathname. Logpath may be too long.");
 		WriteTxWav = FALSE;
 		return;
 	}
 	txwff = OpenWavW(txwff_pathname);
 }
 
+void StartCapture()
+{
+	// Set receiving state - called when starting to listen for incoming signals
+	// This is mainly for compatibility with Linux/Windows implementations
+	// On macOS, Core Audio is always running when initialized
+	if (gAudioInitialized)
+	{
+		ZF_LOGD("StartCapture: Audio capture started");
+	}
+}
+
 void StopCapture()
 {
+	ZF_LOGD("StopCapture: Called! gAudioInitialized=%s", gAudioInitialized ? "true" : "false");
+
 	if (!gAudioInitialized)
 		return;
 
-	// Stop audio processing
-	if (gAudioUnit)
-	{
-		AudioOutputUnitStop(gAudioUnit);
-		AudioUnitUninitialize(gAudioUnit);
-		AudioComponentInstanceDispose(gAudioUnit);
-		gAudioUnit = NULL;
-		gAudioInitialized = false;
-	}
+	// On macOS, StopCapture should NOT destroy the entire audio system
+	// It should only stop audio capture, but keep the audio unit available for transmission
+	ZF_LOGD("StopCapture: Stopping capture only (keeping audio system for transmission)");
+
+	// TODO: If we implement separate input/output audio units in the future,
+	// we would stop only the input unit here. For now, we keep everything running.
+
+	// NOTE: We do NOT set gAudioInitialized = false here because that would
+	// break transmission. The audio system should remain available for both
+	// input and output operations.
 }
 
 // Audio channel selection variables/functions
@@ -607,7 +762,7 @@ static OSStatus InputCallback(void *inRefCon,
 	// Maximum expected frames is typically 1024 for real-time audio
 	short stackBuffer[1024];
 	short *bufferData = NULL;
-	
+
 	// Use stack buffer if it's large enough, otherwise fall back to heap
 	if (inNumberFrames <= 1024)
 	{
@@ -619,7 +774,7 @@ static OSStatus InputCallback(void *inRefCon,
 		if (!bufferData)
 			return kAudioUnitErr_FailedInitialization;
 	}
-	
+
 	AudioBufferList bufferList;
 	bufferList.mNumberBuffers = 1;
 	bufferList.mBuffers[0].mDataByteSize = inNumberFrames * sizeof(short);
@@ -649,7 +804,7 @@ static OSStatus InputCallback(void *inRefCon,
 	// Only free if we allocated from heap
 	if (inNumberFrames > 1024 && bufferData)
 		free(bufferData);
-		
+
 	return status;
 }
 
@@ -664,6 +819,8 @@ static OSStatus OutputCallback(void *inRefCon,
 
 	short *outputBuffer = (short *)ioData->mBuffers[0].mData;
 	UInt32 samplesToWrite = inNumberFrames;
+	static int callbackCount = 0;
+	int samplesWritten = 0;
 
 	// Fill output buffer from queued samples
 	for (UInt32 i = 0; i < samplesToWrite; i++)
@@ -673,6 +830,7 @@ static OSStatus OutputCallback(void *inRefCon,
 			outputBuffer[i] = gOutputBuffer[gOutputReadIndex / BUFFER_SIZE][gOutputReadIndex % BUFFER_SIZE];
 			gOutputReadIndex = (gOutputReadIndex + 1) % (BUFFER_SIZE * NUM_BUFFERS);
 			gOutputSamplesQueued--;
+			samplesWritten++;
 		}
 		else
 		{
@@ -680,12 +838,20 @@ static OSStatus OutputCallback(void *inRefCon,
 		}
 	}
 
+	// Log more frequently for first few callbacks and when we have audio data
+	if ((callbackCount < 10) || (samplesWritten > 0 && (callbackCount % 50 == 0)))
+	{
+		ZF_LOGD("OutputCallback: Frame %d, wrote %d samples, %d queued, requested %d", callbackCount, samplesWritten, gOutputSamplesQueued, samplesToWrite);
+	}
+	callbackCount++;
+
 	pthread_mutex_unlock(&gAudioMutex);
 	return noErr;
 }
 
 // HID implementation for macOS using IOKit
-// This provides CM108-style USB audio device support for PTT control
+// This provides hidapi-compatible functions for CM108 PTT control
+// Note: This is a macOS-specific implementation to avoid external dependencies
 
 // HID device structure for macOS
 typedef struct
@@ -712,7 +878,7 @@ static void init_hid_system()
 			IOReturn result = IOHIDManagerOpen(gHIDManager, kIOHIDOptionsTypeNone);
 			if (result != kIOReturnSuccess)
 			{
-				printf("Failed to open HID Manager: %d\n", result);
+				ZF_LOGE("Failed to open HID Manager: %d", result);
 			}
 		}
 	}
@@ -772,7 +938,7 @@ int hid_write(void *dev, const unsigned char *data, size_t length)
 		return (int)length;
 	}
 
-	printf("HID write failed: %d\n", result);
+	ZF_LOGE("HID write failed: %d", result);
 	return -1;
 }
 
@@ -809,8 +975,8 @@ void *hid_open_path(const char *path)
 	if (!gHIDManager)
 		return NULL;
 
-	// For CM108 devices, we need to find the device by VID/PID or path
-	// This is a simplified implementation - real CM108 support would parse VID:PID
+	// For CM108 devices, we need to find the device by VID/PID from the path
+	// Path format expected: "0d8c:0008" or similar VID:PID format
 
 	CFSetRef deviceSet = IOHIDManagerCopyDevices(gHIDManager);
 	if (!deviceSet)
@@ -822,30 +988,60 @@ void *hid_open_path(const char *path)
 
 	IOHIDDeviceRef targetDevice = NULL;
 
-	// Search for matching device
-	for (CFIndex i = 0; i < deviceCount; i++)
+	// Parse VID:PID from path if provided in that format
+	int vid = 0, pid = 0;
+	if (sscanf(path, "%x:%x", &vid, &pid) == 2)
 	{
-		IOHIDDeviceRef device = devices[i];
-
-		// Get device properties
-		CFNumberRef vendorID = IOHIDDeviceGetProperty(device, CFSTR(kIOHIDVendorIDKey));
-		CFNumberRef productID = IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductIDKey));
-
-		if (vendorID && productID)
+		// Search for matching device by VID:PID
+		for (CFIndex i = 0; i < deviceCount; i++)
 		{
-			int vid, pid;
-			CFNumberGetValue(vendorID, kCFNumberIntType, &vid);
-			CFNumberGetValue(productID, kCFNumberIntType, &pid);
+			IOHIDDeviceRef device = devices[i];
 
-			// Check for common CM108 VID/PID combinations
-			if ((vid == 0x0d8c && pid == 0x0008) || // Original CM108
-					(vid == 0x0d8c && pid == 0x000c) || // CM119 variant
-					strstr(path, "0d8c:0008") ||				// VID:PID format
-					strstr(path, "0d8c:000c"))
-			{ // VID:PID format
-				targetDevice = device;
-				CFRetain(targetDevice);
-				break;
+			// Get device properties
+			CFNumberRef vendorID = IOHIDDeviceGetProperty(device, CFSTR(kIOHIDVendorIDKey));
+			CFNumberRef productID = IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductIDKey));
+
+			if (vendorID && productID)
+			{
+				int device_vid, device_pid;
+				CFNumberGetValue(vendorID, kCFNumberIntType, &device_vid);
+				CFNumberGetValue(productID, kCFNumberIntType, &device_pid);
+
+				// Check if this matches our target VID:PID
+				if (device_vid == vid && device_pid == pid)
+				{
+					targetDevice = device;
+					CFRetain(targetDevice);
+					break;
+				}
+			}
+		}
+	}
+	else
+	{
+		// Also support common CM108 devices by checking known VID:PID combinations
+		for (CFIndex i = 0; i < deviceCount; i++)
+		{
+			IOHIDDeviceRef device = devices[i];
+
+			// Get device properties
+			CFNumberRef vendorID = IOHIDDeviceGetProperty(device, CFSTR(kIOHIDVendorIDKey));
+			CFNumberRef productID = IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductIDKey));
+
+			if (vendorID && productID)
+			{
+				int device_vid, device_pid;
+				CFNumberGetValue(vendorID, kCFNumberIntType, &device_vid);
+				CFNumberGetValue(productID, kCFNumberIntType, &device_pid);
+
+				// Check for common CM108 VID/PID combinations
+				if ((device_vid == 0x0d8c && device_pid == 0x0008) || // Original CM108
+						(device_vid == 0x0d8c && device_pid == 0x000c))   // CM119 variant
+				{
+					targetDevice = device;
+					CFRetain(targetDevice);
+					break;
+				}
 			}
 		}
 	}
@@ -855,7 +1051,7 @@ void *hid_open_path(const char *path)
 
 	if (!targetDevice)
 	{
-		printf("CM108 device not found: %s\n", path);
+		ZF_LOGE("CM108 device not found: %s", path);
 		return NULL;
 	}
 
@@ -863,7 +1059,7 @@ void *hid_open_path(const char *path)
 	IOReturn result = IOHIDDeviceOpen(targetDevice, kIOHIDOptionsTypeNone);
 	if (result != kIOReturnSuccess)
 	{
-		printf("Failed to open HID device: %d\n", result);
+		ZF_LOGE("Failed to open HID device: %d", result);
 		CFRelease(targetDevice);
 		return NULL;
 	}
@@ -874,7 +1070,7 @@ void *hid_open_path(const char *path)
 	hid_dev->runLoop = CFRunLoopGetCurrent();
 	hid_dev->isOpen = true;
 
-	printf("CM108 HID device opened successfully\n");
+	ZF_LOGI("CM108 HID device opened successfully");
 	return hid_dev;
 }
 
@@ -910,6 +1106,8 @@ char *PlaybackDevices = PlaybackDevice;
 
 int platform_main(int argc, char *argv[])
 {
+	ZF_LOGD("platform_main: ENTRY with argc=%d", argc);
+
 	// Initialize Reed-Solomon codec
 	int rslen_set[] = {2, 4, 8, 16, 32, 36, 50, 64};
 	init_rs(rslen_set, 8);
@@ -924,23 +1122,35 @@ int platform_main(int argc, char *argv[])
 																											"%s ",
 																											argv[i]))
 		{
-			printf("ERROR: cmdstr[%ld] insufficient to hold full command string for logging.\n", sizeof(cmdstr));
+			ZF_LOGE("ERROR: cmdstr[%ld] insufficient to hold full command string for logging.", sizeof(cmdstr));
 			break;
 		}
 	}
 
 	// Process command line arguments
+	ZF_LOGD("platform_main: About to call processargs()");
 	processargs(argc, argv);
+	ZF_LOGD("platform_main: processargs() completed");
 
-	// TODO: Initialize signal handlers for macOS
-	// TODO: Initialize Core Audio system
-	// TODO: Set up audio devices
+	// Check for CM108 PTT device
+	if (PTTPort[0])
+	{
+		// CM108 devices are specified as VID:PID (e.g., 0x0d8c:0x0008) or full device path
+		if (_memicmp(PTTPort, "0x", 2) == 0 || strstr(PTTPort, ":"))
+		{
+			// CM108 device - decode VID:PID format
+			DecodeCM108(PTTPort);
+		}
+	}
 
-	printf("ARDOP macOS version starting...\n");
-	printf("Command line: %s\n", cmdstr);
+	ZF_LOGD("platform_main: About to print starting message");
+	ZF_LOGI("ARDOP macOS version starting...");
+	ZF_LOGI("Command line: %s", cmdstr);
 
 	// Call main ARDOP loop
+	ZF_LOGD("platform_main: About to call ARDOP_Main()");
 	ARDOP_Main();
+	ZF_LOGD("platform_main: ARDOP_Main() returned");
 
 	return 0;
 }

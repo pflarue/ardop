@@ -95,7 +95,7 @@ HANDLE OpenCOMPort(void *Port, int speed, int SetDTR, int SetRTS, int Quiet, int
 	if (s->user_speed == -1)
 	{
 		if (!Quiet)
-			fprintf(stderr, "tty_speed: invalid speed %d", speed);
+			ZF_LOGE("tty_speed: invalid speed %d", speed);
 		close(fd);
 		return 0;
 	}
@@ -261,13 +261,13 @@ void EnumerateSerialDevices()
 	// /dev/cu.usbmodem*       - USB CDC devices
 	// /dev/cu.serial*         - Built-in serial ports (rare on modern Macs)
 
-	printf("macOS Serial Device Patterns:\n");
-	printf("  /dev/cu.usbserial-*  - USB-to-serial adapters\n");
-	printf("  /dev/cu.Bluetooth-*  - Bluetooth serial devices\n");
-	printf("  /dev/cu.usbmodem*    - USB CDC/ACM devices\n");
-	printf("Use 'ls /dev/cu.*' to see available devices\n");
+	ZF_LOGI("macOS Serial Device Patterns:");
+	ZF_LOGI("  /dev/cu.usbserial-*  - USB-to-serial adapters");
+	ZF_LOGI("  /dev/cu.Bluetooth-*  - Bluetooth serial devices");
+	ZF_LOGI("  /dev/cu.usbmodem*    - USB CDC/ACM devices");
+	ZF_LOGI("Use 'ls /dev/cu.*' to see available devices");
 
 	// Also show CM108 HID devices if available
 	// Note: CM108 enumeration is implemented in CoreAudioSound.c
-	printf("\\nFor CM108 HID PTT devices, use: -p 0d8c:0008\\n");
+	ZF_LOGI("\nFor CM108 HID PTT devices, use: -p 0d8c:0008\n");
 }
