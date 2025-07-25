@@ -96,15 +96,20 @@ OBJS_MAC = \
 OBJS_EXE = \
 	src/common/ardopcf.o \
 
+# Detect operating system for test configuration
+UNAME_S := $(shell uname -s)
+
 # unit test executables
 ifeq ($(UNAME_S),Darwin)
 # Exclude tests that require --wrap (not supported on macOS)
+# Include macOS-specific platform test
 TESTS = \
 	test/ardop/test_ARDOPCommon \
 	test/ardop/test_HostInterface \
 	test/ardop/test_Locator \
 	test/ardop/test_Packed6 \
-	test/ardop/test_StationId
+	test/ardop/test_StationId \
+	test/ardop/test_MacOSPlatform
 else
 TESTS = \
 	test/ardop/test_ARDOPCommon \
@@ -146,9 +151,6 @@ TXT2C ?=
 # Set WIN32 to non-empty to cross-compile on Linux.
 # Leave empty for OS auto-detection
 WIN32 ?= $(filter $(OS),Windows_NT)
-
-# Detect operating system
-UNAME_S := $(shell uname -s)
 
 # Set platform-specific linker flags
 ifeq ($(UNAME_S),Darwin)
@@ -221,6 +223,7 @@ test/ardop/test_%: test/ardop/test_%.c $(OBJS) $(TEST_OBJS_COMMON)
 		$(LOADLIBES) \
 		$(LDLIBS) \
 		-lcmocka
+
 
 # linkage overrides for unit tests
 #   for tests that need only a subset of production code,
