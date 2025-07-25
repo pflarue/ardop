@@ -203,14 +203,29 @@ void ProcessRXOFrame(UCHAR bytFrameType, int frameLen, UCHAR * bytData, BOOL bln
 	}
 	if (frameLen > 0)
 	{
-		snprintf(strMsg, sizeof(strMsg), "    [RXO %02hhX] %d bytes of data as hex values:\n", bytSessionID, frameLen);
-		intMsgLen = strlen(strMsg);
-		for (int i = 0; i < frameLen; i++)
-		{
-			sprintf(strMsg + intMsgLen, "%02X ", bytData[i]);
-			intMsgLen += 3;
-		}
+		// Split long hex output into multiple lines to fit within log buffer limits
+		snprintf(strMsg, sizeof(strMsg), "    [RXO %02hhX] %d bytes of data as hex values:", bytSessionID, frameLen);
 		ZF_LOGI("%s", strMsg);
+		
+		// Calculate how many hex bytes fit per line (account for prefix and spacing)
+		const char* line_prefix = "    ";
+		int prefix_len = strlen(line_prefix);
+		// Use a conservative estimate: 40 hex bytes per line to ensure we stay under buffer limits
+		int max_hex_per_line = 40;
+		
+		for (int i = 0; i < frameLen; i += max_hex_per_line)
+		{
+			snprintf(strMsg, sizeof(strMsg), "%s", line_prefix);
+			intMsgLen = strlen(strMsg);
+			
+			int end = (i + max_hex_per_line < frameLen) ? i + max_hex_per_line : frameLen;
+			for (int j = i; j < end; j++)
+			{
+				snprintf(strMsg + intMsgLen, sizeof(strMsg) - intMsgLen, "%02X ", bytData[j]);
+				intMsgLen += 3;
+			}
+			ZF_LOGI("%s", strMsg);
+		}
 		// If there is a Null (0x00) anywhere other than as the last byte
 		// of bytData, or if utf8_check() indicates that it is not valid
 		// utf8, then bytData should not be displayed as text.

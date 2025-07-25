@@ -11,7 +11,7 @@
 
 #include "common/log_file.h"
 
-// Fix zf_log buffer size issue on macOS
+// Fix zf_log buffer size issue on macOS - keep 512 byte limit for PIPE_BUF compliance
 #ifdef __APPLE__
 #define ZF_LOG_BUF_SZ 512
 #endif

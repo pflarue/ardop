@@ -427,7 +427,7 @@ void PollReceivedSamples()
 	pthread_mutex_unlock(&gAudioMutex);
 }
 
-short *SendtoCard(short *samples, int nSamples)
+unsigned short *SendtoCard(unsigned short *samples, int nSamples)
 {
 	ZF_LOGD("SendtoCard: Called with %d samples", nSamples);
 	ZF_LOGD("SendtoCard: PlaybackDevice='%s', gAudioInitialized=%s",
@@ -438,9 +438,9 @@ short *SendtoCard(short *samples, int nSamples)
 		ZF_LOGD("SendtoCard: NOSOUND mode or audio not initialized - returning early");
 		// Even in NOSOUND mode, we still need to write to WAV file if enabled
 		if (txwff != NULL)
-			WriteWav(samples, nSamples, txwff);
+			WriteWav((short *)samples, nSamples, txwff);
 		// Return the DMA buffer for next use
-		return gDMABuffer;
+		return (unsigned short *)gDMABuffer;
 	}
 
 	// Implement proper flow control like Linux/Windows - wait for buffer space instead of dropping
@@ -465,7 +465,7 @@ short *SendtoCard(short *samples, int nSamples)
 			{
 				if (gOutputSamplesQueued < BUFFER_SIZE * NUM_BUFFERS)
 				{
-					gOutputBuffer[gOutputWriteIndex / BUFFER_SIZE][gOutputWriteIndex % BUFFER_SIZE] = samples[i];
+					gOutputBuffer[gOutputWriteIndex / BUFFER_SIZE][gOutputWriteIndex % BUFFER_SIZE] = (short)samples[i];
 					gOutputWriteIndex = (gOutputWriteIndex + 1) % (BUFFER_SIZE * NUM_BUFFERS);
 					gOutputSamplesQueued++;
 					samplesQueued++;
@@ -522,10 +522,10 @@ short *SendtoCard(short *samples, int nSamples)
 
 	// Write transmitted audio to WAV file if enabled (like Linux/Windows)
 	if (txwff != NULL)
-		WriteWav(samples, nSamples, txwff);
+		WriteWav((short *)samples, nSamples, txwff);
 
 	// Return the DMA buffer for next use (like Linux/Windows)
-	return gDMABuffer;
+	return (unsigned short *)gDMABuffer;
 }
 
 // LED/Status functions
@@ -583,8 +583,17 @@ void AddTrailer();
 // More audio functions
 void SoundFlush()
 {
+	// Always close WAV files, even if audio isn't initialized (NOSOUND mode)
 	if (!gAudioInitialized)
+	{
+		ZF_LOGD("SoundFlush: Audio not initialized, but closing WAV files if open");
+		if (txwff != NULL)
+		{
+			CloseWav(txwff);
+			txwff = NULL;
+		}
 		return;
+	}
 
 	// Add trailer to complete transmission (like Linux implementation)
 	AddTrailer();
@@ -1132,6 +1141,15 @@ int platform_main(int argc, char *argv[])
 	processargs(argc, argv);
 	ZF_LOGD("platform_main: processargs() completed");
 
+	// Check if decoding WAV file(s) - if so, skip audio initialization
+	extern char DecodeWav[5][256];
+	if (DecodeWav[0][0])
+	{
+		ZF_LOGD("platform_main: DecodeWav mode detected, calling decode_wav() directly");
+		decode_wav();
+		return 0;
+	}
+
 	// Check for CM108 PTT device
 	if (PTTPort[0])
 	{
@@ -1151,6 +1169,10 @@ int platform_main(int argc, char *argv[])
 	ZF_LOGD("platform_main: About to call ARDOP_Main()");
 	ARDOP_Main();
 	ZF_LOGD("platform_main: ARDOP_Main() returned");
+
+	// Ensure WAV files are properly closed on program exit
+	ZF_LOGD("platform_main: Calling SoundFlush() to close any open WAV files");
+	SoundFlush();
 
 	return 0;
 }

@@ -168,7 +168,7 @@ def parse_ber_results(logstr, cars, print_bermap=False):
     # Parse Bit Error results
     for car in range(cars):
         m = re.search(
-            f"(Carrier\[{car}\] [0-9]+ raw bytes\. CER[^\n\[]+)[^\n]*",
+            rf"(Carrier\[{car}\] [0-9]+ raw bytes\. CER[^\n\[]+)[^\n]*",
             logstr
         )
         if m is None:
@@ -385,11 +385,40 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                             )
                     # Further parse stdout for decoded data as space delimited
                     # hex string so that it can be compared to the encoded data.
-                    m = re.search(
-                        r"\[RXO ([0-9A-F][0-9A-F])\] ([0-9]+) bytes of data as"
-                        r" hex values:\s+([0-9A-F ]+)\s\s+",
-                        res.stdout.decode("iso-8859-1")
+                    # First find the header line, then collect hex data from multiple lines
+                    stdout_text = res.stdout.decode("iso-8859-1")
+                    header_match = re.search(
+                        r"\[RXO ([0-9A-F][0-9A-F])\] ([0-9]+) bytes of data as hex values:",
+                        stdout_text
                     )
+                    m = None
+                    if header_match:
+                        # Extract multi-line hex data following the header
+                        lines = stdout_text.split('\n')
+                        header_line_found = False
+                        hex_data = ""
+                        for line in lines:
+                            if header_match.group(0) in line:
+                                header_line_found = True
+                                continue
+                            if header_line_found:
+                                # Check if this line starts with exactly 4 spaces and contains hex
+                                if line.startswith('    ') and len(line) > 4:
+                                    hex_part = line[4:]  # Remove leading spaces
+                                    # Check if this contains only hex digits and spaces
+                                    if hex_part and all(c in '0123456789ABCDEFabcdef ' for c in hex_part):
+                                        hex_data += hex_part + " "
+                                        continue
+                                # If we hit a non-hex line, we're done
+                                break
+                        if hex_data.strip():
+                            # Create a match object similar to the original regex
+                            class FakeMatch:
+                                def __init__(self, session_id, byte_count, hex_string):
+                                    self._groups = (session_id, byte_count, hex_string.strip())
+                                def group(self, n):
+                                    return self._groups[n-1]
+                            m = FakeMatch(header_match.group(1), header_match.group(2), hex_data)
                     if m is None:
                         if verbose > 0:
                             print(
