@@ -1,9 +1,6 @@
 # Build directory (contains all build artifacts)
 /build/
 
-# Executables (legacy entries, now covered by /build/)
-CalcTemplates
-
 # Python tests may write a variety of temporary files to /test/python/tmp/
 /test/python/tmp/*
 
@@ -19,15 +16,6 @@ newArdopSampleArrays.c
 
 # WAVs
 *.wav
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
 
 # Shared objects (inc. Windows DLLs)
 *.dll
@@ -42,12 +30,6 @@ newArdopSampleArrays.c
 *.i*86
 *.x86_64
 *.hex
-
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
 
 # Editor garbage
 /.vscode/**
