@@ -44,64 +44,64 @@
 # list all object files and their directories
 # keep sorted by filename
 OBJS = \
-	lib/rockliff/rrs.o \
-	lib/ws_server/ws_server.o \
-	src/common/ARDOPC.o \
-	src/common/ARDOPCommon.o \
-	src/common/ardopSampleArrays.o \
-	src/common/ARQ.o \
-	src/common/BusyDetect.o \
-	src/common/FEC.o \
-	src/common/FFT.o \
-	src/common/HostInterface.o \
-	src/common/Locator.o \
-	src/common/log_file.o \
-	src/common/log.o \
-	src/common/Modulate.o \
-	src/common/Packed6.o \
-	src/common/RXO.o \
-	src/common/sdft.o \
-	src/common/SoundInput.o \
-	src/common/StationId.o \
-	src/common/TCPHostInterface.o \
-	src/common/txframe.o \
-	src/common/wav.o \
-	src/common/gen-webgui.html.o \
-	src/common/gen-webgui.js.o \
-	src/common/Webgui.o \
-	src/common/noise.o \
-	src/common/ptt.o \
-	src/common/eutf8.o \
+	$(BUILDDIR)/lib/rockliff/rrs.o \
+	$(BUILDDIR)/lib/ws_server/ws_server.o \
+	$(BUILDDIR)/src/common/ARDOPC.o \
+	$(BUILDDIR)/src/common/ARDOPCommon.o \
+	$(BUILDDIR)/src/common/ardopSampleArrays.o \
+	$(BUILDDIR)/src/common/ARQ.o \
+	$(BUILDDIR)/src/common/BusyDetect.o \
+	$(BUILDDIR)/src/common/FEC.o \
+	$(BUILDDIR)/src/common/FFT.o \
+	$(BUILDDIR)/src/common/HostInterface.o \
+	$(BUILDDIR)/src/common/Locator.o \
+	$(BUILDDIR)/src/common/log_file.o \
+	$(BUILDDIR)/src/common/log.o \
+	$(BUILDDIR)/src/common/Modulate.o \
+	$(BUILDDIR)/src/common/Packed6.o \
+	$(BUILDDIR)/src/common/RXO.o \
+	$(BUILDDIR)/src/common/sdft.o \
+	$(BUILDDIR)/src/common/SoundInput.o \
+	$(BUILDDIR)/src/common/StationId.o \
+	$(BUILDDIR)/src/common/TCPHostInterface.o \
+	$(BUILDDIR)/src/common/txframe.o \
+	$(BUILDDIR)/src/common/wav.o \
+	$(BUILDDIR)/src/common/gen-webgui.html.o \
+	$(BUILDDIR)/src/common/gen-webgui.js.o \
+	$(BUILDDIR)/src/common/Webgui.o \
+	$(BUILDDIR)/src/common/noise.o \
+	$(BUILDDIR)/src/common/ptt.o \
+	$(BUILDDIR)/src/common/eutf8.o \
 
 # Linux-only object files
 OBJS_LIN = \
-	src/linux/ALSA.o \
-	src/linux/os_util.o \
+	$(BUILDDIR)/src/linux/ALSA.o \
+	$(BUILDDIR)/src/linux/os_util.o \
 
 # Windows-only object files
 OBJS_WIN = \
-	src/windows/Waveform.o \
-	src/windows/os_util.o \
+	$(BUILDDIR)/src/windows/Waveform.o \
+	$(BUILDDIR)/src/windows/os_util.o \
 
 # user-facing executables, like ardopcf
 OBJS_EXE = \
-	src/common/ardopcf.o \
+	$(BUILDDIR)/src/common/ardopcf.o \
 
 # unit test executables
 TESTS = \
-	test/ardop/test_ARDOPCommon \
-	test/ardop/test_HostInterface \
-	test/ardop/test_Locator \
-	test/ardop/test_log \
-	test/ardop/test_Packed6 \
-	test/ardop/test_StationId \
-	test/ardop/test_ARDOPCommon_processargs \
-	test/ardop/test_eutf8 \
-	test/ardop/test_txframe \
+	$(BUILDDIR)/test/ardop/test_ARDOPCommon \
+	$(BUILDDIR)/test/ardop/test_HostInterface \
+	$(BUILDDIR)/test/ardop/test_Locator \
+	$(BUILDDIR)/test/ardop/test_log \
+	$(BUILDDIR)/test/ardop/test_Packed6 \
+	$(BUILDDIR)/test/ardop/test_StationId \
+	$(BUILDDIR)/test/ardop/test_ARDOPCommon_processargs \
+	$(BUILDDIR)/test/ardop/test_eutf8 \
+	$(BUILDDIR)/test/ardop/test_txframe \
 
 # unit test common code
 TEST_OBJS_COMMON = \
-	test/ardop/setup.o \
+	$(BUILDDIR)/test/ardop/setup.o \
 
 # define newline for use with foreach to run tests
 define newline
@@ -127,25 +127,41 @@ TXT2C ?=
 # Leave empty for OS auto-detection
 WIN32 ?= $(filter $(OS),Windows_NT)
 
+# Determine build directory based on target platform
 ifneq ($(WIN32),)
+PLATFORM := windows
 OBJS += $(OBJS_WIN)
 LDLIBS += -lwsock32 -lwinmm -lsetupapi -lws2_32 -lhid
 else
+PLATFORM := linux
 OBJS += $(OBJS_LIN)
 LDLIBS += -lrt -lasound
 endif
 
+# Build directory structure
+BUILDDIR := build/$(PLATFORM)
+
+# Platform-specific directory creation
+ifeq ($(OS),Windows_NT)
+MKDIR = if not exist "$(subst /,\,$1)" mkdir "$(subst /,\,$1)"
+else
+MKDIR = mkdir -p $1
+endif
+
 all: ardopcf
 
-ardopcf: $(OBJS_EXE) $(OBJS)
+ardopcf: $(BUILDDIR)/ardopcf
+
+$(BUILDDIR)/ardopcf: $(OBJS_EXE) $(OBJS)
 	$(CC) $(LDFLAGS) $^ -o $@ $(LOADLIBES) $(LDLIBS)
 
 # if txt2c is not provided, build it
 ifeq ($(TXT2C),)
-TXT2C := lib/txt2c/txt2c
+TXT2C := $(BUILDDIR)/lib/txt2c/txt2c
 
 # build txt2c directly and without our link libraries (none are required)
-$(TXT2C): $(TXT2C).c
+$(TXT2C): lib/txt2c/txt2c.c
+	@$(call MKDIR,$(dir $@))
 	$(CC_NATIVE) $^ -o $@
 
 # mark build products for cleaning
@@ -156,7 +172,8 @@ endif
 #   The C symbol name will be FOO_xyz.
 #   This is used to convert HTML and JavaScript to C sources.
 #   The implicit rule will then compile them to FOO.xyz.o.
-src/common/gen-%.c:: webgui/% | $(TXT2C)
+$(BUILDDIR)/src/common/gen-%.c:: webgui/% | $(TXT2C)
+	@$(call MKDIR,$(dir $@))
 	$(TXT2C) $< $@ $(subst .,_,$(notdir $<))
 
 # `make buildtest` builds the test-case executables but does not run them
@@ -169,7 +186,8 @@ test: buildtest
 	$(foreach test, $(TESTS), @echo $(test):$(newline)@$(test)$(newline))
 
 # rule to make test-case executables from their sources
-test/ardop/test_%: test/ardop/test_%.c $(OBJS) $(TEST_OBJS_COMMON)
+$(BUILDDIR)/test/ardop/test_%: test/ardop/test_%.c $(OBJS) $(TEST_OBJS_COMMON)
+	@$(call MKDIR,$(dir $@))
 	$(CC) \
 		$(CPPFLAGS) \
 		$(CFLAGS) \
@@ -189,45 +207,33 @@ test/ardop/test_%: test/ardop/test_%.c $(OBJS) $(TEST_OBJS_COMMON)
 #
 #   for tests that need mock functions injected,
 #   set WRAP to a space-separated list of functions to mock
-test/ardop/test_log: OBJS := \
-	src/common/log_file.o \
-	src/common/log.o
-test/ardop/test_log: WRAP := fopen fclose fwrite fflush freopen
-test/ardop/test_ARDOPCommon_processargs: WRAP := \
+$(BUILDDIR)/test/ardop/test_log: OBJS := \
+	$(BUILDDIR)/src/common/log_file.o \
+	$(BUILDDIR)/src/common/log.o
+$(BUILDDIR)/test/ardop/test_log: WRAP := fopen fclose fwrite fflush freopen
+$(BUILDDIR)/test/ardop/test_ARDOPCommon_processargs: WRAP := \
 	printf puts ardop_log_start InitAudio \
 	GetCM108Strlist GetSerialStrlist updateWebGuiNonAudioConfig \
 	OpenCOMPort tcpconnect OpenCM108 OpenSoundCapture OpenSoundPlayback \
 
--include *.d
+# Implicit rules to build object files in build directory
+$(BUILDDIR)/%.o: %.c
+	@$(call MKDIR,$(dir $@))
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+-include $(BUILDDIR)/**/*.d
 
 # 'make clean' deletes files produced by the build process.
 # After using git checkout change branches, it is sometimes neccessary to run
 # 'make clean' before running 'make' to produce a successful build.  Failure
 # to run 'make clean' before using git checkout may sometimes leave build
 # related files that must then be manually deleted.
-CLEAN += \
-	ardopcf \
-	ardopcf.exe \
-	$(OBJS) \
-	$(OBJS:.o=.d) \
-	$(OBJS_LIN) \
-	$(OBJS_LIN:.o=.d) \
-	$(OBJS_WIN) \
-	$(OBJS_WIN:.o=.d) \
-	$(OBJS_EXE) \
-	$(OBJS_EXE:.o=.d) \
-	$(TESTS) \
-	$(TESTS:%=%.exe) \
-	$(TESTS:%=%.d) \
-	$(TEST_OBJS_COMMON) \
-	$(TEST_OBJS_COMMON:.o=.d) \
-	output.map \
 
 ifeq ($(OS),Windows_NT)
-# on Windows, del requires backslash paths
+# on Windows, use rmdir for directories
 clean :
-	del /Q /F $(subst /,\,$(CLEAN))
+	@if exist build rmdir /S /Q build
 else
 clean :
-	rm -f -- $(CLEAN)
+	rm -rf build
 endif
