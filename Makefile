@@ -39,7 +39,7 @@
 #		sudo apt install mingw-w64
 #		make CC_NATIVE=gcc CC=i686-w64-mingw32-gcc-posix WIN32=1
 
-.PHONY: all buildtest test
+.PHONY: all buildtest test clean cleanall
 
 # list all object files and their directories
 # keep sorted by filename
@@ -176,6 +176,9 @@ $(BUILDDIR)/src/common/gen-%.c:: webgui/% | $(TXT2C)
 	@$(call MKDIR,$(dir $@))
 	$(TXT2C) $< $@ $(subst .,_,$(notdir $<))
 
+# Keep generated C files (don't delete them as intermediate files)
+.PRECIOUS: $(BUILDDIR)/src/common/gen-%.c
+
 # `make buildtest` builds the test-case executables but does not run them
 buildtest: $(TESTS)
 
@@ -233,8 +236,12 @@ $(BUILDDIR)/%.o: %.c
 ifeq ($(OS),Windows_NT)
 # on Windows, use rmdir for directories
 clean :
+	@if exist "$(subst /,\,$(BUILDDIR))" rmdir /S /Q "$(subst /,\,$(BUILDDIR))"
+cleanall :
 	@if exist build rmdir /S /Q build
 else
 clean :
+	rm -rf $(BUILDDIR)
+cleanall :
 	rm -rf build
 endif
