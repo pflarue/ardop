@@ -1,10 +1,8 @@
-# Executables
-ardopcf
+# Build directory (contains all build artifacts)
+/build/
+
+# Executables (legacy entries, now covered by /build/)
 CalcTemplates
-/lib/txt2c/txt2c
-/test/ardop/*
-!/test/ardop/*.[ch]
-!/test/ardop/*.bin
 
 # Python tests may write a variety of temporary files to /test/python/tmp/
 /test/python/tmp/*
@@ -21,21 +19,6 @@ newArdopSampleArrays.c
 
 # WAVs
 *.wav
-
-# Prerequisites
-*.d
-
-# Object files
-*.o
-*.ko
-*.obj
-*.elf
-
-# Linker output
-*.ilk
-*.map
-*.exp
-
 # Precompiled Headers
 *.gch
 *.pch

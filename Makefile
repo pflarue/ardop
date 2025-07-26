@@ -113,7 +113,7 @@ endef
 CPPFLAGS += -Isrc -Ilib
 CFLAGS = -g -MMD
 LDLIBS = -lm -lpthread
-LDFLAGS = -Xlinker -Map=output.map
+LDFLAGS = -Xlinker -Map=$(BUILDDIR)/output.map
 CC = gcc
 CC_NATIVE ?= $(CC)
 
@@ -221,7 +221,8 @@ $(BUILDDIR)/%.o: %.c
 	@$(call MKDIR,$(dir $@))
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
--include $(BUILDDIR)/**/*.d
+# Include dependency files
+-include $(OBJS:.o=.d) $(OBJS_EXE:.o=.d) $(TEST_OBJS_COMMON:.o=.d)
 
 # 'make clean' deletes files produced by the build process.
 # After using git checkout change branches, it is sometimes neccessary to run
