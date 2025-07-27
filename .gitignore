@@ -1,10 +1,5 @@
-# Executables
-ardopcf
-CalcTemplates
-/lib/txt2c/txt2c
-/test/ardop/*
-!/test/ardop/*.[ch]
-!/test/ardop/*.bin
+# Build directory (contains all build artifacts)
+/build/
 
 # Python tests may write a variety of temporary files to /test/python/tmp/
 /test/python/tmp/*
@@ -22,30 +17,6 @@ newArdopSampleArrays.c
 # WAVs
 *.wav
 
-# Prerequisites
-*.d
-
-# Object files
-*.o
-*.ko
-*.obj
-*.elf
-
-# Linker output
-*.ilk
-*.map
-*.exp
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-
 # Shared objects (inc. Windows DLLs)
 *.dll
 *.so
@@ -59,12 +30,6 @@ newArdopSampleArrays.c
 *.i*86
 *.x86_64
 *.hex
-
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
 
 # Editor garbage
 /.vscode/**

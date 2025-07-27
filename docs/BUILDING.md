@@ -12,13 +12,17 @@ By making the source code for **ardopcf** available with only the minimal restri
 
 No.  You do not need programming experience to build **ardopcf** from source.  One of the design goals of **ardopcf** is to make building from source as simple as possible.  If you have difficulty with the following instructions, please join the free users subgroup of ardop.groups.io and ask for help.
 
-## Does **ardopcf** work with my hardware and operating system.
+## Does **ardopcf** work with my hardware and operating system
 
 **ardopcf** is built and tested on computers with Intel/AMD processors having 32-bit and 64-bit Windows operating systems.  It is also built and tested on computers having Linux operating systems including those with Intel/AMD and ARM processors.  Specifically, Raspberry Pi Zero W and Zero 2W computers are used to build and test **ardopcf** for ARM processors.  Users have reported success building and using **ardopcf** on some addional Linux machines.
 
 I don't know whether anyone has tried building **ardopcf** for macOS or any other operating system.  Anyone who attempts to build for another OS is encouraged to send a message to the free users subgroup of ardop.groups.io to let us know whether it worked.  If it didn't work well, perhaps someone from that group will be able to help.
 
-## Building ardopcf for Linux:
+## Build System Output Folder
+
+The build system outputs files to the `build/%TARGET_OS%` folder in the project root. Where Target OS is one of Linux or Windows. This is where you will find the ardopcf executable when the build completes.
+
+## Building ardopcf for Linux
 
 Building **ardopcf** from source mostly doesn't require root/admin privledges.  It does require `libasound2-dev` and several items installed via the `build-essential` meta-package.  `libasound2-dev` provides the development files for the ALSA sound system library.  `git` also provides a convenient way to download the **ardopcf** source code and choose the branch you want to build.  Since there are other ways to get the source code, `git` is not strictly required, but the instructions provided will assume that it is available.  Many Linux distributions install `build-essential` and `git`, but not `libasound2-dev` by default.  There may be a way to install these without root access, but if so, I am not familiar with it.  So, if you want to build **ardopcf** on a machine without root access and where these packages are not already installed, then I recommend that you ask your system administrator to install these them for you.  Then follow these instructions, skipping the first step.
 
@@ -56,36 +60,35 @@ make
 
 # 4. Verify that it worked.
 # If the build worked correctly, the following line should print the help screen.
-./ardopcf -h
+./build/linux/ardopcf -h
 
 # 5. Move the executable to a directory in your $PATH.
 
 # 5a. IF you have root access, and you want ardopcf to be available to all users, put it
 # in /usr/local/bin
-sudo cp ardopcf /usr/local/bin
+sudo cp ./build/linux/ardopcf /usr/local/bin
 
 # 5b. IF you do not have root access, then put it in your personal bin directory $HOME/bin.
 # It is possible that $HOME/bin does not exist.  If not, you will get an error like:
 # cp: cannot create regular file '/home/username/bin/ardopcf': No such file or directory
 # If that occurs do 'mkdir $HOME/bin' first, then try again.  In this case you probably
 # also need to logout and log back in before $HOME/bin will be added to your $PATH
-cp ardopcf $HOME/bin/ardopcf
+cp ./build/linux/ardopcf $HOME/bin/ardopcf
 
 # Now typing 'ardopcf -h' at the command line should work from any directory.
 ```
+
 See [USAGE_linux.md](USAGE_linux.md) for guidance on use of **ardopcf** with Linux.  This includes instructions for determining what command line options you should use.
 
-
-
-## Building ardopcf for Windows using MinGW:
+## Building ardopcf for Windows using MinGW
 
 It **is** possible to build and run **ardopcf** on a Windows computer without admin privledges.
 
 ### Downloading the ardopcf source code
 
-Unlike the instructions for building **ardopcf** for Linux, these instuctions will not use `git` to clone (download) the source code.  However, if you are interested in studying or making changes to the source code, you probably want to install and learn to use `git`.  Using `git` may also be advantageous if you intend to build from the `develop` branch to try changes that have been made to **ardopcf** since that last release.  In this case, using `git` allows you easily continue to track and use the latest version of the `develop` branch as further changes are made to it.  See https://git-scm.com/doc to learn more about `git` and https://git-scm.com/downloads/win to get the version for Windows.
+Unlike the instructions for building **ardopcf** for Linux, these instuctions will not use `git` to clone (download) the source code.  However, if you are interested in studying or making changes to the source code, you probably want to install and learn to use `git`.  Using `git` may also be advantageous if you intend to build from the `develop` branch to try changes that have been made to **ardopcf** since that last release.  In this case, using `git` allows you easily continue to track and use the latest version of the `develop` branch as further changes are made to it.  See <https://git-scm.com/doc> to learn more about `git` and <https://git-scm.com/downloads/win> to get the version for Windows.
 
-At https://github.com/pflarue/ardop click on the green `Code` button, and then on `Download ZIP`.  By default this will download the code from the master branch corresponding to the most recent release of **ardopcf**.  If you want to include changes made since the last release, then before clicking on `Code` click on `master` and select `develop` from the pulldown.  This may include improvements over the most recently released version, but it may also include changes that have not been tested as well as the released version.
+At <https://github.com/pflarue/ardop> click on the green `Code` button, and then on `Download ZIP`.  By default this will download the code from the master branch corresponding to the most recent release of **ardopcf**.  If you want to include changes made since the last release, then before clicking on `Code` click on `master` and select `develop` from the pulldown.  This may include improvements over the most recently released version, but it may also include changes that have not been tested as well as the released version.
 
 When the download is complete, use Windows File Explorer to find the zip file in the Downloads directory.  Right click on it and choose `Extract All...`.  Choose a suitable directory.  A path that has any spaces in it may cause problems, so choose one without any.  Consider using `C:\Users\<USERNAME>` which will create `C:\Users\<USERNAME>\ardop-master`.
 
@@ -95,14 +98,14 @@ The **ardopcf** source code can be compiled into 32-bit or 64-bit Windows native
 
 MinGW stands for Minimalist GNU for Windows.  It provides a compiler very similar to the GNU C compiler that is used on Linux systems, but which produces native Windows binaries.  Compared to using Microsoft's C compiler system, using MinGW makes it simpler to create a program like **ardopcf** which can run on both Linux and Windows.
 
-Several internet sites provide Pre-built toolchains and packages to simplify installing MinGW-64, the version of MinGW that produces 64-bit (or optionally 32-bit) windows native binaries.  I recommend using a Zip archive available from https://winlibs.com.  These are intended to be easy to install and use, and they are what are used to create the **ardopcf** release binaries.  There are a lot of different options available to download from that site.  **ardopcf** v1.0.4.1.3 for Windows is built with [Win64 GCC 14.2.0 (with POSIX threads) - without LLVM/Clang/LLD/LLDB](https://github.com/brechtsanders/winlibs_mingw/releases/download/14.2.0posix-19.1.1-12.0.0-ucrt-r2/winlibs-x86_64-posix-seh-gcc-14.2.0-mingw-w64ucrt-12.0.0-r2.zip) and [Win32 GCC 14.2.0 (with POSIX threads) - without LLVM/Clang/LLD/LLDB](https://github.com/brechtsanders/winlibs_mingw/releases/download/14.2.0posix-19.1.1-12.0.0-ucrt-r2/winlibs-i686-posix-dwarf-gcc-14.2.0-mingw-w64ucrt-12.0.0-r2.zip).  These are probably a good default choice to use.  All Windows 11 and most Windows 10 operating systems are 64-bit.  To find out if a Windows 10 operating system is 32 or 64 bit press the **Start** button and select **Settings**, click on **System** then on **About** and read the line starting with **System type**.  See the details below if you have a Windows system older than Windows 10.
+Several internet sites provide Pre-built toolchains and packages to simplify installing MinGW-64, the version of MinGW that produces 64-bit (or optionally 32-bit) windows native binaries.  I recommend using a Zip archive available from <https://winlibs.com>.  These are intended to be easy to install and use, and they are what are used to create the **ardopcf** release binaries.  There are a lot of different options available to download from that site.  **ardopcf** v1.0.4.1.3 for Windows is built with [Win64 GCC 14.2.0 (with POSIX threads) - without LLVM/Clang/LLD/LLDB](https://github.com/brechtsanders/winlibs_mingw/releases/download/14.2.0posix-19.1.1-12.0.0-ucrt-r2/winlibs-x86_64-posix-seh-gcc-14.2.0-mingw-w64ucrt-12.0.0-r2.zip) and [Win32 GCC 14.2.0 (with POSIX threads) - without LLVM/Clang/LLD/LLDB](https://github.com/brechtsanders/winlibs_mingw/releases/download/14.2.0posix-19.1.1-12.0.0-ucrt-r2/winlibs-i686-posix-dwarf-gcc-14.2.0-mingw-w64ucrt-12.0.0-r2.zip).  These are probably a good default choice to use.  All Windows 11 and most Windows 10 operating systems are 64-bit.  To find out if a Windows 10 operating system is 32 or 64 bit press the **Start** button and select **Settings**, click on **System** then on **About** and read the line starting with **System type**.  See the details below if you have a Windows system older than Windows 10.
 
 <details>
 <summary><b>Details for choosing an specific version of MinGW-64 from</b> https://winlibs.com.</summary>
 
 Using one of the MinGW-64 Zip archives linked above is an good default choice.  The following describes how to choose an alternative.  This may be appropriate if a newer version has been released since the last **ardopcf** release.
 
-The files available for download from https://winlibs.com are grouped by those based on the UCRT runtime followed by those based on the MSVCRT runtime.  Choose from the ones that use the UCRT runtime.  The UCRT runtime library that these require is a standard part of all Windows 10 and later operating systems.  If your operating system is Windows Vista SP2 up to Windows 8.1, you can get UCRT by manually installing the [Universal C Runtime update](https://support.microsoft.com/en-us/topic/update-for-universal-c-runtime-in-windows-c0514201-7fe6-95a3-b0a5-287930f3560c).  UCRT is a newer system that replaces MSVCRT.  It has better support for recent versions of Windows, and it conforms better to the standards that define how C compilers should work.  **ardopcf** has not been tested with MSVCRT.  Using MSVCRT **might** allow **ardopcf** to run on older Windows machines, or it might require modifications to the source code to work with that older system.
+The files available for download from <https://winlibs.com> are grouped by those based on the UCRT runtime followed by those based on the MSVCRT runtime.  Choose from the ones that use the UCRT runtime.  The UCRT runtime library that these require is a standard part of all Windows 10 and later operating systems.  If your operating system is Windows Vista SP2 up to Windows 8.1, you can get UCRT by manually installing the [Universal C Runtime update](https://support.microsoft.com/en-us/topic/update-for-universal-c-runtime-in-windows-c0514201-7fe6-95a3-b0a5-287930f3560c).  UCRT is a newer system that replaces MSVCRT.  It has better support for recent versions of Windows, and it conforms better to the standards that define how C compilers should work.  **ardopcf** has not been tested with MSVCRT.  Using MSVCRT **might** allow **ardopcf** to run on older Windows machines, or it might require modifications to the source code to work with that older system.
 
 Under UCRT runtime, the packages at the top of the list are the most recent, so choosing the first one on the list is usually a good choice.  Each version is available in Win32 and Win64 options.  As described above, all Windows 11 and most Windows 10 operating systems are 64-bit.
 
@@ -135,20 +138,20 @@ dir Makefile
 
 5. Verify that the build worked correctly.  The following line should print the help screen.
 
-`ardopcf -h`
+`build\windows\ardopcf -h`
 
 The first time that you run `ardopcf` without the `-h` option,  Windows will ask you whether you want to allow public and private networks to access this app.  Host programs like [Pat](https://getpat.io) use a TCP "network" connection to work with **ardopcf**.  Without a program like Pat, **ardopcf** isn't useful.  Also, the **ardopcf** WebGui connects from a browser window to **ardopcf** using a TCP "network" connection.  If you choose `Allow` in this windows dialog, then you will be able to use the Webgui in a browser running on any computer on your local network and/or run a host program on any computer on your local network.  If instead you choose 'Cancel' in this windows dialog, then these programs/features will still work, but only if they are all running on the same computer.  If you do not have admin privledges on this Windows computer, then `Allow` won't work.  On a Windows computer this usually isn't a problem since you probably intend to run everything on this one computer anyway.  The ability to run **ardopcf** on one computer and a host or the WebGui on another is more likely to be useful when **ardopcf** is running on a small computer like a Raspberry Pi that does not have a monitor conencted to it.
 
-6. You may leave `ardopcf.exe` where it is or copy or move it to a different directory.  The choice is yours.  One option is to put it in `C:\Users\<USERNAME>\ardop` and also create a `C:\Users\<USERNAME>\ardop\logs` directory for the log files that ardopcf creates.  If you copy `ardopcf.exe` to a directory other than where you built it from source, you may choose to delete the source directory and even the MinGW directory.
+6. You may leave `ardopcf.exe` where it is or copy or move it to a different directory.  The choice is yours.  One option is to put it in `C:\Users\<USERNAME>\ardop` and also create a `C:\Users\<USERNAME>\ardop\logs` directory for the log files that ardopcf creates.  If you copy `build\windows\ardopcf.exe` to a directory other than where you built it from source, you may choose to delete the source directory and even the MinGW directory.
 
 See [USAGE_windows.md](USAGE_windows.md) for guidance on use of **ardopcf** with Windows.  This includes instructions for determining what command line options you should use, how to set up a Desktop Shortcut to start **ardopcf**, and how to adjust your audio settings.
 
-
-## Building ardopcf for Windows by cross-compiling on a Linux machine:
+## Building ardopcf for Windows by cross-compiling on a Linux machine
 
 Before using Linux to cross-compile an executable for Windows, follow the instructions above to build ardopcf for Linux.
 
 Then:
+
 ```
 sudo apt install mingw-w64
 make CC_NATIVE=gcc CC=i686-w64-mingw32-gcc-posix WIN32=1

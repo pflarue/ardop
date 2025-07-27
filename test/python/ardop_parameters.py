@@ -3,7 +3,21 @@ This module provides some constants for use by other Python test modules.
 """
 
 # Path to the ardopcf executable
-APATH = "../../ardopcf"
+import os
+import platform
+import sys
+
+# Determine the platform-specific build directory
+if sys.platform.startswith('win') or os.name == 'nt':  # Windows
+    PLATFORM = "windows"
+    EXEC_EXT = ".exe"
+else:  # Linux/Unix/macOS
+    PLATFORM = "linux"
+    EXEC_EXT = ""
+
+# Use the build directory structure
+BUILDDIR = f"../../build/{PLATFORM}"
+APATH = f"{BUILDDIR}/ardopcf{EXEC_EXT}"
 # Suggested location for temporary files including WAV recordings
 # and log files.  WAV files written to this directory should be deleted
 # after they have been used.  However, when a test failure occurs, the
