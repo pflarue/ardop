@@ -13,6 +13,7 @@
 #include "common/wav.h"
 #include "common/ptt.h"
 #include "common/Webgui.h"
+#include "common/eutf8.h"
 
 #pragma comment(lib, "winmm.lib")
 
@@ -153,13 +154,22 @@ void GetDevices() {
 	// Windows does not use dev->alias.
 
 	CaptureDevicesCount = 0;
+	// pwic.szPname and pwoc.szPname are not always entitrely valid utf-8 text.
+	// This can cause display problems in the webgui and parsing difficulties in
+	// python based test scripts.  So, use eutf8() to ensure that the contents
+	// of dev->desc are valid utf-8 text.
 	for (i = 0; i < waveInGetNumDevs(); ++i) {
 		waveInGetDevCaps(i, &pwic, sizeof(WAVEINCAPS));
 		devindex = ExtendDevices(&AudioDevices);
 		dev = AudioDevices[devindex];
 		dev->name = strdup("i999");  // Accomodate a 3-digit index.
 		sprintf(dev->name + 1, "%i", i);
-		dev->desc = strdup(pwic.szPname);
+		dev->desc = malloc(3 * strlen(pwic.szPname) + 1);
+		if (dev->desc == NULL) {
+			ZF_LOGE("Error allocating memory for input device description");
+			break;
+		}
+		eutf8(dev->desc, 3 * strlen(pwic.szPname) + 1, pwic.szPname, strlen(pwic.szPname));
 		dev->capture = true;
 	}
 	for (i = 0; i < waveOutGetNumDevs(); ++i) {
@@ -168,7 +178,12 @@ void GetDevices() {
 		dev = AudioDevices[devindex];
 		dev->name = strdup("o999");  // Accomodate a 3-digit index.
 		sprintf(dev->name + 1, "%i", i);
-		dev->desc = strdup(pwoc.szPname);
+		dev->desc = malloc(3 * strlen(pwoc.szPname) + 1);
+		if (dev->desc == NULL) {
+			ZF_LOGE("Error allocating memory for ouput device description");
+			break;
+		}
+		eutf8(dev->desc, 3 * strlen(pwoc.szPname) + 1, pwoc.szPname, strlen(pwoc.szPname));
 		dev->playback = true;
 	}
 	// Always include NOSOUND as the last device suitable for both capture
