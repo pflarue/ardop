@@ -211,6 +211,17 @@ endif
 
 all: ardopcf
 
+# AddressSanitizer / malloc debug (enable with `make ASAN=1`)
+ifeq ($(ASAN),1)
+ifneq ($(PLATFORM),windows)
+CFLAGS += -fsanitize=address -fno-omit-frame-pointer
+LDFLAGS += -fsanitize=address
+# Encourage early detection of heap issues for macOS (export when running)
+# Example run:
+#   MallocScribble=1 MallocPreScribble=1 MallocGuardEdges=1 ./build/$(PLATFORM)/ardopcf 8515
+endif
+endif
+
 ardopcf: $(BUILDDIR)/ardopcf
 
 $(BUILDDIR)/ardopcf: $(OBJS_EXE) $(OBJS)

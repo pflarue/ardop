@@ -119,9 +119,12 @@ static void ReinitCoreAudioIfNeeded(void) {
 
     // Teardown sequence (stop -> uninit -> dispose) stubbed
     if (coreAudioInitialized) {
-        // Future: AudioOutputUnitStop(unit);
-        // Future: AudioUnitUninitialize(unit);
-        // Future: AudioComponentInstanceDispose(unit);
+        // Maintain documented order even while stubbed so future real
+        // implementation plugs in here without risking order regressions.
+        // 1) Stop
+        // 2) Uninitialize
+        // 3) Dispose
+        // (All three are no-ops in current stub.)
         coreAudioInitialized = false;
         coreAudioInputActive = false;
         coreAudioOutputActive = false;
@@ -148,7 +151,8 @@ static void ReinitCoreAudioIfNeeded(void) {
 static void log_stub_once(void) {
     static bool noted = false;
     if (!noted) {
-        ZF_LOGI("macOS stub: CoreAudio path not implemented yet (placeholder)");
+        // One-time notice that full CoreAudio streaming is not yet implemented.
+        ZF_LOGW("macOS CoreAudio streaming not implemented yet (using stub path)");
         noted = true;
     }
 }
@@ -168,6 +172,9 @@ void GetDevices() {
         defOut = kAudioObjectUnknown;
     AudioObjectPropertyAddress listAddr = { kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain };
     size = 0;
+    // First query the size of the device list. The previous call used
+    // AudioObjectGetPropertyData with only 5 arguments which is invalid;
+    // AudioObjectGetPropertyDataSize is the correct API to get the buffer size.
     if (AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &listAddr, 0, NULL, &size) != noErr || size == 0) {
         ZF_LOGW("CoreAudio: no devices returned; adding NOSOUND only");
     } else {
@@ -256,9 +263,9 @@ void GetDevices() {
                 dev->capture = tmp[i].hasIn;
                 dev->playback = tmp[i].hasOut;
             }
-            free(tmp);
+            if (tmp) { free(tmp); tmp = NULL; }
         }
-        if (ids) free(ids);
+        if (ids) { free(ids); ids = NULL; }
     }
 #else
     log_stub_once();
@@ -303,6 +310,7 @@ bool OpenSoundPlayback(char *devstr, int ch) {
     strncpy(PlaybackDevice, devstr, DEVSTRSZ - 1);
     PlaybackDevice[DEVSTRSZ-1] = '\0';
     Pch = ch;
+    ZF_LOGI("Playback device '%s' opening (channels=%d)", PlaybackDevice, Pch);
     if (ZF_LOG_ON_DEBUG) {
         if (Pch == 1)
             ZF_LOGD("Playback device '%s' opened mono (channel=%s)", PlaybackDevice, UseLeftTX ? "Left(default)" : (UseRightTX ? "Right" : "Left(default)"));
@@ -339,6 +347,7 @@ bool OpenSoundCapture(char *devstr, int ch) {
     strncpy(CaptureDevice, devstr, DEVSTRSZ - 1);
     CaptureDevice[DEVSTRSZ-1] = '\0';
     Cch = ch;
+    ZF_LOGI("Capture device '%s' opening (channels=%d)", CaptureDevice, Cch);
     if (ZF_LOG_ON_DEBUG) {
         if (Cch == 1)
             ZF_LOGD("Capture device '%s' opened mono (channel=%s)", CaptureDevice, UseLeftRX ? "Left(default)" : (UseRightRX ? "Right" : "Left(default)"));
@@ -355,20 +364,26 @@ bool OpenSoundCapture(char *devstr, int ch) {
 
 void CloseSoundPlayback(bool do_getdevices) {
     log_stub_once();
+    char prev[DEVSTRSZ];
+    snprintf(prev, sizeof(prev), "%s", PlaybackDevice);
     PlaybackDevice[0] = '\0';
     SoundIsPlaying = false;
     TXEnabled = false;
     KeyPTT(false);
     ReinitCoreAudioIfNeeded();  // Re-evaluate (may tear down AudioUnit if last direction)
     updateWebGuiAudioConfig(do_getdevices);
+    if (prev[0]) ZF_LOGI("Playback device '%s' closed", prev);
 }
 
 void CloseSoundCapture(bool do_getdevices) {
     log_stub_once();
+    char prev[DEVSTRSZ];
+    snprintf(prev, sizeof(prev), "%s", CaptureDevice);
     CaptureDevice[0] = '\0';
     RXEnabled = false;
     ReinitCoreAudioIfNeeded();  // Re-evaluate
     updateWebGuiAudioConfig(do_getdevices);
+    if (prev[0]) ZF_LOGI("Capture device '%s' closed", prev);
 }
 
 bool SendtoCard(int n) {

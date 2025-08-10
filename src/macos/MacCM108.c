@@ -31,6 +31,11 @@ typedef struct {
     int pid;
 } hid_slot_t;
 
+// Slot table lifetime: static for process duration. Each successful OpenCM108
+// assigns a slot; CloseCM108 releases (IOHIDDeviceClose + CFRelease) and resets.
+// No global teardown needed beyond individual Close calls. Enumerations use
+// open_first() which returns a retained IOHIDDeviceRef that is always
+// CFRelease()'d in the same loop so no leak.
 static hid_slot_t hid_slots[MAX_HID_HANDLES];
 static int next_handle_base = 1000;
 

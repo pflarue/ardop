@@ -147,6 +147,22 @@ static int log_level_syslog(const int lvl)
 
 static void log_callback_discard(const zf_log_message* _msg, void* _param) {}
 
+// UTF-8 helper: back up to codepoint boundary (returns new length)
+#ifdef __APPLE__
+static size_t utf8_backtrack(const char *base, size_t len) {
+	// Ensure we don't split in the middle of a multibyte sequence.
+	// Walk backwards until byte is either ASCII or leading byte (10xxxxxx indicates continuation).
+	while (len > 0) {
+		unsigned char c = (unsigned char)base[len - 1];
+		if ((c & 0x80) == 0) return len;              // ASCII
+		if ((c & 0xC0) == 0xC0) return len;           // Leading byte of multibyte seq
+		// Continuation (10xxxxxx) - move back further
+		len--;
+	}
+	return 0; // Fallback (should not happen)
+}
+#endif
+
 static void log_callback(const zf_log_message* msg, void* param) {
 	(void)param; /* unused */
 
@@ -169,9 +185,43 @@ static void log_callback(const zf_log_message* msg, void* param) {
 		if (ArdopLogConsoleSyslog) {
 			syslog(log_level_syslog(msg->lvl), "%.*s", (int)(msg->p - msg->msg_b), msg->msg_b);
 		} else {
-			/* write() is atomic for buffers less than or equal to PIPE_BUF. */
+			/* macOS: enforce <=512 byte atomic chunks (PIPE_BUF) */
+#ifdef __APPLE__
+			const size_t PIPE_SAFE = 512; // Requirement: chunk size <=512
+			const char *ptr = msg->msg_b;
+			size_t remaining = (size_t)(msg->p - msg->msg_b) + EOL_SZ; // include newline
+			bool first_chunk = true;
+			while (remaining) {
+				// Base available size; reserve prefix for continuation chunks
+				const char *prefix = first_chunk ? "" : "... ";
+				size_t prefix_len = first_chunk ? 0 : 4; // length of "... "
+				size_t max_payload = PIPE_SAFE - prefix_len;
+				if (max_payload == 0) break; // safety
+				size_t want = remaining < max_payload ? remaining : max_payload;
+				// Avoid splitting UTF-8 sequences if we truncated mid-chunk
+				if (want == max_payload && want < remaining) {
+					bool ends_with_nl = (ptr[want-1] == '\n');
+					size_t adj = ends_with_nl ? want - 1 : want;
+					adj = utf8_backtrack(ptr, adj);
+					if (adj < want / 2) {
+						adj = want; // fallback
+					}
+					if (ends_with_nl && adj == want - 1) adj = want;
+					want = adj;
+				}
+				char outbuf[PIPE_SAFE];
+				memcpy(outbuf, prefix, prefix_len);
+				memcpy(outbuf + prefix_len, ptr, want);
+				RETVAL_UNUSED(write(STDOUT_FILENO, outbuf, prefix_len + want));
+				ptr += want;
+				remaining -= want;
+				first_chunk = false;
+			}
+#else
+			/* write() is atomic for buffers <= PIPE_BUF */
 			RETVAL_UNUSED(write(STDOUT_FILENO, msg->msg_b,
 				(size_t)(msg->p - msg->msg_b) + EOL_SZ));
+#endif
 		}
 #else
 		/* write() is atomic for buffers less than or equal to PIPE_BUF. */
@@ -183,7 +233,7 @@ static void log_callback(const zf_log_message* msg, void* param) {
 	if (!ArdopLogFileEnabled || msg->lvl < ArdopLogVerbosityFile)
 		return;
 
-	// write decorated message to debug log file
+	// write decorated message to debug log file (file I/O already buffered)
 	ardop_logfile_write(&DebugLog, msg->buf, (size_t)(msg->p - msg->buf) + EOL_SZ);
 
 	// tags for alternate log files

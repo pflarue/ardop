@@ -84,13 +84,13 @@ HANDLE OpenCOMPort(void *Port, int speed) {
     // Clear RTS & DTR to known state
     COMClearRTS(fd);
     COMClearDTR(fd);
-    ZF_LOGD("Port %s opened as fd %d (baud=%d)", path, fd, speed);
+    ZF_LOGI("Serial port '%s' opened (fd=%d baud=%d)", path, fd, speed);
     return fd;
 }
 
 void CloseCOMPort(HANDLE *fd) {
     if (fd && *fd) {
-        ZF_LOGD("Closing serial fd %d", *fd);
+        ZF_LOGI("Serial port fd %d closing", *fd);
         close(*fd);
         *fd = 0;
     }
@@ -299,6 +299,10 @@ char ** GetSerialStrlist() {
         }
     }
     closedir(d);
+    // Free any suffix tracking allocations (not needed after enumeration)
+    for (int i = 0; i < cu_count; ++i) {
+        if (cu_suffixes[i]) { free(cu_suffixes[i]); cu_suffixes[i] = NULL; }
+    }
     if (slist) {
         int pairs = 0;
         for (int i = 0; slist[i]; i += 2) pairs++;
