@@ -20,17 +20,16 @@ int TxIndex = 0;
 bool AudioInit = false;
 
 // Minimal one-time log helper
-static void log_stub_once(const char *fn) {
+static void log_stub_once(void) {
     static bool noted = false;
     if (!noted) {
-        ZF_LOGI("macOS audio stub in use – CoreAudio not implemented yet");
+        ZF_LOGI("macOS stub: CoreAudio path not implemented yet (placeholder)");
         noted = true;
     }
-    ZF_LOGD("macOS stub: %s() invoked", fn);
 }
 
 void GetDevices() {
-    log_stub_once("GetDevices");
+    log_stub_once();
     // Provide just NOSOUND so higher layers have a fallback
     FreeDevices(&AudioDevices);
     InitDevices(&AudioDevices);
@@ -46,14 +45,14 @@ void GetDevices() {
 
 void InitAudio(bool quiet) {
     (void)quiet;
-    log_stub_once("InitAudio");
+    log_stub_once();
     GetDevices();
     AudioInit = true;
 }
 
 bool OpenSoundPlayback(char *devstr, int ch) {
     (void)ch;
-    log_stub_once("OpenSoundPlayback");
+    log_stub_once();
     if (devstr == NULL || devstr[0] == '\0') {
         CloseSoundPlayback(false);
         return false;
@@ -71,7 +70,7 @@ bool OpenSoundPlayback(char *devstr, int ch) {
 
 bool OpenSoundCapture(char *devstr, int ch) {
     (void)ch;
-    log_stub_once("OpenSoundCapture");
+    log_stub_once();
     if (devstr == NULL || devstr[0] == '\0') {
         CloseSoundCapture(false);
         return false;
@@ -89,7 +88,7 @@ bool OpenSoundCapture(char *devstr, int ch) {
 }
 
 void CloseSoundPlayback(bool do_getdevices) {
-    log_stub_once("CloseSoundPlayback");
+    log_stub_once();
     PlaybackDevice[0] = '\0';
     SoundIsPlaying = false;
     TXEnabled = false;
@@ -98,7 +97,7 @@ void CloseSoundPlayback(bool do_getdevices) {
 }
 
 void CloseSoundCapture(bool do_getdevices) {
-    log_stub_once("CloseSoundCapture");
+    log_stub_once();
     CaptureDevice[0] = '\0';
     RXEnabled = false;
     updateWebGuiAudioConfig(do_getdevices);
@@ -106,7 +105,7 @@ void CloseSoundCapture(bool do_getdevices) {
 
 bool SendtoCard(int n) {
     (void)n;
-    log_stub_once("SendtoCard");
+    log_stub_once();
     if (!TXEnabled) return false;
     // Nothing to send in stub
     return true;
@@ -121,7 +120,7 @@ void StopCapture() {
 }
 
 bool SoundFlush() {
-    log_stub_once("SoundFlush");
+    log_stub_once();
     KeyPTT(false);
     return TXEnabled;
 }

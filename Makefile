@@ -123,6 +123,18 @@ LDFLAGS =
 CC = gcc
 CC_NATIVE ?= $(CC)
 
+# Optional overrides for cmocka include and library paths (default empty).
+# Users on macOS with Homebrew can set, e.g.:
+#   make CMOCKA_INC=/opt/homebrew/include CMOCKA_LIB=/opt/homebrew/lib test
+CMOCKA_INC ?=
+CMOCKA_LIB ?=
+ifneq ($(strip $(CMOCKA_INC)),)
+CPPFLAGS += -I$(CMOCKA_INC)
+endif
+ifneq ($(strip $(CMOCKA_LIB)),)
+LDFLAGS += -L$(CMOCKA_LIB)
+endif
+
 # How to wrap a symbol with ld
 LDWRAP := -Wl,--wrap=
 
@@ -157,9 +169,36 @@ endif
 # Build directory structure
 BUILDDIR := build/$(PLATFORM)
 
+# Detect Homebrew-installed cmocka on macOS and add include/lib paths so tests build
+ifeq ($(PLATFORM),macos)
+CMOCKA_HEADER := $(firstword $(wildcard /opt/homebrew/include/cmocka.h /usr/local/include/cmocka.h))
+ifneq ($(CMOCKA_HEADER),)
+	CMOCKA_INCDIR := $(dir $(CMOCKA_HEADER))
+	# Prefer matching lib directory to the header location
+	ifneq ($(wildcard /opt/homebrew/lib/libcmocka.dylib),)
+		CMOCKA_LIBDIR := /opt/homebrew/lib
+	else ifneq ($(wildcard /usr/local/lib/libcmocka.dylib),)
+		CMOCKA_LIBDIR := /usr/local/lib
+	endif
+	CPPFLAGS += -I$(CMOCKA_INCDIR)
+	ifneq ($(CMOCKA_LIBDIR),)
+		LDLIBS += -L$(CMOCKA_LIBDIR)
+	endif
+else
+	# If cmocka isn't present, tests will fail to compile; provide a hint when invoking test targets
+	ifneq (,$(filter test buildtest,$(MAKECMDGOALS)))
+		$(info NOTE: cmocka not found under /opt/homebrew or /usr/local. Install with: brew install cmocka)
+	endif
+endif
+endif
+
 # macOS: exclude wrap-dependent test_log until cmocka & wrap semantics validated
 ifeq ($(PLATFORM),macos)
 TESTS := $(filter-out $(BUILDDIR)/test/ardop/test_log,$(TESTS))
+# test_ARDOPCommon_processargs relies on GNU ld --wrap, unavailable on macOS ld64
+TESTS := $(filter-out $(BUILDDIR)/test/ardop/test_ARDOPCommon_processargs,$(TESTS))
+# Disable symbol wrapping on macOS (no ld --wrap flags)
+LDWRAP :=
 endif
 
 # Platform-specific directory creation
@@ -176,9 +215,9 @@ ardopcf: $(BUILDDIR)/ardopcf
 $(BUILDDIR)/ardopcf: $(OBJS_EXE) $(OBJS)
 	# macOS ld64 rejects -Map option; only use map file on non-macOS
 	@if [ "$(PLATFORM)" = "macos" ]; then \
-		$(CC) $^ -o $@ $(LOADLIBES) $(LDLIBS); \
+		$(CC) $(LDFLAGS) $^ -o $@ $(LOADLIBES) $(LDLIBS); \
 	else \
-		$(CC) -Xlinker -Map=$(BUILDDIR)/output.map $^ -o $@ $(LOADLIBES) $(LDLIBS); \
+		$(CC) $(LDFLAGS) -Xlinker -Map=$(BUILDDIR)/output.map $^ -o $@ $(LOADLIBES) $(LDLIBS); \
 	fi
 
 # if txt2c is not provided, build it
@@ -209,6 +248,7 @@ $(BUILDDIR)/src/common/gen-%.c:: webgui/% | $(TXT2C)
 buildtest: $(TESTS)
 
 # `make test` prints the name of each test file and then runs that test.
+# On macOS, install cmocka via: brew install cmocka.
 # running the test should indicate the tests run and whether they passed
 # or failed.
 test: buildtest
@@ -220,11 +260,12 @@ $(BUILDDIR)/test/ardop/test_%: test/ardop/test_%.c $(OBJS) $(TEST_OBJS_COMMON)
 	$(CC) \
 		$(CPPFLAGS) \
 		$(CFLAGS) \
-		$(patsubst %,$(LDWRAP)%,$(WRAP)) \
+		$(if $(LDWRAP),$(patsubst %,$(LDWRAP)%,$(WRAP))) \
 		$< \
 		$(OBJS) \
 		$(TEST_OBJS_COMMON) \
 		-o $@ \
+		$(LDFLAGS) \
 		$(LOADLIBES) \
 		$(LDLIBS) \
 		-lcmocka
