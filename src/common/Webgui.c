@@ -2,12 +2,13 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include "os_util.h"
-#include "ardopcommon.h"
-#include "StationId.h"
-#include "audio.h"
-#include "ptt.h"
-#include "Webgui.h"
+#include <stdlib.h>
+#include "common/os_util.h"
+#include "common/ardopcommon.h"
+#include "common/StationId.h"
+#include "common/audio.h"
+#include "common/ptt.h"
+#include "common/Webgui.h"
 #include "ws_server/ws_server.h"
 
 
@@ -637,39 +638,51 @@ int wg_send_audiodevices(int cnum, DeviceInfo **devices, char *cdevice,
 	int pindex = -1;  // not found
 	char msg[WG_SSIZE - 2] = "\x9B\x7C\x00\xFF\xFF";
 	int msglen = 5;
+	// Unit test guard: when ARDOP_TEST_SKIP_CA_ENUM is set (macOS CoreAudio
+	// stub tests) we intentionally allow arbitrary synthetic device names
+	// (e.g. "MicA") that do not appear in the enumerated AudioDevices[] list
+	// (which only contains the NOSOUND sentinel in that mode). In production
+	// this function auto-closes devices missing from the refreshed list to
+	// handle hot-unplug. For the deterministic unit tests we suppress that
+	// auto-close behavior so the test can validate logical state transitions
+	// (device strings, RESTORE semantics, enable flags) without needing to
+	// fabricate matching DeviceInfo entries.
+	bool test_mode_skip_enum = (getenv("ARDOP_TEST_SKIP_CA_ENUM") != NULL);
 	// The following is useful when an audio device is disconnected or turned
 	// off causing loss of the capture device to be quickly noticed, but loss
 	// of the playback device would not otherwise be noticed until the next
 	// attempt to transmit.  Because CloseSoundPlayback also does KeyPTT(false),
 	// This also then causes a related loss of the CAT/PTT control device to be
 	// detected.
-	if (pdevice != NULL && pdevice[0] != 0x00) {
-		pindex = FindAudioDevice(pdevice, false);  // -1 if not found
-		if ((pindex = FindAudioDevice(pdevice, false)) == -1) {  // -1 not found
-			if (TXEnabled) {
-				// TXEnabled should be false since pdevice is not found
-				ZF_LOGV("Closing playback device because it is missing from"
-					" updated AudioDevices[]");
-				if (ZF_LOG_ON_VERBOSE)
-					// For testing with testhost.py
-					SendCommandToHost("STATUS TXENABLED FALSE");
-				CloseSoundPlayback(true);  // calls this function recursively
-				return 0;
+	if (!test_mode_skip_enum) {
+		if (pdevice != NULL && pdevice[0] != 0x00) {
+			pindex = FindAudioDevice(pdevice, false);  // -1 if not found
+			if ((pindex = FindAudioDevice(pdevice, false)) == -1) {  // -1 not found
+				if (TXEnabled) {
+					// TXEnabled should be false since pdevice is not found
+					ZF_LOGV("Closing playback device because it is missing from"
+						" updated AudioDevices[]");
+					if (ZF_LOG_ON_VERBOSE)
+						// For testing with testhost.py
+						SendCommandToHost("STATUS TXENABLED FALSE");
+					CloseSoundPlayback(true);  // calls this function recursively
+					return 0;
+				}
 			}
 		}
-	}
-	if (cdevice != NULL && cdevice[0] != 0x00) {
-		if ((cindex = FindAudioDevice(cdevice, true)) == -1) {  // -1 not found
-			if (RXEnabled) {
-				// This is less likely than unnoticed loss of playback device.
-				// RXEnabled should be false since cdevice is not found
-				ZF_LOGV("Closing capture device because it is missing from"
-					" updated AudioDevices[]");
-				if (ZF_LOG_ON_VERBOSE)
-					// For testing with testhost.py
-					SendCommandToHost("STATUS RXENABLED FALSE");
-				CloseSoundCapture(true);  // calls this function recursively
-				return 0;
+		if (cdevice != NULL && cdevice[0] != 0x00) {
+			if ((cindex = FindAudioDevice(cdevice, true)) == -1) {  // -1 not found
+				if (RXEnabled) {
+					// This is less likely than unnoticed loss of playback device.
+					// RXEnabled should be false since cdevice is not found
+					ZF_LOGV("Closing capture device because it is missing from"
+						" updated AudioDevices[]");
+					if (ZF_LOG_ON_VERBOSE)
+						// For testing with testhost.py
+						SendCommandToHost("STATUS RXENABLED FALSE");
+					CloseSoundCapture(true);  // calls this function recursively
+					return 0;
+				}
 			}
 		}
 	}

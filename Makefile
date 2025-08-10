@@ -94,8 +94,8 @@ OBJS_WIN = \
 OBJS_EXE = \
 	$(BUILDDIR)/src/common/ardopcf.o \
 
-# unit test executables
-TESTS = \
+# Base (all-platform unless filtered later) test executables
+TESTS_COMMON = \
 	$(BUILDDIR)/test/ardop/test_ARDOPCommon \
 	$(BUILDDIR)/test/ardop/test_HostInterface \
 	$(BUILDDIR)/test/ardop/test_Locator \
@@ -105,6 +105,15 @@ TESTS = \
 	$(BUILDDIR)/test/ardop/test_ARDOPCommon_processargs \
 	$(BUILDDIR)/test/ardop/test_eutf8 \
 	$(BUILDDIR)/test/ardop/test_txframe \
+
+# macOS-only tests
+TESTS_MAC = \
+	$(BUILDDIR)/test/ardop/test_mac_CoreAudioSound \
+	$(BUILDDIR)/test/ardop/test_mac_MacSerial \
+	$(BUILDDIR)/test/ardop/test_mac_os_util \
+
+# Aggregate TESTS (will filter below per platform)
+TESTS = $(TESTS_COMMON)
 
 # unit test common code
 TEST_OBJS_COMMON = \
@@ -153,18 +162,20 @@ PLATFORM := windows
 OBJS += $(OBJS_WIN)
 LDLIBS += -lwsock32 -lwinmm -lsetupapi -lws2_32 -lhid
 else
-	ifeq ($(UNAME_S),Darwin)
-		PLATFORM := macos
-		OBJS += $(OBJS_MAC)
-		# Apple CoreAudio frameworks (no new external deps)
-		LDLIBS += -framework AudioToolbox -framework AudioUnit -framework CoreAudio -framework CoreFoundation
-		# Add IOKit for HID (CM108) support
-		LDLIBS += -framework IOKit
-	else
-		PLATFORM := linux
-		OBJS += $(OBJS_LIN)
-		LDLIBS += -lrt -lasound
-	endif
+ifeq ($(UNAME_S),Darwin)
+PLATFORM := macos
+OBJS += $(OBJS_MAC)
+# Apple CoreAudio frameworks (no new external deps)
+LDLIBS += -framework AudioToolbox -framework AudioUnit -framework CoreAudio -framework CoreFoundation
+# Add IOKit for HID (CM108) support
+LDLIBS += -framework IOKit
+# macOS: include mac-only tests
+TESTS += $(TESTS_MAC)
+else
+PLATFORM := linux
+OBJS += $(OBJS_LIN)
+LDLIBS += -lrt -lasound
+endif
 endif
 
 # Build directory structure
@@ -195,11 +206,20 @@ endif
 
 # macOS: exclude wrap-dependent test_log until cmocka & wrap semantics validated
 ifeq ($(PLATFORM),macos)
+# Remove wrap-dependent tests
 TESTS := $(filter-out $(BUILDDIR)/test/ardop/test_log,$(TESTS))
-# test_ARDOPCommon_processargs relies on GNU ld --wrap, unavailable on macOS ld64
 TESTS := $(filter-out $(BUILDDIR)/test/ardop/test_ARDOPCommon_processargs,$(TESTS))
-# Disable symbol wrapping on macOS (no ld --wrap flags)
 LDWRAP :=
+else ifeq ($(PLATFORM),linux)
+# Exclude macOS-only tests on Linux
+TESTS := $(filter-out $(BUILDDIR)/test/ardop/test_CoreAudioSound,$(TESTS))
+# MacSerial presently targets macOS APIs (util.h); exclude on Linux for now
+TESTS := $(filter-out $(BUILDDIR)/test/ardop/test_MacSerial,$(TESTS))
+else ifeq ($(PLATFORM),windows)
+# Exclude POSIX-specific tests on Windows
+TESTS := $(filter-out $(BUILDDIR)/test/ardop/test_CoreAudioSound,$(TESTS))
+TESTS := $(filter-out $(BUILDDIR)/test/ardop/test_MacSerial,$(TESTS))
+TESTS := $(filter-out $(BUILDDIR)/test/ardop/test_mac_os_util,$(TESTS))
 endif
 
 # Platform-specific directory creation

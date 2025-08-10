@@ -160,6 +160,13 @@ static void log_stub_once(void) {
 void GetDevices() {
     FreeDevices(&AudioDevices);
     InitDevices(&AudioDevices);
+    // Test hook: when ARDOP_TEST_SKIP_CA_ENUM is set (used by unit tests),
+    // skip real CoreAudio enumeration to avoid dependency on host devices
+    // and potential sandbox / CI issues. Only NOSOUND sentinel will be added.
+    if (getenv("ARDOP_TEST_SKIP_CA_ENUM") != NULL) {
+        ZF_LOGD("Skipping CoreAudio enumeration due to ARDOP_TEST_SKIP_CA_ENUM");
+        goto add_nosound_only;
+    }
 #ifdef __APPLE__
     AudioDeviceID defIn = kAudioObjectUnknown;
     AudioDeviceID defOut = kAudioObjectUnknown;
@@ -270,6 +277,7 @@ void GetDevices() {
 #else
     log_stub_once();
 #endif
+add_nosound_only:
     int idx = ExtendDevices(&AudioDevices);
     if (idx >= 0) {
         DeviceInfo *dev = AudioDevices[idx];
@@ -304,6 +312,22 @@ bool OpenSoundPlayback(char *devstr, int ch) {
         }
         ZF_LOGI("RESTORE playback -> '%s'", last_tx_dev);
         devstr = last_tx_dev;
+    }
+    // Special handling for NOSOUND: treat as a logical disable request for TX.
+    // This differs from other arbitrary strings (real devices or placeholders)
+    // which enable TX. We intentionally do NOT update last_tx_dev so that a
+    // subsequent RESTORE returns to the prior real/open device. This mirrors
+    // Linux/Windows behavior where selecting the sentinel NOSOUND disables
+    // transmission without losing the previous selection.
+    if (strcmp(devstr, "NOSOUND") == 0) {
+        TXEnabled = false;
+        strncpy(PlaybackDevice, devstr, DEVSTRSZ - 1);
+        PlaybackDevice[DEVSTRSZ-1] = '\0';
+        Pch = ch;
+        ZF_LOGI("Playback NOSOUND sentinel selected (TX disabled)");
+        ReinitCoreAudioIfNeeded();
+        updateWebGuiAudioConfig(false);
+        return true; // Success (no audio active by design)
     }
     // Accept any non-empty string (stub). Real implementation will validate.
     TXEnabled = true;
@@ -340,6 +364,21 @@ bool OpenSoundCapture(char *devstr, int ch) {
         }
         ZF_LOGI("RESTORE capture -> '%s'", last_rx_dev);
         devstr = last_rx_dev;
+    }
+    // NOSOUND sentinel disables RX path while keeping the prior restorable
+    // device (last_rx_dev) intact for a future RESTORE. This matches the
+    // cross-platform semantics of selecting NOSOUND as a diagnostic/null
+    // device.
+    if (strcmp(devstr, "NOSOUND") == 0) {
+        RXEnabled = false;
+        RXSilent = true;
+        strncpy(CaptureDevice, devstr, DEVSTRSZ - 1);
+        CaptureDevice[DEVSTRSZ-1] = '\0';
+        Cch = ch;
+        ZF_LOGI("Capture NOSOUND sentinel selected (RX disabled)");
+        ReinitCoreAudioIfNeeded();
+        updateWebGuiAudioConfig(false);
+        return true;
     }
     // Accept any non-empty string (stub). Real implementation will validate.
     RXEnabled = true;
