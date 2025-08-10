@@ -61,11 +61,7 @@ int tcpsend(int fd, unsigned char *data, size_t datalen) { if (send(fd, (char*)d
 void tcpclose(int *fd) { if (fd && *fd) { close(*fd); *fd = 0; } }
 
 int nbrecv(int sockfd, char *data, size_t len) { int ret = recv(sockfd, data, len, 0); if (ret == -1 && (errno == EWOULDBLOCK || errno == EAGAIN)) return 0; return ret; }
-
-void CloseCM108(HANDLE *fd) { if (fd && *fd) { close(*fd); *fd = 0; } }
-HANDLE OpenCM108(char *devstr) { (void)devstr; ZF_LOGW("macOS stub: OpenCM108 not implemented"); return 0; }
-int CM108_set_ptt(HANDLE fd, bool State) { (void)fd; (void)State; ZF_LOGW("macOS stub: CM108_set_ptt not implemented"); return -1; }
-char** GetCM108Strlist() { return NULL; }
+// CM108 HID PTT implemented in MacCM108.c
 
 // GPIO / HID / other Linux-only features not applicable; stubs only.
 

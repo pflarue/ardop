@@ -82,6 +82,7 @@ OBJS_LIN = \
 OBJS_MAC = \
 	$(BUILDDIR)/src/macos/CoreAudioSound.o \
 	$(BUILDDIR)/src/macos/MacSerial.o \
+	$(BUILDDIR)/src/macos/MacCM108.o \
 	$(BUILDDIR)/src/macos/os_util.o \
 
 # Windows-only object files
@@ -157,8 +158,8 @@ else
 		OBJS += $(OBJS_MAC)
 		# Apple CoreAudio frameworks (no new external deps)
 		LDLIBS += -framework AudioToolbox -framework AudioUnit -framework CoreAudio -framework CoreFoundation
-		# Placeholder for future HID/PTT support:
-		# LDLIBS += -framework IOKit
+		# Add IOKit for HID (CM108) support
+		LDLIBS += -framework IOKit
 	else
 		PLATFORM := linux
 		OBJS += $(OBJS_LIN)
