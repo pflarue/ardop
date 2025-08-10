@@ -38,7 +38,14 @@
  * any data frame as hex with spaces between bytes (so 3 printed bytes per data
  * byte) plus with some margin.
  */
+#if defined(__APPLE__)
+// macOS PIPE_BUF is typically 512 bytes; enforce to satisfy zf_log static assert
+// Keep larger buffer on other platforms to preserve existing behavior.
+#undef ZF_LOG_BUF_SZ
+#define ZF_LOG_BUF_SZ 512
+#else
 #define ZF_LOG_BUF_SZ 4000
+#endif
 
 /* UTC log timestamps */
 #define ZF_LOG_USE_UTC_TIME 1

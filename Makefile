@@ -78,6 +78,12 @@ OBJS_LIN = \
 	$(BUILDDIR)/src/linux/ALSA.o \
 	$(BUILDDIR)/src/linux/os_util.o \
 
+# macOS-only object files (stubs for initial scaffolding)
+OBJS_MAC = \
+	$(BUILDDIR)/src/macos/CoreAudioSound.o \
+	$(BUILDDIR)/src/macos/MacSerial.o \
+	$(BUILDDIR)/src/macos/os_util.o \
+
 # Windows-only object files
 OBJS_WIN = \
 	$(BUILDDIR)/src/windows/Waveform.o \
@@ -113,7 +119,7 @@ endef
 CPPFLAGS += -Isrc -Ilib
 CFLAGS = -g -MMD
 LDLIBS = -lm -lpthread
-LDFLAGS = -Xlinker -Map=$(BUILDDIR)/output.map
+LDFLAGS =
 CC = gcc
 CC_NATIVE ?= $(CC)
 
@@ -128,18 +134,33 @@ TXT2C ?=
 WIN32 ?= $(filter $(OS),Windows_NT)
 
 # Determine build directory based on target platform
+UNAME_S := $(shell uname -s)
 ifneq ($(WIN32),)
 PLATFORM := windows
 OBJS += $(OBJS_WIN)
 LDLIBS += -lwsock32 -lwinmm -lsetupapi -lws2_32 -lhid
 else
-PLATFORM := linux
-OBJS += $(OBJS_LIN)
-LDLIBS += -lrt -lasound
+	ifeq ($(UNAME_S),Darwin)
+		PLATFORM := macos
+		OBJS += $(OBJS_MAC)
+		# Apple CoreAudio frameworks (no new external deps)
+		LDLIBS += -framework AudioToolbox -framework AudioUnit -framework CoreAudio -framework CoreFoundation
+		# Placeholder for future HID/PTT support:
+		# LDLIBS += -framework IOKit
+	else
+		PLATFORM := linux
+		OBJS += $(OBJS_LIN)
+		LDLIBS += -lrt -lasound
+	endif
 endif
 
 # Build directory structure
 BUILDDIR := build/$(PLATFORM)
+
+# macOS: exclude wrap-dependent test_log until cmocka & wrap semantics validated
+ifeq ($(PLATFORM),macos)
+TESTS := $(filter-out $(BUILDDIR)/test/ardop/test_log,$(TESTS))
+endif
 
 # Platform-specific directory creation
 ifeq ($(OS),Windows_NT)
@@ -153,7 +174,12 @@ all: ardopcf
 ardopcf: $(BUILDDIR)/ardopcf
 
 $(BUILDDIR)/ardopcf: $(OBJS_EXE) $(OBJS)
-	$(CC) $(LDFLAGS) $^ -o $@ $(LOADLIBES) $(LDLIBS)
+	# macOS ld64 rejects -Map option; only use map file on non-macOS
+	@if [ "$(PLATFORM)" = "macos" ]; then \
+		$(CC) $^ -o $@ $(LOADLIBES) $(LDLIBS); \
+	else \
+		$(CC) -Xlinker -Map=$(BUILDDIR)/output.map $^ -o $@ $(LOADLIBES) $(LDLIBS); \
+	fi
 
 # if txt2c is not provided, build it
 ifeq ($(TXT2C),)
@@ -194,7 +220,6 @@ $(BUILDDIR)/test/ardop/test_%: test/ardop/test_%.c $(OBJS) $(TEST_OBJS_COMMON)
 	$(CC) \
 		$(CPPFLAGS) \
 		$(CFLAGS) \
-		$(LDFLAGS) \
 		$(patsubst %,$(LDWRAP)%,$(WRAP)) \
 		$< \
 		$(OBJS) \
