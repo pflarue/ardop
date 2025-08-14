@@ -521,7 +521,8 @@ int decode_rs(int *rcvd, int rslen, bool quiet, bool test_only)
 int init_rs(int *lengths, int count) {
 	generate_gf();
 	if (gen_polys(lengths, count) != 0)
-		return (1);
+		return 1;
+	return 0;
 }
 
 /*	While only the first datalen bytes of data contain the data to be
