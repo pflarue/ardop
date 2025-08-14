@@ -3,8 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "common/log.h"
-#include "common/eutf8.h"
+#include "log.h"
+#include "eutf8.h"
 
 // See https://GitHub.com/pflarue/eutf8 for a full description of eutf8 (escaped
 // UTF-8) encoding along with reference implementations of to_eutf() and
