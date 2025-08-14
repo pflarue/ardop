@@ -33,3 +33,9 @@ newArdopSampleArrays.c
 
 # Editor garbage
 /.vscode/**
+# Editor backup files
+*~
+
+# MacOS attribute files
+.DS_Store
+
