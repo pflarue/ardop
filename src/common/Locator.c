@@ -1,11 +1,11 @@
-#include "common/Locator.h"
+#include "Locator.h"
 
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "common/log.h"
+#include "log.h"
 
 // Legacy ARDOPC used to transmit "No GS" in IDFRAMEs to indicate
 // that the grid square is unset. This is *not* valid as a

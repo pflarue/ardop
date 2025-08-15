@@ -1,7 +1,7 @@
 #include <stdlib.h>
 
-#include "common/log.h"
-#include "common/audio.h"
+#include "log.h"
+#include "audio.h"
 #include "rockliff/rrs.h"
 
 extern char DecodeWav[5][256];

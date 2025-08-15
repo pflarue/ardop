@@ -15,11 +15,11 @@
 #include <stdbool.h>
 
 #include "os_util.h"
-#include "common/ARDOPC.h"
-#include "common/ardopcommon.h"
-#include "common/wav.h"
-#include "common/ptt.h"
-#include "common/audio.h"
+#include "ARDOPC.h"
+#include "ardopcommon.h"
+#include "wav.h"
+#include "ptt.h"
+#include "audio.h"
 
 // pttOnTime is used both as a reference for how long audio has been playing
 // and as an indication of whether or not any transmissions have been made
