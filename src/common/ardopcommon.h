@@ -1,4 +1,4 @@
-#include "common/ARDOPC.h"
+#include "ARDOPC.h"
 
 #ifndef ARDOPCOMMONDEFINED
 #define ARDOPCOMMONDEFINED

@@ -13,10 +13,10 @@
 
 #include <time.h>
 
-#include "common/os_util.h"
-#include "common/ARDOPC.h"
-#include "common/Modulate.h"
-#include "common/eutf8.h"
+#include "os_util.h"
+#include "ARDOPC.h"
+#include "Modulate.h"
+#include "eutf8.h"
 
 extern unsigned int PKTLEDTimer;
 extern UCHAR bytData[];

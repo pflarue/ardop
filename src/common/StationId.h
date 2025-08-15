@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 
-#include "common/mustuse.h"
-#include "common/Packed6.h"
+#include "mustuse.h"
+#include "Packed6.h"
 
 /**
  * @def STATIONID_CALL_SIZE

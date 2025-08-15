@@ -2,12 +2,12 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include "common/os_util.h"
-#include "common/ardopcommon.h"
-#include "common/StationId.h"
-#include "common/audio.h"
-#include "common/ptt.h"
-#include "common/Webgui.h"
+#include "os_util.h"
+#include "ardopcommon.h"
+#include "StationId.h"
+#include "audio.h"
+#include "ptt.h"
+#include "Webgui.h"
 #include "ws_server/ws_server.h"
 
 

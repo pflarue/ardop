@@ -1,11 +1,11 @@
-#include "common/StationId.h"
+#include "StationId.h"
 
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "common/log.h"
+#include "log.h"
 
 // minimum number of characters in a callsign
 #define CALLSIGN_MIN 2

@@ -15,7 +15,7 @@
 #include <stdio.h>
 #include <time.h>
 
-#include "common/mustuse.h"
+#include "mustuse.h"
 
 // Flooring integer division
 //

@@ -2,11 +2,11 @@
 
 #include <stdbool.h>
 
-#include "common/os_util.h"
-#include "common/ARDOPC.h"
-#include "common/ardopcommon.h"
-#include "common/ptt.h"
-#include "common/Modulate.h"
+#include "os_util.h"
+#include "ARDOPC.h"
+#include "ardopcommon.h"
+#include "ptt.h"
+#include "Modulate.h"
 
 extern bool blnAbort;
 

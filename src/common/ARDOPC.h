@@ -3,9 +3,9 @@
 
 #include <stdbool.h>
 
-#include "common/log.h"
-#include "common/Locator.h"
-#include "common/StationId.h"
+#include "log.h"
+#include "Locator.h"
+#include "StationId.h"
 
 extern const char ProductName[];
 extern const char ProductVersion[];

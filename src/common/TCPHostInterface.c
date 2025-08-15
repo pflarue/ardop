@@ -41,9 +41,9 @@ int _memicmp(unsigned char *a, unsigned char *b, int n);
 
 #define MAX_PENDING_CONNECTS 4
 
-#include "common/os_util.h"
-#include "common/ARDOPC.h"
-#include "common/ptt.h"  // PTT and CAT
+#include "os_util.h"
+#include "ARDOPC.h"
+#include "ptt.h"  // PTT and CAT
 
 #define GetBuff() _GetBuff(__FILE__, __LINE__)
 #define ReleaseBuffer(s) _ReleaseBuffer(s, __FILE__, __LINE__)

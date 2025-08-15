@@ -1,4 +1,4 @@
-#include "common/Packed6.h"
+#include "Packed6.h"
 
 #include <string.h>
 #include <stdio.h>

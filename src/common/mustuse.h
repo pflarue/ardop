@@ -12,7 +12,7 @@
  * which must be checked.
  *
  * \code
- * #include "common/mustuse.h"
+ * #include "mustuse.h"
  *
  * ARDOP_MUSTUSE bool this_function_can_fail(int in, int* out);
  * \endcode

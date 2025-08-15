@@ -10,12 +10,12 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "common/os_util.h"
-#include "common/ardopcommon.h"
-#include "common/ptt.h"
-#include "common/log.h"
-#include "common/Webgui.h"
-#include "common/txframe.h"
+#include "os_util.h"
+#include "ardopcommon.h"
+#include "ptt.h"
+#include "log.h"
+#include "Webgui.h"
+#include "txframe.h"
 
 #define PTTNONCATMASK 0x0F
 #define PTTCATMASK 0x30

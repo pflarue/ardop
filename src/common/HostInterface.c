@@ -3,13 +3,13 @@
 
 #include <stdbool.h>
 
-#include "common/ARDOPC.h"
-#include "common/ardopcommon.h"
-#include "common/audio.h"
-#include "common/wav.h"
-#include "common/ptt.h"  // PTT and CAT
-#include "common/Webgui.h"
-#include "common/eutf8.h"
+#include "ARDOPC.h"
+#include "ardopcommon.h"
+#include "audio.h"
+#include "wav.h"
+#include "ptt.h"  // PTT and CAT
+#include "Webgui.h"
+#include "eutf8.h"
 
 bool blnHostRDY = false;
 extern int intFECFramesSent;

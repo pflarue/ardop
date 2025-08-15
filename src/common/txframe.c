@@ -12,9 +12,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "common/ARDOPC.h"
-#include "common/Locator.h"
-#include "common/Modulate.h"
+#include "ARDOPC.h"
+#include "Locator.h"
+#include "Modulate.h"
 
 extern int intLastRcvdFrameQuality;  // defined in ARDOPC.c
 

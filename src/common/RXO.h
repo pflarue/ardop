@@ -1,5 +1,5 @@
 #include <stdbool.h>
-#include "common/ARDOPC.h"
+#include "ARDOPC.h"
 
 float RxoComputeDecodeDistance(int * intToneMags, UCHAR bytFrameType);
 bool RxoDecodeSessionID(UCHAR bytFrameType, int * intToneMags, float dblMaxDistance);
