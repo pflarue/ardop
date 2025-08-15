@@ -1,4 +1,4 @@
-#include "common/log.h"
+#include "log.h"
 
 #include <assert.h>
 #include <string.h>
@@ -12,7 +12,7 @@
 #define LOG_OUTPUT_SYSLOG
 #endif
 
-#include "common/log_file.h"
+#include "log_file.h"
 
 // Configure log decoration, see zf_log.c
 #define ZF_LOG_MESSAGE_CTX_FORMAT (\

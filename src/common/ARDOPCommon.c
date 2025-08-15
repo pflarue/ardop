@@ -2,10 +2,10 @@
 // This simplifies test builds with using local version numbers independent
 //   of version numbers pushed to git repository.
 #include "os_util.h"
-#include "common/version.h"
-#include "common/audio.h"
-#include "common/Webgui.h"
-#include "common/ptt.h"
+#include "version.h"
+#include "audio.h"
+#include "Webgui.h"
+#include "ptt.h"
 
 
 void PollReceivedSamples();
@@ -36,8 +36,8 @@ void PollReceivedSamples();
 #include <ctype.h>
 #include <getopt.h>
 
-#include "common/ardopcommon.h"
-#include "common/wav.h"
+#include "ardopcommon.h"
+#include "wav.h"
 
 void ProcessCommandFromHost(char * strCMD);
 

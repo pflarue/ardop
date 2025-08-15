@@ -29,14 +29,14 @@ const char ProductName[] = "ardopcf";
 #define closesocket close
 #endif
 
-#include "common/os_util.h"
-#include "common/audio.h"
-#include "common/ARDOPC.h"
-#include "common/Locator.h"
-#include "common/StationId.h"
-#include "common/wav.h"
-#include "common/Modulate.h"
-#include "common/Webgui.h"
+#include "os_util.h"
+#include "audio.h"
+#include "ARDOPC.h"
+#include "Locator.h"
+#include "StationId.h"
+#include "wav.h"
+#include "Modulate.h"
+#include "Webgui.h"
 #include "rockliff/rrs.h"
 
 UCHAR bytDataToSend[DATABUFFERSIZE];

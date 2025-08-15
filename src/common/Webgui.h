@@ -1,7 +1,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#include "common/ardopcommon.h"
+#include "ardopcommon.h"
 
 extern int WebGuiNumConnected;
 

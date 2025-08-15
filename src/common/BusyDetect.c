@@ -7,8 +7,8 @@
 #include <windows.h>
 #endif
 
-#include "common/os_util.h"
-#include "common/ARDOPC.h"
+#include "os_util.h"
+#include "ARDOPC.h"
 
 VOID SortSignals2(float * dblMag, int intStartBin, int intStopBin, int intNumBins, float *  dblAVGSignalPerBin, float *  dblAVGBaselinePerBin);
 

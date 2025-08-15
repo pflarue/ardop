@@ -1,4 +1,4 @@
-#include "common/log_file.h"
+#include "log_file.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -8,7 +8,7 @@
 #include <string.h>
 #include <sys/time.h>
 
-#include "common/log.h"
+#include "log.h"
 
 /* emit inline symbol */
 extern bool ardop_logfile_need_rollover(

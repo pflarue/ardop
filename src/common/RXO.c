@@ -1,9 +1,9 @@
 #include <stdbool.h>
 
-#include "common/ARDOPC.h"
-#include "common/ardopcommon.h"
-#include "common/RXO.h"
-#include "common/eutf8.h"
+#include "ARDOPC.h"
+#include "ardopcommon.h"
+#include "RXO.h"
+#include "eutf8.h"
 
 extern UCHAR bytSessionID;
 extern UCHAR bytFrameData1[760];

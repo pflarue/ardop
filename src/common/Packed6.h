@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "common/mustuse.h"
+#include "mustuse.h"
 
 /**
  * @def PACKED6_SIZE

@@ -7,15 +7,15 @@
 
 #include <stdbool.h>
 
-#include "common/os_util.h"
-#include "common/ARDOPC.h"
-#include "common/Modulate.h"
-#include "common/wav.h"
-#include "common/Locator.h"
-#include "common/RXO.h"
-#include "common/sdft.h"
-#include "common/Webgui.h"
-#include "common/eutf8.h"
+#include "os_util.h"
+#include "ARDOPC.h"
+#include "Modulate.h"
+#include "wav.h"
+#include "Locator.h"
+#include "RXO.h"
+#include "sdft.h"
+#include "Webgui.h"
+#include "eutf8.h"
 #include "rockliff/rrs.h"
 
 #pragma warning(disable : 4244)  // Code does lots of float to int
