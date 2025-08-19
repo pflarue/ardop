@@ -16,11 +16,11 @@ No.  You do not need programming experience to build **ardopcf** from source.  O
 
 **ardopcf** is built and tested on computers with Intel/AMD processors having 32-bit and 64-bit Windows operating systems.  It is also built and tested on computers having Linux operating systems including those with Intel/AMD and ARM processors.  Specifically, Raspberry Pi Zero W and Zero 2W computers are used to build and test **ardopcf** for ARM processors.  Users have reported success building and using **ardopcf** on some addional Linux machines.
 
-I don't know whether anyone has tried building **ardopcf** for macOS or any other operating system.  Anyone who attempts to build for another OS is encouraged to send a message to the free users subgroup of ardop.groups.io to let us know whether it worked.  If it didn't work well, perhaps someone from that group will be able to help.
+Initial support for building and running **ardopcf** on macOS is available using the native CoreAudio API.  See the macOS build section below and [USAGE_macos.md](USAGE_macos.md) for platform-specific usage notes.
 
 ## Build System Output Folder
 
-The build system outputs files to the `build/%TARGET_OS%` folder in the project root. Where Target OS is one of Linux or Windows. This is where you will find the ardopcf executable when the build completes.
+The build system outputs files to the `build/%TARGET_OS%` folder in the project root. Where Target OS is one of `linux`, `macos`, or `windows`. This is where you will find the `ardopcf` executable when the build completes.
 
 ## Building ardopcf for Linux
 
@@ -79,6 +79,57 @@ cp ./build/linux/ardopcf $HOME/bin/ardopcf
 ```
 
 See [USAGE_linux.md](USAGE_linux.md) for guidance on use of **ardopcf** with Linux.  This includes instructions for determining what command line options you should use.
+
+## Building ardopcf for macOS
+
+Building **ardopcf** on macOS uses the system Clang toolchain and Apple CoreAudio frameworks. No third‑party libraries are required for the default build. Unit tests are optional and require `cmocka` (installable via Homebrew).
+
+Prerequisites:
+
+- Xcode Command Line Tools (provides clang, make):
+
+```bash
+xcode-select --install
+```
+
+- Optional for tests only: Homebrew and cmocka
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+brew install cmocka
+```
+
+Build steps:
+
+```bash
+# 1. Clone the repository (or use your existing checkout)
+git clone https://github.com/pflarue/ardop.git
+cd ardop
+
+# OPTIONAL: use the latest development branch
+git checkout develop
+
+# 2. Build ardopcf (CoreAudio frameworks are linked automatically)
+make
+
+# 3. Verify that it worked (prints the help screen)
+./build/macos/ardopcf -h
+
+# OPTIONAL: run unit tests (requires Homebrew cmocka)
+make test
+```
+
+Notes:
+
+- On first run that accesses audio, macOS will prompt for Microphone access. If you launch from Terminal, grant Microphone permission to your terminal app (e.g., Terminal, iTerm2) in System Settings > Privacy & Security > Microphone.
+- If macOS Firewall is enabled, you may be prompted to allow network connections for `ardopcf` when using the WebGui or a host program. Allow to enable local browser/host connectivity.
+- The built binary is at `build/macos/ardopcf`. You can optionally place it in your PATH, for example:
+
+```bash
+sudo cp ./build/macos/ardopcf /usr/local/bin
+```
+
+See [USAGE_macos.md](USAGE_macos.md) for guidance on using **ardopcf** on macOS, including audio device selection and troubleshooting.
 
 ## Building ardopcf for Windows using MinGW
 
