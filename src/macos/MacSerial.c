@@ -22,20 +22,20 @@
 #include "common/log.h"
 
 // Speed mapping table (mirrors Linux selection)
-struct speed_struct {
+struct speed_struct
+{
     int user_speed;
     speed_t termios_speed;
 };
 
 static const struct speed_struct speed_table[] = {
-    {300, B300}, {600, B600}, {1200, B1200}, {2400, B2400}, {4800, B4800},
-    {9600, B9600}, {19200, B19200}, {38400, B38400}, {57600, B57600}, {115200, B115200},
-    {-1, B0}
-};
+    {300, B300}, {600, B600}, {1200, B1200}, {2400, B2400}, {4800, B4800}, {9600, B9600}, {19200, B19200}, {38400, B38400}, {57600, B57600}, {115200, B115200}, {-1, B0}};
 
-static const struct speed_struct * lookup_speed(int speed) {
+static const struct speed_struct *lookup_speed(int speed)
+{
     const struct speed_struct *s = speed_table;
-    while (s->user_speed != -1) {
+    while (s->user_speed != -1)
+    {
         if (s->user_speed == speed)
             return s;
         s++;
@@ -43,28 +43,33 @@ static const struct speed_struct * lookup_speed(int speed) {
     return NULL;
 }
 
-HANDLE OpenCOMPort(void *Port, int speed) {
-    if (Port == NULL) {
+HANDLE OpenCOMPort(void *Port, int speed)
+{
+    if (Port == NULL)
+    {
         ZF_LOGE("Com Open failed: Port pointer NULL");
         return 0;
     }
-    const char *path = (const char*)Port;
+    const char *path = (const char *)Port;
     // NOTE(macOS): /dev/cu.* is preferred for outgoing connections; caller
     // supplies full device path. We do not auto-translate /dev/tty.* to
     // /dev/cu.* to avoid surprising behavior.
     int fd = open(path, O_RDWR | O_NOCTTY | O_NONBLOCK);
-    if (fd == -1) {
+    if (fd == -1)
+    {
         ZF_LOGE("Com Open failed: %s could not be opened (%s)", path, strerror(errno));
         return 0;
     }
     const struct speed_struct *sp = lookup_speed(speed);
-    if (!sp) {
+    if (!sp)
+    {
         ZF_LOGE("Invalid baud rate (%d) specified for com port (%s)", speed, path);
         close(fd);
         return 0;
     }
     struct termios tio;
-    if (tcgetattr(fd, &tio) == -1) {
+    if (tcgetattr(fd, &tio) == -1)
+    {
         ZF_LOGE("ERROR: Unable to get attributes of %s (%s)", path, strerror(errno));
         close(fd);
         return 0;
@@ -76,7 +81,8 @@ HANDLE OpenCOMPort(void *Port, int speed) {
     tio.c_iflag &= ~(IXON | IXOFF | IXANY);
     cfsetispeed(&tio, sp->termios_speed);
     cfsetospeed(&tio, sp->termios_speed);
-    if (tcsetattr(fd, TCSANOW, &tio) == -1) {
+    if (tcsetattr(fd, TCSANOW, &tio) == -1)
+    {
         ZF_LOGE("Error setting baud rate for %s to %d (%s)", path, speed, strerror(errno));
         close(fd);
         return 0;
@@ -88,22 +94,27 @@ HANDLE OpenCOMPort(void *Port, int speed) {
     return fd;
 }
 
-void CloseCOMPort(HANDLE *fd) {
-    if (fd && *fd) {
+void CloseCOMPort(HANDLE *fd)
+{
+    if (fd && *fd)
+    {
         ZF_LOGI("Serial port fd %d closing", *fd);
         close(*fd);
         *fd = 0;
     }
 }
 
-bool COMSetRTS(HANDLE fd) {
+bool COMSetRTS(HANDLE fd)
+{
     int status;
-    if (ioctl(fd, TIOCMGET, &status) == -1) {
+    if (ioctl(fd, TIOCMGET, &status) == -1)
+    {
         ZF_LOGE("ARDOP COMSetRTS TIOCMGET: %s", strerror(errno));
         return false;
     }
     status |= TIOCM_RTS;
-    if (ioctl(fd, TIOCMSET, &status) == -1) {
+    if (ioctl(fd, TIOCMSET, &status) == -1)
+    {
         ZF_LOGE("ARDOP COMSetRTS TIOCMSET: %s", strerror(errno));
         return false;
     }
@@ -111,14 +122,17 @@ bool COMSetRTS(HANDLE fd) {
     return true;
 }
 
-bool COMClearRTS(HANDLE fd) {
+bool COMClearRTS(HANDLE fd)
+{
     int status;
-    if (ioctl(fd, TIOCMGET, &status) == -1) {
+    if (ioctl(fd, TIOCMGET, &status) == -1)
+    {
         ZF_LOGE("ARDOP COMClearRTS TIOCMGET: %s", strerror(errno));
         return false;
     }
     status &= ~TIOCM_RTS;
-    if (ioctl(fd, TIOCMSET, &status) == -1) {
+    if (ioctl(fd, TIOCMSET, &status) == -1)
+    {
         ZF_LOGE("ARDOP COMClearRTS TIOCMSET: %s", strerror(errno));
         return false;
     }
@@ -126,14 +140,17 @@ bool COMClearRTS(HANDLE fd) {
     return true;
 }
 
-bool COMSetDTR(HANDLE fd) {
+bool COMSetDTR(HANDLE fd)
+{
     int status;
-    if (ioctl(fd, TIOCMGET, &status) == -1) {
+    if (ioctl(fd, TIOCMGET, &status) == -1)
+    {
         ZF_LOGE("ARDOP COMSetDTR TIOCMGET: %s", strerror(errno));
         return false;
     }
     status |= TIOCM_DTR;
-    if (ioctl(fd, TIOCMSET, &status) == -1) {
+    if (ioctl(fd, TIOCMSET, &status) == -1)
+    {
         ZF_LOGE("ARDOP COMSetDTR TIOCMSET: %s", strerror(errno));
         return false;
     }
@@ -141,14 +158,17 @@ bool COMSetDTR(HANDLE fd) {
     return true;
 }
 
-bool COMClearDTR(HANDLE fd) {
+bool COMClearDTR(HANDLE fd)
+{
     int status;
-    if (ioctl(fd, TIOCMGET, &status) == -1) {
+    if (ioctl(fd, TIOCMGET, &status) == -1)
+    {
         ZF_LOGE("ARDOP COMClearDTR TIOCMGET: %s", strerror(errno));
         return false;
     }
     status &= ~TIOCM_DTR;
-    if (ioctl(fd, TIOCMSET, &status) == -1) {
+    if (ioctl(fd, TIOCMSET, &status) == -1)
+    {
         ZF_LOGE("ARDOP COMClearDTR TIOCMSET: %s", strerror(errno));
         return false;
     }
@@ -157,34 +177,44 @@ bool COMClearDTR(HANDLE fd) {
 }
 
 // Internal helper implementing non-blocking write; returns bytes written or -1.
-static ssize_t mac_write_nb(int fd, const unsigned char *buf, size_t len) {
+static ssize_t mac_write_nb(int fd, const unsigned char *buf, size_t len)
+{
     size_t total = 0;
-    while (total < len) {
+    while (total < len)
+    {
         ssize_t ret = write(fd, buf + total, len - total);
-        if (ret > 0) {
+        if (ret > 0)
+        {
             total += (size_t)ret;
             // For non-blocking semantics, perform a single attempt; break if partial
             break; // remove this break to force full-block send like Linux
-        } else if (ret == -1) {
+        }
+        else if (ret == -1)
+        {
             if (errno == EINTR)
                 continue; // retry immediately
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+            {
                 // No progress possible now.
                 break;
             }
             return -1; // hard error
-        } else { // ret == 0 unexpected for serial; treat as stall
+        }
+        else
+        { // ret == 0 unexpected for serial; treat as stall
             break;
         }
     }
     return (ssize_t)total;
 }
 
-bool WriteCOMBlock(HANDLE fd, unsigned char * Block, int BytesToWrite) {
+bool WriteCOMBlock(HANDLE fd, unsigned char *Block, int BytesToWrite)
+{
     if (BytesToWrite <= 0)
         return true;
     ssize_t written = mac_write_nb(fd, Block, (size_t)BytesToWrite);
-    if (written == -1) {
+    if (written == -1)
+    {
         ZF_LOGE("Serial write error fd %d (%s)", fd, strerror(errno));
         return false;
     }
@@ -194,16 +224,20 @@ bool WriteCOMBlock(HANDLE fd, unsigned char * Block, int BytesToWrite) {
     return written == BytesToWrite;
 }
 
-int ReadCOMBlock(HANDLE fd, unsigned char * Block, int MaxLength) {
+int ReadCOMBlock(HANDLE fd, unsigned char *Block, int MaxLength)
+{
     if (MaxLength <= 0)
         return 0;
-    for (;;) {
+    for (;;)
+    {
         ssize_t ret = read(fd, Block, (size_t)MaxLength);
-        if (ret > 0) {
+        if (ret > 0)
+        {
             ZF_LOGD("Serial fd %d read %zd bytes", fd, ret);
             return (int)ret;
         }
-        if (ret == 0) {
+        if (ret == 0)
+        {
             // EOF (device closed?)
             ZF_LOGD("Serial fd %d EOF", fd);
             return 0;
@@ -217,7 +251,8 @@ int ReadCOMBlock(HANDLE fd, unsigned char * Block, int MaxLength) {
     }
 }
 
-char ** GetSerialStrlist() {
+char **GetSerialStrlist()
+{
     // Enumerate macOS serial devices with these policies:
     //  - Prefer /dev/cu.* (callout devices) for active connections.
     //  - Include /dev/tty.* only if a corresponding /dev/cu.* variant wasn't found.
@@ -225,7 +260,8 @@ char ** GetSerialStrlist() {
     //    to mirror Linux behavior of omitting generic Bluetooth pseudo ports.
     //  - Return alternating name/description pairs terminated by NULL (description empty).
     DIR *d = opendir("/dev");
-    if (!d) {
+    if (!d)
+    {
         ZF_LOGD("Directory /dev could not be opened for serial enumeration (%s)", strerror(errno));
         return NULL;
     }
@@ -237,7 +273,8 @@ char ** GetSerialStrlist() {
     const int MAX_TRACK = 128;
     char *cu_suffixes[MAX_TRACK];
     int cu_count = 0;
-    while ((dir = readdir(d)) != NULL) {
+    while ((dir = readdir(d)) != NULL)
+    {
         const char *name = dir->d_name;
         if (name[0] == '.')
             continue;
@@ -254,20 +291,28 @@ char ** GetSerialStrlist() {
         else if (is_tty)
             suffix = name + 4;
         // If tty.* and we already saw matching cu.* suffix, skip.
-        if (is_tty && suffix) {
+        if (is_tty && suffix)
+        {
             bool dup = false;
-            for (int i = 0; i < cu_count; ++i) {
-                if (strcmp(cu_suffixes[i], suffix) == 0) { dup = true; break; }
+            for (int i = 0; i < cu_count; ++i)
+            {
+                if (strcmp(cu_suffixes[i], suffix) == 0)
+                {
+                    dup = true;
+                    break;
+                }
             }
             if (dup)
                 continue;
         }
         char fullpath[PATH_MAX];
         snprintf(fullpath, sizeof(fullpath), "/dev/%s", name);
-        if (slist == NULL) {
+        if (slist == NULL)
+        {
             slistsize = 1;
-            slist = (char**)malloc(sizeof(char*));
-            if (!slist) {
+            slist = (char **)malloc(sizeof(char *));
+            if (!slist)
+            {
                 ZF_LOGE("malloc failed in GetSerialStrlist (%s)", strerror(errno));
                 closedir(d);
                 return NULL;
@@ -275,16 +320,18 @@ char ** GetSerialStrlist() {
             slist[slistsize - 1] = NULL;
         }
         slistsize += 2;
-        char **tmp = (char**)realloc(slist, slistsize * sizeof(char*));
-        if (!tmp) {
+        char **tmp = (char **)realloc(slist, slistsize * sizeof(char *));
+        if (!tmp)
+        {
             ZF_LOGE("realloc failed in GetSerialStrlist (%s)", strerror(errno));
             closedir(d);
             return slist;
         }
         slist = tmp;
         size_t namesz = strlen(fullpath) + 1;
-        slist[slistsize - 3] = (char*)malloc(namesz);
-        if (!slist[slistsize - 3]) {
+        slist[slistsize - 3] = (char *)malloc(namesz);
+        if (!slist[slistsize - 3])
+        {
             ZF_LOGE("malloc (name) failed in GetSerialStrlist (%s)", strerror(errno));
             slist[slistsize - 2] = NULL;
             closedir(d);
@@ -293,23 +340,33 @@ char ** GetSerialStrlist() {
         memcpy(slist[slistsize - 3], fullpath, namesz);
         slist[slistsize - 2] = strdup("");
         slist[slistsize - 1] = NULL;
-        if (is_cu && suffix && cu_count < MAX_TRACK) {
+        if (is_cu && suffix && cu_count < MAX_TRACK)
+        {
             cu_suffixes[cu_count] = strdup(suffix); // small leak tolerated on early returns
             cu_count++;
         }
     }
     closedir(d);
     // Free any suffix tracking allocations (not needed after enumeration)
-    for (int i = 0; i < cu_count; ++i) {
-        if (cu_suffixes[i]) { free(cu_suffixes[i]); cu_suffixes[i] = NULL; }
+    for (int i = 0; i < cu_count; ++i)
+    {
+        if (cu_suffixes[i])
+        {
+            free(cu_suffixes[i]);
+            cu_suffixes[i] = NULL;
+        }
     }
-    if (slist) {
+    if (slist)
+    {
         int pairs = 0;
-        for (int i = 0; slist[i]; i += 2) pairs++;
+        for (int i = 0; slist[i]; i += 2)
+            pairs++;
         ZF_LOGD("Serial enumeration: %d device(s) found (cu.* preferred, Bluetooth filtered)", pairs);
         for (int i = 0; slist[i]; i += 2)
             ZF_LOGD("  %s", slist[i]);
-    } else {
+    }
+    else
+    {
         ZF_LOGD("Serial enumeration: no eligible devices found");
     }
     return slist;
