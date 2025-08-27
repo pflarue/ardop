@@ -311,7 +311,9 @@ bool SampleSink(short Sample) {
 		   if (Number == SendSize) {
 			   static int sendtoCardCallCount = 0;
 			   sendtoCardCallCount++;
-			   ZF_LOGI("SampleSink: Number == SendSize, calling SendtoCard() #%d", sendtoCardCallCount);
+			   if (ZF_LOG_ON_DEBUG) {
+				   ZF_LOGD("SampleSink: Number == SendSize, calling SendtoCard() #%d", sendtoCardCallCount);
+			   }
 			   // send this buffer to sound interface
 			   if (!SendtoCard(SendSize)) {
 				   ZF_LOGE("SampleSink: SendtoCard() failed at call #%d", sendtoCardCallCount);
@@ -559,7 +561,9 @@ bool Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 		sprintf(DebugMess + strlen(DebugMess), "(None)");
 	ZF_LOGV("%s", DebugMess);
 
-		ZF_LOGI("Mod4FSKDataAndPlay: Completed, calling SoundFlush()");
+		if (ZF_LOG_ON_DEBUG) {
+			ZF_LOGD("Mod4FSKDataAndPlay: Completed, calling SoundFlush()");
+		}
 		return SoundFlush();
 }
 

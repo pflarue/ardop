@@ -188,8 +188,8 @@ bool WriteCOMBlock(HANDLE fd, unsigned char * Block, int BytesToWrite) {
         ZF_LOGE("Serial write error fd %d (%s)", fd, strerror(errno));
         return false;
     }
-    // TRACE-level equivalent: verbose log
-    ZF_LOGV("Serial fd %d write %zd/%d bytes", fd, written, BytesToWrite);
+    // Debug-level logging for serial I/O
+    ZF_LOGD("Serial fd %d write %zd/%d bytes", fd, written, BytesToWrite);
     // Return true only if entire buffer was written (matches existing bool contract)
     return written == BytesToWrite;
 }
@@ -200,7 +200,7 @@ int ReadCOMBlock(HANDLE fd, unsigned char * Block, int MaxLength) {
     for (;;) {
         ssize_t ret = read(fd, Block, (size_t)MaxLength);
         if (ret > 0) {
-            ZF_LOGV("Serial fd %d read %zd bytes", fd, ret);
+            ZF_LOGD("Serial fd %d read %zd bytes", fd, ret);
             return (int)ret;
         }
         if (ret == 0) {

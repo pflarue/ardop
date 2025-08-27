@@ -1,15 +1,14 @@
 #include <stdio.h>
-// macOS CoreAudio partial implementation.
-// Incremental milestones add functionality while preserving buildability
-// and avoiding impact to Linux/Windows code paths.
+// macOS CoreAudio implementation for ARDOP audio I/O.
+// Provides complete audio streaming functionality with separate AudioUnits
+// for input capture and output playback, matching Linux/Windows capabilities.
 //
-// Current scope:
-//  - Directional enablement (input-only / output-only / both / none)
-//  - Runtime reconfiguration (device/string changes)
-//  - Real device enumeration via CoreAudio (GetDevices)
-//  - Channel selection logging (mirrors Linux/Windows semantics)
-// Audio streaming logic (render/capture callbacks, channel routing) remains
-// stubbed and will be added in later milestones.
+// Features:
+//  - Full-duplex audio streaming with separate input/output AudioUnits
+//  - Real device enumeration via CoreAudio APIs
+//  - Sample rate conversion (48kHz device ↔ 12kHz ARDOP)
+//  - Runtime device reconfiguration and directional enablement
+//  - Ring buffer management for audio capture and playback
 
 #include <stdbool.h>
 #include <string.h>
@@ -48,7 +47,7 @@ static volatile int ringbuf_read = 0;  // Next read position
 static volatile int ringbuf_count = 0; // Number of samples in buffer
 
 // Ring buffer for audio input (capture)
-#define INBUF_SIZE (ReceiveSize * 256) // 256*240 = 61440 samples ~5s at 12kHz
+#define INBUF_SIZE (ReceiveSize * 512) // 512*240 = 122880 samples ~10s at 12kHz
 static float inbuf[INBUF_SIZE];
 static volatile int inbuf_write = 0;
 static volatile int inbuf_read = 0;
@@ -57,6 +56,21 @@ static volatile int inbuf_count = 0;
 // Buffer for delivering 240-sample blocks to ProcessNewSamples
 static short rxblock[ReceiveSize];
 static int rxblock_fill = 0;
+
+// CoreAudio diagnostics (minimal, non-verbose)
+static struct {
+    // Callback frame size sampling (startup only)
+    bool sampling_active;
+    int sample_count;
+    UInt32 frame_size_min, frame_size_max;
+    UInt32 frame_size_sum;
+    bool diagnostics_reported;
+    
+    // Ring buffer usage monitoring
+    int max_output_usage_percent;
+    int max_input_usage_percent;
+    bool buffer_warning_shown;
+} coreAudioDiag = {false, 0, UINT32_MAX, 0, 0, false, 0, 0, false};
 // CoreAudio input callback for audio capture
 static OSStatus inputCallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFlags,
                              const AudioTimeStamp *inTimeStamp, UInt32 inBusNumber,
@@ -65,6 +79,14 @@ static OSStatus inputCallback(void *inRefCon, AudioUnitRenderActionFlags *ioActi
     
     if (!coreAudioInputActive || !RXEnabled || !inputAudioUnit)
         return noErr;
+    
+    // Sample callback frame sizes during startup (first 50 callbacks)
+    if (coreAudioDiag.sampling_active && coreAudioDiag.sample_count < 50) {
+        coreAudioDiag.sample_count++;
+        if (inNumberFrames < coreAudioDiag.frame_size_min) coreAudioDiag.frame_size_min = inNumberFrames;
+        if (inNumberFrames > coreAudioDiag.frame_size_max) coreAudioDiag.frame_size_max = inNumberFrames;
+        coreAudioDiag.frame_size_sum += inNumberFrames;
+    }
 
 #ifdef __APPLE__
     // Allocate buffer for captured audio (mono float32)
@@ -91,17 +113,20 @@ static OSStatus inputCallback(void *inRefCon, AudioUnitRenderActionFlags *ioActi
     if (status == noErr) {
         // Process captured audio samples
         Float32 *inputBuffer = (Float32 *)capturedData.mBuffers[0].mData;
-        static int debugCount = 0;
-        int nonZeroSamples = 0;
         
         for (UInt32 frame = 0; frame < inNumberFrames; frame++) {
             float sample = inputBuffer[frame];
-            if (fabs(sample) > 0.001f) nonZeroSamples++;
             if (inbuf_count < INBUF_SIZE) {
                 inbuf[inbuf_write] = sample;
                 inbuf_write = (inbuf_write + 1) % INBUF_SIZE;
                 inbuf_count++;
             }
+        }
+        
+        // Monitor input buffer usage (non-verbose)
+        int input_usage_percent = (inbuf_count * 100) / INBUF_SIZE;
+        if (input_usage_percent > coreAudioDiag.max_input_usage_percent) {
+            coreAudioDiag.max_input_usage_percent = input_usage_percent;
         }
         
     } else {
@@ -161,8 +186,7 @@ static bool EnsureAudioUnitsStarted(void) {
         if (status != noErr) {
             ZF_LOGE("CoreAudio: Failed to start input AudioUnit (status=%d)", (int)status);
             success = false;
-        } else {
-            }
+        }
     }
     
     // Start output AudioUnit if we have one
@@ -171,13 +195,24 @@ static bool EnsureAudioUnitsStarted(void) {
         if (status != noErr) {
             ZF_LOGE("CoreAudio: Failed to start output AudioUnit (status=%d)", (int)status);
             success = false;
-        } else {
         }
     }
     
     if (success) {
         audioUnitStarted = true;
-        ZF_LOGI("CoreAudio: AudioUnits started successfully");
+        
+        // Start diagnostic sampling on first successful start
+        if (!coreAudioDiag.sampling_active && !coreAudioDiag.diagnostics_reported) {
+            coreAudioDiag.sampling_active = true;
+            coreAudioDiag.sample_count = 0;
+            coreAudioDiag.frame_size_min = UINT32_MAX;
+            coreAudioDiag.frame_size_max = 0;
+            coreAudioDiag.frame_size_sum = 0;
+        }
+        
+        if (ZF_LOG_ON_DEBUG) {
+            ZF_LOGD("CoreAudio: AudioUnits started successfully");
+        }
     }
     return success;
 #else
@@ -252,7 +287,9 @@ static OSStatus renderCallback(void *inRefCon, AudioUnitRenderActionFlags *ioAct
             if (audioPlaying && !audioFinished) {
                 audioFinished = true;
                 audioPlaying = false;
-                ZF_LOGI("RenderCallback: All audio played (ring buffer empty), signaling audioFinished");
+                if (ZF_LOG_ON_DEBUG) {
+                    ZF_LOGD("RenderCallback: All audio played (ring buffer empty), signaling audioFinished");
+                }
             }
             s0 = 0;
             s1 = 0;
@@ -271,8 +308,48 @@ static OSStatus renderCallback(void *inRefCon, AudioUnitRenderActionFlags *ioAct
             srcPos -= 1.0;
         }
     }
-    // (Debug logging removed for normal operation)
+    
+    // Monitor output buffer usage (non-verbose)
+    int output_usage_percent = (ringbuf_count * 100) / RINGBUF_SIZE;
+    if (output_usage_percent > coreAudioDiag.max_output_usage_percent) {
+        coreAudioDiag.max_output_usage_percent = output_usage_percent;
+    }
+    
     return noErr;
+}
+
+// Check if we should report CoreAudio diagnostics (called periodically, reports once)
+static void CheckAndReportCoreDiagnostics(void) {
+    // Report startup diagnostics once after sampling is complete
+    if (coreAudioDiag.sampling_active && coreAudioDiag.sample_count >= 50 && !coreAudioDiag.diagnostics_reported) {
+        coreAudioDiag.sampling_active = false; // Stop sampling
+        coreAudioDiag.diagnostics_reported = true;
+        
+        if (coreAudioDiag.sample_count > 0) {
+            UInt32 avg_frames = coreAudioDiag.frame_size_sum / coreAudioDiag.sample_count;
+            
+            // Report basic callback info (similar to Linux buffer info)
+            ZF_LOGI("CoreAudio: Audio callbacks using %u frame chunks at 48kHz", avg_frames);
+            
+            // Warn about significant frame size variation (like Linux period_size warnings)
+            if (coreAudioDiag.frame_size_max > coreAudioDiag.frame_size_min * 2) {
+                ZF_LOGW("##############################");
+                ZF_LOGW("WARNING: CoreAudio callback frame size varies significantly (%u-%u frames)", 
+                        coreAudioDiag.frame_size_min, coreAudioDiag.frame_size_max);
+                ZF_LOGW("##############################");
+            }
+        }
+    }
+    
+    // Check for buffer usage warnings (threshold-based, like Linux buffer_size warnings)
+    if (!coreAudioDiag.buffer_warning_shown && 
+        (coreAudioDiag.max_output_usage_percent > 80 || coreAudioDiag.max_input_usage_percent > 80)) {
+        coreAudioDiag.buffer_warning_shown = true;
+        ZF_LOGW("##############################");
+        ZF_LOGW("WARNING: CoreAudio ring buffer usage exceeded 80%% (Output: %d%%, Input: %d%%)",
+                coreAudioDiag.max_output_usage_percent, coreAudioDiag.max_input_usage_percent);
+        ZF_LOGW("##############################");
+    }
 }
 
 // Initialize (or reconfigure) the CoreAudio path for the current devices.
@@ -496,7 +573,7 @@ static void InitCoreAudio(const char *captureDev, const char *playbackDev) {
                         if (CFStringGetCString(deviceName, nameBuffer, sizeof(nameBuffer), kCFStringEncodingUTF8)) {
                             if (strcmp(nameBuffer, playbackDev) == 0) {
                                 targetDeviceID = deviceList[i];
-                                ZF_LOGI("CoreAudio: Found device ID %u for '%s'", (unsigned)targetDeviceID, playbackDev);
+                                ZF_LOGD("CoreAudio: Found device ID %u for '%s'", (unsigned)targetDeviceID, playbackDev);
                                 break;
                             }
                         }
@@ -549,14 +626,13 @@ static void InitCoreAudio(const char *captureDev, const char *playbackDev) {
                                      kAudioUnitScope_Input, 0, &renderCallbackStruct, sizeof(renderCallbackStruct));
         if (status != noErr) {
             ZF_LOGE("CoreAudio: Failed to set render callback (status=%d)", (int)status);
-        } else {
-            }
+        }
     }
     // Configure input if needed
     if (wantInput) {
         // Set up input format (always float32, mono, 48kHz or device rate)
         AudioStreamBasicDescription inputFormat = {0};
-        inputFormat.mSampleRate = 48000.0; // TODO: query device for actual rate if needed
+        inputFormat.mSampleRate = 48000.0; // Most devices support 48kHz; SRC handles any differences
         inputFormat.mFormatID = kAudioFormatLinearPCM;
         inputFormat.mFormatFlags = kAudioFormatFlagIsFloat | kAudioFormatFlagsNativeEndian | kLinearPCMFormatFlagIsPacked;
         inputFormat.mChannelsPerFrame = 1;
@@ -579,8 +655,7 @@ static void InitCoreAudio(const char *captureDev, const char *playbackDev) {
                                     kAudioUnitScope_Global, 0, &inputCallbackStruct, sizeof(inputCallbackStruct));
         if (status != noErr) {
             ZF_LOGE("CoreAudio: Failed to set input callback (status=%d)", (int)status);
-        } else {
-            }
+        }
     }
     
     // Initialize the AudioUnits
@@ -625,8 +700,7 @@ static void InitCoreAudio(const char *captureDev, const char *playbackDev) {
         UInt32 verifySize = sizeof(verifyCallback);
         status = AudioUnitGetProperty(outputAudioUnit, kAudioUnitProperty_SetRenderCallback,
                                      kAudioUnitScope_Input, 0, &verifyCallback, &verifySize);
-        if (status == noErr) {
-            } else {
+        if (status != noErr) {
             ZF_LOGE("CoreAudio: Failed to verify render callback (status=%d)", (int)status);
         }
     }
@@ -720,15 +794,6 @@ static void ReinitCoreAudioIfNeeded(void) {
     pthread_mutex_unlock(&coreAudioMutex);
 }
 
-// Minimal one-time log helper
-static void log_stub_once(void) {
-    static bool noted = false;
-    if (!noted) {
-        // One-time notice that full CoreAudio streaming is not yet implemented.
-        ZF_LOGW("macOS CoreAudio streaming not implemented yet (using stub path)");
-        noted = true;
-    }
-}
 
 void GetDevices() {
     FreeDevices(&AudioDevices);
@@ -847,8 +912,6 @@ void GetDevices() {
         }
         if (ids) { free(ids); ids = NULL; }
     }
-#else
-    log_stub_once();
 #endif
 add_nosound_only:
     ;  // Empty statement to satisfy C syntax
@@ -864,17 +927,14 @@ add_nosound_only:
 
 void InitAudio(bool quiet) {
     (void)quiet;
-    log_stub_once();
     GetDevices();
     AudioInit = true;
     if (ZF_LOG_ON_DEBUG) {
         LogDevices(AudioDevices, "macOS audio devices", false, false);
     }
-    // No CoreAudio initialization yet; occurs lazily in OpenSound* based on devices.
 }
 
 bool OpenSoundPlayback(char *devstr, int ch) {
-    log_stub_once();
     if (devstr == NULL || devstr[0] == '\0') {
         CloseSoundPlayback(false);
         return false;
@@ -926,7 +986,6 @@ bool OpenSoundPlayback(char *devstr, int ch) {
 }
 
 bool OpenSoundCapture(char *devstr, int ch) {
-    log_stub_once();
     if (devstr == NULL || devstr[0] == '\0') {
         CloseSoundCapture(false);
         return false;
@@ -976,7 +1035,6 @@ bool OpenSoundCapture(char *devstr, int ch) {
 }
 
 void CloseSoundPlayback(bool do_getdevices) {
-    log_stub_once();
     char prev[DEVSTRSZ];
     snprintf(prev, sizeof(prev), "%s", PlaybackDevice);
     PlaybackDevice[0] = '\0';
@@ -990,7 +1048,6 @@ void CloseSoundPlayback(bool do_getdevices) {
 }
 
 void CloseSoundCapture(bool do_getdevices) {
-    log_stub_once();
     char prev[DEVSTRSZ];
     snprintf(prev, sizeof(prev), "%s", CaptureDevice);
     CaptureDevice[0] = '\0';
@@ -1027,11 +1084,17 @@ bool SendtoCard(int n) {
         if (!EnsureAudioUnitsStarted()) {
             return false;
         }
+        
+        // Check for diagnostic reporting during TX as well
+        CheckAndReportCoreDiagnostics();
+        
         audioPlaying = true;
         audioFinished = false;  // Reset finished flag
         srcPosition = 0.0f;     // Reset sample rate conversion position
         SoundIsPlaying = true;
-        ZF_LOGI("CoreAudio: Started audio playback (ring buffer mode)");
+        if (ZF_LOG_ON_DEBUG) {
+            ZF_LOGD("CoreAudio: Started audio playback (ring buffer mode)");
+        }
     }
     return true;
 }
@@ -1045,6 +1108,9 @@ void PollReceivedSamples() {
     
     // Ensure AudioUnits are started for input capture
     EnsureAudioUnitsStarted();
+    
+    // Check for diagnostic reporting (minimal, non-verbose)
+    CheckAndReportCoreDiagnostics();
     // Sample rate conversion: input is float32 at 48kHz, output must be 16-bit at 12kHz
     static double srcPos = 0.0;
     const double srcRate = 48000.0;
