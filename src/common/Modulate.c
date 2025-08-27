@@ -308,12 +308,17 @@ bool SampleSink(short Sample) {
 			intFilteredSample = -32700;
 
 		txbuffer[TxIndex][Number++] = (short)intFilteredSample;
-		if (Number == SendSize) {
-			// send this buffer to sound interface
-			if (!SendtoCard(SendSize))
-				return false;
-			Number = 0;
-		}
+		   if (Number == SendSize) {
+			   static int sendtoCardCallCount = 0;
+			   sendtoCardCallCount++;
+			   ZF_LOGI("SampleSink: Number == SendSize, calling SendtoCard() #%d", sendtoCardCallCount);
+			   // send this buffer to sound interface
+			   if (!SendtoCard(SendSize)) {
+				   ZF_LOGE("SampleSink: SendtoCard() failed at call #%d", sendtoCardCallCount);
+				   return false;
+			   }
+			   Number = 0;
+		   }
 	}
 
 	Last120[Last120Put++] = Sample;
@@ -455,8 +460,9 @@ bool Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 		return false;
 	}
 
-	ZF_LOGI("Sending Frame Type %s", strType);
-	DrawTXFrame(strType);
+		ZF_LOGI("Sending Frame Type %s", strType);
+		DrawTXFrame(strType);
+		int mod4fsk_sendtoCard_total = 0;
 	// In addition to strType, include quality value being sent for ACK/NAK frames
 	char fr_info[32] = "";
 	if (Type <= DataNAKmax || Type >= DataACKmin) {
@@ -514,32 +520,36 @@ bool Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 	// obsolete versions of this code accommodated inNumCar > 1
 
 	sprintf(DebugMess, "Mod4FSKDataAndPlay 1Car tones :");
-	for (m = 0; m < intDataBytesPerCar; m++) {  // For each byte of input data
+		for (m = 0; m < intDataBytesPerCar; m++) {  // For each byte of input data
 		bytMask = 0xC0;  // Initialize mask each new data byte
 		sprintf(DebugMess + strlen(DebugMess), " ");
 		for (k = 0; k < 4; k++) { // for 4 symbol values per byte of data
 			bytSymToSend = (bytMask & bytEncodedBytes[intDataPtr]) >> (2 * (3 - k));  // Values 0-3
 			sprintf(DebugMess + strlen(DebugMess), "%d", bytSymToSend);
 
-			for (n = 0; n < intSampPerSym; n++) { // Sum for all the samples of a symbols
-				if((k & 1) == 0) {
-					if(intBaud == 50)
-						intSample = intFSK50bdCarTemplate[bytSymToSend][n];
-					else
-						intSample = intFSK100bdCarTemplate[bytSymToSend][n];
+			   for (n = 0; n < intSampPerSym; n++) { // Sum for all the samples of a symbols
+				   if((k & 1) == 0) {
+					   if(intBaud == 50)
+						   intSample = intFSK50bdCarTemplate[bytSymToSend][n];
+					   else
+						   intSample = intFSK100bdCarTemplate[bytSymToSend][n];
 
-					if (!SampleSink(intSample))
-						return false;
-				} else {
-					if(intBaud == 50)
-						intSample = -intFSK50bdCarTemplate[bytSymToSend][n];
-					else
-						intSample = -intFSK100bdCarTemplate[bytSymToSend][n];
+					   if (!SampleSink(intSample)) {
+						   ZF_LOGE("Mod4FSKDataAndPlay: SampleSink failed at m=%d k=%d n=%d", m, k, n);
+						   return false;
+					   }
+				   } else {
+					   if(intBaud == 50)
+						   intSample = -intFSK50bdCarTemplate[bytSymToSend][n];
+					   else
+						   intSample = -intFSK100bdCarTemplate[bytSymToSend][n];
 
-					if (!SampleSink(intSample))
-						return false;
-				}
-			}
+					   if (!SampleSink(intSample)) {
+						   ZF_LOGE("Mod4FSKDataAndPlay: SampleSink failed at m=%d k=%d n=%d", m, k, n);
+						   return false;
+					   }
+				   }
+			   }
 			bytMask = bytMask >> 2;
 		}
 		intDataPtr += 1;
@@ -549,7 +559,8 @@ bool Mod4FSKDataAndPlay(int Type, unsigned char * bytEncodedBytes, int Len, int 
 		sprintf(DebugMess + strlen(DebugMess), "(None)");
 	ZF_LOGV("%s", DebugMess);
 
-	return SoundFlush();
+		ZF_LOGI("Mod4FSKDataAndPlay: Completed, calling SoundFlush()");
+		return SoundFlush();
 }
 
 

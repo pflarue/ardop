@@ -1216,7 +1216,8 @@ size_t EncodeDeviceStrlist(char *dst, int dstsize, char **ss, char **cs) {
 // to recieve.  If none of the methods for locally controlling PTT are set, then
 // send commands to the host program which it may use to control PTT.
 void KeyPTT(bool state) {
-	bool done = false;
+		bool done = false;
+		ZF_LOGI("KeyPTT called: state=%s, PTTmode=0x%02X", state ? "TRUE" : "FALSE", PTTmode);
 #if defined(__APPLE__)
 	// Track which backend successfully handled this PTT change (serial RTS/DTR vs HID CM108)
 	enum { PTT_BACKEND_NONE, PTT_BACKEND_RTS, PTT_BACKEND_DTR, PTT_BACKEND_CM108 } used_backend = PTT_BACKEND_NONE;

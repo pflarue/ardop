@@ -1,3 +1,4 @@
+#include <stdio.h>
 // macOS CoreAudio partial implementation.
 // Incremental milestones add functionality while preserving buildability
 // and avoiding impact to Linux/Windows code paths.
@@ -14,6 +15,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <unistd.h>
 #ifdef __APPLE__
 #include <CoreAudio/CoreAudio.h>
 #include <AudioToolbox/AudioToolbox.h>
@@ -30,13 +32,21 @@
 short txbuffer[2][SendSize];
 int TxIndex = 0;
 
+// Ring buffer for audio output (large enough for several seconds of audio)
+#define RINGBUF_SIZE (SendSize * 256) // 256*1200 = 307200 samples ~7s at 44.1kHz
+static short ringbuf[RINGBUF_SIZE];
+static volatile int ringbuf_write = 0; // Next write position
+static volatile int ringbuf_read = 0;  // Next read position
+static volatile int ringbuf_count = 0; // Number of samples in buffer
+
 // Track enabled state
 bool AudioInit = false;  // One-time overall audio enumeration done
 
-// Stub CoreAudio state flags (would map to actual AudioUnit configuration)
-static bool coreAudioInitialized = false;      // We "created" (stub) an AudioUnit
-static bool coreAudioInputActive = false;      // Input bus logically enabled
-static bool coreAudioOutputActive = false;     // Output bus logically enabled
+// CoreAudio state - real AudioUnit instances and configuration
+static bool coreAudioInitialized = false;      // AudioUnit created and configured
+static bool coreAudioInputActive = false;      // Input bus enabled and running
+static bool coreAudioOutputActive = false;     // Output bus enabled and running
+static AudioUnit audioUnit = NULL;             // The actual AudioUnit instance
 // Track last configured device names to detect change
 static char lastCaptureDev[DEVSTRSZ] = "";
 static char lastPlaybackDev[DEVSTRSZ] = "";
@@ -48,25 +58,126 @@ static char last_tx_dev[DEVSTRSZ] = "";  // Playback side
 // invokes OpenSound* from different threads this prevents partial teardown.
 static pthread_mutex_t coreAudioMutex = PTHREAD_MUTEX_INITIALIZER;
 
+// Audio buffer state for transmission
+static volatile int txReadIndex = 0;           // Read position in txbuffer
+static volatile bool audioPlaying = false;    // AudioUnit is actively playing
+static volatile bool audioFinished = false;   // All audio data has been consumed
+static volatile float srcPosition = 0.0f;     // Sample rate conversion position
+
 // Helper to decide if a device string represents an enabled direction.
 // Enabled if non-null, non-empty, not NOSOUND, not -1.
 static bool dev_enabled(const char *dev) {
     return dev != NULL && dev[0] != '\0' && strcmp(dev, "NOSOUND") != 0 && strcmp(dev, "-1") != 0;
 }
 
+// CoreAudio render callback for audio output
+// This function is called by CoreAudio when it needs audio samples to play
+static OSStatus renderCallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFlags,
+                              const AudioTimeStamp *inTimeStamp, UInt32 inBusNumber,
+                              UInt32 inNumberFrames, AudioBufferList *ioData) {
+    (void)inRefCon; (void)ioActionFlags; (void)inTimeStamp; (void)inBusNumber;
+    
+    // (Debug logging removed for normal operation)
+    if (!audioPlaying || !TXEnabled || ioData->mNumberBuffers == 0) {
+        // Fill with silence
+        for (UInt32 i = 0; i < ioData->mNumberBuffers; i++) {
+            memset(ioData->mBuffers[i].mData, 0, ioData->mBuffers[i].mDataByteSize);
+        }
+        return noErr;
+    }
+    // Get output buffer (assume first buffer, mono or stereo)
+    float *outputBuffer = (float*)ioData->mBuffers[0].mData;
+    UInt32 channelsPerFrame = ioData->mBuffers[0].mNumberChannels;
+    
+    // Convert samples from txbuffer (16-bit signed) to float and copy to output
+    // Handle sample rate conversion from 44.1kHz (ARDOP) to 48kHz (device)
+    int samplesRead = 0;
+    int nonzero = 0;
+    // Sample rate conversion state (static to persist across callbacks)
+    static double srcPos = 0.0; // Position in source (ring buffer) in 12kHz samples
+    const double srcRate = 12000.0;
+    const double dstRate = 48000.0;
+    const double rateRatio = srcRate / dstRate; // 0.25
+    static float srcRatio = 12000.0f / 48000.0f;  // 0.25 - need to read slower
+    
+    // Track total samples played across all SendtoCard() calls
+    static int totalSamplesQueued = 0;
+    static int totalSamplesPlayed = 0;
+    // On first callback after playback starts, compute totalSamplesQueued
+    // (callbackCount logic removed with debug logging)
+
+    // Calculate how many samples are actually queued (sum of both buffers)
+    // This is a workaround: in a real implementation, track this in SendtoCard()
+    int buffer0_nonzero = 0, buffer1_nonzero = 0;
+    for (int i = 0; i < SendSize; i++) {
+        if (txbuffer[0][i] != 0) buffer0_nonzero++;
+        if (txbuffer[1][i] != 0) buffer1_nonzero++;
+    }
+    totalSamplesQueued = buffer0_nonzero + buffer1_nonzero;
+
+    for (UInt32 frame = 0; frame < inNumberFrames; frame++) {
+        // Linear interpolation SRC: for each output frame, compute position in input (ring buffer)
+        int srcIndex0 = (int)srcPos;
+        int srcIndex1 = srcIndex0 + 1;
+        double frac = srcPos - srcIndex0;
+        short s0 = 0, s1 = 0;
+        if (ringbuf_count > srcIndex1) {
+            int idx0 = (ringbuf_read + srcIndex0) % RINGBUF_SIZE;
+            int idx1 = (ringbuf_read + srcIndex1) % RINGBUF_SIZE;
+            s0 = ringbuf[idx0];
+            s1 = ringbuf[idx1];
+            samplesRead++;
+        } else if (ringbuf_count > srcIndex0) {
+            int idx0 = (ringbuf_read + srcIndex0) % RINGBUF_SIZE;
+            s0 = ringbuf[idx0];
+            s1 = s0;
+            samplesRead++;
+        } else {
+            // Buffer underrun: output silence
+            if (audioPlaying && !audioFinished) {
+                audioFinished = true;
+                audioPlaying = false;
+                ZF_LOGI("RenderCallback: All audio played (ring buffer empty), signaling audioFinished");
+            }
+            s0 = 0;
+            s1 = 0;
+        }
+        short sample = (short)((1.0 - frac) * s0 + frac * s1);
+        if (sample != 0) nonzero++;
+        float floatSample = sample / 32768.0f;
+        for (UInt32 ch = 0; ch < channelsPerFrame; ch++) {
+            outputBuffer[frame * channelsPerFrame + ch] = floatSample;
+        }
+        srcPos += rateRatio;
+        // When enough output frames have been produced to consume a source sample, advance ringbuf_read
+        while (srcPos >= 1.0 && ringbuf_count > 0) {
+            ringbuf_read = (ringbuf_read + 1) % RINGBUF_SIZE;
+            ringbuf_count--;
+            srcPos -= 1.0;
+        }
+    }
+    // (Debug logging removed for normal operation)
+    return noErr;
+}
+
 // Initialize (or reconfigure) the CoreAudio path for the current devices.
 // captureDev / playbackDev are the canonical strings (may be "NOSOUND").
 // This function is idempotent and safe to call after each open/close.
-// For now it only computes direction booleans and logs them; real AudioUnit
-// setup will later replace the stub block guarded by comments.
+// Creates real AudioUnit instances and configures them for audio I/O.
 static void InitCoreAudio(const char *captureDev, const char *playbackDev) {
     bool wantInput = dev_enabled(captureDev);
     bool wantOutput = dev_enabled(playbackDev);
+    
+    ZF_LOGI("InitCoreAudio called: captureDev='%s', playbackDev='%s', wantInput=%d, wantOutput=%d", 
+            captureDev ? captureDev : "NULL", playbackDev ? playbackDev : "NULL", wantInput, wantOutput);
 
     if (!wantInput && !wantOutput) {
-        if (coreAudioInitialized) {
-            // Future: dispose AudioUnit instance
+        if (coreAudioInitialized && audioUnit) {
+            AudioUnitUninitialize(audioUnit);
+            AudioComponentInstanceDispose(audioUnit);
+            audioUnit = NULL;
             coreAudioInitialized = false;
+            ZF_LOGI("CoreAudio: Disposed AudioUnit due to no enabled devices");
         }
         coreAudioInputActive = false;
         coreAudioOutputActive = false;
@@ -74,11 +185,188 @@ static void InitCoreAudio(const char *captureDev, const char *playbackDev) {
         return;
     }
 
-    // Stub: mark desired directions active.
+#ifdef __APPLE__
+    OSStatus status = noErr;
+    
+    // Dispose existing AudioUnit if we have one
+    if (coreAudioInitialized && audioUnit) {
+        AudioUnitUninitialize(audioUnit);
+        AudioComponentInstanceDispose(audioUnit);
+        audioUnit = NULL;
+        coreAudioInitialized = false;
+    }
+
+    // Create AudioUnit (using HAL output unit to support specific devices)
+    AudioComponentDescription desc = {0};
+    desc.componentType = kAudioUnitType_Output;
+    desc.componentSubType = kAudioUnitSubType_HALOutput;  // Use HAL instead of DefaultOutput
+    desc.componentManufacturer = kAudioUnitManufacturer_Apple;
+    
+    AudioComponent component = AudioComponentFindNext(NULL, &desc);
+    if (!component) {
+        ZF_LOGE("CoreAudio: Failed to find HAL output component");
+        return;
+    }
+    
+    status = AudioComponentInstanceNew(component, &audioUnit);
+    if (status != noErr || !audioUnit) {
+        ZF_LOGE("CoreAudio: Failed to create AudioUnit instance (status=%d)", (int)status);
+        return;
+    }
+
+    // Enable output on the HAL unit (required for HAL units)
+    UInt32 enableOutput = 1;
+    status = AudioUnitSetProperty(audioUnit, kAudioOutputUnitProperty_EnableIO,
+                                kAudioUnitScope_Output, 0, &enableOutput, sizeof(enableOutput));
+    if (status != noErr) {
+        ZF_LOGE("CoreAudio: Failed to enable output (status=%d)", (int)status);
+        AudioComponentInstanceDispose(audioUnit);
+        audioUnit = NULL;
+        return;
+    } else {
+        ZF_LOGI("CoreAudio: Output enabled on HAL unit");
+    }
+
+    // Disable input on the HAL unit for now (we're only doing output)
+    UInt32 enableInput = 0;
+    status = AudioUnitSetProperty(audioUnit, kAudioOutputUnitProperty_EnableIO,
+                                kAudioUnitScope_Input, 1, &enableInput, sizeof(enableInput));
+    if (status != noErr) {
+        ZF_LOGW("CoreAudio: Failed to disable input (status=%d)", (int)status);
+    } else {
+        ZF_LOGI("CoreAudio: Input disabled on HAL unit");
+    }
+
+    // Configure specific output device if we have one
+    AudioDeviceID targetDeviceID = kAudioObjectUnknown;
+    if (wantOutput && playbackDev && playbackDev[0] != '\0') {
+        
+        // Find the device ID for our playback device name
+        UInt32 propSize = 0;
+        AudioObjectPropertyAddress listAddr = { kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain };
+        if (AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &listAddr, 0, NULL, &propSize) == noErr && propSize > 0) {
+            UInt32 deviceCount = propSize / sizeof(AudioDeviceID);
+            AudioDeviceID *deviceList = (AudioDeviceID *)malloc(propSize);
+            if (deviceList && AudioObjectGetPropertyData(kAudioObjectSystemObject, &listAddr, 0, NULL, &propSize, deviceList) == noErr) {
+                for (UInt32 i = 0; i < deviceCount; i++) {
+                    CFStringRef deviceName = NULL;
+                    UInt32 size = sizeof(CFStringRef);
+                    AudioObjectPropertyAddress nameAddr = { kAudioObjectPropertyName, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain };
+                    if (AudioObjectGetPropertyData(deviceList[i], &nameAddr, 0, NULL, &size, &deviceName) == noErr && deviceName) {
+                        char nameBuffer[256];
+                        if (CFStringGetCString(deviceName, nameBuffer, sizeof(nameBuffer), kCFStringEncodingUTF8)) {
+                            if (strcmp(nameBuffer, playbackDev) == 0) {
+                                targetDeviceID = deviceList[i];
+                                ZF_LOGI("CoreAudio: Found device ID %u for '%s'", (unsigned)targetDeviceID, playbackDev);
+                                break;
+                            }
+                        }
+                        CFRelease(deviceName);
+                    }
+                }
+            }
+            free(deviceList);
+        }
+        
+        if (targetDeviceID != kAudioObjectUnknown) {
+            status = AudioUnitSetProperty(audioUnit, kAudioOutputUnitProperty_CurrentDevice,
+                                        kAudioUnitScope_Global, 0, &targetDeviceID, sizeof(targetDeviceID));
+            if (status != noErr) {
+                ZF_LOGW("CoreAudio: Failed to set specific output device %u (status=%d)", (unsigned)targetDeviceID, (int)status);
+            } else {
+                ZF_LOGI("CoreAudio: Set output device to %u ('%s')", (unsigned)targetDeviceID, playbackDev);
+            }
+        } else {
+            ZF_LOGW("CoreAudio: Could not find device ID for playback device '%s'", playbackDev);
+        }
+    }
+
+    // Configure output if needed
+    if (wantOutput) {
+        // Get the device's current format first
+        AudioStreamBasicDescription deviceFormat = {0};
+        if (targetDeviceID != kAudioObjectUnknown) {
+            UInt32 formatSize = sizeof(deviceFormat);
+            AudioObjectPropertyAddress formatAddr = { kAudioDevicePropertyStreamFormat, kAudioDevicePropertyScopeOutput, kAudioObjectPropertyElementMain };
+            if (AudioObjectGetPropertyData(targetDeviceID, &formatAddr, 0, NULL, &formatSize, &deviceFormat) == noErr) {
+                ZF_LOGI("CoreAudio: Device format: %.1fHz, %u channels, %u bits", 
+                        deviceFormat.mSampleRate, (unsigned)deviceFormat.mChannelsPerFrame, (unsigned)deviceFormat.mBitsPerChannel);
+            }
+        }
+        
+        // Set up audio format - use device's native sample rate and stereo if needed
+        AudioStreamBasicDescription format = {0};
+        // Use device's sample rate if available, otherwise default to 48kHz
+        format.mSampleRate = (deviceFormat.mSampleRate > 0) ? deviceFormat.mSampleRate : 48000.0;
+        format.mFormatID = kAudioFormatLinearPCM;
+        format.mFormatFlags = kAudioFormatFlagIsFloat | kAudioFormatFlagsNativeEndian | kLinearPCMFormatFlagIsPacked;
+        // Use device's channel count if available, otherwise mono
+        format.mChannelsPerFrame = (deviceFormat.mChannelsPerFrame > 0) ? deviceFormat.mChannelsPerFrame : 1;
+        format.mFramesPerPacket = 1;
+        format.mBitsPerChannel = 32;
+        format.mBytesPerFrame = format.mChannelsPerFrame * sizeof(Float32);
+        format.mBytesPerPacket = format.mBytesPerFrame;
+        
+        status = AudioUnitSetProperty(audioUnit, kAudioUnitProperty_StreamFormat,
+                                    kAudioUnitScope_Input, 0, &format, sizeof(format));
+        if (status != noErr) {
+            ZF_LOGE("CoreAudio: Failed to set output format (status=%d)", (int)status);
+        } else {
+            ZF_LOGI("CoreAudio: Set format: %.1fHz, %u channels, 32-bit float", 
+                    format.mSampleRate, (unsigned)format.mChannelsPerFrame);
+        }
+        
+        // Set render callback
+        AURenderCallbackStruct callbackStruct = {0};
+        callbackStruct.inputProc = renderCallback;
+        callbackStruct.inputProcRefCon = NULL;
+        
+        status = AudioUnitSetProperty(audioUnit, kAudioUnitProperty_SetRenderCallback,
+                                    kAudioUnitScope_Input, 0, &callbackStruct, sizeof(callbackStruct));
+        if (status != noErr) {
+            ZF_LOGE("CoreAudio: Failed to set render callback (status=%d)", (int)status);
+            AudioComponentInstanceDispose(audioUnit);
+            audioUnit = NULL;
+            return;
+        } else {
+            ZF_LOGI("CoreAudio: Render callback set successfully");
+        }
+    }
+    
+    // Initialize the AudioUnit
+    status = AudioUnitInitialize(audioUnit);
+    if (status != noErr) {
+        ZF_LOGE("CoreAudio: Failed to initialize AudioUnit (status=%d)", (int)status);
+        AudioComponentInstanceDispose(audioUnit);
+        audioUnit = NULL;
+        return;
+    }
+
     coreAudioInputActive = wantInput;
     coreAudioOutputActive = wantOutput;
     coreAudioInitialized = true;
-    ZF_LOGD("CoreAudio init: inputEnabled=%d outputEnabled=%d", (int)coreAudioInputActive, (int)coreAudioOutputActive);
+    ZF_LOGI("CoreAudio: AudioUnit initialized successfully - inputEnabled=%d outputEnabled=%d", 
+            (int)coreAudioInputActive, (int)coreAudioOutputActive);
+    
+    // Verify callback was set (only if we have output)
+    if (wantOutput) {
+        AURenderCallbackStruct verifyCallback;
+        UInt32 verifySize = sizeof(verifyCallback);
+        status = AudioUnitGetProperty(audioUnit, kAudioUnitProperty_SetRenderCallback,
+                                     kAudioUnitScope_Input, 0, &verifyCallback, &verifySize);
+        if (status == noErr) {
+            ZF_LOGI("CoreAudio: Render callback verified: proc=%p", (void*)verifyCallback.inputProc);
+        } else {
+            ZF_LOGE("CoreAudio: Failed to verify render callback (status=%d)", (int)status);
+        }
+    }
+#else
+    // Non-Apple platform stub
+    coreAudioInputActive = wantInput;
+    coreAudioOutputActive = wantOutput;
+    coreAudioInitialized = true;
+    ZF_LOGD("CoreAudio init: inputEnabled=%d outputEnabled=%d (stub)", (int)coreAudioInputActive, (int)coreAudioOutputActive);
+#endif
 }
 
 // Determine if CoreAudio (stub) needs to be re-created due to changes in
@@ -278,6 +566,7 @@ void GetDevices() {
     log_stub_once();
 #endif
 add_nosound_only:
+    ;  // Empty statement to satisfy C syntax
     int idx = ExtendDevices(&AudioDevices);
     if (idx >= 0) {
         DeviceInfo *dev = AudioDevices[idx];
@@ -408,6 +697,7 @@ void CloseSoundPlayback(bool do_getdevices) {
     PlaybackDevice[0] = '\0';
     SoundIsPlaying = false;
     TXEnabled = false;
+    ZF_LOGI("SoundFlush: called, will KeyPTT(false) and wait for audio to finish");
     KeyPTT(false);
     ReinitCoreAudioIfNeeded();  // Re-evaluate (may tear down AudioUnit if last direction)
     updateWebGuiAudioConfig(do_getdevices);
@@ -426,10 +716,43 @@ void CloseSoundCapture(bool do_getdevices) {
 }
 
 bool SendtoCard(int n) {
-    (void)n;
-    log_stub_once();
-    if (!TXEnabled) return false;
-    // Nothing to send in stub
+    if (!TXEnabled || !coreAudioInitialized || !audioUnit) {
+    ZF_LOGW("SendtoCard: Cannot send - TXEnabled=%d, initialized=%d, audioUnit=%p", 
+        TXEnabled, coreAudioInitialized, (void*)audioUnit);
+    return false;
+    }
+    // Copy n samples from txbuffer[TxIndex] into ring buffer
+    int written = 0;
+    int nonzero = 0;
+    for (int i = 0; i < n; i++) {
+        if (ringbuf_count >= RINGBUF_SIZE) {
+            ZF_LOGE("SendtoCard: ring buffer overrun! Dropping audio sample.");
+            break;
+        }
+        short sample = txbuffer[TxIndex][i];
+        ringbuf[ringbuf_write] = sample;
+        if (sample != 0) nonzero++;
+        ringbuf_write = (ringbuf_write + 1) % RINGBUF_SIZE;
+        ringbuf_count++;
+        written++;
+    }
+    // (Debug logging removed for normal operation)
+    // Start AudioUnit playback if not already playing
+    if (!audioPlaying) {
+#ifdef __APPLE__
+        OSStatus status = AudioOutputUnitStart(audioUnit);
+        if (status != noErr) {
+            ZF_LOGE("CoreAudio: Failed to start AudioUnit (status=%d)", (int)status);
+            return false;
+        }
+        ZF_LOGI("CoreAudio: AudioUnit started successfully");
+#endif
+        audioPlaying = true;
+        audioFinished = false;  // Reset finished flag
+        srcPosition = 0.0f;     // Reset sample rate conversion position
+        SoundIsPlaying = true;
+        ZF_LOGI("CoreAudio: Started audio playback (ring buffer mode)");
+    }
     return true;
 }
 
@@ -442,8 +765,33 @@ void StopCapture() {
 }
 
 bool SoundFlush() {
-    log_stub_once();
     KeyPTT(false);
+
+    // Wait for all staged audio to finish playing
+    if (audioPlaying && audioUnit) {
+        // Wait for the render callback to consume all the audio data
+        int flushWaitCount = 0;
+        while (audioPlaying && !audioFinished) {
+            usleep(1000); // Sleep for 1ms
+            flushWaitCount++;
+        }
+#ifdef __APPLE__
+        OSStatus status = AudioOutputUnitStop(audioUnit);
+        if (status != noErr) {
+            ZF_LOGW("CoreAudio: Failed to stop AudioUnit (status=%d)", (int)status);
+        }
+#endif
+        audioPlaying = false;
+        SoundIsPlaying = false;
+        // Reset ring buffer for next transmission
+        ringbuf_read = 0;
+        ringbuf_write = 0;
+        ringbuf_count = 0;
+        txReadIndex = 0;
+        audioFinished = false;
+        srcPosition = 0.0f;
+    }
+
     return TXEnabled;
 }
 
