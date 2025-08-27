@@ -240,75 +240,161 @@ void CloseCM108(HANDLE *fd)
     *fd = 0;
 }
 
+// Helper to check if a HID device is a known CM108-compatible device
+static bool is_known_cm108_device(IOHIDDeviceRef dev, int *vid_out, int *pid_out)
+{
+    CFNumberRef vid_ref = (CFNumberRef)IOHIDDeviceGetProperty(dev, CFSTR(kIOHIDVendorIDKey));
+    CFNumberRef pid_ref = (CFNumberRef)IOHIDDeviceGetProperty(dev, CFSTR(kIOHIDProductIDKey));
+    
+    if (!vid_ref || !pid_ref)
+        return false;
+    
+    int vid = 0, pid = 0;
+    CFNumberGetValue(vid_ref, kCFNumberIntType, &vid);
+    CFNumberGetValue(pid_ref, kCFNumberIntType, &pid);
+    
+    if (vid_out) *vid_out = vid;
+    if (pid_out) *pid_out = pid;
+    
+    // Only check for known CM108 devices to avoid triggering macOS permissions
+    if (vid == CM108VID && pid_in_known(pid))
+        return true;
+    if (vid == AIOCVID && pid == AIOCPID)
+        return true;
+    
+    return false;
+}
+
 char **GetCM108Strlist()
 {
-    // Enumerate known CM108 compatible (VID=0x0D8C + known PIDs) and AIOC.
-    // Return CM108:VID:PID entries with empty description (placeholder).
+    // Enumerate known CM108 VID/PID combinations that are actually present
+    // This avoids triggering macOS keyboard/input device permissions
     char **slist = NULL;
     int slistsize = 0;
-    int vids[2] = {CM108VID, AIOCVID};
-    for (int vi = 0; vi < 2; ++vi)
+    
+    IOHIDManagerRef mgr = IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDOptionsTypeNone);
+    if (!mgr)
     {
-        int vid = vids[vi];
-        const int *pids;
-        size_t pidcount;
-        int singlePID = 0;
-        if (vid == CM108VID)
-        {
-            pids = CM108PIDS;
-            pidcount = sizeof(CM108PIDS) / sizeof(CM108PIDS[0]);
+        ZF_LOGD("CM108 enumeration: failed to create HID manager");
+        return NULL;
+    }
+    
+    // Create matching dictionary to exclude keyboards, mice, and other common HID devices
+    // Focus on devices that could plausibly be CM108-compatible (audio-related HID)
+    CFMutableArrayRef matchingArray = CFArrayCreateMutable(kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks);
+    
+    // Add known CM108 devices first
+    int known_vids[] = {CM108VID, AIOCVID};
+    for (int i = 0; i < 2; i++) {
+        CFMutableDictionaryRef dict = CFDictionaryCreateMutable(kCFAllocatorDefault, 0, 
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef vidNum = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &known_vids[i]);
+        if (dict && vidNum) {
+            CFDictionarySetValue(dict, CFSTR(kIOHIDVendorIDKey), vidNum);
+            CFArrayAppendValue(matchingArray, dict);
         }
-        else
+        if (vidNum) CFRelease(vidNum);
+        if (dict) CFRelease(dict);
+    }
+    
+    IOHIDManagerSetDeviceMatchingMultiple(mgr, matchingArray);
+    CFRelease(matchingArray);
+    
+    if (IOHIDManagerOpen(mgr, kIOHIDOptionsTypeNone) != kIOReturnSuccess)
+    {
+        CFRelease(mgr);
+        ZF_LOGD("CM108 enumeration: failed to open HID manager");
+        return NULL;
+    }
+    
+    CFSetRef devs = IOHIDManagerCopyDevices(mgr);
+    if (!devs)
+    {
+        CFRelease(mgr);
+        ZF_LOGD("CM108 enumeration: no HID devices found");
+        return NULL;
+    }
+    
+    CFIndex n = CFSetGetCount(devs);
+    if (n > 0)
+    {
+        IOHIDDeviceRef *arr = (IOHIDDeviceRef *)calloc((size_t)n, sizeof(IOHIDDeviceRef));
+        if (arr)
         {
-            singlePID = AIOCPID;
-            pids = &singlePID;
-            pidcount = 1;
-        }
-        for (size_t pi = 0; pi < pidcount; ++pi)
-        {
-            IOHIDDeviceRef dev = open_first(vid, pids[pi]);
-            if (!dev)
-                continue; // not present
-            // Present: add to list
-            if (slist == NULL)
+            CFSetGetValues(devs, (const void **)arr);
+            
+            for (CFIndex i = 0; i < n; ++i)
             {
-                slistsize = 1;
-                slist = (char **)malloc(sizeof(char *));
-                if (!slist)
+                int vid = 0, pid = 0;
+                if (!is_known_cm108_device(arr[i], &vid, &pid))
+                    continue;
+                
+                // Add compatible device to list
+                if (slist == NULL)
                 {
-                    CFRelease(dev);
-                    return NULL;
+                    slistsize = 1;
+                    slist = (char **)malloc(sizeof(char *));
+                    if (!slist)
+                    {
+                        free(arr);
+                        CFRelease(devs);
+                        CFRelease(mgr);
+                        return NULL;
+                    }
+                    slist[0] = NULL;
                 }
-                slist[0] = NULL;
+                
+                // Check if this VID:PID already in list (avoid duplicates)
+                bool duplicate = false;
+                for (int j = 0; slist[j]; j += 2)
+                {
+                    char check[32];
+                    snprintf(check, sizeof(check), "CM108:%04X:%04X", vid, pid);
+                    if (strcmp(slist[j], check) == 0)
+                    {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (duplicate)
+                    continue;
+                
+                slistsize += 2;
+                char **tmp = (char **)realloc(slist, slistsize * sizeof(char *));
+                if (!tmp)
+                {
+                    free(arr);
+                    CFRelease(devs);
+                    CFRelease(mgr);
+                    return slist;
+                }
+                slist = tmp;
+                
+                char namebuf[32];
+                snprintf(namebuf, sizeof(namebuf), "CM108:%04X:%04X", vid, pid);
+                slist[slistsize - 3] = strdup(namebuf);
+                slist[slistsize - 2] = strdup("");
+                slist[slistsize - 1] = NULL;
             }
-            slistsize += 2;
-            char **tmp = (char **)realloc(slist, slistsize * sizeof(char *));
-            if (!tmp)
-            {
-                CFRelease(dev);
-                return slist;
-            }
-            slist = tmp;
-            char namebuf[32];
-            snprintf(namebuf, sizeof(namebuf), "CM108:%04X:%04X", vid, pids[pi]);
-            slist[slistsize - 3] = strdup(namebuf);
-            slist[slistsize - 2] = strdup("");
-            slist[slistsize - 1] = NULL;
-            CFRelease(dev); // Only enumerating; real open duplicates later
+            free(arr);
         }
     }
+    
+    CFRelease(devs);
+    CFRelease(mgr);
+    
     if (slist)
     {
         int pairs = 0;
         for (int i = 0; slist[i]; i += 2)
             pairs++;
-        ZF_LOGD("CM108 enumeration: %d device(s)", pairs);
+        ZF_LOGD("CM108 enumeration: %d known device(s) found", pairs);
         for (int i = 0; slist[i]; i += 2)
             ZF_LOGD("  %s", slist[i]);
     }
     else
     {
-        ZF_LOGD("CM108 enumeration: none found");
+        ZF_LOGD("CM108 enumeration: no known devices found");
     }
     return slist;
 }

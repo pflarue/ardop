@@ -176,33 +176,43 @@ bool COMClearDTR(HANDLE fd)
     return true;
 }
 
-// Internal helper implementing non-blocking write; returns bytes written or -1.
-static ssize_t mac_write_nb(int fd, const unsigned char *buf, size_t len)
+// Internal helper implementing write with retry logic similar to Linux
+static ssize_t mac_write_with_retry(int fd, const unsigned char *buf, size_t len)
 {
     size_t total = 0;
     while (total < len)
     {
         ssize_t ret = write(fd, buf + total, len - total);
+        if (ret >= (ssize_t)(len - total))
+        {
+            // All remaining bytes written
+            return (ssize_t)len;
+        }
         if (ret > 0)
         {
+            // Partial write, continue trying
             total += (size_t)ret;
-            // For non-blocking semantics, perform a single attempt; break if partial
-            break; // remove this break to force full-block send like Linux
         }
         else if (ret == -1)
         {
             if (errno == EINTR)
-                continue; // retry immediately
+            {
+                // Signal interrupted, retry immediately
+                continue;
+            }
             if (errno == EAGAIN || errno == EWOULDBLOCK)
             {
-                // No progress possible now.
-                break;
+                // Would block, wait briefly and retry like Linux does
+                usleep(10000); // 10ms delay matching Linux
+                continue;
             }
-            return -1; // hard error
+            // Hard error
+            return -1;
         }
         else
-        { // ret == 0 unexpected for serial; treat as stall
-            break;
+        {
+            // ret == 0 unexpected for serial write
+            return (ssize_t)total > 0 ? (ssize_t)total : -1;
         }
     }
     return (ssize_t)total;
@@ -212,16 +222,18 @@ bool WriteCOMBlock(HANDLE fd, unsigned char *Block, int BytesToWrite)
 {
     if (BytesToWrite <= 0)
         return true;
-    ssize_t written = mac_write_nb(fd, Block, (size_t)BytesToWrite);
-    if (written == -1)
+    ssize_t written = mac_write_with_retry(fd, Block, (size_t)BytesToWrite);
+    if (written != BytesToWrite)
     {
-        ZF_LOGE("Serial write error fd %d (%s)", fd, strerror(errno));
+        if (written == -1)
+            ZF_LOGE("Serial write error fd %d (%s)", fd, strerror(errno));
+        else
+            ZF_LOGE("Serial partial write fd %d: %zd/%d bytes", fd, written, BytesToWrite);
         return false;
     }
-    // Debug-level logging for serial I/O
-    ZF_LOGD("Serial fd %d write %zd/%d bytes", fd, written, BytesToWrite);
-    // Return true only if entire buffer was written (matches existing bool contract)
-    return written == BytesToWrite;
+    // Debug-level logging for successful serial I/O
+    ZF_LOGD("Serial fd %d write %d bytes complete", fd, BytesToWrite);
+    return true;
 }
 
 int ReadCOMBlock(HANDLE fd, unsigned char *Block, int MaxLength)
