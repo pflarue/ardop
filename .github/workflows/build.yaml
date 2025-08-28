@@ -1,0 +1,123 @@
+##
+## Ardop Build Workflow
+##
+## - Builds on Ubuntu and Windows using the Makefile.
+## - Linux: installs build-essential, libasound2-dev, libcmocka-dev; builds and runs unit tests.
+## - Windows: uses MSYS2 MinGW toolchain with cmocka; builds and runs unit tests.
+## - Artifacts: zips only the built binary and uploads to the run.
+##   Filename format: {os}-{arch}-ardopcf-{commit}.zip where:
+##     - {os} is linux|windows
+##     - {arch} is normalized (amd64, arm64, 386, armv7, armv6)
+##     - {commit} is the 7-char short GITHUB_SHA
+##
+
+name: Build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    name: Build (Ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential libasound2-dev libcmocka-dev zip
+
+      - name: Build
+        run: make -j$(nproc)
+
+      - name: Run unit tests
+        run: make test
+
+      - name: Package artifact
+        id: package
+        run: |
+          BIN=build/linux/ardopcf
+          test -f "$BIN" || { echo "Binary not found: $BIN"; exit 1; }
+          ARCH=$(uname -m)
+          case "$ARCH" in
+            x86_64|amd64) ARCH=amd64 ;;
+            aarch64|arm64) ARCH=arm64 ;;
+            i386|i686) ARCH=386 ;;
+            armv7l|armv7) ARCH=armv7 ;;
+            armv6l) ARCH=armv6 ;;
+            *) : ;;
+          esac
+          GIT_SHA=${GITHUB_SHA::7}
+          ZIP="linux-${ARCH}-ardopcf-${GIT_SHA}.zip"
+          zip -j "$ZIP" "$BIN"
+          echo "artifact=$ZIP" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.artifact }}
+          path: ${{ steps.package.outputs.artifact }}
+
+  windows:
+    name: Build (Windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up MSYS2 (MINGW64)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            base-devel
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-make
+            mingw-w64-x86_64-cmocka
+            zip
+
+      - name: Build
+        shell: msys2 {0}
+        run: |
+          make WIN32=1 -j$(nproc)
+
+      - name: Run unit tests
+        shell: msys2 {0}
+        run: |
+          make WIN32=1 test
+
+      - name: Package artifact
+        id: package
+        shell: msys2 {0}
+        run: |
+          BIN=build/windows/ardopcf.exe
+          if [ ! -f "$BIN" ]; then
+            # Fallback in case the toolchain emitted without .exe
+            [ -f build/windows/ardopcf ] && BIN=build/windows/ardopcf || { echo "Binary not found"; exit 1; }
+          fi
+          ARCH=$(uname -m)
+          case "$ARCH" in
+            x86_64|amd64) ARCH=amd64 ;;
+            aarch64|arm64) ARCH=arm64 ;;
+            i386|i686) ARCH=386 ;;
+            armv7l|armv7) ARCH=armv7 ;;
+            armv6l) ARCH=armv6 ;;
+            *) : ;;
+          esac
+          GIT_SHA=${GITHUB_SHA::7}
+          ZIP="windows-${ARCH}-ardopcf-${GIT_SHA}.zip"
+          zip -j "$ZIP" "$BIN"
+          echo "artifact=$ZIP" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.artifact }}
+          path: ${{ steps.package.outputs.artifact }}
