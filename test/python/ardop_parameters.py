@@ -8,10 +8,13 @@ import platform
 import sys
 
 # Determine the platform-specific build directory
-if sys.platform.startswith('win') or os.name == 'nt':  # Windows
+if sys.platform.startswith("win") or os.name == "nt":  # Windows
     PLATFORM = "windows"
     EXEC_EXT = ".exe"
-else:  # Linux/Unix/macOS
+elif sys.platform == "darwin":  # macOS
+    PLATFORM = "macos"
+    EXEC_EXT = ""
+else:  # Linux/Unix
     PLATFORM = "linux"
     EXEC_EXT = ""
 
@@ -78,21 +81,17 @@ DATAFRAMES = [
     ("4PSK.200.100.E", 1, 64, 32),  # 0x40, 0x41
     ("8PSK.200.100.E", 1, 108, 36),  # 0x44, 0x45
     ("16QAM.200.100.E", 1, 128, 64),  # 0x46, 0x47
-
     ("4FSK.500.100S.E", 1, 32, 8),  # 0x4C, 0x4D
     ("4FSK.500.100.E", 1, 64, 16),  # 0x4A, 0x4B
     ("4PSK.500.100.E", 2, 64, 32),  # 0x50, 0x51
     ("8PSK.500.100.E", 2, 108, 36),  # 0x52, 0x53
     ("16QAM.500.100.E", 2, 128, 64),  # 0x54, 0x55
-
     ("4PSK.1000.100.E", 4, 64, 32),  # 0x60, 0x61
     ("8PSK.1000.100.E", 4, 108, 36),  # 0x62, 0x63
     ("16QAM.1000.100.E", 4, 128, 64),  # 0x64, 0x65
-
     ("4PSK.2000.100.E", 8, 64, 32),  # 0x70, 0x71
     ("8PSK.2000.100.E", 8, 108, 36),  # 0x72, 0x73
     ("16QAM.2000.100.E", 8, 128, 64),  # 0x74, 0x75
-
     ("4FSK.2000.600S.E", 1, 200, 50),  # 0x7C, 0x7D
     ("4FSK.2000.600.E", 1, 600, 150),  # 0x7A, 0x7B
 ]
