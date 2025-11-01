@@ -1,0 +1,25 @@
+Source: ardopcf
+Section: hamradio
+Priority: extra
+Maintainer: Peter LaRue <peter.f.larue@gmail.com>
+Rules-Requires-Root: no
+Build-Depends:
+ debhelper-compat (= 13),
+ pandoc,
+ libasound2-dev,
+ libcmocka-dev,
+ build-essential
+Standards-Version: 4.6.2
+Homepage: https://github.com/pflarue/ardop
+#Vcs-Browser: https://salsa.debian.org/debian/ardopcf
+#Vcs-Git: https://salsa.debian.org/debian/ardopcf.git
+
+Package: ardopcf
+Architecture: any
+Multi-Arch: foreign
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+Description: Cross platform ARDOP implementation 
+ for exchange of digital data encoded as audio
+ and transmitted over amateur radio.

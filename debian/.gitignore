@@ -1,0 +1,8 @@
+# Debian build artifacts
+.debhelper/
+debhelper-build-stamp
+ardopcf/
+ardopcf.substvars
+files
+*.debhelper.log
+tmp/

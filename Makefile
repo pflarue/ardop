@@ -245,3 +245,7 @@ clean :
 cleanall :
 	rm -rf build
 endif
+
+
+ardopcf.1: debian/manpage.1.md
+	pandoc --standalone --from=markdown --to=man $< --output=$@
