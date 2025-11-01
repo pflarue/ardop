@@ -1,10 +1,28 @@
-ardopcf for Debian
------------------
+Source Package Information
+==========================
 
-<This file describes information about the source package, see Debian policy
-manual section 4.14. You WILL either need to modify or delete this file.>
+This package uses the standard Debian source format "3.0 (quilt)".
 
+Upstream Source
+---------------
+Repository: https://github.com/pflarue/ardop
+Branch: develop (for latest features) or master (for stable releases)
 
+Build Dependencies
+------------------
+- libasound2-dev: ALSA sound library development files
+- libcmocka-dev: Unit testing framework
+- pandoc: For generating manpage from markdown
+- build-essential: Standard build tools
 
- -- Workstation <tyler@unknown>  Tue, 19 Nov 2024 11:44:27 -0800
+Build System
+------------
+Uses upstream Makefile with minor additions:
+- Added rule to generate manpage: make ardopcf.1
+- Unit tests run during package build via dh_auto_test
 
+Patches
+-------
+No patches are currently applied to the upstream source.
+
+ -- Tyler <tyler@dinsmoor.us>

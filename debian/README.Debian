@@ -1,6 +1,39 @@
 ardopcf for Debian
------------------
+==================
 
-<Possible notes regarding this package - if none, delete this file.>
+Installation
+------------
+After installing this package, ardopcf will be available at /usr/bin/ardopcf.
 
- -- Workstation <tyler@unknown>  Tue, 19 Nov 2024 11:44:27 -0800
+Documentation
+-------------
+Manual page: man ardopcf
+Installed docs: /usr/share/doc/ardopcf/
+  - BUILDING.md: Build instructions
+  - Commandline_options.md: Complete command-line reference
+  - Host_Interface_Commands.md: Host interface protocol
+  - USAGE_linux.md: Linux usage guide
+  - USAGE_windows.md: Windows usage guide
+  - Troubleshooting.md: Common issues and solutions
+  - And more...
+Upstream docs: https://github.com/pflarue/ardop/tree/master/docs
+
+Usage Notes
+-----------
+- Audio devices must be specified at invocation or configured via WebGUI
+- Default WebGUI port is 8514 (host_port - 1)
+- Log files are written to the start directory by default
+- See /usr/share/doc/ardopcf/ for additional documentation
+
+ALSA Configuration
+------------------
+ardopcf will look for ALSA devices named "ARDOP" if none are specified.
+Create ~/.asoundrc to define custom ALSA devices.
+Note: DMIX/DSNOOP plugins are not currently compatible with ardopcf.
+
+Support
+-------
+Community: ardop.groups.io (free users subgroup)
+Issues: https://github.com/pflarue/ardop/issues
+
+ -- Tyler <tyler@dinsmoor.us>
