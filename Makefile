@@ -222,7 +222,11 @@ $(BUILDDIR)/test/ardop/test_log: WRAP := fopen fclose fwrite fflush freopen
 $(BUILDDIR)/test/ardop/test_ARDOPCommon_processargs: WRAP := \
 	printf puts ardop_log_start InitAudio \
 	GetCM108Strlist GetSerialStrlist updateWebGuiNonAudioConfig \
-	OpenCOMPort tcpconnect OpenCM108 OpenSoundCapture OpenSoundPlayback \
+	OpenCOMPort tcpconnect OpenCM108 OpenSoundCapture OpenSoundPlayback
+ifneq ($(WIN32),)
+# MinGW maps printf/puts to __mingw_printf/__mingw_puts when ANSI stdio is enabled
+$(BUILDDIR)/test/ardop/test_ARDOPCommon_processargs: WRAP += __mingw_printf __mingw_puts
+endif
 
 # Implicit rules to build object files in build directory
 $(BUILDDIR)/%.o: %.c
