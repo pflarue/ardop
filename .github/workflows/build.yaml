@@ -82,7 +82,14 @@ jobs:
         run: |
           set -e
           for attempt in 1 2 3; do
-            if pacman --noconfirm --needed --overwrite '*' --disable-download-timeout -Syu \
+            if pacman --noconfirm --disable-download-timeout -Sy; then
+              break
+            fi
+            echo "pacman -Sy failed (attempt ${attempt}), retrying in 10s..." >&2
+            sleep 10
+          done
+          for attempt in 1 2 3; do
+            if pacman --noconfirm --needed --overwrite '*' --disable-download-timeout -S \
               base-devel \
               mingw-w64-x86_64-gcc \
               mingw-w64-x86_64-make \
