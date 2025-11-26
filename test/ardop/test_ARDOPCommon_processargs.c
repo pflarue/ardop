@@ -132,6 +132,38 @@ int __wrap_puts(const char *s) {
 	return __real_puts(s);
 }
 
+// MinGW uses __mingw_printf/puts when ANSI stdio is enabled; wrap them too.
+int __wrap___mingw_printf(const char *restrict format, ...) {
+	(void) format;
+	if (++printindex == MAXPRINTSTRS) {
+		__real_printf("P MAXPRINTSTRS exceeded.  Unable to store additional text.\n");
+		return 1;
+	}
+	printstrs[printindex][0] = 'P';
+	va_list args;
+	va_start(args, format);
+	vsnprintf(&(printstrs[printindex][1]), MAXSTRLEN - 1, format, args);
+	if (suppressprintf) {
+		va_end(args);
+		return strlen(printstrs[printindex]);
+	}
+	int ret = vprintf(format, args);
+	va_end(args);
+	return ret;
+}
+
+int __wrap___mingw_puts(const char *s) {
+	if (++printindex == MAXPRINTSTRS) {
+		__real_printf("S MAXPRINTSTRS exceeded.  Unable to store additional text.\n");
+		return 1;
+	}
+	printstrs[printindex][0] = 'S';
+	snprintf(&(printstrs[printindex][1]), MAXSTRLEN - 1, "%s", s);
+	if (suppressprintf)
+		return strlen(s);
+	return __real_puts(s);
+}
+
 static void test_callback(const zf_log_message *msg, void *arg) {
 	(void) arg;  // This line avoids an unused parameter warning
 	if (++printindex == MAXPRINTSTRS) {
