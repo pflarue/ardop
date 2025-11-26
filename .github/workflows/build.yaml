@@ -75,13 +75,24 @@ jobs:
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
-          update: true
-          install: >-
-            base-devel
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-make
-            mingw-w64-x86_64-cmocka
-            zip
+          update: false
+
+      - name: Update and install dependencies (retry)
+        shell: msys2 {0}
+        run: |
+          set -e
+          for attempt in 1 2 3; do
+            if pacman --noconfirm --needed --overwrite '*' --disable-download-timeout -Syu \
+              base-devel \
+              mingw-w64-x86_64-gcc \
+              mingw-w64-x86_64-make \
+              mingw-w64-x86_64-cmocka \
+              zip; then
+              break
+            fi
+            echo "pacman failed (attempt ${attempt}), retrying in 10s..." >&2
+            sleep 10
+          done
 
       - name: Build
         shell: msys2 {0}
