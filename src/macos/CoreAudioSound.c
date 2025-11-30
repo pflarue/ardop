@@ -19,7 +19,10 @@
 #ifdef __APPLE__
 #include <CoreAudio/CoreAudio.h>
 #include <AudioToolbox/AudioToolbox.h>
+#include <AudioToolbox/AudioConverter.h>
 #include <AudioUnit/AudioUnit.h>
+
+#define ARDOP_AUDIOCONVERTER_NO_DATA 'NoDa'
 #endif
 
 #include "common/audio.h"
@@ -51,6 +54,20 @@ static volatile uint64_t txSamplesPlayed = 0; // Total TX samples consumed by re
 static double coreAudioOutputSampleRate = 48000.0;
 static double coreAudioInputSampleRate = 48000.0;
 
+#ifdef __APPLE__
+static AudioConverterRef txConverter = NULL;
+static AudioConverterRef rxConverter = NULL;
+
+#define TX_CONVERTER_MAX_OUTPUT_FRAMES 4096
+#define TX_CONVERTER_INPUT_CHUNK 4096
+#define RX_CONVERTER_MAX_OUTPUT_FRAMES 4096
+#define RX_CONVERTER_INPUT_CHUNK 4096
+
+static SInt16 txConverterInputChunk[TX_CONVERTER_INPUT_CHUNK];
+static Float32 txConverterOutputChunk[TX_CONVERTER_MAX_OUTPUT_FRAMES];
+static Float32 rxConverterInputChunk[RX_CONVERTER_INPUT_CHUNK];
+#endif
+
 static inline uint64_t tx_samples_pending(void)
 {
     uint64_t queued = txSamplesQueued;
@@ -67,6 +84,7 @@ static inline void tx_reset_counters(void)
 static bool testBypassAudioStart = false;
 static bool testBypassOutputHandleCheck = false;
 static bool testBypassAudioStop = false;
+static bool testForceLegacySRC = false;
 
 // Ring buffer for audio input (capture)
 #define INBUF_SIZE (ReceiveSize * 512) // 512*240 = 122880 samples ~10s at 12kHz
@@ -127,6 +145,191 @@ static double coreaudio_query_nominal_rate(AudioDeviceID deviceID, AudioObjectPr
         return 0.0;
     }
     return (double)rate;
+}
+#endif
+
+#ifdef __APPLE__
+static void DisposeTxConverter(void)
+{
+    if (txConverter)
+    {
+        AudioConverterDispose(txConverter);
+        txConverter = NULL;
+    }
+}
+
+static void DisposeRxConverter(void)
+{
+    if (rxConverter)
+    {
+        AudioConverterDispose(rxConverter);
+        rxConverter = NULL;
+    }
+}
+
+static void RebuildTxConverter(void)
+{
+    DisposeTxConverter();
+    if (!coreAudioOutputActive)
+        return;
+
+    AudioStreamBasicDescription inFormat = {0};
+    inFormat.mSampleRate = 12000.0;
+    inFormat.mFormatID = kAudioFormatLinearPCM;
+    inFormat.mFormatFlags = kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked;
+    inFormat.mChannelsPerFrame = 1;
+    inFormat.mFramesPerPacket = 1;
+    inFormat.mBitsPerChannel = 16;
+    inFormat.mBytesPerFrame = sizeof(SInt16);
+    inFormat.mBytesPerPacket = sizeof(SInt16);
+
+    AudioStreamBasicDescription outFormat = {0};
+    outFormat.mSampleRate = (coreAudioOutputSampleRate > 0.0) ? coreAudioOutputSampleRate : 48000.0;
+    outFormat.mFormatID = kAudioFormatLinearPCM;
+    outFormat.mFormatFlags = kAudioFormatFlagIsFloat | kAudioFormatFlagsNativeEndian | kLinearPCMFormatFlagIsPacked;
+    outFormat.mChannelsPerFrame = 1;
+    outFormat.mFramesPerPacket = 1;
+    outFormat.mBitsPerChannel = 32;
+    outFormat.mBytesPerFrame = sizeof(Float32);
+    outFormat.mBytesPerPacket = sizeof(Float32);
+
+    OSStatus status = AudioConverterNew(&inFormat, &outFormat, &txConverter);
+    if (status != noErr)
+    {
+        txConverter = NULL;
+        ZF_LOGW("CoreAudio: Failed to create TX AudioConverter (status=%d)", (int)status);
+        return;
+    }
+
+    UInt32 quality = kAudioConverterQuality_Max;
+    AudioConverterSetProperty(txConverter, kAudioConverterSampleRateConverterQuality, sizeof(quality), &quality);
+    UInt32 complexity = kAudioConverterSampleRateConverterComplexity_Mastering;
+    AudioConverterSetProperty(txConverter, kAudioConverterSampleRateConverterComplexity, sizeof(complexity), &complexity);
+}
+
+static void RebuildRxConverter(void)
+{
+    DisposeRxConverter();
+    if (!coreAudioInputActive)
+        return;
+
+    AudioStreamBasicDescription inFormat = {0};
+    inFormat.mSampleRate = (coreAudioInputSampleRate > 0.0) ? coreAudioInputSampleRate : 48000.0;
+    inFormat.mFormatID = kAudioFormatLinearPCM;
+    inFormat.mFormatFlags = kAudioFormatFlagIsFloat | kAudioFormatFlagsNativeEndian | kLinearPCMFormatFlagIsPacked;
+    inFormat.mChannelsPerFrame = 1;
+    inFormat.mFramesPerPacket = 1;
+    inFormat.mBitsPerChannel = 32;
+    inFormat.mBytesPerFrame = sizeof(Float32);
+    inFormat.mBytesPerPacket = sizeof(Float32);
+
+    AudioStreamBasicDescription outFormat = {0};
+    outFormat.mSampleRate = 12000.0;
+    outFormat.mFormatID = kAudioFormatLinearPCM;
+    outFormat.mFormatFlags = kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked;
+    outFormat.mChannelsPerFrame = 1;
+    outFormat.mFramesPerPacket = 1;
+    outFormat.mBitsPerChannel = 16;
+    outFormat.mBytesPerFrame = sizeof(SInt16);
+    outFormat.mBytesPerPacket = sizeof(SInt16);
+
+    OSStatus status = AudioConverterNew(&inFormat, &outFormat, &rxConverter);
+    if (status != noErr)
+    {
+        rxConverter = NULL;
+        ZF_LOGW("CoreAudio: Failed to create RX AudioConverter (status=%d)", (int)status);
+        return;
+    }
+
+    UInt32 quality = kAudioConverterQuality_Max;
+    AudioConverterSetProperty(rxConverter, kAudioConverterSampleRateConverterQuality, sizeof(quality), &quality);
+    UInt32 complexity = kAudioConverterSampleRateConverterComplexity_Mastering;
+    AudioConverterSetProperty(rxConverter, kAudioConverterSampleRateConverterComplexity, sizeof(complexity), &complexity);
+}
+
+static void RebuildAudioConverters(void)
+{
+    RebuildTxConverter();
+    RebuildRxConverter();
+}
+
+static OSStatus txConverterInputProc(AudioConverterRef inAudioConverter,
+                                     UInt32 *ioNumberDataPackets,
+                                     AudioBufferList *ioData,
+                                     AudioStreamPacketDescription **outDataPacketDescription,
+                                     void *inUserData)
+{
+    (void)inAudioConverter;
+    (void)outDataPacketDescription;
+    (void)inUserData;
+
+    if (*ioNumberDataPackets == 0)
+        return noErr;
+
+    UInt32 capacity = (*ioNumberDataPackets > TX_CONVERTER_INPUT_CHUNK) ? TX_CONVERTER_INPUT_CHUNK : *ioNumberDataPackets;
+    UInt32 available = (ringbuf_count < (int)capacity) ? (UInt32)ringbuf_count : capacity;
+
+    if (available == 0)
+    {
+        *ioNumberDataPackets = 0;
+        ioData->mNumberBuffers = 0;
+        return ARDOP_AUDIOCONVERTER_NO_DATA;
+    }
+
+    ioData->mNumberBuffers = 1;
+    ioData->mBuffers[0].mNumberChannels = 1;
+    ioData->mBuffers[0].mData = txConverterInputChunk;
+    ioData->mBuffers[0].mDataByteSize = available * sizeof(SInt16);
+
+    for (UInt32 i = 0; i < available; ++i)
+    {
+        txConverterInputChunk[i] = ringbuf[ringbuf_read];
+        ringbuf_read = (ringbuf_read + 1) % RINGBUF_SIZE;
+        ringbuf_count--;
+        txSamplesPlayed++;
+    }
+
+    *ioNumberDataPackets = available;
+    return noErr;
+}
+
+static OSStatus rxConverterInputProc(AudioConverterRef inAudioConverter,
+                                     UInt32 *ioNumberDataPackets,
+                                     AudioBufferList *ioData,
+                                     AudioStreamPacketDescription **outDataPacketDescription,
+                                     void *inUserData)
+{
+    (void)inAudioConverter;
+    (void)outDataPacketDescription;
+    (void)inUserData;
+
+    if (*ioNumberDataPackets == 0)
+        return noErr;
+
+    UInt32 capacity = (*ioNumberDataPackets > RX_CONVERTER_INPUT_CHUNK) ? RX_CONVERTER_INPUT_CHUNK : *ioNumberDataPackets;
+    UInt32 available = (inbuf_count < (int)capacity) ? (UInt32)inbuf_count : capacity;
+
+    if (available == 0)
+    {
+        *ioNumberDataPackets = 0;
+        ioData->mNumberBuffers = 0;
+        return ARDOP_AUDIOCONVERTER_NO_DATA;
+    }
+
+    ioData->mNumberBuffers = 1;
+    ioData->mBuffers[0].mNumberChannels = 1;
+    ioData->mBuffers[0].mData = rxConverterInputChunk;
+    ioData->mBuffers[0].mDataByteSize = available * sizeof(Float32);
+
+    for (UInt32 i = 0; i < available; ++i)
+    {
+        rxConverterInputChunk[i] = inbuf[inbuf_read];
+        inbuf_read = (inbuf_read + 1) % INBUF_SIZE;
+        inbuf_count--;
+    }
+
+    *ioNumberDataPackets = available;
+    return noErr;
 }
 #endif
 // CoreAudio input callback for audio capture
@@ -349,64 +552,122 @@ static OSStatus renderCallback(void *inRefCon, AudioUnitRenderActionFlags *ioAct
     float *outputBuffer = (float *)ioData->mBuffers[0].mData;
     UInt32 channelsPerFrame = ioData->mBuffers[0].mNumberChannels;
 
-    // Convert samples from txbuffer (16-bit signed) to float and copy to output
-    // Handle sample rate conversion from 12kHz (ARDOP) to the device sample rate
-    // Sample rate conversion state (static to persist across callbacks)
-    static double srcPos = 0.0; // Position in source (ring buffer) in 12kHz samples
-    const double srcRate = 12000.0;
-    const double dstRate = (coreAudioOutputSampleRate > 0.0) ? coreAudioOutputSampleRate : 48000.0;
-    const double rateRatio = srcRate / dstRate;
-
-    for (UInt32 frame = 0; frame < inNumberFrames; frame++)
+    bool usedConverter = false;
+#ifdef __APPLE__
+    if (txConverter)
     {
-        // Linear interpolation SRC: for each output frame, compute position in input (ring buffer)
-        int srcIndex0 = (int)srcPos;
-        int srcIndex1 = srcIndex0 + 1;
-        double frac = srcPos - srcIndex0;
-        short s0 = 0, s1 = 0;
-        if (ringbuf_count > srcIndex1)
+        usedConverter = true;
+        UInt32 framesRemaining = inNumberFrames;
+        UInt32 frameOffset = 0;
+        while (framesRemaining > 0)
         {
-            int idx0 = (ringbuf_read + srcIndex0) % RINGBUF_SIZE;
-            int idx1 = (ringbuf_read + srcIndex1) % RINGBUF_SIZE;
-            s0 = ringbuf[idx0];
-            s1 = ringbuf[idx1];
-        }
-        else if (ringbuf_count > srcIndex0)
-        {
-            int idx0 = (ringbuf_read + srcIndex0) % RINGBUF_SIZE;
-            s0 = ringbuf[idx0];
-            s1 = s0;
-        }
-        else
-        {
-            // Buffer underrun: output silence
-            if (audioPlaying && !audioFinished)
+            UInt32 chunkFrames = framesRemaining;
+            if (chunkFrames > TX_CONVERTER_MAX_OUTPUT_FRAMES)
+                chunkFrames = TX_CONVERTER_MAX_OUTPUT_FRAMES;
+
+            AudioBufferList outList = {0};
+            outList.mNumberBuffers = 1;
+            outList.mBuffers[0].mNumberChannels = 1;
+            outList.mBuffers[0].mDataByteSize = chunkFrames * sizeof(Float32);
+            outList.mBuffers[0].mData = txConverterOutputChunk;
+
+            UInt32 ioFrames = chunkFrames;
+            OSStatus status = AudioConverterFillComplexBuffer(txConverter, txConverterInputProc, NULL, &ioFrames, &outList, NULL);
+            if (status == ARDOP_AUDIOCONVERTER_NO_DATA || ioFrames == 0)
             {
-                audioFinished = true;
-                audioPlaying = false;
-                if (ZF_LOG_ON_DEBUG)
+                for (UInt32 frame = 0; frame < chunkFrames; ++frame)
                 {
-                    ZF_LOGD("RenderCallback: All audio played (ring buffer empty), signaling audioFinished");
+                    for (UInt32 ch = 0; ch < channelsPerFrame; ++ch)
+                        outputBuffer[(frameOffset + frame) * channelsPerFrame + ch] = 0.0f;
+                }
+                if (ringbuf_count == 0 && tx_samples_pending() == 0)
+                {
+                    audioFinished = true;
+                    audioPlaying = false;
                 }
             }
-            s0 = 0;
-            s1 = 0;
+            else
+            {
+                for (UInt32 frame = 0; frame < ioFrames; ++frame)
+                {
+                    float sample = txConverterOutputChunk[frame];
+                    for (UInt32 ch = 0; ch < channelsPerFrame; ++ch)
+                        outputBuffer[(frameOffset + frame) * channelsPerFrame + ch] = sample;
+                }
+                for (UInt32 frame = ioFrames; frame < chunkFrames; ++frame)
+                {
+                    for (UInt32 ch = 0; ch < channelsPerFrame; ++ch)
+                        outputBuffer[(frameOffset + frame) * channelsPerFrame + ch] = 0.0f;
+                }
+            }
+
+            framesRemaining -= chunkFrames;
+            frameOffset += chunkFrames;
         }
-        short sample = (short)((1.0 - frac) * s0 + frac * s1);
-        float floatSample = sample / 32768.0f;
-        for (UInt32 ch = 0; ch < channelsPerFrame; ch++)
+    }
+#endif
+
+    if (!usedConverter)
+    {
+        // Convert samples from txbuffer (16-bit signed) to float and copy to output
+        // Handle sample rate conversion from 12kHz (ARDOP) to the device sample rate
+        double srcPos = srcPosition; // Persisted across callbacks for deterministic SRC
+        const double srcRate = 12000.0;
+        const double dstRate = (coreAudioOutputSampleRate > 0.0) ? coreAudioOutputSampleRate : 48000.0;
+        const double rateRatio = srcRate / dstRate;
+
+        for (UInt32 frame = 0; frame < inNumberFrames; frame++)
         {
-            outputBuffer[frame * channelsPerFrame + ch] = floatSample;
+            // Linear interpolation SRC: for each output frame, compute position in input (ring buffer)
+            int srcIndex0 = (int)srcPos;
+            int srcIndex1 = srcIndex0 + 1;
+            double frac = srcPos - srcIndex0;
+            short s0 = 0, s1 = 0;
+            if (ringbuf_count > srcIndex1)
+            {
+                int idx0 = (ringbuf_read + srcIndex0) % RINGBUF_SIZE;
+                int idx1 = (ringbuf_read + srcIndex1) % RINGBUF_SIZE;
+                s0 = ringbuf[idx0];
+                s1 = ringbuf[idx1];
+            }
+            else if (ringbuf_count > srcIndex0)
+            {
+                int idx0 = (ringbuf_read + srcIndex0) % RINGBUF_SIZE;
+                s0 = ringbuf[idx0];
+                s1 = s0;
+            }
+            else
+            {
+                // Buffer underrun: output silence
+                if (audioPlaying && !audioFinished)
+                {
+                    audioFinished = true;
+                    audioPlaying = false;
+                    if (ZF_LOG_ON_DEBUG)
+                    {
+                        ZF_LOGD("RenderCallback: All audio played (ring buffer empty), signaling audioFinished");
+                    }
+                }
+                s0 = 0;
+                s1 = 0;
+            }
+            short sample = (short)((1.0 - frac) * s0 + frac * s1);
+            float floatSample = sample / 32768.0f;
+            for (UInt32 ch = 0; ch < channelsPerFrame; ch++)
+            {
+                outputBuffer[frame * channelsPerFrame + ch] = floatSample;
+            }
+            srcPos += rateRatio;
+            // When enough output frames have been produced to consume a source sample, advance ringbuf_read
+            while (srcPos >= 1.0 && ringbuf_count > 0)
+            {
+                ringbuf_read = (ringbuf_read + 1) % RINGBUF_SIZE;
+                ringbuf_count--;
+                txSamplesPlayed++;
+                srcPos -= 1.0;
+            }
         }
-        srcPos += rateRatio;
-        // When enough output frames have been produced to consume a source sample, advance ringbuf_read
-        while (srcPos >= 1.0 && ringbuf_count > 0)
-        {
-            ringbuf_read = (ringbuf_read + 1) % RINGBUF_SIZE;
-            ringbuf_count--;
-            txSamplesPlayed++;
-            srcPos -= 1.0;
-        }
+        srcPosition = (float)srcPos;
     }
 
     if (ringbuf_count == 0 && audioPlaying && !audioFinished && tx_samples_pending() == 0)
@@ -495,6 +756,11 @@ double coreaudio_test_get_output_samplerate(void)
     return coreAudioOutputSampleRate;
 }
 
+void coreaudio_test_force_legacy_src(bool enable)
+{
+    testForceLegacySRC = enable;
+}
+
 void coreaudio_test_render(float *buffer, uint32_t frames, uint32_t channels)
 {
 #ifdef __APPLE__
@@ -568,6 +834,10 @@ static void InitCoreAudio(const char *captureDev, const char *playbackDev)
 
     if (!wantInput && !wantOutput)
     {
+#ifdef __APPLE__
+        DisposeTxConverter();
+        DisposeRxConverter();
+#endif
         if (coreAudioInitialized)
         {
             if (inputAudioUnit)
@@ -1040,6 +1310,9 @@ static void InitCoreAudio(const char *captureDev, const char *playbackDev)
     coreAudioInputActive = wantInput;
     coreAudioOutputActive = wantOutput;
     coreAudioInitialized = true;
+#ifdef __APPLE__
+    RebuildAudioConverters();
+#endif
     ZF_LOGD("CoreAudio: AudioUnit initialized successfully - inputEnabled=%d outputEnabled=%d",
             (int)coreAudioInputActive, (int)coreAudioOutputActive);
 
@@ -1111,6 +1384,10 @@ static void ReinitCoreAudioIfNeeded(void)
     // Teardown sequence (stop -> uninit -> dispose)
     if (coreAudioInitialized)
     {
+#ifdef __APPLE__
+        DisposeTxConverter();
+        DisposeRxConverter();
+#endif
         // 1) Stop
         if (audioUnitStarted)
         {
@@ -1582,14 +1859,55 @@ void PollReceivedSamples()
 
     // Check for diagnostic reporting (minimal, non-verbose)
     CheckAndReportCoreDiagnostics();
-    // Sample rate conversion: input is float32 at device rate, output must be 16-bit at 12kHz
+#ifdef __APPLE__
+    if (txConverter && !testForceLegacySRC)
+    {
+        bool madeProgress = true;
+        while (madeProgress)
+        {
+            madeProgress = false;
+            UInt32 framesNeeded = ReceiveSize - rxblock_fill;
+            if (framesNeeded == 0)
+                framesNeeded = ReceiveSize;
+            if (framesNeeded > RX_CONVERTER_MAX_OUTPUT_FRAMES)
+                framesNeeded = RX_CONVERTER_MAX_OUTPUT_FRAMES;
+
+            AudioBufferList outList = {0};
+            outList.mNumberBuffers = 1;
+            outList.mBuffers[0].mNumberChannels = 1;
+            outList.mBuffers[0].mDataByteSize = framesNeeded * sizeof(SInt16);
+            outList.mBuffers[0].mData = rxblock + rxblock_fill;
+
+            UInt32 ioFrames = framesNeeded;
+            OSStatus status = AudioConverterFillComplexBuffer(rxConverter, rxConverterInputProc, NULL, &ioFrames, &outList, NULL);
+            if (status == ARDOP_AUDIOCONVERTER_NO_DATA || ioFrames == 0)
+            {
+                break;
+            }
+
+            rxblock_fill += ioFrames;
+            madeProgress = true;
+            while (rxblock_fill >= ReceiveSize)
+            {
+                ProcessNewSamples(rxblock, ReceiveSize);
+                rxblock_fill -= ReceiveSize;
+                if (rxblock_fill > 0)
+                {
+                    memmove(rxblock, rxblock + ReceiveSize, rxblock_fill * sizeof(short));
+                }
+            }
+        }
+        return;
+    }
+#endif
+
+    // Legacy linear interpolation fallback when converters are unavailable
     static double srcPos = 0.0;
     const double srcRate = (coreAudioInputSampleRate > 0.0) ? coreAudioInputSampleRate : 48000.0;
     const double dstRate = 12000.0;
     const double rateRatio = srcRate / dstRate;
     while (inbuf_count > 4)
-    { // Need at least 2 samples for interpolation
-        // Linear interpolation SRC
+    {
         int srcIndex0 = (int)srcPos;
         int srcIndex1 = srcIndex0 + 1;
         float s0 = 0, s1 = 0;
@@ -1619,7 +1937,6 @@ void PollReceivedSamples()
             rxblock_fill = 0;
         }
         srcPos += rateRatio;
-        // When enough output frames have been produced to consume a source sample, advance inbuf_read
         while (srcPos >= 1.0 && inbuf_count > 0)
         {
             inbuf_read = (inbuf_read + 1) % INBUF_SIZE;

@@ -6,20 +6,20 @@ This short guide covers the current (work‑in‑progress) macOS CoreAudio backe
 
 ## 1. Quick Start
 
-1. Build (from repo root): `make macos`
-2. Run selecting host port 8515 and explicit input/output devices:
+1. Ensure you have built the binary (see [BUILDING.md](docs/BUILDING.md) for macOS build prerequisites). The executable will be at `build/macos/ardopcf`.
+2. Run selecting host port 8515 and explicit input/output devices (positional form):
 
    ```bash
    ./build/macos/ardopcf 8515 "Built-in Microphone" "MacBook Pro Speakers"
    ```
 
-   Or using options (equivalent):
+   Option form (equivalent):
 
    ```bash
    ./build/macos/ardopcf -i "Built-in Microphone" -o "MacBook Pro Speakers" 8515
    ```
 
-3. Connect your host (e.g. Pat) to localhost:8515.
+3. Connect your host (e.g. Pat) to `localhost:8515`.
 
 If you omit `-i` and/or `-o` you can set devices later via the WebGUI or host commands (`CAPTURE`, `PLAYBACK`).
 
@@ -28,10 +28,11 @@ If you omit `-i` and/or `-o` you can set devices later via the WebGUI or host co
 On startup the macOS backend enumerates CoreAudio devices and logs something like:
 
 ```text
-CoreAudio audio devices
+macOS audio devices
    Built-in Microphone (capture)
    MacBook Pro Speakers (playback)
    USB Audio CODEC (capture) (playback)
+   NOSOUND (capture) (playback)
 ```
 
 Device names are matched case‑sensitively when passed to `-i` / `-o`. A device UID alias can also work (shown in brackets if different).
@@ -40,51 +41,50 @@ You can re‑emit the list by restarting `ardopcf` or using the WebGUI devices p
 
 ## 3. Playback Device Binding (`-o`)
 
-The macOS port uses a HAL Output AudioUnit so it can bind directly to the named playback device before starting. Example log sequence:
+The macOS port creates a HAL Output `AudioUnit` and (if specified) attempts to set the current output device to the named string before starting audio. Example (representative) log sequence from the current code path:
 
 ```text
-CoreAudio TX: requested playback 'USB Audio CODEC' -> FOUND
-CoreAudio TX: bound requested device id=87
-CoreAudio TX: started (req 12k mono) -> fmt 12000 Hz 1 ch 16-bit bound=1
+Playback device 'USB Audio CODEC' opening (channels=2)
+CoreAudio: Found device ID 87 for 'USB Audio CODEC'
+CoreAudio: Output device sample rate negotiated to 48000.0 Hz (2 channels)
+CoreAudio: AudioUnit initialized successfully - inputEnabled=0 outputEnabled=1
+CoreAudio: AudioUnits started successfully
 ```
 
-If the requested device cannot be resolved you will see a warning during startup and the system default output will be used:
+If the requested device name cannot be resolved you will see a warning and CoreAudio falls back to the system default output device, e.g.:
 
 ```text
-Playback device 'NotADevice' not found; using default output.
+CoreAudio: Could not find device ID for playback device 'NotADevice'
 ```
 
-(Exact wording may change to include a `CoreAudio:` prefix.)
+Selecting the special sentinel `NOSOUND` disables TX while preserving the prior real device for a future `RESTORE` (see Section 4).
 
-## 4. Capture Path Summary
+## 4. Capture Path Summary & RESTORE/NOSOUND Semantics
 
-The backend attempts to negotiate a simple 12 kHz signed 16‑bit interleaved mono format. If the hardware runs at 48 kHz it performs integer decimation (factor 4). Other rates fall back to a light fractional resampler. Diagnostic logs (at DEBUG) show the negotiated input format and any fallbacks.
+The current backend requests a float32 mono stream at the device's native rate (often 48 kHz) and performs linear‑interpolation downsampling to 12 kHz internally. (The earlier documented “negotiate 12 kHz S16 interleaved” path is not yet implemented.) Diagnostic DEBUG logs show the negotiated input rate and any significant callback frame size variation.
 
-Environment variables (set before launching) can force behaviors:
+`NOSOUND` on capture disables RX without discarding the last working device. Later issuing `CAPTURE RESTORE` (or selecting `RESTORE` via host/WebGUI) returns to that previous device. The same semantics apply to playback: `PLAYBACK NOSOUND` disables TX; `PLAYBACK RESTORE` re‑enables the last real device.
 
-- `ARDOP_MAC_FORCE_12K=1` – Force 12 kHz input format request.
-- `ARDOP_MAC_FORCE_SINT16=1` – Force S16.
-- `ARDOP_MAC_FORCE_INTERLEAVED=1` – Force interleaved buffers.
-- `ARDOP_MAC_MIX_BOTH=1` – Always average stereo channels for RX even if only one is selected.
+Environment variable flags previously documented for macOS (`ARDOP_MAC_FORCE_12K`, `ARDOP_MAC_FORCE_SINT16`, `ARDOP_MAC_FORCE_INTERLEAVED`, `ARDOP_MAC_MIX_BOTH`) are **not yet implemented**. They remain planned and may be added; for now they have no effect.
 
-## 5. RX Debug WAV (Optional)
+## 5. RX Debug WAV (Planned)
 
-When compiled with `-DCA_DUMP_RX_WAV` (e.g. `make macos DEBUG_RX=1`) a rolling dump is written to `/tmp/mac_rx.wav` (12 kHz mono S16) to aid troubleshooting.
+`CA_DUMP_RX_WAV` / `DEBUG_RX=1` is **not yet wired into the macOS backend**. A future implementation may emit a rolling `/tmp/mac_rx.wav` (12 kHz mono S16) file for diagnostics. At present enabling these flags has no effect.
 
 ## 6. Known Limitations / Next Steps
 
 - TX underrun/overflow counters & periodic statistics (planned).
 - Optional self‑test transmit tone flag (planned) to verify routing without a host.
-- Additional documentation sections (PTT integration, WebGUI screenshots) will be added as macOS support matures.
+- Environment variable feature set (listed above) and RX debug WAV dump are planned but currently inactive.
 
-## 7. Getting Help
+## 7. Known macOS Differences
+
+- **Audio conversion strategy:** The macOS backend always negotiates whatever sample rate the selected CoreAudio device prefers (often 44.1/48 kHz) and uses in-process `AudioConverter` resamplers to bridge that rate to ARDOP’s fixed 12 kHz modem domain. Linux (ALSA) and Windows (Waveform) instead request 12 kHz directly from the driver and rely on the OS/device to cope when that rate is unavailable, so the macOS path delivers consistent SRC quality even when hardware cannot clock at 12 kHz.
+
+## 8. Getting Help
 
 For issues specific to macOS bring logs (run with higher verbosity) to the project issue tracker or user group. Include:
 
 - Command line used
 - First 100 lines of log
 - Any `CoreAudio:` WARN/ERROR lines
-
----
-
-(End of preliminary macOS usage notes)

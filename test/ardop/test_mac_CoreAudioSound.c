@@ -24,6 +24,7 @@ bool coreaudio_test_audio_finished(void);
 void coreaudio_test_override_output_samplerate(double rate);
 double coreaudio_test_get_output_samplerate(void);
 void coreaudio_test_render(float *buffer, uint32_t frames, uint32_t channels);
+void coreaudio_test_force_legacy_src(bool enable);
 #include "common/ARDOPC.h"
 
 // Forward declarations (from CoreAudioSound.c) for RESTORE helpers
@@ -49,6 +50,7 @@ static void prepare_tx_test(void)
     coreaudio_test_bypass_audio_start(true);
     coreaudio_test_bypass_output_handle_check(true);
     coreaudio_test_bypass_audio_stop(true);
+    coreaudio_test_force_legacy_src(false);
     TXEnabled = true;
 }
 
@@ -61,6 +63,7 @@ static void cleanup_tx_test(void)
     coreaudio_test_bypass_audio_stop(false);
     coreaudio_test_set_initialized(false);
     coreaudio_test_override_output_samplerate(48000.0);
+    coreaudio_test_force_legacy_src(false);
     coreaudio_test_reset_tx_state();
 }
 
@@ -183,6 +186,7 @@ static void test_tx_respects_output_rate(void **state)
 {
     (void)state;
     prepare_tx_test();
+    coreaudio_test_force_legacy_src(true);
     coreaudio_test_override_output_samplerate(24000.0);
     assert_float_equal((float)coreaudio_test_get_output_samplerate(), 24000.0f, 0.001f);
     const short pattern[2] = {12000, -12000};
