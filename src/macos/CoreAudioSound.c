@@ -11,6 +11,7 @@
 //  - Ring buffer management for audio capture and playback
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -44,6 +45,28 @@ static short ringbuf[RINGBUF_SIZE];
 static volatile int ringbuf_write = 0; // Next write position
 static volatile int ringbuf_read = 0;  // Next read position
 static volatile int ringbuf_count = 0; // Number of samples in buffer
+static volatile uint64_t txSamplesQueued = 0; // Total TX samples queued (12kHz domain)
+static volatile uint64_t txSamplesPlayed = 0; // Total TX samples consumed by renderer
+
+static double coreAudioOutputSampleRate = 48000.0;
+static double coreAudioInputSampleRate = 48000.0;
+
+static inline uint64_t tx_samples_pending(void)
+{
+    uint64_t queued = txSamplesQueued;
+    uint64_t played = txSamplesPlayed;
+    return (queued > played) ? (queued - played) : 0;
+}
+
+static inline void tx_reset_counters(void)
+{
+    txSamplesQueued = 0;
+    txSamplesPlayed = 0;
+}
+
+static bool testBypassAudioStart = false;
+static bool testBypassOutputHandleCheck = false;
+static bool testBypassAudioStop = false;
 
 // Ring buffer for audio input (capture)
 #define INBUF_SIZE (ReceiveSize * 512) // 512*240 = 122880 samples ~10s at 12kHz
@@ -71,6 +94,41 @@ static struct
     int max_input_usage_percent;
     bool buffer_warning_shown;
 } coreAudioDiag = {false, 0, UINT32_MAX, 0, 0, false, 0, 0, false};
+
+#ifdef __APPLE__
+#define INPUT_CAPTURE_MAX_FRAMES 8192
+static Float32 capturedFrameBuffer[INPUT_CAPTURE_MAX_FRAMES];
+
+static AudioDeviceID coreaudio_get_default_device(bool input)
+{
+    AudioDeviceID device = kAudioObjectUnknown;
+    AudioObjectPropertyAddress addr = {
+        input ? kAudioHardwarePropertyDefaultInputDevice : kAudioHardwarePropertyDefaultOutputDevice,
+        kAudioObjectPropertyScopeGlobal,
+        kAudioObjectPropertyElementMain};
+    UInt32 size = sizeof(device);
+    if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &addr, 0, NULL, &size, &device) != noErr)
+    {
+        device = kAudioObjectUnknown;
+    }
+    return device;
+}
+
+static double coreaudio_query_nominal_rate(AudioDeviceID deviceID, AudioObjectPropertyScope scope)
+{
+    if (deviceID == kAudioObjectUnknown)
+        return 0.0;
+
+    double rate = 0.0;
+    UInt32 size = sizeof(rate);
+    AudioObjectPropertyAddress addr = {kAudioDevicePropertyNominalSampleRate, scope, kAudioObjectPropertyElementMain};
+    if (AudioObjectGetPropertyData(deviceID, &addr, 0, NULL, &size, &rate) != noErr || rate <= 0.0)
+    {
+        return 0.0;
+    }
+    return (double)rate;
+}
+#endif
 // CoreAudio input callback for audio capture
 static OSStatus inputCallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFlags,
                               const AudioTimeStamp *inTimeStamp, UInt32 inBusNumber,
@@ -98,11 +156,19 @@ static OSStatus inputCallback(void *inRefCon, AudioUnitRenderActionFlags *ioActi
     const UInt32 bytesPerFrame = sizeof(Float32) * channelsPerFrame;
     const UInt32 bufferSize = inNumberFrames * bytesPerFrame;
 
-    Float32 *capturedBuffer = (Float32 *)malloc(bufferSize);
-    if (!capturedBuffer)
+    if (inNumberFrames > INPUT_CAPTURE_MAX_FRAMES)
     {
-        return noErr; // Out of memory
+        static int warningCount = 0;
+        if (warningCount < 5 || warningCount % 100 == 0)
+        {
+            ZF_LOGW("CoreAudio input callback requested %u frames; max supported is %u. Dropping frame block.",
+                    (unsigned int)inNumberFrames, (unsigned int)INPUT_CAPTURE_MAX_FRAMES);
+        }
+        warningCount++;
+        return noErr;
     }
+
+    Float32 *capturedBuffer = capturedFrameBuffer;
 
     // Set up AudioBufferList for captured data
     AudioBufferList capturedData = {0};
@@ -147,7 +213,6 @@ static OSStatus inputCallback(void *inRefCon, AudioUnitRenderActionFlags *ioActi
         }
     }
 
-    free(capturedBuffer);
     return status;
 #else
     (void)inRefCon;
@@ -193,6 +258,20 @@ static bool EnsureAudioUnitsStarted(void)
     if (!coreAudioInitialized || audioUnitStarted)
     {
         return audioUnitStarted; // Already started or not initialized
+    }
+
+    if (testBypassAudioStart)
+    {
+        audioUnitStarted = true;
+        if (!coreAudioDiag.sampling_active && !coreAudioDiag.diagnostics_reported)
+        {
+            coreAudioDiag.sampling_active = true;
+            coreAudioDiag.sample_count = 0;
+            coreAudioDiag.frame_size_min = UINT32_MAX;
+            coreAudioDiag.frame_size_max = 0;
+            coreAudioDiag.frame_size_sum = 0;
+        }
+        return true;
     }
 
 #ifdef __APPLE__
@@ -271,33 +350,12 @@ static OSStatus renderCallback(void *inRefCon, AudioUnitRenderActionFlags *ioAct
     UInt32 channelsPerFrame = ioData->mBuffers[0].mNumberChannels;
 
     // Convert samples from txbuffer (16-bit signed) to float and copy to output
-    // Handle sample rate conversion from 44.1kHz (ARDOP) to 48kHz (device)
-    int samplesRead = 0;
-    int nonzero = 0;
+    // Handle sample rate conversion from 12kHz (ARDOP) to the device sample rate
     // Sample rate conversion state (static to persist across callbacks)
     static double srcPos = 0.0; // Position in source (ring buffer) in 12kHz samples
     const double srcRate = 12000.0;
-    const double dstRate = 48000.0;
-    const double rateRatio = srcRate / dstRate;  // 0.25
-    static float srcRatio = 12000.0f / 48000.0f; // 0.25 - need to read slower
-
-    // Track total samples played across all SendtoCard() calls
-    static int totalSamplesQueued = 0;
-    static int totalSamplesPlayed = 0;
-    // On first callback after playback starts, compute totalSamplesQueued
-    // (callbackCount logic removed with debug logging)
-
-    // Calculate how many samples are actually queued (sum of both buffers)
-    // This is a workaround: in a real implementation, track this in SendtoCard()
-    int buffer0_nonzero = 0, buffer1_nonzero = 0;
-    for (int i = 0; i < SendSize; i++)
-    {
-        if (txbuffer[0][i] != 0)
-            buffer0_nonzero++;
-        if (txbuffer[1][i] != 0)
-            buffer1_nonzero++;
-    }
-    totalSamplesQueued = buffer0_nonzero + buffer1_nonzero;
+    const double dstRate = (coreAudioOutputSampleRate > 0.0) ? coreAudioOutputSampleRate : 48000.0;
+    const double rateRatio = srcRate / dstRate;
 
     for (UInt32 frame = 0; frame < inNumberFrames; frame++)
     {
@@ -312,14 +370,12 @@ static OSStatus renderCallback(void *inRefCon, AudioUnitRenderActionFlags *ioAct
             int idx1 = (ringbuf_read + srcIndex1) % RINGBUF_SIZE;
             s0 = ringbuf[idx0];
             s1 = ringbuf[idx1];
-            samplesRead++;
         }
         else if (ringbuf_count > srcIndex0)
         {
             int idx0 = (ringbuf_read + srcIndex0) % RINGBUF_SIZE;
             s0 = ringbuf[idx0];
             s1 = s0;
-            samplesRead++;
         }
         else
         {
@@ -337,8 +393,6 @@ static OSStatus renderCallback(void *inRefCon, AudioUnitRenderActionFlags *ioAct
             s1 = 0;
         }
         short sample = (short)((1.0 - frac) * s0 + frac * s1);
-        if (sample != 0)
-            nonzero++;
         float floatSample = sample / 32768.0f;
         for (UInt32 ch = 0; ch < channelsPerFrame; ch++)
         {
@@ -350,7 +404,19 @@ static OSStatus renderCallback(void *inRefCon, AudioUnitRenderActionFlags *ioAct
         {
             ringbuf_read = (ringbuf_read + 1) % RINGBUF_SIZE;
             ringbuf_count--;
+            txSamplesPlayed++;
             srcPos -= 1.0;
+        }
+    }
+
+    if (ringbuf_count == 0 && audioPlaying && !audioFinished && tx_samples_pending() == 0)
+    {
+        audioFinished = true;
+        audioPlaying = false;
+        if (ZF_LOG_ON_DEBUG)
+        {
+            ZF_LOGD("RenderCallback: TX ring buffer drained (%llu/%llu samples played)",
+                    (unsigned long long)txSamplesPlayed, (unsigned long long)txSamplesQueued);
         }
     }
 
@@ -362,6 +428,88 @@ static OSStatus renderCallback(void *inRefCon, AudioUnitRenderActionFlags *ioAct
     }
 
     return noErr;
+}
+
+void coreaudio_test_reset_tx_state(void)
+{
+    ringbuf_write = 0;
+    ringbuf_read = 0;
+    ringbuf_count = 0;
+    tx_reset_counters();
+    audioPlaying = false;
+    audioFinished = false;
+    srcPosition = 0.0f;
+    SoundIsPlaying = false;
+    audioUnitStarted = false;
+    txReadIndex = 0;
+}
+
+void coreaudio_test_set_initialized(bool init)
+{
+    coreAudioInitialized = init;
+    coreAudioOutputActive = init;
+}
+
+void coreaudio_test_bypass_audio_start(bool enable)
+{
+    testBypassAudioStart = enable;
+}
+
+void coreaudio_test_bypass_output_handle_check(bool enable)
+{
+    testBypassOutputHandleCheck = enable;
+}
+
+void coreaudio_test_bypass_audio_stop(bool enable)
+{
+    testBypassAudioStop = enable;
+}
+
+uint64_t coreaudio_test_tx_pending(void)
+{
+    return tx_samples_pending();
+}
+
+uint64_t coreaudio_test_samples_played(void)
+{
+    return txSamplesPlayed;
+}
+
+int coreaudio_test_ringbuf_count(void)
+{
+    return ringbuf_count;
+}
+
+bool coreaudio_test_audio_finished(void)
+{
+    return audioFinished;
+}
+
+void coreaudio_test_override_output_samplerate(double rate)
+{
+    coreAudioOutputSampleRate = (rate > 0.0) ? rate : 48000.0;
+}
+
+double coreaudio_test_get_output_samplerate(void)
+{
+    return coreAudioOutputSampleRate;
+}
+
+void coreaudio_test_render(float *buffer, uint32_t frames, uint32_t channels)
+{
+#ifdef __APPLE__
+    AudioBufferList list;
+    AudioUnitRenderActionFlags flags = 0;
+    list.mNumberBuffers = 1;
+    list.mBuffers[0].mNumberChannels = channels;
+    list.mBuffers[0].mDataByteSize = (UInt32)(frames * channels * sizeof(Float32));
+    list.mBuffers[0].mData = buffer;
+    renderCallback(NULL, &flags, NULL, 0, frames, &list);
+#else
+    (void)buffer;
+    (void)frames;
+    (void)channels;
+#endif
 }
 
 // Check if we should report CoreAudio diagnostics (called periodically, reports once)
@@ -378,7 +526,10 @@ static void CheckAndReportCoreDiagnostics(void)
             UInt32 avg_frames = coreAudioDiag.frame_size_sum / coreAudioDiag.sample_count;
 
             // Report basic callback info (similar to Linux buffer info)
-            ZF_LOGI("CoreAudio: Audio callbacks using %u frame chunks at 48kHz", avg_frames);
+            double reportRate = coreAudioOutputActive ? coreAudioOutputSampleRate : coreAudioInputSampleRate;
+            if (reportRate <= 0.0)
+                reportRate = 48000.0;
+            ZF_LOGI("CoreAudio: Audio callbacks using %u frame chunks at %.1fHz", avg_frames, reportRate);
 
             // Warn about significant frame size variation (like Linux period_size warnings)
             if (coreAudioDiag.frame_size_max > coreAudioDiag.frame_size_min * 2)
@@ -443,6 +594,9 @@ static void InitCoreAudio(const char *captureDev, const char *playbackDev)
 
 #ifdef __APPLE__
     OSStatus status = noErr;
+    AudioDeviceID resolvedInputDevice = kAudioObjectUnknown;
+    AudioDeviceID resolvedOutputDevice = kAudioObjectUnknown;
+    UInt32 outputDeviceChannels = 2;
 
     // Dispose existing AudioUnits if we have them
     if (coreAudioInitialized)
@@ -599,6 +753,7 @@ static void InitCoreAudio(const char *captureDev, const char *playbackDev)
                 else
                 {
                     ZF_LOGD("CoreAudio: Set input device to %u ('%s')", (unsigned)inputDeviceID, captureDev);
+                    resolvedInputDevice = inputDeviceID;
                 }
             }
             else
@@ -687,6 +842,7 @@ static void InitCoreAudio(const char *captureDev, const char *playbackDev)
             else
             {
                 ZF_LOGD("CoreAudio: Set output device to %u ('%s')", (unsigned)targetDeviceID, playbackDev);
+                resolvedOutputDevice = targetDeviceID;
             }
         }
         else if (wantOutput)
@@ -695,15 +851,94 @@ static void InitCoreAudio(const char *captureDev, const char *playbackDev)
         }
     }
 
+    // Determine active device IDs if CoreAudio chose defaults
+    if (inputAudioUnit)
+    {
+        UInt32 size = sizeof(resolvedInputDevice);
+        if (resolvedInputDevice == kAudioObjectUnknown &&
+            AudioUnitGetProperty(inputAudioUnit, kAudioOutputUnitProperty_CurrentDevice,
+                                 kAudioUnitScope_Global, 0, &resolvedInputDevice, &size) != noErr)
+        {
+            resolvedInputDevice = coreaudio_get_default_device(true);
+        }
+
+        AudioStreamBasicDescription deviceFormat = {0};
+        size = sizeof(deviceFormat);
+        coreAudioInputSampleRate = 48000.0;
+        if (AudioUnitGetProperty(inputAudioUnit, kAudioUnitProperty_StreamFormat,
+                                 kAudioUnitScope_Input, 1, &deviceFormat, &size) == noErr &&
+            deviceFormat.mSampleRate > 0.0)
+        {
+            coreAudioInputSampleRate = deviceFormat.mSampleRate;
+        }
+        else
+        {
+            double rate = coreaudio_query_nominal_rate(resolvedInputDevice, kAudioDevicePropertyScopeInput);
+            if (rate > 0.0)
+                coreAudioInputSampleRate = rate;
+        }
+
+        if (coreAudioInputSampleRate <= 0.0)
+            coreAudioInputSampleRate = 48000.0;
+
+        ZF_LOGI("CoreAudio: Input device sample rate negotiated to %.1f Hz", coreAudioInputSampleRate);
+    }
+    else
+    {
+        coreAudioInputSampleRate = 48000.0;
+    }
+
+    if (outputAudioUnit)
+    {
+        UInt32 size = sizeof(resolvedOutputDevice);
+        if (resolvedOutputDevice == kAudioObjectUnknown &&
+            AudioUnitGetProperty(outputAudioUnit, kAudioOutputUnitProperty_CurrentDevice,
+                                 kAudioUnitScope_Global, 0, &resolvedOutputDevice, &size) != noErr)
+        {
+            resolvedOutputDevice = coreaudio_get_default_device(false);
+        }
+
+        AudioStreamBasicDescription deviceFormat = {0};
+        size = sizeof(deviceFormat);
+        coreAudioOutputSampleRate = 48000.0;
+        if (AudioUnitGetProperty(outputAudioUnit, kAudioUnitProperty_StreamFormat,
+                                 kAudioUnitScope_Output, 0, &deviceFormat, &size) == noErr)
+        {
+            if (deviceFormat.mSampleRate > 0.0)
+                coreAudioOutputSampleRate = deviceFormat.mSampleRate;
+            if (deviceFormat.mChannelsPerFrame > 0)
+                outputDeviceChannels = deviceFormat.mChannelsPerFrame;
+        }
+        else
+        {
+            double rate = coreaudio_query_nominal_rate(resolvedOutputDevice, kAudioDevicePropertyScopeOutput);
+            if (rate > 0.0)
+                coreAudioOutputSampleRate = rate;
+        }
+
+        if (coreAudioOutputSampleRate <= 0.0)
+            coreAudioOutputSampleRate = 48000.0;
+        if (outputDeviceChannels == 0)
+            outputDeviceChannels = 2;
+
+        ZF_LOGI("CoreAudio: Output device sample rate negotiated to %.1f Hz (%u channels)",
+                coreAudioOutputSampleRate, (unsigned)outputDeviceChannels);
+    }
+    else
+    {
+        coreAudioOutputSampleRate = 48000.0;
+        outputDeviceChannels = 2;
+    }
+
     // Configure output if needed
     if (wantOutput)
     {
-        // Set up output format (float32, stereo, 48kHz)
+        // Set up output format (float32, negotiated device rate/channel count)
         AudioStreamBasicDescription outputFormat = {0};
-        outputFormat.mSampleRate = 48000.0;
+        outputFormat.mSampleRate = coreAudioOutputSampleRate;
         outputFormat.mFormatID = kAudioFormatLinearPCM;
         outputFormat.mFormatFlags = kAudioFormatFlagIsFloat | kAudioFormatFlagsNativeEndian | kLinearPCMFormatFlagIsPacked;
-        outputFormat.mChannelsPerFrame = 2; // Stereo
+        outputFormat.mChannelsPerFrame = outputDeviceChannels;
         outputFormat.mFramesPerPacket = 1;
         outputFormat.mBitsPerChannel = 32;
         outputFormat.mBytesPerFrame = sizeof(Float32) * outputFormat.mChannelsPerFrame;
@@ -734,9 +969,9 @@ static void InitCoreAudio(const char *captureDev, const char *playbackDev)
     // Configure input if needed
     if (wantInput)
     {
-        // Set up input format (always float32, mono, 48kHz or device rate)
+        // Set up input format (float32, mono, negotiated device rate)
         AudioStreamBasicDescription inputFormat = {0};
-        inputFormat.mSampleRate = 48000.0; // Most devices support 48kHz; SRC handles any differences
+        inputFormat.mSampleRate = coreAudioInputSampleRate;
         inputFormat.mFormatID = kAudioFormatLinearPCM;
         inputFormat.mFormatFlags = kAudioFormatFlagIsFloat | kAudioFormatFlagsNativeEndian | kLinearPCMFormatFlagIsPacked;
         inputFormat.mChannelsPerFrame = 1;
@@ -1283,7 +1518,7 @@ void CloseSoundCapture(bool do_getdevices)
 
 bool SendtoCard(int n)
 {
-    if (!TXEnabled || !coreAudioInitialized || !outputAudioUnit)
+    if (!TXEnabled || !coreAudioInitialized || (!outputAudioUnit && !testBypassOutputHandleCheck))
     {
         ZF_LOGW("SendtoCard: Cannot send - TXEnabled=%d, initialized=%d, outputAudioUnit=%p",
                 TXEnabled, coreAudioInitialized, (void *)outputAudioUnit);
@@ -1291,7 +1526,11 @@ bool SendtoCard(int n)
     }
     // Copy n samples from txbuffer[TxIndex] into ring buffer
     int written = 0;
-    int nonzero = 0;
+    bool resetCounters = (tx_samples_pending() == 0);
+    if (resetCounters)
+    {
+        tx_reset_counters();
+    }
     for (int i = 0; i < n; i++)
     {
         if (ringbuf_count >= RINGBUF_SIZE)
@@ -1301,15 +1540,14 @@ bool SendtoCard(int n)
         }
         short sample = txbuffer[TxIndex][i];
         ringbuf[ringbuf_write] = sample;
-        if (sample != 0)
-            nonzero++;
         ringbuf_write = (ringbuf_write + 1) % RINGBUF_SIZE;
         ringbuf_count++;
         written++;
     }
+    txSamplesQueued += (uint64_t)written;
     // (Debug logging removed for normal operation)
     // Start AudioUnit playback if not already playing
-    if (!audioPlaying)
+    if (!audioPlaying && written > 0)
     {
         if (!EnsureAudioUnitsStarted())
         {
@@ -1344,11 +1582,11 @@ void PollReceivedSamples()
 
     // Check for diagnostic reporting (minimal, non-verbose)
     CheckAndReportCoreDiagnostics();
-    // Sample rate conversion: input is float32 at 48kHz, output must be 16-bit at 12kHz
+    // Sample rate conversion: input is float32 at device rate, output must be 16-bit at 12kHz
     static double srcPos = 0.0;
-    const double srcRate = 48000.0;
+    const double srcRate = (coreAudioInputSampleRate > 0.0) ? coreAudioInputSampleRate : 48000.0;
     const double dstRate = 12000.0;
-    const double rateRatio = srcRate / dstRate; // 4.0
+    const double rateRatio = srcRate / dstRate;
     while (inbuf_count > 4)
     { // Need at least 2 samples for interpolation
         // Linear interpolation SRC
@@ -1398,21 +1636,17 @@ void StopCapture()
 
 bool SoundFlush()
 {
-    KeyPTT(false);
-
     // Wait for all staged audio to finish playing
-    if (audioPlaying && outputAudioUnit)
+    if (audioPlaying && (outputAudioUnit || testBypassOutputHandleCheck))
     {
         // Wait for the render callback to consume all the audio data
-        int flushWaitCount = 0;
-        while (audioPlaying && !audioFinished)
+        while ((tx_samples_pending() > 0 || ringbuf_count > 0) && !audioFinished)
         {
             usleep(1000); // Sleep for 1ms
-            flushWaitCount++;
         }
 #ifdef __APPLE__
         // Stop both AudioUnits
-        if (inputAudioUnit)
+        if (inputAudioUnit && !testBypassAudioStop)
         {
             OSStatus status = AudioOutputUnitStop(inputAudioUnit);
             if (status != noErr)
@@ -1420,7 +1654,7 @@ bool SoundFlush()
                 ZF_LOGW("CoreAudio: Failed to stop input AudioUnit (status=%d)", (int)status);
             }
         }
-        if (outputAudioUnit)
+        if (outputAudioUnit && !testBypassAudioStop)
         {
             OSStatus status = AudioOutputUnitStop(outputAudioUnit);
             if (status != noErr)
@@ -1439,7 +1673,10 @@ bool SoundFlush()
         txReadIndex = 0;
         audioFinished = false;
         srcPosition = 0.0f;
+        tx_reset_counters();
     }
+
+    KeyPTT(false);
 
     return TXEnabled;
 }

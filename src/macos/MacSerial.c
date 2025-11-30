@@ -21,6 +21,33 @@
 #include "common/os_util.h"
 #include "common/log.h"
 
+static void *(*serial_malloc_fn)(size_t) = malloc;
+static void *(*serial_realloc_fn)(void *, size_t) = realloc;
+static char *(*serial_strdup_fn)(const char *) = NULL;
+
+static char *default_strdup(const char *s)
+{
+    return strdup(s);
+}
+
+static void ensure_default_allocators(void)
+{
+    if (!serial_strdup_fn)
+        serial_strdup_fn = default_strdup;
+}
+
+void macserial_test_set_allocators(void *(*malloc_fn)(size_t), void *(*realloc_fn)(void *, size_t), char *(*strdup_fn)(const char *))
+{
+    serial_malloc_fn = malloc_fn ? malloc_fn : malloc;
+    serial_realloc_fn = realloc_fn ? realloc_fn : realloc;
+    serial_strdup_fn = strdup_fn ? strdup_fn : default_strdup;
+}
+
+void macserial_test_reset_allocators(void)
+{
+    macserial_test_set_allocators(NULL, NULL, NULL);
+}
+
 // Speed mapping table (mirrors Linux selection)
 struct speed_struct
 {
@@ -263,18 +290,35 @@ int ReadCOMBlock(HANDLE fd, unsigned char *Block, int MaxLength)
     }
 }
 
+static void free_suffix_tracking(char **suffixes, int count)
+{
+    for (int i = 0; i < count; ++i)
+    {
+        if (suffixes[i])
+        {
+            free(suffixes[i]);
+            suffixes[i] = NULL;
+        }
+    }
+}
+
 char **GetSerialStrlist()
 {
+    ensure_default_allocators();
     // Enumerate macOS serial devices with these policies:
     //  - Prefer /dev/cu.* (callout devices) for active connections.
     //  - Include /dev/tty.* only if a corresponding /dev/cu.* variant wasn't found.
     //  - Filter out built-in Bluetooth placeholders (cu.Bluetooth-* / tty.Bluetooth-*)
     //    to mirror Linux behavior of omitting generic Bluetooth pseudo ports.
     //  - Return alternating name/description pairs terminated by NULL (description empty).
-    DIR *d = opendir("/dev");
+    const char *devdir = getenv("ARDOP_TEST_SERIAL_DEV_DIR");
+    if (!devdir || devdir[0] == '\0')
+        devdir = "/dev";
+
+    DIR *d = opendir(devdir);
     if (!d)
     {
-        ZF_LOGD("Directory /dev could not be opened for serial enumeration (%s)", strerror(errno));
+        ZF_LOGD("Directory %s could not be opened for serial enumeration (%s)", devdir, strerror(errno));
         return NULL;
     }
     struct dirent *dir;
@@ -283,7 +327,7 @@ char **GetSerialStrlist()
     // Track which cu.* suffixes were added so we can suppress tty.* duplicates.
     // Simple fixed-size tracking for typical small device counts; fall back to linear scan.
     const int MAX_TRACK = 128;
-    char *cu_suffixes[MAX_TRACK];
+    char *cu_suffixes[MAX_TRACK] = {0};
     int cu_count = 0;
     while ((dir = readdir(d)) != NULL)
     {
@@ -318,56 +362,70 @@ char **GetSerialStrlist()
                 continue;
         }
         char fullpath[PATH_MAX];
-        snprintf(fullpath, sizeof(fullpath), "/dev/%s", name);
+        size_t dirlen = strlen(devdir);
+        bool add_slash = (dirlen > 0 && devdir[dirlen - 1] != '/');
+        int needed = snprintf(fullpath, sizeof(fullpath), "%s%s%s", devdir, add_slash ? "/" : "", name);
+        if (needed < 0 || needed >= (int)sizeof(fullpath))
+            continue;
         if (slist == NULL)
         {
             slistsize = 1;
-            slist = (char **)malloc(sizeof(char *));
+            slist = (char **)serial_malloc_fn(sizeof(char *));
             if (!slist)
             {
                 ZF_LOGE("malloc failed in GetSerialStrlist (%s)", strerror(errno));
                 closedir(d);
+                free_suffix_tracking(cu_suffixes, cu_count);
                 return NULL;
             }
             slist[slistsize - 1] = NULL;
         }
         slistsize += 2;
-        char **tmp = (char **)realloc(slist, slistsize * sizeof(char *));
+        char **tmp = (char **)serial_realloc_fn(slist, slistsize * sizeof(char *));
         if (!tmp)
         {
             ZF_LOGE("realloc failed in GetSerialStrlist (%s)", strerror(errno));
             closedir(d);
+            free_suffix_tracking(cu_suffixes, cu_count);
             return slist;
         }
         slist = tmp;
         size_t namesz = strlen(fullpath) + 1;
-        slist[slistsize - 3] = (char *)malloc(namesz);
+        slist[slistsize - 3] = (char *)serial_malloc_fn(namesz);
         if (!slist[slistsize - 3])
         {
             ZF_LOGE("malloc (name) failed in GetSerialStrlist (%s)", strerror(errno));
+            slist[slistsize - 3] = NULL;
             slist[slistsize - 2] = NULL;
             closedir(d);
+            free_suffix_tracking(cu_suffixes, cu_count);
             return slist;
         }
         memcpy(slist[slistsize - 3], fullpath, namesz);
-        slist[slistsize - 2] = strdup("");
+        slist[slistsize - 2] = serial_strdup_fn("");
+        if (!slist[slistsize - 2])
+        {
+            ZF_LOGE("strdup failed in GetSerialStrlist (%s)", strerror(errno));
+            free(slist[slistsize - 3]);
+            slist[slistsize - 3] = NULL;
+            closedir(d);
+            free_suffix_tracking(cu_suffixes, cu_count);
+            return slist;
+        }
         slist[slistsize - 1] = NULL;
         if (is_cu && suffix && cu_count < MAX_TRACK)
         {
-            cu_suffixes[cu_count] = strdup(suffix); // small leak tolerated on early returns
-            cu_count++;
+            char *dup = serial_strdup_fn(suffix);
+            if (dup)
+            {
+                cu_suffixes[cu_count] = dup;
+                cu_count++;
+            }
         }
     }
     closedir(d);
     // Free any suffix tracking allocations (not needed after enumeration)
-    for (int i = 0; i < cu_count; ++i)
-    {
-        if (cu_suffixes[i])
-        {
-            free(cu_suffixes[i]);
-            cu_suffixes[i] = NULL;
-        }
-    }
+    free_suffix_tracking(cu_suffixes, cu_count);
     if (slist)
     {
         int pairs = 0;

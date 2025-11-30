@@ -8,14 +8,21 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include <termios.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <limits.h>
 #include <util.h> // openpty, ptsname
 
 #include "setup.h"
 #include "common/os_util.h"
+#include "common/ardopcommon.h"
+
+void macserial_test_set_allocators(void *(*malloc_fn)(size_t), void *(*realloc_fn)(void *, size_t), char *(*strdup_fn)(const char *));
+void macserial_test_reset_allocators(void);
 
 // Helper: create a PTY pair and return slave path.
 static bool make_pty(char *slavePath, size_t sz, int *masterFd, int *slaveFd) {
@@ -157,13 +164,56 @@ static void test_close_semantics(void **state) {
     close(mfd); close(sfd);
 }
 
+static void *realloc_fail_once(void *ptr, size_t sz)
+{
+    static int counter = 0;
+    counter++;
+    if (counter == 1)
+        return NULL;
+    return realloc(ptr, sz);
+}
+
+static void test_getserial_realloc_failure(void **state)
+{
+    (void)state;
+    char tmpl[] = "/tmp/ardop_serialXXXXXX";
+    char *dir = mkdtemp(tmpl);
+    if (!dir)
+        fail_msg("mkdtemp");
+
+    char path[PATH_MAX];
+    int len = snprintf(path, sizeof(path), "%s/cu.mock", dir);
+    if (len < 0 || len >= (int)sizeof(path))
+        fail_msg("snprintf path");
+    int fd = creat(path, 0600);
+    if (fd == -1)
+        fail_msg("creat test entry");
+    close(fd);
+
+    if (setenv("ARDOP_TEST_SERIAL_DEV_DIR", dir, 1) == -1)
+        fail_msg("setenv override");
+
+    macserial_test_reset_allocators();
+    macserial_test_set_allocators(NULL, realloc_fail_once, NULL);
+    char **list = GetSerialStrlist();
+    assert_non_null(list);
+    assert_null(list[0]);
+    macserial_test_reset_allocators();
+    FreeStrlist(&list);
+
+    unsetenv("ARDOP_TEST_SERIAL_DEV_DIR");
+    unlink(path);
+    rmdir(dir);
+}
+
 int main(void) {
     ardop_test_setup();
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_open_invalid),
         cmocka_unit_test(test_pty_happy_path),
         cmocka_unit_test(test_modem_lines),
-        cmocka_unit_test(test_close_semantics)
+        cmocka_unit_test(test_close_semantics),
+        cmocka_unit_test(test_getserial_realloc_failure)
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }
