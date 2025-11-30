@@ -30,6 +30,7 @@
 #include "common/ardopcommon.h"
 #include "common/Webgui.h"
 #include "common/ptt.h"
+#include "common/os_util.h"
 
 // Globals required by audio.h (mirroring ALSA.c declarations)
 short txbuffer[2][SendSize];
@@ -85,6 +86,15 @@ static bool testBypassAudioStart = false;
 static bool testBypassOutputHandleCheck = false;
 static bool testBypassAudioStop = false;
 static bool testForceLegacySRC = false;
+static bool testBypassRecoveryRestart = false;
+static bool testBypassRecoveryReopen = false;
+
+static pthread_mutex_t coreAudioMutex = PTHREAD_MUTEX_INITIALIZER;
+static volatile int txReadIndex = 0;           // Read position in txbuffer
+static volatile bool audioPlaying = false;     // AudioUnit is actively playing
+static volatile bool audioFinished = false;    // All audio data has been consumed
+static volatile float srcPosition = 0.0f;      // Sample rate conversion position
+static volatile bool audioUnitStarted = false; // Whether AudioUnit is started (for input or output)
 
 // Ring buffer for audio input (capture)
 #define INBUF_SIZE (ReceiveSize * 512) // 512*240 = 122880 samples ~10s at 12kHz
@@ -112,6 +122,332 @@ static struct
     int max_input_usage_percent;
     bool buffer_warning_shown;
 } coreAudioDiag = {false, 0, UINT32_MAX, 0, 0, false, 0, 0, false};
+
+#define CORE_AUDIO_RX_SILENCE_TIMEOUT_MS 2000U
+#define CORE_AUDIO_TX_STALL_TIMEOUT_MS 1000U
+#define CORE_AUDIO_RECOVERY_BACKOFF_MS 1000U
+#define CORE_AUDIO_MAX_CONVERTER_ERRORS 3
+#define CORE_AUDIO_FLUSH_TIMEOUT_MS 500U
+
+static struct
+{
+    unsigned int lastRxMs;
+    unsigned int lastTxMs;
+    unsigned int lastRxRecoverAttemptMs;
+    unsigned int lastTxRecoverAttemptMs;
+    unsigned int rxRecoveries;
+    unsigned int txRecoveries;
+    int consecutiveRxErrors;
+    int consecutiveTxErrors;
+} coreAudioRecovery = {0, 0, 0, 0, 0, 0, 0, 0};
+
+static bool coreAudioPendingRxRecovery = false;
+static bool coreAudioPendingTxRecovery = false;
+static const char *coreAudioPendingRxReason = NULL;
+static const char *coreAudioPendingTxReason = NULL;
+
+static bool testNowOverride = false;
+static unsigned int testNowValue = 0;
+
+static bool dev_enabled(const char *dev);
+#ifdef __APPLE__
+static void RebuildTxConverter(void);
+static void RebuildRxConverter(void);
+#endif
+static bool EnsureAudioUnitsStarted(void);
+
+static inline unsigned int coreaudio_now_ms(void)
+{
+    if (testNowOverride)
+        return testNowValue;
+    return Now;
+}
+
+static void coreaudio_mark_rx_activity(void)
+{
+    coreAudioRecovery.lastRxMs = coreaudio_now_ms();
+    coreAudioRecovery.consecutiveRxErrors = 0;
+}
+
+static void coreaudio_mark_tx_activity(void)
+{
+    coreAudioRecovery.lastTxMs = coreaudio_now_ms();
+    coreAudioRecovery.consecutiveTxErrors = 0;
+}
+
+static bool coreaudio_should_monitor_rx(void)
+{
+    return RXEnabled && dev_enabled(CaptureDevice);
+}
+
+static bool coreaudio_should_monitor_tx(void)
+{
+    if (!TXEnabled || !audioPlaying || !dev_enabled(PlaybackDevice))
+        return false;
+    return (ringbuf_count > 0) || (tx_samples_pending() > 0);
+}
+
+static bool coreaudio_direction_enabled(bool capture)
+{
+    if (capture)
+        return RXEnabled && dev_enabled(CaptureDevice);
+    return TXEnabled && dev_enabled(PlaybackDevice);
+}
+
+static void coreaudio_reset_rx_buffers(void)
+{
+    inbuf_read = 0;
+    inbuf_write = 0;
+    inbuf_count = 0;
+    rxblock_fill = 0;
+}
+
+static bool coreaudio_soft_restart(bool capture);
+static bool coreaudio_full_reopen(bool capture);
+static void coreaudio_request_recovery(bool capture, const char *reason);
+static void coreaudio_attempt_recovery(bool capture, const char *reason);
+static void CheckAndRecoverAudioHealth(void);
+
+static void coreaudio_note_callback_error(bool capture, const char *source, OSStatus status)
+{
+#ifdef __APPLE__
+    int *counter = capture ? &coreAudioRecovery.consecutiveRxErrors : &coreAudioRecovery.consecutiveTxErrors;
+    (*counter)++;
+    ZF_LOGW("CoreAudio %s error in %s (status=%d, count=%d)", capture ? "RX" : "TX", source, (int)status, *counter);
+    if (*counter >= CORE_AUDIO_MAX_CONVERTER_ERRORS)
+    {
+        coreaudio_request_recovery(capture, source);
+        *counter = 0;
+    }
+#else
+    (void)capture;
+    (void)source;
+    (void)status;
+#endif
+}
+
+static bool coreaudio_soft_restart(bool capture)
+{
+#ifdef __APPLE__
+    pthread_mutex_lock(&coreAudioMutex);
+    AudioUnit unit = capture ? inputAudioUnit : outputAudioUnit;
+    if (!unit)
+    {
+        pthread_mutex_unlock(&coreAudioMutex);
+        return false;
+    }
+
+    if (!testBypassAudioStop)
+    {
+        AudioOutputUnitStop(unit);
+    }
+    AudioUnitUninitialize(unit);
+    OSStatus status = AudioUnitInitialize(unit);
+    if (status != noErr)
+    {
+        pthread_mutex_unlock(&coreAudioMutex);
+        ZF_LOGW("CoreAudio: Failed to reinitialize %s AudioUnit (status=%d)", capture ? "capture" : "playback", (int)status);
+        return false;
+    }
+
+    if (capture)
+    {
+        coreaudio_reset_rx_buffers();
+        RebuildRxConverter();
+    }
+    else
+    {
+        RebuildTxConverter();
+    }
+
+    audioUnitStarted = false;
+    pthread_mutex_unlock(&coreAudioMutex);
+    return EnsureAudioUnitsStarted();
+#else
+    (void)capture;
+    return false;
+#endif
+}
+
+static bool coreaudio_full_reopen(bool capture)
+{
+    if (capture)
+    {
+        if (!crestorable())
+            return false;
+        RXEnabled = false;
+        return OpenSoundCapture("RESTORE", Cch);
+    }
+    else
+    {
+        if (!prestorable())
+            return false;
+        TXEnabled = false;
+        SoundIsPlaying = false;
+        return OpenSoundPlayback("RESTORE", Pch);
+    }
+}
+
+static void coreaudio_request_recovery(bool capture, const char *reason)
+{
+    if (capture)
+    {
+        if (!coreAudioPendingRxRecovery)
+        {
+            coreAudioPendingRxReason = reason;
+        }
+        coreAudioPendingRxRecovery = true;
+    }
+    else
+    {
+        if (!coreAudioPendingTxRecovery)
+        {
+            coreAudioPendingTxReason = reason;
+        }
+        coreAudioPendingTxRecovery = true;
+    }
+}
+
+static void coreaudio_attempt_recovery(bool capture, const char *reason)
+{
+#ifdef __APPLE__
+    if (!coreaudio_direction_enabled(capture))
+        return;
+
+    bool verboseTestRecovery = false;
+    const char *verboseEnv = getenv("ARDOP_TEST_VERBOSE_RECOVERY");
+    if (verboseEnv && verboseEnv[0] != '\0')
+        verboseTestRecovery = true;
+
+    if (verboseTestRecovery)
+    {
+        fprintf(stderr, "CoreAudio recovery start capture=%d restartBypass=%d reopenBypass=%d\n",
+                capture ? 1 : 0,
+                testBypassRecoveryRestart ? 1 : 0,
+                testBypassRecoveryReopen ? 1 : 0);
+    }
+
+    unsigned int now = coreaudio_now_ms();
+    if (capture)
+    {
+        coreAudioRecovery.lastRxRecoverAttemptMs = now;
+        coreAudioRecovery.rxRecoveries++;
+    }
+    else
+    {
+        coreAudioRecovery.lastTxRecoverAttemptMs = now;
+        coreAudioRecovery.txRecoveries++;
+    }
+
+    ZF_LOGW("CoreAudio %s recovery triggered (%s)", capture ? "RX" : "TX", reason);
+    bool recovered = false;
+    if (testBypassRecoveryRestart)
+    {
+        ZF_LOGD("CoreAudio %s recovery restart bypassed for tests", capture ? "RX" : "TX");
+        recovered = true;
+    }
+    else
+    {
+        recovered = coreaudio_soft_restart(capture);
+    }
+    if (!recovered)
+    {
+        if (testBypassRecoveryReopen)
+        {
+            ZF_LOGD("CoreAudio %s soft restart failed but RESTORE bypassed for tests", capture ? "RX" : "TX");
+            recovered = true;
+        }
+        else
+        {
+            ZF_LOGW("CoreAudio %s soft restart failed, attempting RESTORE", capture ? "RX" : "TX");
+            recovered = coreaudio_full_reopen(capture);
+        }
+    }
+
+    if (recovered)
+    {
+        if (capture)
+            coreaudio_mark_rx_activity();
+        else
+            coreaudio_mark_tx_activity();
+    }
+    else
+    {
+        ZF_LOGW("CoreAudio %s recovery failed", capture ? "RX" : "TX");
+    }
+#else
+    (void)capture;
+    (void)reason;
+#endif
+}
+
+static void coreaudio_service_pending_recovery(bool capture, unsigned int now)
+{
+    bool *pendingFlag = capture ? &coreAudioPendingRxRecovery : &coreAudioPendingTxRecovery;
+    const char **reasonSlot = capture ? &coreAudioPendingRxReason : &coreAudioPendingTxReason;
+    if (!*pendingFlag)
+        return;
+
+    if (!coreaudio_direction_enabled(capture))
+    {
+        *pendingFlag = false;
+        *reasonSlot = NULL;
+        return;
+    }
+
+    unsigned int lastAttempt = capture ? coreAudioRecovery.lastRxRecoverAttemptMs : coreAudioRecovery.lastTxRecoverAttemptMs;
+    if (now - lastAttempt < CORE_AUDIO_RECOVERY_BACKOFF_MS)
+    {
+        return;
+    }
+
+    const char *reason = *reasonSlot ? *reasonSlot : (capture ? "Pending RX recovery" : "Pending TX recovery");
+    *pendingFlag = false;
+    *reasonSlot = NULL;
+    coreaudio_attempt_recovery(capture, reason);
+}
+
+static void CheckAndRecoverAudioHealth(void)
+{
+    unsigned int now = coreaudio_now_ms();
+
+    coreaudio_service_pending_recovery(true, now);
+    coreaudio_service_pending_recovery(false, now);
+
+    if (!coreaudio_should_monitor_rx())
+    {
+        coreAudioRecovery.lastRxMs = now;
+        coreAudioRecovery.consecutiveRxErrors = 0;
+    }
+    else
+    {
+        if (coreAudioRecovery.lastRxMs == 0)
+            coreAudioRecovery.lastRxMs = now;
+        unsigned int delta = now - coreAudioRecovery.lastRxMs;
+        if (delta > CORE_AUDIO_RX_SILENCE_TIMEOUT_MS &&
+            now - coreAudioRecovery.lastRxRecoverAttemptMs > CORE_AUDIO_RECOVERY_BACKOFF_MS)
+        {
+            coreaudio_attempt_recovery(true, "RX watchdog timeout");
+        }
+    }
+
+    if (!coreaudio_should_monitor_tx())
+    {
+        coreAudioRecovery.lastTxMs = now;
+        coreAudioRecovery.consecutiveTxErrors = 0;
+    }
+    else
+    {
+        if (coreAudioRecovery.lastTxMs == 0)
+            coreAudioRecovery.lastTxMs = now;
+        unsigned int delta = now - coreAudioRecovery.lastTxMs;
+        if (delta > CORE_AUDIO_TX_STALL_TIMEOUT_MS &&
+            now - coreAudioRecovery.lastTxRecoverAttemptMs > CORE_AUDIO_RECOVERY_BACKOFF_MS)
+        {
+            coreaudio_attempt_recovery(false, "TX watchdog timeout");
+        }
+    }
+}
 
 #ifdef __APPLE__
 #define INPUT_CAPTURE_MAX_FRAMES 8192
@@ -290,6 +626,11 @@ static OSStatus txConverterInputProc(AudioConverterRef inAudioConverter,
     }
 
     *ioNumberDataPackets = available;
+    if (available > 0)
+    {
+        coreaudio_mark_tx_activity();
+        coreAudioRecovery.consecutiveTxErrors = 0;
+    }
     return noErr;
 }
 
@@ -406,6 +747,12 @@ static OSStatus inputCallback(void *inRefCon, AudioUnitRenderActionFlags *ioActi
         {
             coreAudioDiag.max_input_usage_percent = input_usage_percent;
         }
+
+        if (inNumberFrames > 0)
+        {
+            coreaudio_mark_rx_activity();
+            coreAudioRecovery.consecutiveRxErrors = 0;
+        }
     }
     else
     {
@@ -414,6 +761,7 @@ static OSStatus inputCallback(void *inRefCon, AudioUnitRenderActionFlags *ioActi
         {
             ZF_LOGE("INPUT ERROR: AudioUnitRender failed, status=%d (count=%d)", (int)status, errorCount);
         }
+        coreaudio_note_callback_error(true, "AudioUnitRender", status);
     }
 
     return status;
@@ -435,17 +783,6 @@ static char lastPlaybackDev[DEVSTRSZ] = "";
 // Track last successfully opened (good) device names for RESTORE feature
 static char last_rx_dev[DEVSTRSZ] = ""; // Capture side
 static char last_tx_dev[DEVSTRSZ] = ""; // Playback side
-
-// Mutex to guard reconfiguration (minimal thread-safety). If future code
-// invokes OpenSound* from different threads this prevents partial teardown.
-static pthread_mutex_t coreAudioMutex = PTHREAD_MUTEX_INITIALIZER;
-
-// Audio buffer state for transmission
-static volatile int txReadIndex = 0;           // Read position in txbuffer
-static volatile bool audioPlaying = false;     // AudioUnit is actively playing
-static volatile bool audioFinished = false;    // All audio data has been consumed
-static volatile float srcPosition = 0.0f;      // Sample rate conversion position
-static volatile bool audioUnitStarted = false; // Whether AudioUnit is started (for input or output)
 
 // Helper to decide if a device string represents an enabled direction.
 // Enabled if non-null, non-empty, not NOSOUND, not -1.
@@ -553,6 +890,7 @@ static OSStatus renderCallback(void *inRefCon, AudioUnitRenderActionFlags *ioAct
     UInt32 channelsPerFrame = ioData->mBuffers[0].mNumberChannels;
 
     bool usedConverter = false;
+    bool producedAudio = false;
 #ifdef __APPLE__
     if (txConverter)
     {
@@ -588,6 +926,10 @@ static OSStatus renderCallback(void *inRefCon, AudioUnitRenderActionFlags *ioAct
             }
             else
             {
+                if (status != noErr)
+                {
+                    coreaudio_note_callback_error(false, "AudioConverterFill", status);
+                }
                 for (UInt32 frame = 0; frame < ioFrames; ++frame)
                 {
                     float sample = txConverterOutputChunk[frame];
@@ -598,6 +940,10 @@ static OSStatus renderCallback(void *inRefCon, AudioUnitRenderActionFlags *ioAct
                 {
                     for (UInt32 ch = 0; ch < channelsPerFrame; ++ch)
                         outputBuffer[(frameOffset + frame) * channelsPerFrame + ch] = 0.0f;
+                }
+                if (ioFrames > 0)
+                {
+                    producedAudio = true;
                 }
             }
 
@@ -665,9 +1011,16 @@ static OSStatus renderCallback(void *inRefCon, AudioUnitRenderActionFlags *ioAct
                 ringbuf_count--;
                 txSamplesPlayed++;
                 srcPos -= 1.0;
+                producedAudio = true;
             }
         }
         srcPosition = (float)srcPos;
+    }
+
+    if (producedAudio)
+    {
+        coreaudio_mark_tx_activity();
+        coreAudioRecovery.consecutiveTxErrors = 0;
     }
 
     if (ringbuf_count == 0 && audioPlaying && !audioFinished && tx_samples_pending() == 0)
@@ -705,6 +1058,119 @@ void coreaudio_test_reset_tx_state(void)
     txReadIndex = 0;
 }
 
+void coreaudio_test_force_flush_idle(void)
+{
+    ringbuf_write = 0;
+    ringbuf_read = 0;
+    ringbuf_count = 0;
+    tx_reset_counters();
+    audioFinished = true;
+    audioPlaying = false;
+}
+
+void coreaudio_test_reset_recovery_state(void)
+{
+    coreAudioRecovery.lastRxMs = 0;
+    coreAudioRecovery.lastTxMs = 0;
+    coreAudioRecovery.lastRxRecoverAttemptMs = 0;
+    coreAudioRecovery.lastTxRecoverAttemptMs = 0;
+    coreAudioRecovery.rxRecoveries = 0;
+    coreAudioRecovery.txRecoveries = 0;
+    coreAudioRecovery.consecutiveRxErrors = 0;
+    coreAudioRecovery.consecutiveTxErrors = 0;
+    coreAudioPendingRxRecovery = false;
+    coreAudioPendingTxRecovery = false;
+    coreAudioPendingRxReason = NULL;
+    coreAudioPendingTxReason = NULL;
+}
+
+void coreaudio_test_set_recovery_activity(unsigned int rxMs, unsigned int txMs)
+{
+    coreAudioRecovery.lastRxMs = rxMs;
+    coreAudioRecovery.lastTxMs = txMs;
+}
+
+void coreaudio_test_set_recovery_attempts(unsigned int rxAttemptMs, unsigned int txAttemptMs)
+{
+    coreAudioRecovery.lastRxRecoverAttemptMs = rxAttemptMs;
+    coreAudioRecovery.lastTxRecoverAttemptMs = txAttemptMs;
+}
+
+unsigned int coreaudio_test_get_rx_recoveries(void)
+{
+    return coreAudioRecovery.rxRecoveries;
+}
+
+unsigned int coreaudio_test_get_tx_recoveries(void)
+{
+    return coreAudioRecovery.txRecoveries;
+}
+
+void coreaudio_test_set_consecutive_errors(int rxErrors, int txErrors)
+{
+    coreAudioRecovery.consecutiveRxErrors = rxErrors;
+    coreAudioRecovery.consecutiveTxErrors = txErrors;
+}
+
+void coreaudio_test_set_now(unsigned int nowMs)
+{
+    testNowOverride = true;
+    testNowValue = nowMs;
+}
+
+void coreaudio_test_clear_now_override(void)
+{
+    testNowOverride = false;
+}
+
+void coreaudio_test_run_watchdog(void)
+{
+    CheckAndRecoverAudioHealth();
+}
+
+unsigned int coreaudio_test_max_converter_errors(void)
+{
+    return CORE_AUDIO_MAX_CONVERTER_ERRORS;
+}
+
+unsigned int coreaudio_test_rx_timeout_ms(void)
+{
+    return CORE_AUDIO_RX_SILENCE_TIMEOUT_MS;
+}
+
+unsigned int coreaudio_test_tx_timeout_ms(void)
+{
+    return CORE_AUDIO_TX_STALL_TIMEOUT_MS;
+}
+
+unsigned int coreaudio_test_recovery_backoff_ms(void)
+{
+    return CORE_AUDIO_RECOVERY_BACKOFF_MS;
+}
+
+void coreaudio_test_set_last_devices(const char *capture, const char *playback)
+{
+    if (capture && capture[0] != '\0')
+        snprintf(last_rx_dev, DEVSTRSZ, "%s", capture);
+    else
+        last_rx_dev[0] = '\0';
+
+    if (playback && playback[0] != '\0')
+        snprintf(last_tx_dev, DEVSTRSZ, "%s", playback);
+    else
+        last_tx_dev[0] = '\0';
+}
+
+void coreaudio_test_inject_converter_error(bool capture, int status)
+{
+#ifdef __APPLE__
+    coreaudio_note_callback_error(capture, "test", (OSStatus)status);
+#else
+    (void)capture;
+    (void)status;
+#endif
+}
+
 void coreaudio_test_set_initialized(bool init)
 {
     coreAudioInitialized = init;
@@ -724,6 +1190,21 @@ void coreaudio_test_bypass_output_handle_check(bool enable)
 void coreaudio_test_bypass_audio_stop(bool enable)
 {
     testBypassAudioStop = enable;
+}
+
+void coreaudio_test_bypass_recovery_restart(bool enable)
+{
+    testBypassRecoveryRestart = enable;
+}
+
+bool coreaudio_test_is_bypass_recovery_restart(void)
+{
+    return testBypassRecoveryRestart;
+}
+
+void coreaudio_test_bypass_recovery_reopen(bool enable)
+{
+    testBypassRecoveryReopen = enable;
 }
 
 uint64_t coreaudio_test_tx_pending(void)
@@ -1795,6 +2276,8 @@ void CloseSoundCapture(bool do_getdevices)
 
 bool SendtoCard(int n)
 {
+    CheckAndRecoverAudioHealth();
+
     if (!TXEnabled || !coreAudioInitialized || (!outputAudioUnit && !testBypassOutputHandleCheck))
     {
         ZF_LOGW("SendtoCard: Cannot send - TXEnabled=%d, initialized=%d, outputAudioUnit=%p",
@@ -1849,6 +2332,7 @@ bool SendtoCard(int n)
 // Poll for received samples, perform SRC, and deliver 240-sample blocks to ProcessNewSamples
 void PollReceivedSamples()
 {
+    CheckAndRecoverAudioHealth();
 
     // Only run if RX is enabled and input is active
     if (!RXEnabled || !coreAudioInputActive)
@@ -1957,9 +2441,17 @@ bool SoundFlush()
     if (audioPlaying && (outputAudioUnit || testBypassOutputHandleCheck))
     {
         // Wait for the render callback to consume all the audio data
+        unsigned int waitStart = coreaudio_now_ms();
         while ((tx_samples_pending() > 0 || ringbuf_count > 0) && !audioFinished)
         {
             usleep(1000); // Sleep for 1ms
+            if (coreaudio_now_ms() - waitStart > CORE_AUDIO_FLUSH_TIMEOUT_MS)
+            {
+                ZF_LOGW("SoundFlush: timeout waiting for TX buffer to drain (%llu pending samples)",
+                        (unsigned long long)tx_samples_pending());
+                coreaudio_request_recovery(false, "SoundFlush timeout");
+                break;
+            }
         }
 #ifdef __APPLE__
         // Stop both AudioUnits

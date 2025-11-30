@@ -5,6 +5,7 @@
 #include <cmocka.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 #include <math.h>
 #include "setup.h"
@@ -13,10 +14,14 @@
 #include "common/ardopcommon.h"
 
 void coreaudio_test_reset_tx_state(void);
+void coreaudio_test_reset_recovery_state(void);
 void coreaudio_test_set_initialized(bool init);
 void coreaudio_test_bypass_audio_start(bool enable);
 void coreaudio_test_bypass_output_handle_check(bool enable);
 void coreaudio_test_bypass_audio_stop(bool enable);
+void coreaudio_test_bypass_recovery_restart(bool enable);
+bool coreaudio_test_is_bypass_recovery_restart(void);
+void coreaudio_test_bypass_recovery_reopen(bool enable);
 uint64_t coreaudio_test_tx_pending(void);
 uint64_t coreaudio_test_samples_played(void);
 int coreaudio_test_ringbuf_count(void);
@@ -25,6 +30,20 @@ void coreaudio_test_override_output_samplerate(double rate);
 double coreaudio_test_get_output_samplerate(void);
 void coreaudio_test_render(float *buffer, uint32_t frames, uint32_t channels);
 void coreaudio_test_force_legacy_src(bool enable);
+void coreaudio_test_force_flush_idle(void);
+void coreaudio_test_set_recovery_activity(unsigned int rxMs, unsigned int txMs);
+void coreaudio_test_set_recovery_attempts(unsigned int rxAttemptMs, unsigned int txAttemptMs);
+unsigned int coreaudio_test_get_rx_recoveries(void);
+unsigned int coreaudio_test_get_tx_recoveries(void);
+void coreaudio_test_set_consecutive_errors(int rxErrors, int txErrors);
+void coreaudio_test_run_watchdog(void);
+void coreaudio_test_set_now(unsigned int nowMs);
+void coreaudio_test_clear_now_override(void);
+unsigned int coreaudio_test_max_converter_errors(void);
+unsigned int coreaudio_test_tx_timeout_ms(void);
+unsigned int coreaudio_test_recovery_backoff_ms(void);
+void coreaudio_test_set_last_devices(const char *capture, const char *playback);
+void coreaudio_test_inject_converter_error(bool capture, int status);
 #include "common/ARDOPC.h"
 
 // Forward declarations (from CoreAudioSound.c) for RESTORE helpers
@@ -56,6 +75,7 @@ static void prepare_tx_test(void)
 
 static void cleanup_tx_test(void)
 {
+    coreaudio_test_force_flush_idle();
     SoundFlush();
     TXEnabled = false;
     coreaudio_test_bypass_audio_start(false);
@@ -65,6 +85,30 @@ static void cleanup_tx_test(void)
     coreaudio_test_override_output_samplerate(48000.0);
     coreaudio_test_force_legacy_src(false);
     coreaudio_test_reset_tx_state();
+    coreaudio_test_clear_now_override();
+    coreaudio_test_reset_recovery_state();
+    coreaudio_test_set_last_devices(NULL, NULL);
+    coreaudio_test_bypass_recovery_restart(false);
+    coreaudio_test_bypass_recovery_reopen(false);
+}
+
+static void prepare_tx_recovery_fixture(const char *playbackName)
+{
+    prepare_tx_test();
+    coreaudio_test_bypass_recovery_restart(true);
+    assert_true(coreaudio_test_is_bypass_recovery_restart());
+    coreaudio_test_bypass_recovery_reopen(true);
+    snprintf(PlaybackDevice, sizeof(PlaybackDevice), "%s", playbackName);
+    Pch = 1;
+    coreaudio_test_set_last_devices(NULL, playbackName);
+    const short pattern[4] = {1000, -1000, 500, -500};
+    memcpy(txbuffer[0], pattern, sizeof(pattern));
+    coreaudio_test_set_now(0);
+    assert_true(SendtoCard(4));
+    assert_true(coreaudio_test_ringbuf_count() >= 4);
+    coreaudio_test_reset_recovery_state();
+    coreaudio_test_set_recovery_activity(0, 0);
+    coreaudio_test_set_recovery_attempts(0, 0);
 }
 
 static int count_devices(bool *has_nosound) {
@@ -201,6 +245,38 @@ static void test_tx_respects_output_rate(void **state)
     cleanup_tx_test();
 }
 
+static void test_tx_watchdog_triggers_recovery(void **state)
+{
+    (void)state;
+    const char *device = "DummyRecover";
+    prepare_tx_recovery_fixture(device);
+    unsigned int now = coreaudio_test_tx_timeout_ms() + coreaudio_test_recovery_backoff_ms() + 50;
+    coreaudio_test_set_now(now);
+    unsigned int lastTx = now - coreaudio_test_tx_timeout_ms() - 10;
+    coreaudio_test_set_recovery_activity(0, lastTx);
+    assert_int_equal(coreaudio_test_get_tx_recoveries(), 0u);
+    coreaudio_test_run_watchdog();
+    assert_int_equal(coreaudio_test_get_tx_recoveries(), 1u);
+    cleanup_tx_test();
+}
+
+static void test_converter_errors_trigger_recovery(void **state)
+{
+    (void)state;
+    const char *device = "DummyRecover";
+    prepare_tx_recovery_fixture(device);
+    unsigned int needed = coreaudio_test_max_converter_errors();
+    for (unsigned int i = 0; i < needed; ++i)
+    {
+        coreaudio_test_inject_converter_error(false, -1);
+    }
+    unsigned int now = coreaudio_test_recovery_backoff_ms() + 10;
+    coreaudio_test_set_now(now);
+    coreaudio_test_run_watchdog();
+    assert_int_equal(coreaudio_test_get_tx_recoveries(), 1u);
+    cleanup_tx_test();
+}
+
 int main(void) {
     // Ensure CoreAudio enumeration is skipped for deterministic tests.
     setenv("ARDOP_TEST_SKIP_CA_ENUM", "1", 1);
@@ -211,7 +287,9 @@ int main(void) {
         cmocka_unit_test(test_restore_capture_and_playback),
         cmocka_unit_test(test_error_handling_invalid_device),
         cmocka_unit_test(test_tx_ringbuffer_render_drains),
-        cmocka_unit_test(test_tx_respects_output_rate)
+        cmocka_unit_test(test_tx_respects_output_rate),
+        cmocka_unit_test(test_tx_watchdog_triggers_recovery),
+        cmocka_unit_test(test_converter_errors_trigger_recovery)
     };
     ardop_test_setup();
     return cmocka_run_group_tests(tests, NULL, NULL);
