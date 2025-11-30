@@ -64,4 +64,3 @@
 ## Assumptions
 
 - No formal formatter/linter config is present; follow prevailing style in touched files.
-- macOS support is currently unverified/minimal; treat mac builds as experimental unless documented otherwise.
