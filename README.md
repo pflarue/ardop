@@ -12,13 +12,15 @@ Though improvements have been made to the documentation for users and developers
 
 ## Supported Platforms
 
-Linux and Windows (fully supported). Preliminary macOS build scaffolding added (functional features under development).
+Linux and Windows (fully supported).
+
+macOS (preview): A functional CoreAudio backend is present but still evolving. See [docs/USAGE_macos.md](docs/USAGE_macos.md) for current capabilities, limitations, and planned features. Expect log/message changes; treat it as experimental.
 
 ## Additional Documentation
 
-* [USAGE_linux.md](docs/USAGE_linux.md) and [USAGE_windows.md](docs/USAGE_windows.md): Basic instructions to install, configure, and run **ardopcf**.  These are split into separate versions for Linux and Windows users in an effort to make them easier to understand and follow, even though it results in some repetition.
+* [USAGE_linux.md](docs/USAGE_linux.md), [USAGE_windows.md](docs/USAGE_windows.md), and [USAGE_macos.md](docs/USAGE_macos.md): Platform‑specific instructions to install, configure, and run **ardopcf**.
 * [Troubleshooting.md](docs/Troubleshooting.md): Some suggestions for anyone having difficulty getting **ardopcf** to work correctly.
-* [BUILDING.md](docs/BUILDING.md): How to build **ardopcf** from source (Linux and Windows).
+* [BUILDING.md](docs/BUILDING.md): How to build **ardopcf** from source (Linux, Windows; macOS uses the same single `make` invocation and auto‑detects the platform).
 * [Commandline_options.md](docs/Commandline_options.md): Descriptions of all of the options that can be applied when starting **ardopcf**.
 * [Host_Interface_Commands.md](docs/Host_Interface_Commands.md): Descriptions of all of the commands that host programs can pass to **ardopcf**.  These may also be applied at startup using the `--hostcommands` option.
 * [CONTRIBUTING.md](docs/CONTRIBUTING.md): Info about how to contribute to the ongoing development of **ardopcf**.
