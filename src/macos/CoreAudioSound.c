@@ -128,6 +128,8 @@ static struct
 #define CORE_AUDIO_RECOVERY_BACKOFF_MS 1000U
 #define CORE_AUDIO_MAX_CONVERTER_ERRORS 3
 #define CORE_AUDIO_FLUSH_TIMEOUT_MS 500U
+#define CORE_AUDIO_FLUSH_MARGIN_MS 100U
+#define CORE_AUDIO_FLUSH_MAX_TIMEOUT_MS 5000U
 
 static struct
 {
@@ -153,6 +155,7 @@ static bool dev_enabled(const char *dev);
 #ifdef __APPLE__
 static void RebuildTxConverter(void);
 static void RebuildRxConverter(void);
+static void coreaudio_disable_tx_converter(const char *reason);
 #endif
 static bool EnsureAudioUnitsStarted(void);
 
@@ -503,9 +506,25 @@ static void DisposeRxConverter(void)
     }
 }
 
+static bool coreAudioTxConverterAllowed = true;
+
+static void coreaudio_disable_tx_converter(const char *reason)
+{
+    if (!coreAudioTxConverterAllowed)
+        return;
+    coreAudioTxConverterAllowed = false;
+    if (reason && reason[0] != '\0')
+        ZF_LOGW("CoreAudio: Falling back to legacy TX path (%s)", reason);
+    else
+        ZF_LOGW("CoreAudio: Falling back to legacy TX path");
+    DisposeTxConverter();
+}
+
 static void RebuildTxConverter(void)
 {
     DisposeTxConverter();
+    if (!coreAudioTxConverterAllowed)
+        return;
     if (!coreAudioOutputActive)
         return;
 
@@ -534,6 +553,7 @@ static void RebuildTxConverter(void)
     {
         txConverter = NULL;
         ZF_LOGW("CoreAudio: Failed to create TX AudioConverter (status=%d)", (int)status);
+        coreaudio_disable_tx_converter("converter init failed");
         return;
     }
 
@@ -585,6 +605,8 @@ static void RebuildRxConverter(void)
 
 static void RebuildAudioConverters(void)
 {
+    if (!coreAudioTxConverterAllowed)
+        DisposeTxConverter();
     RebuildTxConverter();
     RebuildRxConverter();
 }
@@ -892,7 +914,7 @@ static OSStatus renderCallback(void *inRefCon, AudioUnitRenderActionFlags *ioAct
     bool usedConverter = false;
     bool producedAudio = false;
 #ifdef __APPLE__
-    if (txConverter)
+    if (txConverter && coreAudioTxConverterAllowed)
     {
         usedConverter = true;
         UInt32 framesRemaining = inNumberFrames;
@@ -929,6 +951,9 @@ static OSStatus renderCallback(void *inRefCon, AudioUnitRenderActionFlags *ioAct
                 if (status != noErr)
                 {
                     coreaudio_note_callback_error(false, "AudioConverterFill", status);
+                    coreaudio_disable_tx_converter("converter runtime error");
+                    usedConverter = false;
+                    break;
                 }
                 for (UInt32 frame = 0; frame < ioFrames; ++frame)
                 {
@@ -1684,6 +1709,7 @@ static void InitCoreAudio(const char *captureDev, const char *playbackDev)
     // Configure output if needed
     if (wantOutput)
     {
+        coreAudioTxConverterAllowed = true;
         // Set up output format (float32, negotiated device rate/channel count)
         AudioStreamBasicDescription outputFormat = {0};
         outputFormat.mSampleRate = coreAudioOutputSampleRate;
@@ -1715,6 +1741,7 @@ static void InitCoreAudio(const char *captureDev, const char *playbackDev)
         if (status != noErr)
         {
             ZF_LOGE("CoreAudio: Failed to set render callback (status=%d)", (int)status);
+            coreaudio_disable_tx_converter("render callback setup failed");
         }
     }
     // Configure input if needed
@@ -1807,6 +1834,7 @@ static void InitCoreAudio(const char *captureDev, const char *playbackDev)
         if (status != noErr)
         {
             ZF_LOGE("CoreAudio: Failed to verify render callback (status=%d)", (int)status);
+            coreaudio_disable_tx_converter("render callback verify failed");
         }
     }
 #else
@@ -2441,11 +2469,25 @@ bool SoundFlush()
     if (audioPlaying && (outputAudioUnit || testBypassOutputHandleCheck))
     {
         // Wait for the render callback to consume all the audio data
+        uint64_t initialPending = tx_samples_pending();
+        if ((uint64_t)ringbuf_count > initialPending)
+            initialPending = (uint64_t)ringbuf_count;
         unsigned int waitStart = coreaudio_now_ms();
+        unsigned int allowedWaitMs = CORE_AUDIO_FLUSH_TIMEOUT_MS;
+        if (initialPending > 0)
+        {
+            unsigned int pendingMs = (unsigned int)((initialPending * 1000ULL) / 12000ULL);
+            unsigned int dynamic = CORE_AUDIO_FLUSH_TIMEOUT_MS + pendingMs + CORE_AUDIO_FLUSH_MARGIN_MS;
+            if (dynamic > CORE_AUDIO_FLUSH_MAX_TIMEOUT_MS)
+                dynamic = CORE_AUDIO_FLUSH_MAX_TIMEOUT_MS;
+            allowedWaitMs = dynamic;
+        }
+
         while ((tx_samples_pending() > 0 || ringbuf_count > 0) && !audioFinished)
         {
             usleep(1000); // Sleep for 1ms
-            if (coreaudio_now_ms() - waitStart > CORE_AUDIO_FLUSH_TIMEOUT_MS)
+            unsigned int now = coreaudio_now_ms();
+            if (now - waitStart > allowedWaitMs)
             {
                 ZF_LOGW("SoundFlush: timeout waiting for TX buffer to drain (%llu pending samples)",
                         (unsigned long long)tx_samples_pending());
