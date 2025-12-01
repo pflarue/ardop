@@ -70,6 +70,8 @@ static void prepare_tx_test(void)
     coreaudio_test_bypass_output_handle_check(true);
     coreaudio_test_bypass_audio_stop(true);
     coreaudio_test_force_legacy_src(false);
+    // Simulate a real playback selection so EnsureAudioUnitsStarted() is allowed
+    snprintf(PlaybackDevice, DEVSTRSZ, "TestPlaybackUnit");
     TXEnabled = true;
 }
 
@@ -144,10 +146,12 @@ static void test_open_close_nosound_idempotent(void **state) {
     assert_true(OpenSoundCapture("NOSOUND", 1));
     assert_false(RXEnabled);
     assert_true(OpenSoundPlayback("NOSOUND", 1));
-    assert_false(TXEnabled); // NOSOUND should disable TX
+    // macOS CoreAudio keeps TX logic active so virtual feeds (decodewav, writetxwav)
+    // still flow even when no hardware is attached.
+    assert_true(TXEnabled);
     assert_string_equal(PlaybackDevice, "NOSOUND");
     assert_true(OpenSoundPlayback("NOSOUND", 1));
-    assert_false(TXEnabled);
+    assert_true(TXEnabled);
     // Close twice (idempotent)
     CloseSoundCapture(false);
     CloseSoundCapture(false);
