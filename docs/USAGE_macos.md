@@ -65,17 +65,31 @@ The current backend requests a float32 mono stream at the device's native rate (
 
 `NOSOUND` on capture disables RX without discarding the last working device. Later issuing `CAPTURE RESTORE` (or selecting `RESTORE` via host/WebGUI) returns to that previous device. The same semantics apply to playback: `PLAYBACK NOSOUND` disables TX; `PLAYBACK RESTORE` re‑enables the last real device.
 
-## 5. Known Limitations / Next Steps
+## 5. Headless / Offline Operation
+
+- Use `-i -1` / `-o -1` (or `CAPTURE NOSOUND` / `PLAYBACK NOSOUND`) to keep ARDOP’s state machines alive without touching CoreAudio. The macOS backend now normalizes `-1` to `NOSOUND`, so host commands and scripts can rely on the Linux/Windows behavior.
+- When `--decodewav` is present, both capture and playback paths are forced into a *virtual* mode: CoreAudio is not probed and 12 kHz samples from the WAV reader are pushed through the same RX buffers used during live operation. This prevents the "CaptureDevice= is silent" warning during offline demodulation.
+- Implementation detail: the CoreAudio callback plumbing is still exercised via `MacVirtualCaptureFeed()`, so the AGC, busy detector, and ARQ state machine receive samples exactly as if CoreAudio were running. This makes `--decodewav` runs representative for regression testing.
+- A quick sanity check:
+
+   ```bash
+   ./build/macos/ardopcf --nologfile --decodewav test/python/tmp/sample.wav -i -1 -o -1 --hostcommands 'CONSOLELOG 2'
+   ```
+
+   The command finishes without trying to open CoreAudio, prints `[DecodeFrame]` lines for any frames in the WAV, and leaves the RX diagnostics quiet.
+- The end-to-end Python suite (`python test/python/test_wav_io.py`) now succeeds on macOS using the default `-i -1 -o -1` settings, matching the Linux CI workflow.
+
+## 6. Known Limitations / Next Steps
 
 - TX underrun/overflow counters & periodic statistics (planned).
 - Optional self‑test transmit tone flag (planned) to verify routing without a host.
 - RX debug WAV dump remains a future idea for developer diagnostics.
 
-## 6. Known macOS Differences
+## 7. Known macOS Differences
 
 - **Audio conversion strategy:** The macOS backend always negotiates whatever sample rate the selected CoreAudio device prefers (often 44.1/48 kHz) and uses in-process `AudioConverter` resamplers to bridge that rate to ARDOP’s fixed 12 kHz modem domain. Linux (ALSA) and Windows (Waveform) instead request 12 kHz directly from the driver and rely on the OS/device to cope when that rate is unavailable, so the macOS path delivers consistent SRC quality even when hardware cannot clock at 12 kHz.
 
-## 7. Getting Help
+## 8. Getting Help
 
 For issues specific to macOS bring logs (run with higher verbosity) to the project issue tracker or user group. Include:
 

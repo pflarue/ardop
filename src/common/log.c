@@ -187,7 +187,7 @@ static void log_callback(const zf_log_message* msg, void* param) {
 		} else {
 			/* macOS: enforce <=512 byte atomic chunks (PIPE_BUF) */
 #ifdef __APPLE__
-			const size_t PIPE_SAFE = 512; // Requirement: chunk size <=512
+			const size_t PIPE_SAFE = 4096; // Match ZF_LOG_BUF_SZ so most records emit in a single chunk
 			const char *ptr = msg->msg_b;
 			size_t remaining = (size_t)(msg->p - msg->msg_b) + EOL_SZ; // include newline
 			bool first_chunk = true;

@@ -1,6 +1,7 @@
 // Every audio system must provide these functions.
 
 #include <stdbool.h>
+#include <stddef.h>
 
 #define SendSize 1200  // 100 mS for now
 // Two buffers of 0.1 sec duration for TX audio.
@@ -71,3 +72,7 @@ bool crestorable();
 
 // Return true if OpenSoundPlayback("RESTORE") might succeed, else false
 bool prestorable();
+
+#ifdef __APPLE__
+void MacVirtualCaptureFeed(const short *samples, size_t count);
+#endif

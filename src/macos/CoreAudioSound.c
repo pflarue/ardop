@@ -14,6 +14,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <pthread.h>
 #include <unistd.h>
 #ifdef __APPLE__
@@ -31,6 +32,10 @@
 #include "common/Webgui.h"
 #include "common/ptt.h"
 #include "common/os_util.h"
+#include "common/wav.h"
+
+extern char DecodeWav[5][256];
+extern struct WavFile *txwff;  // For recording of filtered TX audio
 
 // Globals required by audio.h (mirroring ALSA.c declarations)
 short txbuffer[2][SendSize];
@@ -151,6 +156,10 @@ static const char *coreAudioPendingTxReason = NULL;
 static bool testNowOverride = false;
 static unsigned int testNowValue = 0;
 
+static bool dev_is_nosound(const char *dev);
+static bool coreaudio_decodewav_active(void);
+static bool coreaudio_headless_capture(void);
+static bool coreaudio_headless_playback(void);
 static bool dev_enabled(const char *dev);
 #ifdef __APPLE__
 static void RebuildTxConverter(void);
@@ -180,11 +189,15 @@ static void coreaudio_mark_tx_activity(void)
 
 static bool coreaudio_should_monitor_rx(void)
 {
+    if (coreaudio_headless_capture())
+        return false;
     return RXEnabled && dev_enabled(CaptureDevice);
 }
 
 static bool coreaudio_should_monitor_tx(void)
 {
+    if (coreaudio_headless_playback())
+        return false;
     if (!TXEnabled || !audioPlaying || !dev_enabled(PlaybackDevice))
         return false;
     return (ringbuf_count > 0) || (tx_samples_pending() > 0);
@@ -193,8 +206,8 @@ static bool coreaudio_should_monitor_tx(void)
 static bool coreaudio_direction_enabled(bool capture)
 {
     if (capture)
-        return RXEnabled && dev_enabled(CaptureDevice);
-    return TXEnabled && dev_enabled(PlaybackDevice);
+        return !coreaudio_headless_capture() && RXEnabled && dev_enabled(CaptureDevice);
+    return !coreaudio_headless_playback() && TXEnabled && dev_enabled(PlaybackDevice);
 }
 
 static void coreaudio_reset_rx_buffers(void)
@@ -412,6 +425,8 @@ static void coreaudio_service_pending_recovery(bool capture, unsigned int now)
 
 static void CheckAndRecoverAudioHealth(void)
 {
+    if (coreaudio_headless_capture() && coreaudio_headless_playback())
+        return;
     unsigned int now = coreaudio_now_ms();
 
     coreaudio_service_pending_recovery(true, now);
@@ -806,17 +821,45 @@ static char lastPlaybackDev[DEVSTRSZ] = "";
 static char last_rx_dev[DEVSTRSZ] = ""; // Capture side
 static char last_tx_dev[DEVSTRSZ] = ""; // Playback side
 
+static bool dev_is_nosound(const char *dev)
+{
+    return dev != NULL && (strcmp(dev, "NOSOUND") == 0 || strcmp(dev, "-1") == 0);
+}
+
+static bool coreaudio_decodewav_active(void)
+{
+    return DecodeWav[0][0] != '\0';
+}
+
+static bool coreaudio_headless_capture(void)
+{
+    if (coreaudio_decodewav_active())
+        return true;
+    if (CaptureDevice[0] == '\0')
+        return true;
+    return dev_is_nosound(CaptureDevice);
+}
+
+static bool coreaudio_headless_playback(void)
+{
+    if (PlaybackDevice[0] == '\0')
+        return true;
+    return dev_is_nosound(PlaybackDevice);
+}
+
 // Helper to decide if a device string represents an enabled direction.
-// Enabled if non-null, non-empty, not NOSOUND, not -1.
+// Enabled if non-null, non-empty, not NOSOUND, not -1, and not suppressed by headless rules.
 static bool dev_enabled(const char *dev)
 {
-    return dev != NULL && dev[0] != '\0' && strcmp(dev, "NOSOUND") != 0 && strcmp(dev, "-1") != 0;
+    return dev != NULL && dev[0] != '\0' && !dev_is_nosound(dev);
 }
 
 // Start the AudioUnits if they're initialized and not already started
 // This is needed for both TX and RX operation
 static bool EnsureAudioUnitsStarted(void)
 {
+    if (coreaudio_headless_capture() && coreaudio_headless_playback())
+        return false;
     if (!coreAudioInitialized || audioUnitStarted)
     {
         return audioUnitStarted; // Already started or not initialized
@@ -1853,8 +1896,8 @@ static void InitCoreAudio(const char *captureDev, const char *playbackDev)
 static void ReinitCoreAudioIfNeeded(void)
 {
     pthread_mutex_lock(&coreAudioMutex);
-    bool wantInput = dev_enabled(CaptureDevice);
-    bool wantOutput = dev_enabled(PlaybackDevice);
+    bool wantInput = dev_enabled(CaptureDevice) && !coreaudio_headless_capture();
+    bool wantOutput = dev_enabled(PlaybackDevice) && !coreaudio_headless_playback();
     bool deviceChanged = false;
     if (wantInput)
     {
@@ -2186,16 +2229,20 @@ bool OpenSoundPlayback(char *devstr, int ch)
     // subsequent RESTORE returns to the prior real/open device. This mirrors
     // Linux/Windows behavior where selecting the sentinel NOSOUND disables
     // transmission without losing the previous selection.
-    if (strcmp(devstr, "NOSOUND") == 0)
+    if (strcmp(devstr, "NOSOUND") == 0 || strcmp(devstr, "-1") == 0)
     {
-        TXEnabled = false;
-        strncpy(PlaybackDevice, devstr, DEVSTRSZ - 1);
+        // Keep TXEnabled true so that diagnostic transmissions (e.g. --writetxwav)
+        // can proceed even though no real audio device is active.
+        TXEnabled = true;
+        SoundIsPlaying = false;
+        audioPlaying = false;
+        strncpy(PlaybackDevice, "NOSOUND", DEVSTRSZ - 1);
         PlaybackDevice[DEVSTRSZ - 1] = '\0';
         Pch = ch;
-        ZF_LOGI("Playback NOSOUND sentinel selected (TX disabled)");
+        ZF_LOGI("Playback NOSOUND sentinel selected (audio suppressed, TX logic active)");
         ReinitCoreAudioIfNeeded();
         updateWebGuiAudioConfig(false);
-        return true; // Success (no audio active by design)
+        return true; // Success (audio intentionally disabled)
     }
     // Accept any non-empty string (stub). Real implementation will validate.
     TXEnabled = true;
@@ -2241,11 +2288,11 @@ bool OpenSoundCapture(char *devstr, int ch)
     // device (last_rx_dev) intact for a future RESTORE. This matches the
     // cross-platform semantics of selecting NOSOUND as a diagnostic/null
     // device.
-    if (strcmp(devstr, "NOSOUND") == 0)
+    if (strcmp(devstr, "NOSOUND") == 0 || strcmp(devstr, "-1") == 0)
     {
         RXEnabled = false;
         RXSilent = true;
-        strncpy(CaptureDevice, devstr, DEVSTRSZ - 1);
+        strncpy(CaptureDevice, "NOSOUND", DEVSTRSZ - 1);
         CaptureDevice[DEVSTRSZ - 1] = '\0';
         Cch = ch;
         ZF_LOGI("Capture NOSOUND sentinel selected (RX disabled)");
@@ -2305,6 +2352,16 @@ void CloseSoundCapture(bool do_getdevices)
 bool SendtoCard(int n)
 {
     CheckAndRecoverAudioHealth();
+
+    if (txwff != NULL)
+    {
+        WriteWav(&txbuffer[TxIndex][0], n, txwff);
+    }
+
+    if (dev_is_nosound(PlaybackDevice))
+    {
+        return true; // Diagnostic/no-audio mode
+    }
 
     if (!TXEnabled || !coreAudioInitialized || (!outputAudioUnit && !testBypassOutputHandleCheck))
     {
@@ -2463,6 +2520,24 @@ void StopCapture()
     // Nothing
 }
 
+void MacVirtualCaptureFeed(const short *samples, size_t count)
+{
+    if (samples == NULL || count == 0)
+        return;
+
+    size_t produced = 0;
+    while (produced < count)
+    {
+        rxblock[rxblock_fill++] = samples[produced++];
+        if (rxblock_fill >= ReceiveSize)
+        {
+            ProcessNewSamples(rxblock, ReceiveSize);
+            rxblock_fill = 0;
+        }
+    }
+    coreaudio_mark_rx_activity();
+}
+
 bool SoundFlush()
 {
     // Wait for all staged audio to finish playing
@@ -2528,6 +2603,12 @@ bool SoundFlush()
     }
 
     KeyPTT(false);
+
+    if (txwff != NULL)
+    {
+        CloseWav(txwff);
+        txwff = NULL;
+    }
 
     return TXEnabled;
 }

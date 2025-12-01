@@ -19,6 +19,30 @@ import subprocess
 from ardop_parameters import *
 from eutf8 import from_eutf8
 
+
+_HOST_FAULT_RE = re.compile(r"Host Command Fault:\s*([^\n]+)")
+_TXFRAME_WARN_RE = re.compile(r"txframe\(\)[^\n]*", re.IGNORECASE)
+
+
+def _decode_stream(stream: bytes) -> str:
+    """Decode subprocess output while tolerating arbitrary bytes."""
+    if not stream:
+        return ""
+    return stream.decode("iso-8859-1", errors="replace")
+
+
+def _extract_host_fault(stdout_text: str, stderr_text: str):
+    """Return a concise host fault description, if present in either stream."""
+    for text in (stdout_text, stderr_text):
+        match = _HOST_FAULT_RE.search(text)
+        if match:
+            detail = match.group(1).strip()
+            tx_warn = _TXFRAME_WARN_RE.search(stdout_text)
+            if tx_warn:
+                detail = f"{detail} ({tx_warn.group(0).strip()})"
+            return detail
+    return None
+
 def test_contol_wav_io(verbose=1):
     """
     This function tests all short control frame types.  These frame types mostly
@@ -67,17 +91,33 @@ def test_contol_wav_io(verbose=1):
             capture_output=True,
             check=True,
         )
+        encode_stdout = _decode_stream(res.stdout)
+        encode_stderr = _decode_stream(res.stderr)
+        host_fault = _extract_host_fault(encode_stdout, encode_stderr)
+        if host_fault:
+            if verbose > 0:
+                print(
+                    f"Host command fault while encoding {frametype}: {host_fault}"
+                )
+                print("stdout:\n", encode_stdout)
+                if encode_stderr:
+                    print("stderr:\n", encode_stderr)
+            faillist.append(
+                f"Host command fault while encoding {frametype}: {host_fault}"
+            )
+            continue
         fail = False
         # Parse captured stdout for WAV filename
         m = re.search(
             r"Opening WAV file for writing: ([^\s]+)\s",
-            res.stdout.decode("iso-8859-1")
+            encode_stdout
         )
         if m is None:
             if verbose > 0:
                 print("ERROR parsing stdout from ardopcf.")
-                print("stdout:\n", res.stdout.decode("iso-8859-1"))
-                print("stderr:\n", res.stdout.decode("iso-8859-1"))
+                print("stdout:\n", encode_stdout)
+                if encode_stderr:
+                    print("stderr:\n", encode_stderr)
             faillist.append(f"ERROR parsing stdout from encoding {frametype}")
             fail = True
             continue
@@ -111,6 +151,8 @@ def test_contol_wav_io(verbose=1):
                     capture_output=True,
                     check=True,
                 )
+                decode_stdout = _decode_stream(res.stdout)
+                decode_stderr = _decode_stream(res.stderr)
             except subprocess.CalledProcessError as err:
                 if verbose > 0:
                     print("Error decoding", err)
@@ -132,7 +174,7 @@ def test_contol_wav_io(verbose=1):
             # Parse stdout for results of success
             m = re.search(
                     r"\[DecodeFrame\] Frame: ([^ ]+)",
-                    res.stdout.decode("iso-8859-1")
+                    decode_stdout
             )
             if m is None:
                 if verbose > 0:
@@ -168,33 +210,25 @@ def test_contol_wav_io(verbose=1):
 def parse_ber_results(logstr, cars, print_bermap=False):
     """For each carrier, print the Bit Error Rate data"""
     # Parse Bit Error results
+    missing_carriers = []
     for car in range(cars):
         m = re.search(
-            f"(Carrier\[{car}\] [0-9]+ raw bytes\. CER[^\n\[]+)[^\n]*",
+            rf"(Carrier\[{car}\] [0-9]+ raw bytes\. CER[^\n\[]+)[^\n]*",
             logstr
         )
         if m is None:
-            # ardopcf cannot calculate CER and BER if there are more errors than
-            # could by corrected.  However, with verbose logging (CONSOLELOG 1),
-            # the uncorrectable raw data for each carrier is written to the log.
-            # Given the data that was intended to be encoded in this frame, it
-            # should be possible to reconstruct what each carrier's raw data
-            # should have contained, and then compare that to the uncorrectable
-            # raw data to calulate CER, BER, and the bit error map.  This should
-            # be relateively easy for the actual data bytes, but would require
-            # use of rs_append() from rrs.c (or creation of an equivalent python
-            # function) to also calculate the RS bytes that would have been
-            # encoded into this frame.
-            # TODO: Implement CER/BER calculation for carriers whose contents
-            # could not be corrected?
-            print(f"Unable to parse CER and BER for Carrier[{car+1}].")
-            print(logstr)
-            raise ValueError
-        if m is not None and "BER=0.0%" not in m.group(0):
+            missing_carriers.append(car + 1)
+            continue
+        if "BER=0.0%" not in m.group(0):
             if print_bermap:
                 print("  ", m.group(0))
             else:
                 print("  ", m.group(1))
+    if missing_carriers:
+        carrier_list = ", ".join(str(car) for car in missing_carriers)
+        print(f"Unable to parse CER and BER for Carrier(s): {carrier_list}.")
+        if print_bermap:
+            print(logstr)
 
 
 
@@ -273,17 +307,35 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                     capture_output=True,
                     check=True,
                 )
+                encode_stdout = _decode_stream(res.stdout)
+                encode_stderr = _decode_stream(res.stderr)
+                host_fault = _extract_host_fault(encode_stdout, encode_stderr)
+                if host_fault:
+                    if verbose > 0:
+                        print(
+                            f"Host command fault while encoding"
+                            f" {frametype[:-1]}{suffix}: {host_fault}"
+                        )
+                        print("stdout:\n", encode_stdout)
+                        if encode_stderr:
+                            print("stderr:\n", encode_stderr)
+                    faillist.append(
+                        f"Host command fault while encoding {frametype[:-1]}{suffix}"
+                        f" ({payload_used}/{payload_capacity} bytes): {host_fault}"
+                    )
+                    continue
                 fail = False
                 # Parse captured stdout for WAV filename
                 m = re.search(
                     r"Opening WAV file for writing: ([^\s]+)\s",
-                    res.stdout.decode("iso-8859-1")
+                    encode_stdout
                 )
                 if m is None:
                     if verbose > 0:
                         print("ERROR parsing stdout from ardopcf.")
-                        print("stdout:\n", res.stdout.decode("iso-8859-1"))
-                        print("stderr:\n", res.stdout.decode("iso-8859-1"))
+                        print("stdout:\n", encode_stdout)
+                        if encode_stderr:
+                            print("stderr:\n", encode_stderr)
                     faillist.append(
                         f"ERROR parsing stdout from encoding {frametype[:-1]}"
                         f"{suffix} ({payload_used}/{payload_capacity} bytes)")
@@ -324,6 +376,9 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                             capture_output=True,
                             check=True,
                         )
+                        decode_stdout = _decode_stream(res.stdout)
+                        decode_stdout_utf8 = res.stdout.decode("utf-8", errors="replace")
+                        decode_stderr = _decode_stream(res.stderr)
                     except subprocess.CalledProcessError as err:
                         if verbose > 0:
                             print(
@@ -351,7 +406,7 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                         r"\[DecodeFrame\] Frame: ([^ ]+) Decode ([^ ]+),"
                         r"  Quality= ([0-9]+),"
                         r"  RS fixed ([0-9]+) \(of ([0-9]+) max\).",
-                        res.stdout.decode("iso-8859-1")
+                        decode_stdout
                     )
                     if m is None:
                         if verbose > 0:
@@ -371,7 +426,7 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                                     " SDFT demodulator was used.")
                             if verbose > 1:
                                 parse_ber_results(
-                                    res.stdout.decode("iso-8859-1"),
+                                    decode_stdout,
                                     cars,
                                     verbose > 2
                                 )
@@ -396,7 +451,7 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                             else:
                                 additional_pseudocarriers = 0
                             parse_ber_results(
-                                res.stdout.decode("iso-8859-1"),
+                                decode_stdout,
                                 cars + additional_pseudocarriers,
                                 verbose > 2
                             )
@@ -405,7 +460,7 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                     m = re.search(
                         r"\[RXO ([0-9A-F][0-9A-F])\] ([0-9]+) bytes of data"
                         r" \(eutf8\):\n+([^\n]+)\n",
-                        res.stdout.decode("utf-8")
+                        decode_stdout_utf8
                     )
                     if m is None:
                         if verbose > 0:
@@ -426,8 +481,9 @@ def test_data_wav_io(verbose=1, sessionid=0xFF):
                                 print(
                                     "This error occured when the experiemental"
                                     " SDFT demodulator was used.")
-                            print("stdout:\n", res.stdout.decode("iso-8859-1"))
-                            print("stderr:\n", res.stdout.decode("iso-8859-1"))
+                            print("stdout:\n", decode_stdout)
+                            if decode_stderr:
+                                print("stderr:\n", decode_stderr)
                         faillist.append(
                             f"Error parsing decoded data for {frametype[:-1]}"
                             f"{suffix} ({payload_used}/{payload_capacity} bytes)"

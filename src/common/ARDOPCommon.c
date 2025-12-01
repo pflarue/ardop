@@ -996,6 +996,15 @@ void displayCall(int dirn, const char * Call)
 // at 100 ms intervals.
 int WavNow = 0;
 
+static inline void decodewav_deliver_samples(short *samples, size_t count)
+{
+#ifdef __APPLE__
+	MacVirtualCaptureFeed(samples, count);
+#else
+	ProcessNewSamples(samples, count);
+#endif
+}
+
 int decode_wav() {
 	FILE *wavf;
 	unsigned char wavHead[44];
@@ -1035,10 +1044,13 @@ int decode_wav() {
 	// RXO (receive only) protocol mode.  During normal operation, this is set
 	// in ardopmain(), which is not used when decoding a WAV file.
 	setProtocolMode("RXO");
+	snprintf(CaptureDevice, DEVSTRSZ, "NOSOUND");
+	snprintf(PlaybackDevice, DEVSTRSZ, "NOSOUND");
+	RXSilent = true;
 
 	// Send blocksize silent/noise samples to ProcessNewSamples() before start of WAV file data.
 	memset(samples, 0, sizeof(samples));
-	ProcessNewSamples(samples, blocksize);
+	decodewav_deliver_samples(samples, blocksize);
 
 	WavNow = 0;
 	unsigned int NowOffset = 0;
@@ -1089,7 +1101,7 @@ int decode_wav() {
 			WavNow += blocksize * 1000 / 12000;
 			if ((Now - NowOffset) % 100 == 0)  // time stamp at 100 ms intervals
 				ZF_LOGV("%s: %.3f sec (%.3f)", DecodeWav[WavFileCount], (Now - NowOffset)/1000.0, Now/1000.0);
-			ProcessNewSamples(samples, blocksize);
+			decodewav_deliver_samples(samples, blocksize);
 			nSamples -= blocksize;
 		}
 		// nSamples is less than or equal to blocksize.
@@ -1106,7 +1118,7 @@ int decode_wav() {
 		WavNow += blocksize * 1000 / 12000;
 		if ((Now - NowOffset) % 100 == 0)  // time stamp at 100 ms intervals
 			ZF_LOGV("%s: %.3f sec (%.3f)", DecodeWav[WavFileCount], (Now - NowOffset)/1000.0, Now/1000.0);
-		ProcessNewSamples(samples, blocksize);
+		decodewav_deliver_samples(samples, blocksize);
 		nSamples = 0;
 		fclose(wavf);
 		// Send additional silent/noise samples to ProcessNewSamples() after end of WAV file data.
@@ -1129,7 +1141,7 @@ int decode_wav() {
 			WavNow += blocksize * 1000 / 12000;
 			if ((Now - NowOffset) % 100 == 0)  // time stamp at 100 ms intervals
 				ZF_LOGV("Added silence/noise: %.3f sec (%.3f)", (Now - NowOffset)/1000.0, Now/1000.0);
-			ProcessNewSamples(samples, blocksize);
+			decodewav_deliver_samples(samples, blocksize);
 		}
 		ZF_LOGD("Done decoding %s.", DecodeWav[WavFileCount]);
 		WavFileCount++;

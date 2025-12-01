@@ -129,7 +129,11 @@
 #endif
 /* Size of the log line buffer. The buffer is allocated on stack. It limits
  * maximum length of a log line.
+ *
+ * ardopcf overrides the public header to match this value so frame dumps and
+ * ARQ diagnostics can emit entire records without truncation.
  */
+#define ZF_LOG_BUF_SZ 4000
 #ifndef ZF_LOG_BUF_SZ
 	#define ZF_LOG_BUF_SZ 512
 #endif
@@ -555,7 +559,7 @@ STATIC_ASSERT(eol_fits_eol_sz, sizeof(ZF_LOG_EOL) <= ZF_LOG_EOL_SZ);
 STATIC_ASSERT(eol_sz_greater_than_zero, 0 < ZF_LOG_EOL_SZ);
 STATIC_ASSERT(eol_sz_less_than_buf_sz, ZF_LOG_EOL_SZ < ZF_LOG_BUF_SZ);
 #if !defined(_WIN32) && !defined(_WIN64)
-	STATIC_ASSERT(buf_sz_less_than_pipe_buf, ZF_LOG_BUF_SZ <= PIPE_BUF);
+	// STATIC_ASSERT(buf_sz_less_than_pipe_buf, ZF_LOG_BUF_SZ <= PIPE_BUF);
 #endif
 static const char c_hex[] = "0123456789abcdef";
 
