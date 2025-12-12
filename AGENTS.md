@@ -59,7 +59,6 @@
 - Documentation PRs for released behavior target `master`; other changes typically target `develop` (see `docs/CONTRIBUTING.md`).
 - Inline documentation is encouraged for clarity; keep code approachable to newcomers.
 - Line-by-line review of any AI-assisted changes is expected; submit only code you understand and will support.
-- This AGENTS.md supersedes the legacy CLAUDE.md guidance; keep this file authoritative going forward.
 
 ## Assumptions
 
