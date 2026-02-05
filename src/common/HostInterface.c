@@ -298,7 +298,7 @@ bool process_playbackchannel(char *param) {
 void ProcessCommandFromHost(char * strCMD)
 {
 	char * ptrParams;
-	// cmdCopy expanded from 80 to 3000 to accomodate
+	// cmdCopy expanded from 80 to 3000 to accommodate
 	// TXFRAME with data up to 1024 bytes written as hex
 	// requiring 2 string chars per data byte
 	char cmdCopy[3000] = "";
@@ -1303,13 +1303,13 @@ void ProcessCommandFromHost(char * strCMD)
 	// after the first linefeed shall be interpreted as a description.  The name
 	// portion of this value is suitable to pass to the PLAYBACK command.
 	//
-	// Futhermore:
-	// If the description begins with "[BUSY", then this is an indicaton that the
+	// Furthermore:
+	// If the description begins with "[BUSY", then this is an indication that the
 	// device is currently in use (by this or another program).  This may be
 	// followed immediately by a closing bracket "]" or additional details may be
 	// included before that closing bracket.
 	//
-	// The response CSV text is preceeded by the command string and a space.
+	// The response CSV text is preceded by the command string and a space.
 	// The host should probably discard all whitespace after the command string.
 	if (strcmp(strCMD, "PLAYBACKDEVICES") == 0) {
 		GetDevices();
@@ -1346,8 +1346,8 @@ void ProcessCommandFromHost(char * strCMD)
 			goto cmddone;
 		}
 
-		if (strcmp(ptrParams, "ARQ") != 0 && strcmp(ptrParams, "RXO") == 0
-			&& strcmp(ptrParams, "FEC") == 0
+		if (strcmp(ptrParams, "ARQ") != 0 && strcmp(ptrParams, "RXO") != 0
+			&& strcmp(ptrParams, "FEC") != 0
 		) {
 			snprintf(strFault, sizeof(strFault), "Syntax Err: %s %s", strCMD, ptrParams);
 			goto cmddone;
@@ -1372,11 +1372,11 @@ void ProcessCommandFromHost(char * strCMD)
 	// cannot be set to TRUE.  RADIOPTT or RADIOCTRLPORT, RADIOPTTON,
 	// RADIOPTTOFF required.  The assumption is that if CAT PTT was used, but is
 	// now not usable, that the PTTON and PTTOFF strings are probably still
-	// valid so that restoring RADIOCTRLPORT is suffient to restore usability of
+	// valid so that restoring RADIOCTRLPORT is sufficient to restore usability of
 	// CAT PTT.  TX may still be possible when PTTEnabled is false if a host
 	// program is configured to to PTT control or if the radio is configured to
 	// use VOX.  Ardopcf has no way of detecting whether either of these is
-	// true, so it cannot detect whether or not TX has actually occured.
+	// true, so it cannot detect whether or not TX has actually occurred.
 	if (strcmp(strCMD, "PTTENABLED") == 0) {
 		bool PTTEnabled = isPTTmodeEnabled();
 		// This is similar to DoTrueFalseCmd(strCMD, ptrParams, &PTTEnabled),
@@ -1443,7 +1443,7 @@ void ProcessCommandFromHost(char * strCMD)
 			goto cmddone;
 		} else if (strcmp(ptrParams, "FALSE") == 0) {
 			// If both are open, close both PTT and CAT.
-			// The order in whcih they are closed can change
+			// The order in which they are closed can change
 			// wasLastGoodControlCAT().  So, choose the order of closing them
 			// so as not to change this result.
 			if (wasLastGoodControlCAT()) {
@@ -1466,7 +1466,7 @@ void ProcessCommandFromHost(char * strCMD)
 
 	if (strcmp(strCMD, "PURGEBUFFER") == 0)
 	{
-		ClearDataToSend();  // Should precipitate an asynchonous BUFFER 0 reponse.
+		ClearDataToSend();  // Should precipitate an asynchronous BUFFER 0 response.
 
 		SendReplyToHost(strCMD);
 		goto cmddone;
@@ -1500,7 +1500,7 @@ void ProcessCommandFromHost(char * strCMD)
 		End If
 */
 
-	// WARNING: If this command fails (especiaily if a remote TCP port is
+	// WARNING: If this command fails (especially if a remote TCP port is
 	// selected and the address is unreachable), it may introduce an extended
 	// delay that will cause an overrun in the RX audio system.  So, DO NOT
 	// DO THIS while there is an active ARQ session.  If done when there is no
@@ -1509,7 +1509,7 @@ void ProcessCommandFromHost(char * strCMD)
 	if (strcmp(strCMD, "RADIOCTRLPORT") == 0) {
 		// Set the port to use for CAT commands.  The argument takes the same
 		// form as the --cat/-c command line option, including the use of the
-		// TCP: prefix to select a TCP port rather than a harware device/port.
+		// TCP: prefix to select a TCP port rather than a hardware device/port.
 		// Like the command line option, this command also accepts the RIGCTLD
 		// special shortcut which is equivalent to the host commands:
 		// RADIOCTRLPORT TCP:4532, RADIOPTTON 5420310A, and
@@ -1586,9 +1586,9 @@ void ProcessCommandFromHost(char * strCMD)
 		// Parameter is a hex or ASCII string representing a radio specific
 		// command to be immediately sent to the radio.
 		// If the string contains only an even number of valid hex characters
-		// (upper or lower case with no whitespace), then it is intrepreted as
+		// (upper or lower case with no whitespace), then it is interpreted as
 		// hex.  Otherwise, if it contains only printable ASCII characters
-		// 0x20-0x7E, it is interpreted as ASCII text with substition for "\\n"
+		// 0x20-0x7E, it is interpreted as ASCII text with substitution for "\\n"
 		// and "\\r".  A prefix of "ASCII:" may be used to force the string to
 		// be interpreted as ASCII text, and this is required for ASCII text
 		// that contains only an even number of valid hex characters.
@@ -1711,7 +1711,7 @@ void ProcessCommandFromHost(char * strCMD)
 		// failure or use of the NONE option to close it), then this attempts to
 		// restore that connection.  The use case for RADIOPTT RESTORE for
 		// non-cat PTT control is similar to CODEC TRUE for the audio devices.
-		// A hardware device/port used for RTS or DTR PTT conrol may be the same
+		// A hardware device/port used for RTS or DTR PTT control may be the same
 		// device/port used CAT control with the RADIOCTRLPORT command.
 		// If no argument is provided, return the string used to set the current
 		// non-cat PTT control connection if one exists, or NONE if no non-cat
@@ -1755,7 +1755,7 @@ void ProcessCommandFromHost(char * strCMD)
 		// Parameter is a hex or ASCII string representing a radio specific
 		// command to be send to the radio to transition from TX to RX.
 		// If the string contains only an even number of valid hex characters
-		// (upper or lower case with no whitespace), then it is intrepreted as
+		// (upper or lower case with no whitespace), then it is interpreted as
 		// hex.  Otherwise, if it contains only printable ASCII characters
 		// 0x20-0x7E, it is interpreted as ASCII text with substitution for
 		// "\\n" and "\\r".  A prefix of "ASCII:" may be used to force the
@@ -1798,7 +1798,7 @@ void ProcessCommandFromHost(char * strCMD)
 		// Parameter is a hex or ASCII string representing a radio specific
 		// command to be send to the radio to transition from RX to TX.
 		// If the string contains only an even number of valid hex characters
-		// (upper or lower case with no whitespace), then it is intrepreted as
+		// (upper or lower case with no whitespace), then it is interpreted as
 		// hex.  Otherwise, if it contains only printable ASCII characters
 		// 0x20-0x7E, it is interpreted as ASCII text with substitution for
 		// "\\n" and "\\r".  A prefix of "ASCII:" may be used to force the
@@ -1937,7 +1937,7 @@ void ProcessCommandFromHost(char * strCMD)
 	if (strcmp(strCMD, "SENDID") == 0)
 	{
 		// Previously this check to ensure that MYCALL is set was handled in
-		// the response to seting NeedID=true.  Adding this test here helps
+		// the response to setting NeedID=true.  Adding this test here helps
 		// provide a consistent fault message for any attempt to initiate
 		// transmitting without first setting MYCALL.
 		if (!stationid_ok(&Callsign)) {
@@ -2135,7 +2135,7 @@ void ProcessCommandFromHost(char * strCMD)
 	///////////////////////////////////////////////////////////////
 	// The TXFRAME command is intended for development and debugging.
 	// It is NOT intended for normal use by Host applications.
-	// It may be removed or modfied without notice in future
+	// It may be removed or modified without notice in future
 	// versions of ardopcf.
 	///////////////////////////////////////////////////////////////
 	if (strcmp(strCMD, "TXFRAME") == 0)
