@@ -993,13 +993,10 @@ window.addEventListener("load", function(evt) {
 						break;
 					}
 					txtlog.value += "RX Quality = " + quality + "/100\n";
-					txtlog.value += "RX RS Errors = " + rserrors
-						+ "/" + rsmax + "\n";
+					txtlog.value += "RX RS Errors = " + rserrors + "/" + rsmax + "\n";
 					txtlog.scrollTo(0, txtlog.scrollHeight);
-					document.getElementById("quality").innerHTML =
-						"Quality: " + quality + "/100";
-					document.getElementById("rserrs").innerHTML =
-						"RS Errors: " + rserrors + "/" + rsmax;
+					document.getElementById("quality").innerHTML = "" + quality + "/100";
+					document.getElementById("rserrs").innerHTML = "" + rserrors + "/" + rsmax;
 					break;
 				}
 				case "\x8B": {
@@ -1064,8 +1061,7 @@ window.addEventListener("load", function(evt) {
 						txtlog.value += "AvgLen = " + avglen + "\n";
 						txtlog.scrollTo(0, txtlog.scrollHeight);
 					}
-					document.getElementById("avglentext").innerHTML =
-						"" + avglen;
+					document.getElementById("avglentext").innerHTML = "" + avglen;
 					document.getElementById("avglenslider").value = avglen;
 					break;
 				}
@@ -1670,6 +1666,7 @@ window.addEventListener("load", function(evt) {
 		cnstCanvas.height = plotscale * cnstHeight;
 		cnstCtx.fillStyle = "#000000";
 		cnstCtx.fillRect(0, 0, plotscale * cnstWidth, plotscale * cnstHeight);
+		document.getElementById("plotscaletext").innerHTML = "" + plotscale;
 		drawCnstGridlines();
 	}
 	document.getElementById("decrease-scale").onclick = function() {
@@ -1686,6 +1683,7 @@ window.addEventListener("load", function(evt) {
 		cnstCanvas.height = plotscale * cnstHeight;
 		cnstCtx.fillStyle = "#000000";
 		cnstCtx.fillRect(0, 0, plotscale * cnstWidth, plotscale * cnstHeight);
+		document.getElementById("plotscaletext").innerHTML = "" + plotscale;
 		drawCnstGridlines();
 	};
 	document.getElementById("increase-scale").onclick = function() {
@@ -1702,6 +1700,7 @@ window.addEventListener("load", function(evt) {
 		cnstCanvas.height = plotscale * cnstHeight;
 		cnstCtx.fillStyle = "#000000";
 		cnstCtx.fillRect(0, 0, plotscale * cnstWidth, plotscale * cnstHeight);
+		document.getElementById("plotscaletext").innerHTML = "" + plotscale;
 		drawCnstGridlines();
 	};
 	document.getElementById("drivelevelslider").oninput = function() {

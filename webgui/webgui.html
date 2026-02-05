@@ -4,7 +4,7 @@
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<title>Ardopcf Web GUI</title>
-		<style type="text/css">
+		<style>
 			#spectrum {vertical-align: bottom;}
 			#busy {background-color: gold;}
 			#ptt, #recordingrx {background-color: red;}
@@ -12,7 +12,20 @@
 			#lostcon {background-color: hotpink;}
 			#rcvoverflow {background-color: hotpink;}
 			#hostcommand, #text-log {width: 95%;}
-			#info, #configdiv {background-color: lightgray;}
+			#info {background-color: lightgray; text-align: justify; padding-left: 0.5em; padding-right: 0.5em;}
+			#configdiv {background-color: lightgray; padding-left: 0.5em; padding-right: 0.5em;}
+			.grid_protocol {display: inline-grid; gap: 0px; grid-template-columns: auto auto;}
+			.grid_enabled {display: inline-grid; gap: 0px; grid-template-columns: auto auto; font-size: smaller;}
+   		    .grid_status_ptt_busy {display: inline-grid; gap: 0px; grid-template-columns: auto;}
+   		    .grid_status_call {display: inline-grid; gap: 0px; grid-template-columns: auto;}
+   		    .grid_status_quality {display: inline-grid; gap: 0px; grid-template-columns: auto auto;}
+   		    .grid_status_rx {display: inline-grid; gap: 0px; grid-template-columns: auto;}
+   		    .grid_status_frame_type {display: inline-grid; gap: 0px; grid-template-columns: auto auto;}
+			.grid_sliders {display: inline-grid; align-items: center; gap: 10px; grid-template-columns: auto auto auto auto auto;}
+			.grid_buttons {display: inline-grid; gap: 10px; grid-template-columns: auto auto auto auto auto;}
+			.button {min-height: 48px; min-width: 48px; margin: 5px;}
+			.select {min-height: 48px; min-width: 48px; margin: 5px;}
+			.input {min-height: 48px; min-width: 48px; margin: 5px;}
 			.hidden {visibility: hidden;}
 			.dnone {display: none;}
 			.quality, .enabled {background-color: lime;}
@@ -23,113 +36,137 @@
 			.txnak {background-color: lightpink;}
 			.txack {background-color: aquamarine;}
 			.state {background-color: #D0D0D0;}
-			.sltext, .slbutton, .slider {vertical-align: middle;}
+			.sllabel, .sltext, .slbutton, .slider {vertical-align: middle;}
 			.slbutton {height: 3em; width: 3em;}
 			dt {font-weight: bold;}
 		</style>
 		<script src="webgui.js"></script>
 	</head>
 	<body>
-		<strong>ardopcf</strong>
+		<strong>ardopcf</strong><br/>
 		<div id="lostcon" class="dnone"><br />
 			Connection to ardopcf lost.  Try reloading this page.<br /><br />
 		</div>
-		<div>
+
+		<span class="grid_protocol">
 			<!-- TODO: Should be able to get same effect with simpler html and better css -->
-			ProtocolMode:
-			<span class="state">&nbsp;</span><span id="protocolmode" class="state">UNKNOWN</span><span class="state">&nbsp;</span>
-			State:
-			<span class="state">&nbsp;</span><span id="state" class="state">UNKNOWN</span><span class="state">&nbsp;</span>
-		</div>
-		<div><small>
-			RXAudio: <span id="rxenabled" class="disabled">DISABLED</span>
-			TXAudio: <span id="txenabled" class="disabled">DISABLED</span>
-			PTTControl: <span id="pttenabled" class="voxhost">VOX/HOST</span>
-		</small></div>
-		<div>
+            <label for="protocolmode">ProtocolMode:&nbsp;</label>
+            <span id="protocolmode" class="state" style="width: 8em;">UNKNOWN</span>
+            <label for="state">State:&nbsp;</label>
+			<span id="state" class="state" style="width: 8em;">UNKNOWN</span>
+		</span>
+
+        <span class="grid_enabled">
+			<label for="rxenabled">RXAudio:&nbsp;</label>
+            <span id="rxenabled" class="disabled" style="width: 8em;">DISABLED</span>
+            <label for="txenabled">TXAudio:&nbsp;</label>
+            <span id="txenabled" class="disabled" style="width: 8em;">DISABLED</span>
+            <label for="pttenabled">PTTControl:&nbsp;</label>
+            <span id="pttenabled" class="voxhost" style="width: 8em;">VOX/HOST</span>
+		</span>
+
+        <span class="grid_status_call">
+			<span id="mycall">(MYCALL NOT SET)</span>
+			<span id="irs" class="dnone" style="width: 8em;">IRS <<<<</span>
+			<span id="iss" class="dnone" style="width: 8em;">ISS >>>></span>
+			<span id="rcall"></span>
+		</span>
+
+        <span class="grid_status_ptt_busy">
 			<span id="ptt" class="hidden">&nbsp;PTT&nbsp;</span>
 			<span id="busy" class="hidden">Channel Busy</span>
 			<span id="recordingrx" class="hidden">RECORDING RX</span>
-		</div>
-		<div>
-			<span id="mycall">(MYCALL NOT SET)</span>
-			<span id="irs" class="dnone">IRS <<<<</span>
-			<span id="iss" class="dnone">ISS >>>></span>
-			<span id="rcall"></span>
-		</div>
+		</span>
+
 		<div>
 			<canvas id="spectrum" width="205" height="50"></canvas>
 		</div>
+
 		<div>
 			<canvas id="waterfall" width="205" height="100"></canvas>
 			<canvas id="constellation" width="90" height="90"></canvas>
 		</div>
-		<div>
-			<span id="quality">Quality: 0/100</span>
-			[<span id="rserrs">RS Errors: 0/0</span>]
-			<span id="rcvoverflow" class="dnone">
-			WARNING: Audio from radio is too loud!
-			</span>
-		</div>
-		<div>
-			Rcv Level:
+
+        <span class="grid_status_quality">
+			<label for="quality">Quality:&nbsp;</label>
+            <span id="quality" style="width: 7em;">0/100</span>
+			<span>[<label for="rserrs">RS Errors:&nbsp;</label></span>
+            <span><span id="rserrs" style="width: 7em;">0/0</span>]</span>
+		</span>
+
+		<span class="grid_status_rx">
+			<label for="rcvlvl" style="width: 18em;">RX Level:</label>
 			<!-- rcvlvl is linear fraction of full scale audio-->
-			<meter id="rcvlvl" min="0" max="150" high="120" value="0"></meter>
+			<meter id="rcvlvl" min="0" max="150" high="120" value="0" style="width: 100%;"></meter>
+            <span id="rcvoverflow" class="dnone">WARNING: Audio from<br>radio is too loud!</span>
 			<span id="rcvunderflow" class="dnone">(Low Audio)</span>
-		</div>
-		<div>RX Frame Type: <span id="rxtype" class="rxstate_none"></span></div>
-		<div>TX Frame Type: <span id="txtype"></span></div>
-		<div>
-			<span class="sltext">TX DriveLevel:</span>
-			<button class="slbutton" id="decrease-drivelevel">-</button>
-			<input type="range" min="0" max="100" value="100" class="slider" id="drivelevelslider">
-			<button class="slbutton" id="increase-drivelevel">+</button>
-			<span class="sltext" id="driveleveltext"></span>
-		</div>
-		<div>
-			<span class="sltext">Plot Averaging:</span>
-			<button class="slbutton" id="decrease-avg">-</button>
-			<input type="range" min="1" max="10" value="1" class="slider" id="avglenslider">
-			<button class="slbutton" id="increase-avg">+</button>
-			<span class="sltext" id="avglentext"></span>
-		</div>
-		<div>
-			<span class="sltext">Plot Scale:</span>
-			<button class="slbutton" id="decrease-scale">-</button>
-			<input type="range" min="1" max="8" value="1" class="slider" id="plotscaleslider">
-			<button class="slbutton" id="increase-scale">+</button>
-		</div>
-		<div>
-			<button id="send2tone">Send2Tone</button>
-			<button id="sendid">SendID</button>
-		</div>
-		<div>
-			<button id="confighider">Show Config Controls</button>
-			<button id="loghider">Show Log</button>
-			<button id="infohider">Show Help</button>
-		</div>
+        </span>
+
+        <span class="grid_status_frame_type">
+            <label for="rxtype">RX Frame Type:</label>
+            <span id="rxtype" class="rxstate_none" style="width: 15em;"></span>
+            <label for="txtype">TX Frame Type:</label>
+            <span id="txtype" style="width: 15em;"></span>
+        </span>
+
+        <br>
+        <br>
+
+        <span class="grid_sliders">
+            <label for="drivelevelslider" class="sllabel">TX DriveLevel:</label>
+            <button class="slbutton" id="decrease-drivelevel">-</button>
+            <input type="range" min="0" max="100" value="100" class="slider" id="drivelevelslider">
+            <button class="slbutton" id="increase-drivelevel">+</button>
+            <span class="sltext" id="driveleveltext"></span>
+
+            <label for="avglenslider" class="sllabel">Plot Averaging:</label>
+            <button class="slbutton" id="decrease-avg">-</button>
+            <input type="range" min="1" max="10" value="1" class="slider" id="avglenslider">
+            <button class="slbutton" id="increase-avg">+</button>
+            <span class="sltext" id="avglentext"></span>
+
+            <label for="plotscaleslider" class="sllabel">Plot Scale:</label>
+            <button class="slbutton" id="decrease-scale">-</button>
+            <input type="range" min="1" max="8" value="1" class="slider" id="plotscaleslider">
+            <button class="slbutton" id="increase-scale">+</button>
+            <span class="sltext" id="plotscaletext"></span>
+        </span>
+
+        <br>
+        <br>
+
+        <button id="send2tone" class="button">Send2Tone</button>
+        <button id="sendid" class="button">SendID</button>
+        <button id="confighider" class="button">Show Config Controls</button>
+        <button id="loghider" class="button">Show Log</button>
+        <button id="infohider" class="button">Show Help</button>
+
 		<div id="configdiv" class="dnone">
 			<b>WARNING: Changing these settings may disrupt audio processing (maybe
 			only briefly).  So, making changes while transmitting or receiving
 			is not recommended.</b><br /><br />
 
-			<button id="codectoggle">ENABLE Audio Processing</button>
-			<button id="ptttoggle">ENABLE PTT/CAT Control</button><br /><br />
+			<button id="codectoggle" class="button">ENABLE Audio Processing</button>
+			<button id="ptttoggle" class="button">ENABLE PTT/CAT Control</button><br /><br />
 
-			RX Audio Device:
-			<select name="rxselect" id="rxselect"></select><br />
-			TX Audio Device:
-			<select name="txselect" id="txselect"></select><br />
-			<button id="getdevices">Refresh audio devices list</button><br />
-			<br />
+			<label for="rxselect" class="sllabel">RX Audio Device:</label>
+            <select name="rxselect" id="rxselect" class="select"></select><br />
+
+            <label for="txselect" class="sllabel">TX Audio Device:</label>
+			<select name="txselect" id="txselect" class="select"></select><br />
+
+            <button id="getdevices" class="button">Refresh audio devices list</button><br />
+
+            <br />
 			The next two selectors include available and commonly used devices
 			that may be suitable for CAT/PTT.  Some listed devices may not
 			actually be usable.<br />
-			PTT Selector:
-			<select name="pttselect" id="pttselect"></select><br />
-			CAT Selector:
-			<select name="catselect" id="catselect"></select><br />
-			<button id="getnadevices">Refresh CAT/PTT devices list</button><br />
+
+            <label for="pttselect" class="sllabel">PTT Selector:</label>
+			<select name="pttselect" id="pttselect" class="select"></select><br />
+            <label for="catselect" class="sllabel">CAT Selector:</label>
+			<select name="catselect" id="catselect" class="select"></select><br />
+			<button id="getnadevices" class="button">Refresh CAT/PTT devices list</button><br />
 			<small>Because some less commonly used devices may not be included
 			in the selectors above, you may also type a device name into the
 			text inputs below.  These accept any value that can be used with the
@@ -137,32 +174,38 @@
 			of NONE and RESTORE.  It may also be necessary to use these inputs
 			if non-default baud rates are required for serial devices.</small>
 			<br />
-			PTT device: <input type="text" id="pttdev"></input><br />
-			CAT device: <input type="text" id="catdev"></input><br />
-			CAT PTTON string: <input type="text" id="ptton"></input> <small>(HEX or ASCII)</small><br />
-			CAT PTTOFF string: <input type="text" id="pttoff"></input> <small>(HEX or ASCII)</small>
+            <label for="pttdev" class="sllabel">PTT device:</label>
+            <input type="text" id="pttdev" class="input"></input><br />
+            <label for="catdev" class="sllabel">CAT device:</label>
+			<input type="text" id="catdev" class="input"></input><br />
+            <label for="ptton" class="sllabel">CAT PTTON string:</label>
+			<input type="text" id="ptton" class="input"></input> <small>(HEX or ASCII)</small><br />
+            <label for="pttoff" class="sllabel">CAT PTTOFF string:</label>
+			<input type="text" id="pttoff" class="input"></input> <small>(HEX or ASCII)</small>
 			<br /><br />
 			<small>MONO is usually used, except when using a dual VFO system that has
 			audio from VFO A on one channel and VFO B on the other.</small>
 			<br />
-			RX Audio Channel:
-			<select name="rxch" id="rxch">
+            <label for="rxch" class="sllabel">RX Audio Channel:</label>
+			<select name="rxch" id="rxch" class="select">
 				<option value="MONO">MONO</option>
 				<option value="LEFT">LEFT (stereo)</option>
 				<option value="RIGHT">RIGHT (stereo)</option>
 			</select><br />
-			TX Audio Channel:
-			<select name="txch" id="txch">
+            <label for="txch" class="sllabel">TX Audio Channel:</label>
+			<select name="txch" id="txch" class="select">
 				<option value="MONO">MONO</option>
 				<option value="LEFT">LEFT (stereo)</option>
 				<option value="RIGHT">RIGHT (stereo)</option>
 			</select><br />
 			<br />
 		</div>
+
 		<div id="logdiv" class="dnone">
-			<button id="clearlog">Clear Log</button><br />
+			<button id="clearlog" class="button">Clear Log</button><br />
 			<textarea id="text-log" rows="10"></textarea>
 		</div>
+
 		<div id="info" class="dnone">
 			<p>
 			If you see a bright pink box at the top of the page saying <b>'Connection to
@@ -170,12 +213,12 @@
 			a connection with ardopcf, or that connection has been closed.  This can occur
 			for a number of reasons.  This will be displayed if the ardopcf program is
 			terminated (intentionally or not).  If you are displaying this page on a
-			device (computer, table, phone, etc.) other that the one that is running the
+			device (computer, table, phone, etc.) other than the one that is running the
 			ardopcf program, then this can also be caused by a problem with the network (often
 			WiFi) connection between them.  It is normal for this message to very briefly
 			flash at the top of this page when it first loads.
 			</p><p>
-			A few different devices can view copies of this Web GUI for that same running
+			A few different devices can view copies of this Web GUI for the same running
 			ardopcf instance.  However, ardopcf will refuse additional connections if too
 			many copies try to connect simultaneously.
 			</p><p>
@@ -238,7 +281,7 @@
 			not change the amount of data being used for the plots.  It just magnifies them.
 			</p><p>
 			Scaling of data for plotting, include averaging, does NOT affect the 'Rcv Level'
-			indicator, the busy detector, or ardopcf's abilility to detect or decode data.
+			indicator, the busy detector, or ardopcf's ability to detect or decode data.
 			These adjustments are purely for display purposes.
 			</p><p>
 			The <b>constellation plot</b> provides a visual indicator of the quality of the most
@@ -260,7 +303,7 @@
 			type supports, the level of success of the demodulators can be inferred.  A small
 			number of errors indicates a high level of success at demodulating the raw signal.
 			When a frame cannot be correctly decoded, the number of RS errors shown will always be
-			one more than the nuumber that could have been corrected.  At least this many errors
+			one more than the number that could have been corrected.  At least this many errors
 			were present, or else they would have been corrected.  It is not possible to determine
 			how many additional errors may have been present.  A high number of RS Errors may be an
 			indication of poor quality of the received signal, a deficiency in ardopcf's
@@ -318,7 +361,7 @@
 			or received.  In FEC Protocol Mode, frames are sometimes sent multiple times to increase
 			the likelihood that they will be received correctly.  Unlike in ARQ Protocol Mode, in FEC
 			Protocol Mode, it is also possible that consecutively received frames may have the same type
-			but diffent content.  This is most likely to occur when they are sent by different stations.
+			but different content.  This is most likely to occur when they are sent by different stations.
 			Ardopcf's Memory ARQ feature allows information from repeated copies of a received frame
 			to be combined to increase the likelihood of correctly decoding it, even when no single
 			copy could be correctly be decoded on its own.
@@ -481,9 +524,9 @@
 			the make and model of radio being used.  So, you must search the internet or the
 			manual for your radio to discover what is required.  Text inputs are provided for
 			these.  If you enter an even number of valid hex characters (upper or lower case
-			with no whitespace), then it is intrepreted as hex.  Otherwise, if you enter only
+			with no whitespace), then it is interpreted as hex.  Otherwise, if you enter only
 			printable ASCII characters 0x20-0x7E, it is interpreted as ASCII text with
-			substition for \n and \r.  A prefix of ASCII: may be used to force the string to
+			substitution for \n and \r.  A prefix of ASCII: may be used to force the string to
 			be interpreted as ASCII text, and this is required for ASCII text that contains
 			only an even number of valid hex characters.  If you enter non-ASCII text (such
 			as UTF8 or extended ASCII), it will fail, and the previous value (which may be
@@ -511,7 +554,7 @@
 			after an exchange that failed, or during which you saw something that seemed unusual.
 			The <b>'Show Log'</b> button also provides a list of most of what has been displayed.
 			This log window shows less detail than the debug log file, but provides a
-			convenient way to review what has occured.  Some entries in the log window are
+			convenient way to review what has occurred.  Some entries in the log window are
 			timestamped.  These timestamps use the clock of the device you are viewing this
 			page on, which may be different from the clock on the device that is running
 			the ardopcf program.  Due to this, times shown in the log window may be slightly
@@ -524,7 +567,7 @@
 			</p>
 		</div>
 		<div id="devmode" class="dnone">
-			<button id="recrx">Start RX Recording</button><br />
+			<button id="recrx" class="button">Start RX Recording</button><br />
 			Host Command: <input type="text"  id="hostcommand"></input>
 		</div>
 	</body>
