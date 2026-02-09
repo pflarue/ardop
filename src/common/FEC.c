@@ -340,7 +340,7 @@ void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, bool blnFrameDec
 		// ensures that the next data frame received will always be decoded and
 		// passed to this function rather than discarded as an assumed repeated
 		// frame.  The logic which follows this will evaluate whether a frame is
-		// actaully a repeat of the last frame received, and handle it
+		// actually a repeat of the last frame received, and handle it
 		// appropriately.
 		ZF_LOGD("Memory ARQ data reset after FEC data frame decoded OK.");
 		ResetMemoryARQ();
