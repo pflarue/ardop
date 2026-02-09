@@ -159,6 +159,7 @@ window.addEventListener("load", function(evt) {
 		var is_connected = false;
 		var is_closing = false;
 		var ws = null;
+		var timeNoConnectionLastSent;
 
 		exports.init = function(url) {
 			if (!WebSocket in window){
@@ -209,14 +210,23 @@ window.addEventListener("load", function(evt) {
 				}
 				document.getElementById("lostcon").classList.remove("dnone");
 			};
-
 		}
 
 		exports.sendMessage = function (msg) {
 			if (is_connected) {
 				ws.send(msg);
 			} else {
-				alert("Not connected!");
+                var timeNow = new Date();
+
+                //
+                // display the "Not connected" alert only every 5 seconds...
+                //
+
+                if (timeNoConnectionLastSent == null || timeNow.getTime() - timeNoConnectionLastSent.getTime() > 5000) {
+    				alert("Not connected!");
+
+    				timeNoConnectionLastSent = new Date();
+    			}
 			}
 		};
 
@@ -557,14 +567,14 @@ window.addEventListener("load", function(evt) {
 					isbusy = 1;
 					// txtlog.value += "BUSY = true\n";
 					// txtlog.scrollTo(0, txtlog.scrollHeight);
-					document.getElementById("busy").classList.remove("hidden");
+					document.getElementById("busy").classList.remove("grayed");
 					break;
 				case "b":
 					// BUSY false
 					isbusy = 0;
 					// txtlog.value += "BUSY = false\n";
 					// txtlog.scrollTo(0, txtlog.scrollHeight);
-					document.getElementById("busy").classList.add("hidden");
+					document.getElementById("busy").classList.add("grayed");
 					break;
 				case "C": {
 					// My callsign
@@ -884,7 +894,7 @@ window.addEventListener("load", function(evt) {
 					// PTT true
 					// txtlog.value += "PTT = true\n";
 					// txtlog.scrollTo(0, txtlog.scrollHeight);
-					document.getElementById("ptt").classList.remove("hidden");
+					document.getElementById("ptt").classList.remove("grayed");
 					// Reset spectrum and add a white line to the waterfall
 					// to mark a period of transmit.
 					drawSpectrum(null);
@@ -894,7 +904,7 @@ window.addEventListener("load", function(evt) {
 					// PTT false
 					// txtlog.value += "PTT = false\n";
 					// txtlog.scrollTo(0, txtlog.scrollHeight);
-					document.getElementById("ptt").classList.add("hidden");
+					document.getElementById("ptt").classList.add("grayed");
 					// Clear txtype when done transmitting
 					let txe = document.getElementById("txtype");
 					txe.innerHTML = "";
@@ -909,14 +919,14 @@ window.addEventListener("load", function(evt) {
 						txtlog.value += "IRS = true\n";
 						txtlog.scrollTo(0, txtlog.scrollHeight);
 					}
-					document.getElementById("irs").classList.remove("dnone");
+					document.getElementById("irs").classList.remove("hidden");
 					break;
 				case "r":
 					// IRS false
 					// This is normally accompanied by ISS true, so don't log
 					// txtlog.value += "IRS = false\n";
 					// txtlog.scrollTo(0, txtlog.scrollHeight);
-					document.getElementById("irs").classList.add("dnone");
+					document.getElementById("irs").classList.add("hidden");
 					break;
 				case "S":
 					// ISS true
@@ -925,14 +935,14 @@ window.addEventListener("load", function(evt) {
 						txtlog.value += "ISS = true\n";
 						txtlog.scrollTo(0, txtlog.scrollHeight);
 					}
-					document.getElementById("iss").classList.remove("dnone");
+					document.getElementById("iss").classList.remove("hidden");
 					break;
 				case "s":
 					// ISS false
 					// This is normally accompanied by IRS true, so don't log
 					// txtlog.value += "ISS = false\n";
 					// txtlog.scrollTo(0, txtlog.scrollHeight);
-					document.getElementById("iss").classList.add("dnone");
+					document.getElementById("iss").classList.add("hidden");
 					break;
 				case "t": {
 					let state = decodestr(rdata, -1);
@@ -949,14 +959,14 @@ window.addEventListener("load", function(evt) {
 					// Recording RX WAV true
 					// This may be due to RECRX host command or from use of
 					// -w or --writewav command line option (triggered after TX)
-					document.getElementById("recordingrx").classList.remove("hidden");
+					document.getElementById("recordingrx").classList.remove("grayed");
 					break;
 				case "w": {
 					// Recording RX WAV false
 					// This may be due to RECRX host command or end of timer
 					// for recording started due to -w or --writewav command
 					// line option.
-					document.getElementById("recordingrx").classList.add("hidden");
+					document.getElementById("recordingrx").classList.add("grayed");
 					break;
 				}
 				case "\x81": {

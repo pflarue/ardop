@@ -5,78 +5,119 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<title>Ardopcf Web GUI</title>
 		<style>
+            #title {text-align: left; grid-row: 1; grid-column: 1 / 3; font-weight: bold;}
 			#spectrum {vertical-align: bottom;}
 			#busy {background-color: gold;}
-			#ptt, #recordingrx {background-color: red;}
-			#iss, #irs {background-color: lime;}
-			#lostcon {background-color: hotpink;}
-			#rcvoverflow {background-color: hotpink;}
+			#ptt {background-color: red; text-align: center;}
+			#recordingrx {background-color: red; text-align: center; grid-row: 4; grid-column: 1 / 3;}
+			#busy {text-align: center;}
+			#iss {background-color: lime; z-index: 0; padding-left: 0.5em; padding-right: 0.5em; grid-row: 1; grid-column: 2 / 3; text-align: center;}
+			#irs {background-color: lime; z-index: 1; padding-left: 0.5em; padding-right: 0.5em; grid-row: 1; grid-column: 2 / 3; text-align: center;}
+            #rxenabled {width: 8em; text-align: center;}
+            #txenabled {width: 8em; text-align: center;}
+            #pttenabled {width: 8em; text-align: center;}
+			#mycall {text-align: center;}
+			#rcall {grid-row: 1; grid-column: 3; text-align: left;}
+			#lostcon {background-color: deeppink; color: white; padding: 1em;}
+			#quality {grid-column: 2 / 4;}
+			#rcvoverflow {background-color: deeppink; color: white; grid-row: 2; grid-column: 1 / 3;}
+            #rcvunderflow {background-color: yellow; grid-row: 2; grid-column: 1 / 3;}
+            #rxtype {width: 10em;}
+            #txtype {width: 10em;}
 			#hostcommand, #text-log {width: 95%;}
 			#info {background-color: lightgray; text-align: justify; padding-left: 0.5em; padding-right: 0.5em;}
 			#configdiv {background-color: lightgray; padding-left: 0.5em; padding-right: 0.5em;}
 			.grid_protocol {display: inline-grid; gap: 0px; grid-template-columns: auto auto;}
-			.grid_enabled {display: inline-grid; gap: 0px; grid-template-columns: auto auto; font-size: smaller;}
+			.grid_enabled {display: inline-grid; gap: 0px; grid-template-columns: auto auto; vertical-align: top; }
    		    .grid_status_ptt_busy {display: inline-grid; gap: 0px; grid-template-columns: auto;}
-   		    .grid_status_call {display: inline-grid; gap: 0px; grid-template-columns: auto;}
-   		    .grid_status_quality {display: inline-grid; gap: 0px; grid-template-columns: auto auto;}
-   		    .grid_status_rx {display: inline-grid; gap: 0px; grid-template-columns: auto;}
+   		    .grid_status_call {display: inline-grid; gap: 0px; grid-template-columns: auto auto auto;}
+   		    .grid_status_quality {display: inline-grid; gap: 0px; grid-template-columns: auto auto auto;}
+   		    .grid_status_rx {display: inline-grid; gap: 0px; grid-template-columns: auto 1fr;}
    		    .grid_status_frame_type {display: inline-grid; gap: 0px; grid-template-columns: auto auto;}
-			.grid_sliders {display: inline-grid; align-items: center; gap: 10px; grid-template-columns: auto auto auto auto auto;}
-			.grid_buttons {display: inline-grid; gap: 10px; grid-template-columns: auto auto auto auto auto;}
-			.button {min-height: 48px; min-width: 48px; margin: 5px;}
+			.grid_sliders {display: inline-grid; align-items: center; gap: 10px; grid-template-columns: auto auto 1fr auto auto;}
+            .button-container { display: flex; flex-wrap: wrap; gap: 0em; justify-content: left; }
+			.button {width: 12em; min-height: 48px; min-width: 48px; margin: 5px;}
 			.select {min-height: 48px; min-width: 48px; margin: 5px;}
 			.input {min-height: 48px; min-width: 48px; margin: 5px;}
+            .grayed {opacity: 16%;}
 			.hidden {visibility: hidden;}
 			.dnone {display: none;}
 			.quality, .enabled {background-color: lime;}
 			.rxstate_none {background-color: white;}
-			.rxstate_pending, .silent, #rcvunderflow, .voxhost {background-color: yellow;}
+			.rxstate_pending, .silent, .voxhost {background-color: yellow;}
 			.rxstate_ok {background-color: lime;}
 			.rxstate_fail, .disabled {background-color: red;}
 			.txnak {background-color: lightpink;}
 			.txack {background-color: aquamarine;}
-			.state {background-color: #D0D0D0;}
-			.sllabel, .sltext, .slbutton, .slider {vertical-align: middle;}
-			.slbutton {height: 3em; width: 3em;}
+			.state {background-color: #D0D0D0; text-align: center;}
+			.slider-container {display: flex; flex-wrap: wrap; gap: 0em; justify-content: left; padding-top: 0.5em; padding-bottom: 0.5em;}
+			.slider-element {display: inline-grid; grid-template-columns: auto auto auto auto auto; justify-content: center; align-items: center; padding-right: 2em;}
+			.sllabel {text-align: right; width: 7em;}
+ 		    .slbutton {height: 3em; width: 3em; min-height: 48px; min-width: 48px; vertical-align: middle;}
+			.slider {max-width: 15em; grid-row: 1; grid-column: 3 / 4; }
+    		.sltext {align-self: start; text-align: center; grid-row: 1; grid-column: 3 / 4; }
 			dt {font-weight: bold;}
 		</style>
 		<script src="webgui.js"></script>
 	</head>
 	<body>
-		<strong>ardopcf</strong><br/>
-		<div id="lostcon" class="dnone"><br />
-			Connection to ardopcf lost.  Try reloading this page.<br /><br />
+		<div id="lostcon" class="dnone">
+			Connection to ardopcf lost. Try reloading this page.
 		</div>
 
 		<span class="grid_protocol">
+            <span id="title">ardopcf</span>
 			<!-- TODO: Should be able to get same effect with simpler html and better css -->
             <label for="protocolmode">ProtocolMode:&nbsp;</label>
             <span id="protocolmode" class="state" style="width: 8em;">UNKNOWN</span>
             <label for="state">State:&nbsp;</label>
 			<span id="state" class="state" style="width: 8em;">UNKNOWN</span>
+            <span id="ptt" class="grayed">PTT</span>
+            <span id="busy" class="grayed">Channel Busy</span>
 		</span>
 
         <span class="grid_enabled">
 			<label for="rxenabled">RXAudio:&nbsp;</label>
-            <span id="rxenabled" class="disabled" style="width: 8em;">DISABLED</span>
+            <span id="rxenabled" class="disabled">DISABLED</span>
             <label for="txenabled">TXAudio:&nbsp;</label>
-            <span id="txenabled" class="disabled" style="width: 8em;">DISABLED</span>
+            <span id="txenabled" class="disabled">DISABLED</span>
             <label for="pttenabled">PTTControl:&nbsp;</label>
-            <span id="pttenabled" class="voxhost" style="width: 8em;">VOX/HOST</span>
+            <span id="pttenabled" class="voxhost">VOX/HOST</span>
+            <span id="recordingrx" class="grayed">RECORDING RX</span>
 		</span>
 
         <span class="grid_status_call">
 			<span id="mycall">(MYCALL NOT SET)</span>
-			<span id="irs" class="dnone" style="width: 8em;">IRS <<<<</span>
-			<span id="iss" class="dnone" style="width: 8em;">ISS >>>></span>
+			<span id="irs" class="hidden">&nbsp;IRS <<<<&nbsp;</span>
+			<span id="iss" class="hidden">&nbsp;ISS >>>>&nbsp;</span>
 			<span id="rcall"></span>
 		</span>
 
-        <span class="grid_status_ptt_busy">
-			<span id="ptt" class="hidden">&nbsp;PTT&nbsp;</span>
-			<span id="busy" class="hidden">Channel Busy</span>
-			<span id="recordingrx" class="hidden">RECORDING RX</span>
-		</span>
+        <span class="slider-container">
+            <div class="slider-element">
+                <label for="drivelevelslider" class="sllabel">TX DriveLevel:</label>
+                <button class="slbutton" id="decrease-drivelevel">-</button>
+                <input type="range" min="0" max="100" value="100" class="slider" id="drivelevelslider">
+                <button class="slbutton" id="increase-drivelevel">+</button>
+                <span class="sltext" id="driveleveltext"></span>
+            </div>
+
+            <div class="slider-element">
+                <label for="avglenslider" class="sllabel">Plot Averaging:</label>
+                <button class="slbutton" id="decrease-avg">-</button>
+                <input type="range" min="1" max="10" value="1" class="slider" id="avglenslider">
+                <button class="slbutton" id="increase-avg">+</button>
+                <span class="sltext" id="avglentext"></span>
+            </div>
+
+            <div class="slider-element">
+                <label for="plotscaleslider" class="sllabel">Plot Scale:</label>
+                <button class="slbutton" id="decrease-scale">-</button>
+                <input type="range" min="1" max="8" value="1" class="slider" id="plotscaleslider">
+                <button class="slbutton" id="increase-scale">+</button>
+                <span class="sltext" id="plotscaletext"></span>
+            </div>
+        </span>
 
 		<div>
 			<canvas id="spectrum" width="205" height="50"></canvas>
@@ -89,57 +130,34 @@
 
         <span class="grid_status_quality">
 			<label for="quality">Quality:&nbsp;</label>
-            <span id="quality" style="width: 7em;">0/100</span>
-			<span>[<label for="rserrs">RS Errors:&nbsp;</label></span>
-            <span><span id="rserrs" style="width: 7em;">0/0</span>]</span>
+            <span id="quality">0/100</span>
+            <label for="rserrs">[RS Errors:&nbsp;</label>
+            <span id="rserrs">0/0</span>
+            <span>]</span>
 		</span>
 
 		<span class="grid_status_rx">
-			<label for="rcvlvl" style="width: 18em;">RX Level:</label>
-			<!-- rcvlvl is linear fraction of full scale audio-->
-			<meter id="rcvlvl" min="0" max="150" high="120" value="0" style="width: 100%;"></meter>
-            <span id="rcvoverflow" class="dnone">WARNING: Audio from<br>radio is too loud!</span>
+			<label for="rcvlvl">Rcv Level:&nbsp;</label>
+            <!-- rcvlvl is linear fraction of full scale audio-->
+			<meter id="rcvlvl" min="0" max="150" high="120" value="0" style="width: 12em;"></meter>
 			<span id="rcvunderflow" class="dnone">(Low Audio)</span>
+            <span id="rcvoverflow" class="dnone">WARNING: Audio from radio too loud!</span>
         </span>
 
         <span class="grid_status_frame_type">
             <label for="rxtype">RX Frame Type:</label>
-            <span id="rxtype" class="rxstate_none" style="width: 15em;"></span>
+            <span id="rxtype" class="rxstate_none"></span>
             <label for="txtype">TX Frame Type:</label>
-            <span id="txtype" style="width: 15em;"></span>
+            <span id="txtype"></span>
         </span>
 
-        <br>
-        <br>
-
-        <span class="grid_sliders">
-            <label for="drivelevelslider" class="sllabel">TX DriveLevel:</label>
-            <button class="slbutton" id="decrease-drivelevel">-</button>
-            <input type="range" min="0" max="100" value="100" class="slider" id="drivelevelslider">
-            <button class="slbutton" id="increase-drivelevel">+</button>
-            <span class="sltext" id="driveleveltext"></span>
-
-            <label for="avglenslider" class="sllabel">Plot Averaging:</label>
-            <button class="slbutton" id="decrease-avg">-</button>
-            <input type="range" min="1" max="10" value="1" class="slider" id="avglenslider">
-            <button class="slbutton" id="increase-avg">+</button>
-            <span class="sltext" id="avglentext"></span>
-
-            <label for="plotscaleslider" class="sllabel">Plot Scale:</label>
-            <button class="slbutton" id="decrease-scale">-</button>
-            <input type="range" min="1" max="8" value="1" class="slider" id="plotscaleslider">
-            <button class="slbutton" id="increase-scale">+</button>
-            <span class="sltext" id="plotscaletext"></span>
-        </span>
-
-        <br>
-        <br>
-
-        <button id="send2tone" class="button">Send2Tone</button>
-        <button id="sendid" class="button">SendID</button>
-        <button id="confighider" class="button">Show Config Controls</button>
-        <button id="loghider" class="button">Show Log</button>
-        <button id="infohider" class="button">Show Help</button>
+        <div class="button-container">
+            <button id="send2tone" class="button">Send2Tone</button>
+            <button id="sendid" class="button">SendID</button>
+            <button id="confighider" class="button">Show Config Controls</button>
+            <button id="loghider" class="button">Show Log</button>
+            <button id="infohider" class="button">Show Help</button>
+        </div>
 
 		<div id="configdiv" class="dnone">
 			<b>WARNING: Changing these settings may disrupt audio processing (maybe
@@ -217,24 +235,31 @@
 			ardopcf program, then this can also be caused by a problem with the network (often
 			WiFi) connection between them.  It is normal for this message to very briefly
 			flash at the top of this page when it first loads.
-			</p><p>
+			</p>
+
+            <p>
 			A few different devices can view copies of this Web GUI for the same running
 			ardopcf instance.  However, ardopcf will refuse additional connections if too
 			many copies try to connect simultaneously.
-			</p><p>
-			The top of this page shows the current <b>'ProtocolMode'</b>.  This will be one of
-			'ARQ', 'FEC', or 'RXO'.  Next is shown the current Ardop protocol <b>'State'</b>
-			This may be:
-			<dl>
-				<dt>'DISC'</dt><dd>disconnected</dd>
-				<dt>'FECRcv'</dt><dd>receiving Forward Error Correction (FEC) frame</dd>
-				<dt>'FECSend'</dt><dd>sending FEC frame</dd>
-				<dt>'ISS'</dt><dd>station is the Information Sending Station</dd>
-				<dt>'IRS'</dt><dd>station is the Information Receiving Station</dd>
-				<dt>'IRStoISS'</dt><dd>transition from 'IRS' to 'ISS'</dd>
-				<dt>'IDLE'</dt><dd>idle</dd>
-			</dl>
-			</p><p>
+			</p>
+
+            <p>
+            The top of this page shows the current <b>'ProtocolMode'</b>. This will be one of
+            'ARQ', 'FEC', or 'RXO'. Next is shown the current Ardop protocol <b>'State'</b>
+            This may be:
+            </p>
+
+            <dl>
+                <dt>'DISC'</dt><dd>disconnected</dd>
+                <dt>'FECRcv'</dt><dd>receiving Forward Error Correction (FEC) frame</dd>
+                <dt>'FECSend'</dt><dd>sending FEC frame</dd>
+                <dt>'ISS'</dt><dd>station is the Information Sending Station</dd>
+                <dt>'IRS'</dt><dd>station is the Information Receiving Station</dd>
+                <dt>'IRStoISS'</dt><dd>transition from 'IRS' to 'ISS'</dd>
+                <dt>'IDLE'</dt><dd>idle</dd>
+            </dl>
+
+            <p>
 			The next line shows the status of <b>RXAudio</b>, <b>TXAudio</b>, and
 			<b>PTTControl</b>.  When ardopcf is operating normally, all will show
 			<b>ENABLED</b>, except that if using VOX or if the host program, such as Pat,
@@ -242,20 +267,26 @@
 			<b>VOX/HOST</b>.  If RXAudio is active, but the audio being received has zero
 			amplitude, then it will show <b>SILENCE</b> rather than <b>ENABLED</b>.  This may
 			indicate a device failure.  The alternative to <b>ENABLED</b> is <b>DISABLED</b>.
-			</p><p>
+			</p>
+
+            <p>
 			The next blank line will show <b>'PTT'</b> when transmitting, <b>'Channel Busy'</b>
 			when the busy detector detects a signal within Ardop's current bandwidth settings,
 			and <b>RECORDING RX</b> when ardopcf is writing a WAV file containing the received
 			audio.  Such recording happens after transmitting when the -w or --writewav command
 			line option is used, as well as in response to the RECRX host command.
-			</p><p>
+			</p>
+
+            <p>
 			The next line shows the value of <b>MYCALL</b> and the callsign of the station you
 			are connected to or sending Connection Requests (ConReq) to.  MYCALL is
 			normally set by the Host program such as Pat Winlink or gARIM.  This should
 			be your callsign.  If it has not been set, then it will show <b>'(MYCALL NOT
 			SET)'</b>.  Transmitting, including the 2tone test signal, is not permitted when no
 			callsign has been set.
-			</p><p>
+			</p>
+
+            <p>
 			The <b>spectrum and waterfall plots</b> show from about 300 to 2700 Hz.  If this is
 			narrower than the receive filter of your radio, high and/or low pitched audio
 			that you hear from your radio may not be visible on these plots.  The thin
@@ -265,7 +296,9 @@
 			500, 1000, or 2000 Hz wide).  These lines are not labeled, but their location
 			relative to the total bandwidth should make it obvious which of these bandwidths
 			they represent.
-			</p><p>
+			</p>
+
+            <p>
 			The levels shown in the spectrum and waterfall displays are log scale (dB),
 			and a very slow automatic gain control is used to try to clearly show the
 			relative power levels of signals and noise detected in the available audio.
@@ -276,24 +309,34 @@
 			that you can see or hear within the Ardop bandwidth you intend to use, you
 			should not attempt to establish a connection at this time on this frequency,
 			because you may interfere with the existing signal.
-			</p><p>
+			</p>
+
+            <p>
 			<b>'Plot Scale'</b> may be used to increase the size of all of the plots.  This does
 			not change the amount of data being used for the plots.  It just magnifies them.
-			</p><p>
+			</p>
+
+            <p>
 			Scaling of data for plotting, include averaging, does NOT affect the 'Rcv Level'
 			indicator, the busy detector, or ardopcf's ability to detect or decode data.
 			These adjustments are purely for display purposes.
-			</p><p>
+			</p>
+
+            <p>
 			The <b>constellation plot</b> provides a visual indicator of the quality of the most
 			recently received PSK/QAM frame.  The display shown for FSK frames provides
 			less information, but may still be somewhat useful.
-			</p><p>
+			</p>
+
+            <p>
 			The <b>'Quality'</b> value provides an indication of the quality of the most recently
 			received frame, whether correctly decoded or not.  Ideally, this value would be
 			independent of ardopcf's ability to demodulate and decode the signal, but since it uses
 			intermediate values from the demodulators, this is not the case.  Some frame types
 			typically require higher 'Quality' values than others to ensure correct decoding.
-			</p><p>
+			</p>
+
+            <p>
 			The <b>'RS Errors'</b> value provides a measure of ardopcf's level of success in
 			accurately demodulating and decoding the most recently received frame.  All data frame
 			types, as well as some control frame types, use Reed Solomon (RS) error correction to
@@ -308,7 +351,9 @@
 			how many additional errors may have been present.  A high number of RS Errors may be an
 			indication of poor quality of the received signal, a deficiency in ardopcf's
 			demodulators and decoders, or some combination of the two.
-			</p><p>
+			</p>
+
+            <p>
 			The <b>'Rcv Level'</b> graph shows the percentage of full scale used by the received
 			audio on a linear scale.  If this level is too high, the audio will be clipped,
 			making it harder for ardopcf to decode received signals.  The 'Rcv Level'
@@ -316,7 +361,9 @@
 			bandwidth, and is thus not influenced by the Ardop bandwidth settings indicated
 			on the spectrum and waterfall plots.  A strong signal outside of the Ardop
 			bandwidth can still cause audio clipping.
-			</p><p>
+			</p>
+
+            <p>
 			A warning message is shown when <b>excessive audio levels</b> are detected.  This
 			message will disappear a few seconds after audio amplitudes drop to more reasonable
 			levels.  Low to moderate audio levels seem to usually work well.  However, audio
@@ -327,12 +374,16 @@
 			then increasing the audio level may improve decoding.  Increasing your received audio
 			level may also help if you see faint indication of possible ardop signals centered on
 			the waterfall display, but ardopcf does not appear to be detecting these signals.
-			</p><p>
+			</p>
+
+            <p>
 			Received audio levels are dependent on the actual strength of the received signal,
 			on some of your radio's settings, and on the 'microphone' settings for your computer's
 			soundcard.  Details of how to adjust these various settings depends on the model of
 			radio you are using and on what operating system your computer uses.
-			</p><p>
+			</p>
+
+            <p>
 			The <b>'RX Frame Type'</b> and <b>'TX Frame Type'</b> displays show what Ardop frame
 			type is being received or sent respectively.  These values also persist for a short
 			time after a frame has been received or sent.  <u>In some cases, ardopcf attempts to
@@ -345,11 +396,15 @@
 			frame telling the other station that you correctly received some data.  A light pink
 			background is used when sending a DataNAK frame telling the other station that you
 			were unable to decode some received data.
-			</p><p>
+			</p>
+
+            <p>
 			Received DataACK and DataNAK frames include a value indicating the quality of your
 			sent frame as received by the other station.  This quality is shown in the <b>RX
 			Frame Type</b> field along with the Frame Type.
-			</p><p>
+			</p>
+
+            <p>
 			If a transmitted or received data frame type matches the previously transmitted or
 			received data frame type, then the <b>TX Frame Type</b> or <b>RX Frame Type</b> field
 			will show '(REPEATED TYPE)' after the frame type. This is only shown for data frames
@@ -365,16 +420,20 @@
 			Ardopcf's Memory ARQ feature allows information from repeated copies of a received frame
 			to be combined to increase the likelihood of correctly decoding it, even when no single
 			copy could be correctly be decoded on its own.
-			</p><p>
+			</p>
+
+            <p>
 			The <b>'TX DriveLevel'</b> slider linearly scales the amplitude of the audio sent to
 			your radio by ardopcf.  This, along with your radio's settings and the 'speaker'
 			settings for your computer's soundcard, influences the strength and quality of
 			your transmitted radio signal.  By default, this slider control will be set to to
 			100 when ardopcf is first started, though the --hostcommands option may be used to
 			specify a different initial DRIVELEVEL.  You may want to adjust your radio and
-			soudcard settings to levels that allow you to use this convenient slider control
+			soundcard settings to levels that allow you to use this convenient slider control
 			to make final adjustments to your transmit audio level.
-			</p><p>
+			</p>
+
+            <p>
 			Reduced audio amplitude can be used to <b>decrease the RF power</b> of your
 			transmitted signals when using a single sideband radio transmitter.  In addition to
 			limiting your power to only what is required to carry out the desired communications
@@ -383,13 +442,17 @@
 			its full rated power when using high duty cycle digital modes.  While sending data,
 			Ardop can have a very high duty cycle as it sends long data frames with only brief
 			breaks to hear short DataACK or DataNAK frames from the other station.
-			</p><p>
+			</p>
+
+            <p>
 			If the output audio is too loud, your radio's <b>Automatic Level Control (ALC)</b>
 			will adjust this audio before using it to modulate the RF signal.  This adjustment
 			may distort the signal making it more difficult for other stations to correctly
 			receive your transmissions.  Some frame types used by Ardop may be more sensitive
 			to these distortions than others.
-			</p><p>
+			</p>
+
+            <p>
 			Details of how to monitor the action of your radio's ALC, and how to adjust
 			your radio and soundcard settings depend on the model of radio you are using
 			and on what operating system your computer uses.  On some radios, the maximum
@@ -399,7 +462,9 @@
 			On some radios, appropriate audio levels are highly dependent on the power output
 			settings of the radio, while on other radios they are mostly independent of these
 			settings.
-			</p><p>
+			</p>
+
+            <p>
 			The <b>'Send2Tone'</b> button causes ardopcf to transmit a 5 second two tone signal
 			similar to, but longer than, what is used as the leader at the start of all Ardop
 			frames.  If MYCALL has not been set, such that '(MYCALL NOT SET)' is shown, then this
@@ -410,7 +475,9 @@
 			upon starting ardopcf with the --hostcommands option.  This signal will also not
 			be sent if the Protocol 'STATE', as shown near the top of this page, is not 'DISC'
 			for disconnected.  An alert is displayed for this failure.
-			</p><p>
+			</p>
+
+            <p>
 			The <b>'SendID'</b> button causes ardopcf to transmit an ID frame containing your
 			callsign.  If MYCALL has not been set, such that '(MYCALL NOT SET)' is shown, then this
 			frame cannot be sent, and an alert is displayed instead.  Similarly, this will
@@ -422,13 +489,17 @@
 			sent by pressing this button, ID frames are sent every 9-10 minutes when
 			transmitting.  They are also automatically sent at the end of an ARQ session, and
 			after sending a PingACK in response to a received Ping.
-			</p><p>
+			</p>
+
+            <p>
 			Either of these transmissions may be useful for antenna tuning or for making
 			initial adjustments to DRIVELEVEL settings.  However, <u>the various frame types
 			sent by ardopcf do not all produce the same audio power levels.</u>  This is a
 			known issue that will hopefully be improved in a future release.  For now, this
 			means that additional adjustments may be useful based on actual data transmissions.
-			</p><p>
+			</p>
+
+            <p>
 			The <b>Show Config Controls</b> button displays additional controls that can be used
 			to configure or reconfigure the audio and CAT/PTT devices used by ardopcf.
 			As indicated by the warning at the top of this section <b>Changing these settings
@@ -441,7 +512,9 @@
 			running on.  Both of these should also be disabled before disconnecting or turning
 			off the audio and control devices used.  In most cases, disconnecting without first
 			disabling them will also work, but in certain cases this may cause problems.
-			</p><p>
+			</p>
+
+            <p>
 			The <b>ENABLE Audio Processing</b> button doesn't work unless the audio devices
 			were previously successfully configured, and then <b>DISABLED</b>.  To initially
 			configure the audio devices, or to select audio devices different from what were
@@ -454,7 +527,9 @@
 			previously been successfully configured, then a special <b>RESTORE</b> item is
 			also included in the list of devices.  Selecting <b>RESTORE</b> causes ardopcf
 			to attempt to re-open the last device that was successfully opened and configured.
-			</p><p>
+			</p>
+
+            <p>
 			The <b>ENABLE PTT/CAT Control</b> button doesn't work unless a PTT control device
 			or CAT control device plus the CAT PTTON and CAT PTTOFF settings were previously
 			successfully configured, and then <b>DISABLED</b>.  To initially configure the
@@ -462,13 +537,17 @@
 			configured, select appropriate devices from the <b>PTT Selector</b> and/or
 			<b>CAT Selector</b> controls.  These include detected serial and CM108 devices as
 			well as available connections to the default TCP:4532 port used by Hamlib/rigctld.
-			</p><p>
+			</p>
+
+            <p>
 			If the <b>RX Audio Device</b>, <b>TX Audio Device</b>, <b>PTT Selector</b>, or
 			<b>CAT Selector</b> still shows <b>NONE</b> after you use one of the <b>ENABLE</b>
 			buttons or choose another value from one of these selectors, this indicates that
 			an attempt to open and configure the device failed.  You might find additional
 			details in the debug log file to help you understand why it failed.
-			</p><p>
+			</p>
+
+            <p>
 			It is likely that only one or two of the CAT/PTT items is actually usable.  Unlike
 			the audio device selectors that, with a bit of trial an error, can probably be
 			used to configure a working system without knowing too much about the details of
@@ -487,7 +566,9 @@
 			<b>RESTORE</b> item is also included in the list of devices.  Selecting
 			<b>RESTORE</b> causes ardopcf to attempt to re-open the last device that was
 			successfully opened.
-			</p><p>
+			</p>
+
+            <p>
 			The <b>PTT Selector</b> and <b>CAT Selector</b> controls do not include every
 			possible value that you might need to use.  So, the <b>PTT device</b> and
 			<b>CAT device</b> text inputs are also provided.  These accept any value that can
@@ -499,14 +580,18 @@
 			'GPIO:N', where N is the GPIO pin number.  It may also be necessary to use these
 			inputs if non-default baud rates are required for serial devices.  See the
 			documentation for the --ptt and --cat command line options for more details.
-			</p><p>
+			</p>
+
+            <p>
 			Even for devices such as GPIO pins or serial devices that require manual
 			configuration because they do not appear in the selector lists, once
 			successfully configured either from the text input fields in the Webgui or from
 			the command line, the <b>ENABLE/DISABLE CAT/PTT</b> button and/or the <b>NONE</b>
 			and <b>RESTORE</b> values in the selectors can be used to temporarily disable them,
 			and then later re-enable them.
-			<p></p>
+			</p>
+
+            <p>
 			I see a few use cases for this ability to disable and later re-enable PTT control.
 			The first is that, especially during portable operations, it may be convenient to
 			disconnect and later reconnect the cable between the radio and computer.  You
@@ -517,7 +602,9 @@
 			PTT/CAT is to temporarily prevent unplanned transmitting, such as might occur to
 			meet ID requirements, when doing so might cause equipment damage or injury because
 			you need to make adjustments to your antenna or feedline.
-			</p><p>
+			</p>
+
+            <p>
 			To use CAT for PTT control, unless you used the RIGCTRL shortcut to set up
 			TCP CAT via Hamlib/rigctld, you must also provide <b>PTTON</b> and <b>PTTOFF</b>
 			commands expressed as hex or ASCII strings.  The required values are specific to
@@ -532,7 +619,9 @@
 			as UTF8 or extended ASCII), it will fail, and the previous value (which may be
 			blank) will be retained.  If you successfully enter an ASCII string without the
 			ASCII: prefix, it will be updated to include the ASCII: prefix.
-			</p><p>
+			</p>
+
+            <p>
 			The <b>RX Audio Channel</b> and <b>TX Audio Channel</b> selectors control whether
 			the audio devices are opened as mono or stereo devices, and when opened as stereo
 			devices, whether the left or right channel is used.  In most cases, the <b>MONO</b>
@@ -541,12 +630,16 @@
 			audio from one VFO on the left channel and audio from the other VFO on the right
 			channel.  I am not currently aware of a use case for other than <b>MONO</b> on the
 			<b>TX Audio Channel</b> selector.
-			</p><p>
+			</p>
+
+            <p>
 			By providing these controls within the WebGUI, ardopcf can be started
 			without specifying these options, and it may be reconfigured to change which
 			devices are used and how they are configured without having to exit and restart
 			ardopcf.
-			</p><p>
+			</p>
+
+            <p>
 			The various items displayed in this WebGUI can change quickly during an Ardop ARQ
 			connection.  The debug log file created by ardopcf contains most of this same
 			information and more, though it does not contain data comparable to the waterfall
@@ -559,7 +652,9 @@
 			page on, which may be different from the clock on the device that is running
 			the ardopcf program.  Due to this, times shown in the log window may be slightly
 			different from those written to the debug log file.
-			</p><p>
+			</p>
+
+            <p>
 			The <b>'Clear Log'</b> button (visible only when the log window is visible) may be used
 			to discard the contents of this window.  This might be useful before initiating
 			a new connection.  The 'Clear Log' button does not influence what is written to
