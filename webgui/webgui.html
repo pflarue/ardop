@@ -6,7 +6,6 @@
 		<title>Ardopcf Web GUI</title>
 		<style>
             #title {text-align: left; grid-row: 1; grid-column: 1 / 3; font-weight: bold;}
-			#spectrum {vertical-align: bottom;}
 			#busy {background-color: gold;}
 			#ptt {background-color: red; text-align: center;}
 			#recordingrx {background-color: red; text-align: center; grid-row: 4; grid-column: 1 / 3;}
@@ -24,7 +23,8 @@
             #rcvunderflow {background-color: yellow; grid-row: 2; grid-column: 1 / 3;}
             #rxtype {width: 10em;}
             #txtype {width: 10em;}
-			#hostcommand, #text-log {width: 95%;}
+			#hostcommand {width: 95%;}
+			#text-log {width: 100%; box-sizing: border-box;}
 			#info {background-color: lightgray; text-align: justify; padding-left: 0.5em; padding-right: 0.5em;}
 			#configdiv {background-color: lightgray; padding-left: 0.5em; padding-right: 0.5em;}
 			.grid_protocol {display: inline-grid; gap: 0px; grid-template-columns: auto auto;}
@@ -35,7 +35,10 @@
    		    .grid_status_rx {display: inline-grid; gap: 0px; grid-template-columns: auto 1fr;}
    		    .grid_status_frame_type {display: inline-grid; gap: 0px; grid-template-columns: auto auto;}
 			.grid_sliders {display: inline-grid; align-items: center; gap: 10px; grid-template-columns: auto auto 1fr auto auto;}
-            .button-container { display: flex; flex-wrap: wrap; gap: 0em; justify-content: left; }
+            .grid_visual {display: flex; flex-wrap: wrap; gap: 0em; justify-content: left;}
+            .display_container {display: flex; flex-wrap: wrap; align-items: flex-start; }
+			.spectrum_container {display: inline-grid; grid-template-columns: auto; align-content: start; align-items: start; padding-right: 0.25em; padding-bottom: 0.5em;}
+            .button-container {display: flex; flex-wrap: wrap; gap: 0em; justify-content: left;}
 			.button {width: 12em; min-height: 48px; min-width: 48px; margin: 5px;}
 			.select {min-height: 48px; min-width: 48px; margin: 5px;}
 			.input {min-height: 48px; min-width: 48px; margin: 5px;}
@@ -52,11 +55,12 @@
 			.state {background-color: #D0D0D0; text-align: center;}
 			.slider-container {display: flex; flex-wrap: wrap; gap: 0em; justify-content: left; padding-top: 0.5em; padding-bottom: 0.5em;}
 			.slider-element {display: inline-grid; grid-template-columns: auto auto auto auto auto; justify-content: center; align-items: center; padding-right: 2em;}
-			.sllabel {text-align: right; width: 7em;}
+			.sllabel {text-align: right; width: 7em; padding-right: 0.5em;}
  		    .slbutton {height: 3em; width: 3em; min-height: 48px; min-width: 48px; vertical-align: middle;}
 			.slider {max-width: 15em; grid-row: 1; grid-column: 3 / 4; }
     		.sltext {align-self: start; text-align: center; grid-row: 1; grid-column: 3 / 4; }
-			dt {font-weight: bold;}
+			dt {font-weight: bold; float: left; clear: left; margin-right: 5px;}
+            dd {margin-left: 0px;}
 		</style>
 		<script src="webgui.js"></script>
 	</head>
@@ -94,39 +98,39 @@
 		</span>
 
         <span class="slider-container">
-            <div class="slider-element">
+            <span class="slider-element">
                 <label for="drivelevelslider" class="sllabel">TX DriveLevel:</label>
                 <button class="slbutton" id="decrease-drivelevel">-</button>
                 <input type="range" min="0" max="100" value="100" class="slider" id="drivelevelslider">
                 <button class="slbutton" id="increase-drivelevel">+</button>
                 <span class="sltext" id="driveleveltext"></span>
-            </div>
+            </span>
 
-            <div class="slider-element">
+            <span class="slider-element">
                 <label for="avglenslider" class="sllabel">Plot Averaging:</label>
                 <button class="slbutton" id="decrease-avg">-</button>
                 <input type="range" min="1" max="10" value="1" class="slider" id="avglenslider">
                 <button class="slbutton" id="increase-avg">+</button>
                 <span class="sltext" id="avglentext"></span>
-            </div>
+            </span>
 
-            <div class="slider-element">
+            <span class="slider-element">
                 <label for="plotscaleslider" class="sllabel">Plot Scale:</label>
                 <button class="slbutton" id="decrease-scale">-</button>
                 <input type="range" min="1" max="8" value="1" class="slider" id="plotscaleslider">
                 <button class="slbutton" id="increase-scale">+</button>
                 <span class="sltext" id="plotscaletext"></span>
-            </div>
+            </span>
         </span>
 
-		<div>
-			<canvas id="spectrum" width="205" height="50"></canvas>
-		</div>
+        <div class="display_container">
+            <span class="spectrum_container">
+                <canvas id="spectrum" width="205" height="50"></canvas>
+                <canvas id="waterfall" width="205" height="100"></canvas>
+            </span>
 
-		<div>
-			<canvas id="waterfall" width="205" height="100"></canvas>
-			<canvas id="constellation" width="90" height="90"></canvas>
-		</div>
+            <canvas id="constellation" width="150" height="150"></canvas>
+        </div>
 
         <span class="grid_status_quality">
 			<label for="quality">Quality:&nbsp;</label>
@@ -160,9 +164,11 @@
         </div>
 
 		<div id="configdiv" class="dnone">
-			<b>WARNING: Changing these settings may disrupt audio processing (maybe
+			<p>
+            <b>WARNING: Changing these settings may disrupt audio processing (maybe
 			only briefly).  So, making changes while transmitting or receiving
-			is not recommended.</b><br /><br />
+			is not recommended.</b>
+            </p>
 
 			<button id="codectoggle" class="button">ENABLE Audio Processing</button>
 			<button id="ptttoggle" class="button">ENABLE PTT/CAT Control</button><br /><br />
@@ -175,10 +181,11 @@
 
             <button id="getdevices" class="button">Refresh audio devices list</button><br />
 
-            <br />
+            <p>
 			The next two selectors include available and commonly used devices
 			that may be suitable for CAT/PTT.  Some listed devices may not
-			actually be usable.<br />
+			actually be usable.
+            </p>
 
             <label for="pttselect" class="sllabel">PTT Selector:</label>
 			<select name="pttselect" id="pttselect" class="select"></select><br />
@@ -220,7 +227,7 @@
 		</div>
 
 		<div id="logdiv" class="dnone">
-			<button id="clearlog" class="button">Clear Log</button><br />
+			<button id="clearlog" class="button">Clear Log</button>
 			<textarea id="text-log" rows="10"></textarea>
 		</div>
 
@@ -250,13 +257,13 @@
             </p>
 
             <dl>
-                <dt>'DISC'</dt><dd>disconnected</dd>
-                <dt>'FECRcv'</dt><dd>receiving Forward Error Correction (FEC) frame</dd>
-                <dt>'FECSend'</dt><dd>sending FEC frame</dd>
-                <dt>'ISS'</dt><dd>station is the Information Sending Station</dd>
-                <dt>'IRS'</dt><dd>station is the Information Receiving Station</dd>
-                <dt>'IRStoISS'</dt><dd>transition from 'IRS' to 'ISS'</dd>
-                <dt>'IDLE'</dt><dd>idle</dd>
+                <dt>'DISC':</dt><dd>disconnected</dd>
+                <dt>'FECRcv':</dt><dd>receiving Forward Error Correction (FEC) frame</dd>
+                <dt>'FECSend':</dt><dd>sending FEC frame</dd>
+                <dt>'ISS':</dt><dd>station is the Information Sending Station</dd>
+                <dt>'IRS':</dt><dd>station is the Information Receiving Station</dd>
+                <dt>'IRStoISS':</dt><dd>transition from 'IRS' to 'ISS'</dd>
+                <dt>'IDLE':</dt><dd>idle</dd>
             </dl>
 
             <p>
@@ -661,6 +668,7 @@
 			the debug log file.
 			</p>
 		</div>
+
 		<div id="devmode" class="dnone">
 			<button id="recrx" class="button">Start RX Recording</button><br />
 			Host Command: <input type="text"  id="hostcommand"></input>

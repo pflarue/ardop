@@ -1466,25 +1466,24 @@ window.addEventListener("load", function(evt) {
 		cmdhistory_index = -1
 	};
 
-
-	const wfWidth = 205;
-	const wfHeight = 100;
 	const wfCanvas = document.getElementById("waterfall");
 	const wfCtx = wfCanvas.getContext("2d");
+	const wfWidth = wfCanvas.width;
+	const wfHeight = wfCanvas.height;
 	wfCtx.fillStyle = "#000000";
 	wfCtx.fillRect(0, 0, wfWidth, wfHeight);
 
-	const spWidth = 205;
-	const spHeight = 50;
 	const spCanvas = document.getElementById("spectrum");
 	const spCtx = spCanvas.getContext("2d");
+	const spWidth = spCanvas.width;
+	const spHeight = spCanvas.height;
 	spCtx.fillStyle = "#000000";
 	spCtx.fillRect(0, 0, spWidth, spHeight);
 
-	const cnstWidth = 90;
-	const cnstHeight = 90;
 	const cnstCanvas = document.getElementById("constellation");
 	const cnstCtx = cnstCanvas.getContext("2d");
+	const cnstWidth = cnstCanvas.width;
+	const cnstHeight = cnstCanvas.height;
 	cnstCtx.fillStyle = "#000000";
 	cnstCtx.fillRect(0, 0, cnstWidth, cnstHeight);
 
@@ -1621,6 +1620,7 @@ window.addEventListener("load", function(evt) {
 		cnstCtx.strokeStyle = "#F0F";
 		cnstCtx.stroke();
 	}
+
 	const drawConstellation = (pixels) => {
 		cnstCtx.fillStyle = "#000000";
 		cnstCtx.fillRect(0, 0, plotscale * cnstWidth, plotscale * cnstHeight);
