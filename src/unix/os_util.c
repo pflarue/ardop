@@ -279,7 +279,7 @@ bool WriteCOMBlock(HANDLE fd, unsigned char * Block, int BytesToWrite) {
 		if (ret >= ToSend)
 			return true;
 		if (ret == -1) {
-			if (errno != 11 && errno != 35)  // Would Block
+			if (errno != EAGAIN && errno != EWOULDBLOCK)  // Would Block
 				return false;
 			usleep(10000);
 			ret = 0;
