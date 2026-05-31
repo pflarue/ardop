@@ -98,14 +98,15 @@ char** GetCM108Strlist() {
 			slist[slistsize - 1] = NULL;  // Last pointer must always be null
 		}
 		slistsize += 2;
-		if ((slist = (char **) realloc(slist, slistsize * sizeof(char *)))
-			== NULL
-		) {
+		char **tmp = (char **) realloc(slist, slistsize * sizeof(char *));
+		if (tmp == NULL) {
 			ZF_LOGE("Error from realloc() in GetCM108Strlist() (%s)",
 				strerror(errno));
+			FreeStrlist(&slist);
 			closedir(d);
-			return slist;
+			return NULL;
 		}
+		slist = tmp;
 		namesz = strlen(prefix) + strlen(pathstr) + strlen(dir->d_name) + 1;
 		if ((slist[slistsize - 3] = malloc((namesz) * sizeof(char *)))
 			== NULL
@@ -172,14 +173,15 @@ char** GetSerialStrlist() {
 				slist[slistsize - 1] = NULL;  // Last pointer must always be null
 			}
 			slistsize += 2;
-			if ((slist = (char **) realloc(slist, slistsize * sizeof(char *)))
-				== NULL
-			) {
+			char **tmp = (char **) realloc(slist, slistsize * sizeof(char *));
+			if (tmp == NULL) {
 				ZF_LOGE("Error from realloc() in GetSerialStrlist() (%s)",
 					strerror(errno));
+				FreeStrlist(&slist);
 				closedir(d);
-				return slist;
+				return NULL;
 			}
+			slist = tmp;
 			namesz = strlen(pathstrs[pnum]) + strlen(dir->d_name) + 1;
 			if ((slist[slistsize - 3] = malloc((namesz) * sizeof(char *)))
 				== NULL

@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "common/os_util.h"
+#include "common/ardopcommon.h"
 #include "common/log.h"
 
 
@@ -91,14 +92,15 @@ char** GetSerialStrlist() {
 			slist[slistsize - 1] = NULL;  // Last pointer must always be null
 		}
 		slistsize += 2;
-		if ((slist = (char **) realloc(slist, slistsize * sizeof(char *)))
-			== NULL
-		) {
+		char **tmp = (char **) realloc(slist, slistsize * sizeof(char *));
+		if (tmp == NULL) {
 			ZF_LOGE("Error from realloc() in GetSerialStrlist() (%s)",
 				strerror(errno));
+			FreeStrlist(&slist);
 			closedir(d);
-			return slist;
+			return NULL;
 		}
+		slist = tmp;
 		namesz = strlen(pathstr) + strlen(dir->d_name) + 1;
 		if ((slist[slistsize - 3] = malloc((namesz) * sizeof(char *)))
 			== NULL
