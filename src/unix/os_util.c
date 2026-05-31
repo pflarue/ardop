@@ -175,10 +175,12 @@ HANDLE OpenCOMPort(void * Port, int speed) {
 
 	if (s->user_speed == -1) {
 		ZF_LOGE("Invalid baud rate (%i) specified for com port (%s).", speed, (char *) Port);
+		close(fd);
 		return 0;
 	}
 	if (tcgetattr(fd, &term) == -1) {
 		ZF_LOGE("ERROR: Unable to get attributes of %s.", (char *) Port);
+		close(fd);
 		return 0;
 	}
 
@@ -188,6 +190,7 @@ HANDLE OpenCOMPort(void * Port, int speed) {
 
 	if (tcsetattr(fd, TCSANOW, &term) == -1) {
 		ZF_LOGE("Error setting baud rate for %s to %i.", (char *) Port, speed);
+		close(fd);
 		return 0;
 	}
 
