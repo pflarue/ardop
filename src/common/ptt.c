@@ -682,7 +682,10 @@ int set_PTTport(char *portstr, bool useRTS) {
 
 // Expect pinstr to have a GPIO: prefix
 int set_GPIOpin(char *pinstr) {
-#ifdef __ARM_ARCH
+// GPIO PTT uses the Raspberry Pi /dev/gpiomem interface, so it is only
+// available on ARM Linux.  __ARM_ARCH alone is also defined on Apple Silicon
+// (arm64) macOS, where these GPIO functions do not exist.
+#if defined(__ARM_ARCH) && defined(__linux__)
 	// Compare only the first PORTSTRSZ - 1 bytes (exclude terminating NUlL)
 	if (strncmp(PTTstr, pinstr, PORTSTRSZ - 1) == 0)
 		return 0;  // no change
@@ -1295,7 +1298,7 @@ void KeyPTT(bool state) {
 			close_PTT(true);
 		}
 	}
-#ifdef __ARM_ARCH
+#if defined(__ARM_ARCH) && defined(__linux__)
 	if (PTTmode & PTTGPIO) {
 		gpioWrite(GPIOpin, (GPIOinvert ? !state : state));
 		done = true;
