@@ -73,10 +73,15 @@ OBJS = \
 	$(BUILDDIR)/src/common/ptt.o \
 	$(BUILDDIR)/src/common/eutf8.o \
 
+# Object files shared by the Unix-like platforms (Linux and macOS)
+OBJS_UNIX = \
+	$(BUILDDIR)/src/unix/os_util.o \
+
 # Linux-only object files
 OBJS_LIN = \
 	$(BUILDDIR)/src/linux/ALSA.o \
 	$(BUILDDIR)/src/linux/os_util.o \
+	$(OBJS_UNIX) \
 
 # Windows-only object files
 OBJS_WIN = \
@@ -87,6 +92,7 @@ OBJS_WIN = \
 OBJS_MAC = \
 	$(BUILDDIR)/src/macos/CoreAudio.o \
 	$(BUILDDIR)/src/macos/os_util.o \
+	$(OBJS_UNIX) \
 
 # user-facing executables, like ardopcf
 OBJS_EXE = \
