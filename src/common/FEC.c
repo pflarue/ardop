@@ -358,6 +358,10 @@ void ProcessRcvdFECDataFrame(int intFrameType, UCHAR * bytData, bool blnFrameDec
 			PassFECErrDataToHost();
 
 		AddTagToDataAndSendToHost(bytData, "FEC", frameLen);
+		// Also deliver the decoded frame to any connected TCP KISS clients,
+		// KISS encapsulated as an AX.25 frame.  KISSSendToClients() is a no-op
+		// if the KISS server is not running.
+		KISSSendToClients(bytData, frameLen);
 		if (CommandTrace)
 			ZF_LOGI("[ARDOPprotocol.ProcessRcvdFECDataFrame] Pass good data frame  ID %s to Host (%d bytes)", Name(intFrameType), frameLen);
 

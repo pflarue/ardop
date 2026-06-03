@@ -669,10 +669,19 @@ void ardopmain() {
 		HostCommands = NULL;
 	}
 
+	// If a TCP KISS server was requested on the command line, start it.  KISS
+	// operation uses FEC protocol mode, so force that here (overriding any mode
+	// set above via --hostcommands).
+	if (KISSPort) {
+		setProtocolMode("FEC");
+		KISSInit();
+	}
+
 	while(!blnClosing) {
 		if (RXEnabled)
 			PollReceivedSamples();
 		WebguiPoll();
+		KISSPoll();
 		if (ProtocolMode != RXO) {
 			CheckTimers();
 			TCPHostPoll();

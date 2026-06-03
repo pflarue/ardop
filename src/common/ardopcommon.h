@@ -184,6 +184,37 @@ void InitializeConnection();
 void AddTagToDataAndSendToHost(UCHAR * Msg, char * Type, int Len);
 void TCPAddTagToDataAndSendToHost(UCHAR * Msg, char * Type, int Len);
 
+// TCP KISS server (KISS.c)
+#define KISS_FRAME_MAX 2048  // Max de-escaped KISS/AX.25 frame length
+
+// State for an incremental KISS frame decoder (one per client).
+typedef struct {
+	UCHAR frame[KISS_FRAME_MAX];  // de-escaped frame being assembled
+	int len;  // bytes assembled so far
+	bool inEsc;  // a FESC has been seen, next byte is transposed
+	bool overflow;  // current frame exceeded KISS_FRAME_MAX and is discarded
+} KISSDecoder;
+
+extern int KISSPort;  // 0 means KISS server disabled
+extern char KISSAddr[64];
+bool KISSConfig(const char *arg);
+bool KISSInit();
+void KISSPoll();
+void KISSSendToClients(UCHAR *axdata, int len);
+
+// Pure helpers, with no socket or global side effects, exposed for unit testing.
+// KISSModeCapacity() returns the single-frame payload capacity in bytes of the
+// named FEC mode, or 0 if the mode is unknown.
+int KISSModeCapacity(const char *fecmode);
+// KISSEncode() KISS encapsulates an AX.25 frame into out (FEND, type, escaped
+// payload, FEND).  Returns the encoded length, or -1 if out is too small.
+int KISSEncode(const UCHAR *axdata, int len, UCHAR *out, int outsize);
+// KISSDecoderReset() initialises a decoder.  KISSDecoderByte() feeds one
+// received byte and returns the length of a completed frame (whose de-escaped
+// bytes are then in d->frame), or 0 if no frame completed on this byte.
+void KISSDecoderReset(KISSDecoder *d);
+int KISSDecoderByte(KISSDecoder *d, UCHAR b);
+
 void RemoveDataFromQueue(int Len);
 
 void GetSemaphore();

@@ -54,6 +54,7 @@ OBJS = \
 	$(BUILDDIR)/src/common/FEC.o \
 	$(BUILDDIR)/src/common/FFT.o \
 	$(BUILDDIR)/src/common/HostInterface.o \
+	$(BUILDDIR)/src/common/KISS.o \
 	$(BUILDDIR)/src/common/Locator.o \
 	$(BUILDDIR)/src/common/log_file.o \
 	$(BUILDDIR)/src/common/log.o \
@@ -102,6 +103,7 @@ OBJS_EXE = \
 TESTS = \
 	$(BUILDDIR)/test/ardop/test_ARDOPCommon \
 	$(BUILDDIR)/test/ardop/test_HostInterface \
+	$(BUILDDIR)/test/ardop/test_KISS \
 	$(BUILDDIR)/test/ardop/test_Locator \
 	$(BUILDDIR)/test/ardop/test_log \
 	$(BUILDDIR)/test/ardop/test_Packed6 \

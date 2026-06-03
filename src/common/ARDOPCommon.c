@@ -104,6 +104,7 @@ void txSleep(unsigned int mS) {
 		}
 		TCPHostPoll();
 		WebguiPoll();
+		KISSPoll();
 		// If !Capturing (as intended when called from here),
 		// PollReceivedSamples() reads samples from soundcard, but discards them
 		// rather than passing them to ProcessNewSamples().  This prevents the
@@ -382,6 +383,7 @@ static struct option long_options[] =
 	{"writetxwav",  no_argument, 0, 'T'},
 	{"decodewav",  required_argument, 0, 'd'},
 	{"sdft", no_argument, 0, 's'},
+	{"kiss",  required_argument, 0 , 'K'},
 	{"help",  no_argument, 0 , 'h'},
 	{ NULL , no_argument , NULL , no_argument }
 };
@@ -449,6 +451,11 @@ char HelpScreen[] =
 	"-d pathname or --decodewav pathname  Pathname of WAV file to decode instead of listening.\n"
 	"                                       Repeat up to 5 times for multiple WAV files.\n"
 	"-s or --sdft                         Use the alternative Sliding DFT based 4FSK decoder.\n"
+	"-K [addr:]port or --kiss [addr:]port Run a TCP KISS server on the given port for sending\n"
+	"                                       and receiving AX.25 frames (e.g. APRS) using ARDOP\n"
+	"                                       FEC mode.  If addr is omitted, listen on loopback\n"
+	"                                       (127.0.0.1) only.  Use 0.0.0.0 to listen on all\n"
+	"                                       interfaces.  Enabling KISS forces FEC protocol mode.\n"
 	"\n"
 	" CAT and RTS/DTR PTT can share the same port.\n"
 	" See the ardopcf documentation for command line options at\n"
@@ -511,7 +518,7 @@ int processargs(int argc, char * argv[]) {
 	}
 
 	// Starting optstring with : prevents getopt_long() from printing errors
-	char optstring[64] = ":i:o:l:H:mc:p:k:u:G:hLRyzwTd:s";
+	char optstring[64] = ":i:o:l:H:mc:p:k:u:G:hLRyzwTd:sK:";
 #ifdef LOG_OUTPUT_SYSLOG
 	// -S is only a valid option on Linux systems
 	snprintf(optstring + strlen(optstring), sizeof(optstring), "S");
@@ -806,6 +813,13 @@ int processargs(int argc, char * argv[]) {
 
 			case 's':
 				UseSDFT = true;
+				break;
+
+			case 'K':
+				if (!KISSConfig(optarg))
+					ZF_LOGE("ERROR: Invalid argument \"%s\" for --kiss (or -K). "
+						" Expected [address:]port.  KISS server not started.",
+						optarg);
 				break;
 
 			case ':':
