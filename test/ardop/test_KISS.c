@@ -283,6 +283,227 @@ static void test_KISS_roundtrip(void **state)
 	assert_memory_equal(fr + 1, ax, sizeof(ax));
 }
 
+// --- KISSFragmentBuild() ----------------------------------------------------
+
+// Fill buf with a recognizable byte pattern.
+static void fill_pattern(UCHAR *buf, int len)
+{
+	for (int i = 0; i < len; i++)
+		buf[i] = (UCHAR)(i & 0xFF);
+}
+
+static void test_KISSFragmentBuild_single(void **state)
+{
+	(void)state;
+	UCHAR ax[256], out[512];
+	fill_pattern(ax, sizeof(ax));
+
+	// A frame that fits in one fragment (50 <= chunk = 126).
+	int n = KISSFragmentBuild(ax, 50, 128, 0x2A, out, sizeof(out));
+	assert_int_equal(n, KISS_FRAG_HDR + 50);
+	assert_int_equal(out[0], 0x2A);  // msgid
+	assert_int_equal(out[1], 0x80 | 0);  // last flag, index 0
+	assert_memory_equal(out + KISS_FRAG_HDR, ax, 50);
+
+	// len exactly == chunk (126) is still a single fragment of framecap bytes.
+	n = KISSFragmentBuild(ax, 126, 128, 0x01, out, sizeof(out));
+	assert_int_equal(n, 128);
+	assert_int_equal(out[1], 0x80 | 0);
+	assert_memory_equal(out + KISS_FRAG_HDR, ax, 126);
+}
+
+static void test_KISSFragmentBuild_two(void **state)
+{
+	(void)state;
+	UCHAR ax[256], out[512];
+	fill_pattern(ax, sizeof(ax));
+
+	// 200 bytes, chunk = 126 -> 2 fragments (126 + 74).
+	int n = KISSFragmentBuild(ax, 200, 128, 0x07, out, sizeof(out));
+	assert_int_equal(n, 128 + (KISS_FRAG_HDR + 74));
+
+	// Fragment 0: full framecap, index 0, not last.
+	assert_int_equal(out[0], 0x07);
+	assert_int_equal(out[1], 0x00);
+	assert_memory_equal(out + KISS_FRAG_HDR, ax, 126);
+
+	// Fragment 1 begins at offset framecap (128): index 1, last.
+	assert_int_equal(out[128], 0x07);
+	assert_int_equal(out[129], 0x80 | 1);
+	assert_memory_equal(out + 128 + KISS_FRAG_HDR, ax + 126, 74);
+}
+
+static void test_KISSFragmentBuild_exact_multiple(void **state)
+{
+	(void)state;
+	UCHAR ax[512], out[512];
+	fill_pattern(ax, sizeof(ax));
+
+	// len = 3 * chunk -> 3 full fragments, the last one full size but flagged.
+	int len = 3 * 126;
+	int n = KISSFragmentBuild(ax, len, 128, 0x00, out, sizeof(out));
+	assert_int_equal(n, 3 * 128);
+
+	assert_int_equal(out[1], 0x00);  // frag 0: index 0, not last
+	assert_int_equal(out[128 + 1], 0x01);  // frag 1: index 1, not last
+	assert_int_equal(out[256 + 1], 0x80 | 2);  // frag 2: index 2, last
+}
+
+static void test_KISSFragmentBuild_errors(void **state)
+{
+	(void)state;
+	UCHAR ax[256], out[1024];
+	fill_pattern(ax, sizeof(ax));
+
+	// len <= 0
+	assert_int_equal(KISSFragmentBuild(ax, 0, 128, 0, out, sizeof(out)), -1);
+	// framecap <= header (no room for payload)
+	assert_int_equal(KISSFragmentBuild(ax, 10, KISS_FRAG_HDR, 0, out, sizeof(out)), -1);
+	// out too small
+	assert_int_equal(KISSFragmentBuild(ax, 50, 128, 0, out, 10), -1);
+
+	// More than KISS_FRAG_MAXFRAGS fragments: framecap = HDR + 1 -> chunk 1.
+	UCHAR big[KISS_FRAG_MAXFRAGS + 8];
+	fill_pattern(big, sizeof(big));
+	assert_int_equal(
+		KISSFragmentBuild(big, KISS_FRAG_MAXFRAGS + 1, KISS_FRAG_HDR + 1, 0,
+			out, sizeof(out)), -1);
+	// Exactly KISS_FRAG_MAXFRAGS fragments is allowed.
+	int n = KISSFragmentBuild(big, KISS_FRAG_MAXFRAGS, KISS_FRAG_HDR + 1, 0,
+		out, sizeof(out));
+	assert_int_equal(n, KISS_FRAG_MAXFRAGS * (KISS_FRAG_HDR + 1));
+}
+
+// --- KISSReassembleFrame() --------------------------------------------------
+
+// Carve a KISSFragmentBuild() output buffer into framecap-sized FEC frames (the
+// last frame is the remainder) and feed each through the reassembler.  Stores
+// the final return value in *finalret and returns the number of pieces fed.
+static int carve_and_feed(KISSReassembler *r, const UCHAR *buf, int buflen,
+	int framecap, UCHAR *out, int outsize, int *finalret)
+{
+	int npieces = 0, ret = 0;
+	for (int off = 0; off < buflen; off += framecap)
+	{
+		int plen = buflen - off;
+		if (plen > framecap)
+			plen = framecap;
+		ret = KISSReassembleFrame(r, buf + off, plen, out, outsize);
+		npieces++;
+	}
+	*finalret = ret;
+	return npieces;
+}
+
+static void test_KISSReassemble_roundtrip_single(void **state)
+{
+	(void)state;
+	UCHAR ax[256], frags[512], out[KISS_FRAME_MAX];
+	fill_pattern(ax, sizeof(ax));
+
+	int n = KISSFragmentBuild(ax, 50, 128, 0x11, frags, sizeof(frags));
+	assert_true(n > 0);
+
+	KISSReassembler r;
+	KISSReassemblerReset(&r);
+	int ret = 0;
+	int pieces = carve_and_feed(&r, frags, n, 128, out, sizeof(out), &ret);
+	assert_int_equal(pieces, 1);
+	assert_int_equal(ret, 50);
+	assert_memory_equal(out, ax, 50);
+}
+
+static void test_KISSReassemble_roundtrip_three(void **state)
+{
+	(void)state;
+	UCHAR ax[512], frags[1024], out[KISS_FRAME_MAX];
+	fill_pattern(ax, sizeof(ax));
+
+	// 300 bytes, chunk 126 -> 3 fragments.
+	int n = KISSFragmentBuild(ax, 300, 128, 0x55, frags, sizeof(frags));
+	assert_true(n > 0);
+
+	KISSReassembler r;
+	KISSReassemblerReset(&r);
+	int ret = 0;
+	int pieces = carve_and_feed(&r, frags, n, 128, out, sizeof(out), &ret);
+	assert_int_equal(pieces, 3);
+	assert_int_equal(ret, 300);
+	assert_memory_equal(out, ax, 300);
+}
+
+static void test_KISSReassemble_gap(void **state)
+{
+	(void)state;
+	UCHAR out[KISS_FRAME_MAX];
+	KISSReassembler r;
+	KISSReassemblerReset(&r);
+
+	UCHAR f0[] = {5, 0x00, 'a', 'b'};  // index 0, not last
+	assert_int_equal(KISSReassembleFrame(&r, f0, sizeof(f0), out, sizeof(out)), 0);
+	UCHAR f2[] = {5, 0x80 | 2, 'x', 'y'};  // index 2, last -> gap (expected 1)
+	assert_int_equal(KISSReassembleFrame(&r, f2, sizeof(f2), out, sizeof(out)), -1);
+}
+
+static void test_KISSReassemble_wrong_msgid(void **state)
+{
+	(void)state;
+	UCHAR out[KISS_FRAME_MAX];
+	KISSReassembler r;
+	KISSReassemblerReset(&r);
+
+	UCHAR f0[] = {5, 0x00, 'a'};  // index 0, msgid 5
+	assert_int_equal(KISSReassembleFrame(&r, f0, sizeof(f0), out, sizeof(out)), 0);
+	UCHAR f1[] = {6, 0x80 | 1, 'b'};  // index 1, last, but msgid 6
+	assert_int_equal(KISSReassembleFrame(&r, f1, sizeof(f1), out, sizeof(out)), -1);
+}
+
+static void test_KISSReassemble_start_midstream(void **state)
+{
+	(void)state;
+	UCHAR out[KISS_FRAME_MAX];
+	KISSReassembler r;
+	KISSReassemblerReset(&r);
+
+	// First fragment seen has a non-zero index: cannot start, ignored.
+	UCHAR f1[] = {5, 0x80 | 1, 'b'};
+	assert_int_equal(KISSReassembleFrame(&r, f1, sizeof(f1), out, sizeof(out)), -1);
+}
+
+static void test_KISSReassemble_restart(void **state)
+{
+	(void)state;
+	UCHAR out[KISS_FRAME_MAX];
+	KISSReassembler r;
+	KISSReassemblerReset(&r);
+
+	// A partial in progress...
+	UCHAR a[] = {5, 0x00, 'a', 'b'};  // index 0, not last
+	assert_int_equal(KISSReassembleFrame(&r, a, sizeof(a), out, sizeof(out)), 0);
+	// ...then a fresh index-0 fragment restarts cleanly and completes.
+	UCHAR b[] = {7, 0x80 | 0, 'z'};  // index 0, last, msgid 7
+	assert_int_equal(KISSReassembleFrame(&r, b, sizeof(b), out, sizeof(out)), 1);
+	assert_int_equal(out[0], 'z');
+}
+
+static void test_KISSReassemble_runt(void **state)
+{
+	(void)state;
+	UCHAR out[KISS_FRAME_MAX];
+	KISSReassembler r;
+	KISSReassemblerReset(&r);
+
+	UCHAR f0[] = {5, 0x00, 'a'};  // index 0, not last -> partial in progress
+	assert_int_equal(KISSReassembleFrame(&r, f0, sizeof(f0), out, sizeof(out)), 0);
+	UCHAR runt[] = {9};  // shorter than the header: ignored
+	assert_int_equal(KISSReassembleFrame(&r, runt, sizeof(runt), out, sizeof(out)), -1);
+	// The runt must not have disturbed the partial: the next fragment completes.
+	UCHAR f1[] = {5, 0x80 | 1, 'b'};  // index 1, last
+	assert_int_equal(KISSReassembleFrame(&r, f1, sizeof(f1), out, sizeof(out)), 2);
+	UCHAR exp[] = {'a', 'b'};
+	assert_memory_equal(out, exp, sizeof(exp));
+}
+
 int main(void)
 {
 	const struct CMUnitTest tests[] = {
@@ -297,6 +518,17 @@ int main(void)
 		cmocka_unit_test(test_KISSDecode_split),
 		cmocka_unit_test(test_KISSDecode_overflow),
 		cmocka_unit_test(test_KISS_roundtrip),
+		cmocka_unit_test(test_KISSFragmentBuild_single),
+		cmocka_unit_test(test_KISSFragmentBuild_two),
+		cmocka_unit_test(test_KISSFragmentBuild_exact_multiple),
+		cmocka_unit_test(test_KISSFragmentBuild_errors),
+		cmocka_unit_test(test_KISSReassemble_roundtrip_single),
+		cmocka_unit_test(test_KISSReassemble_roundtrip_three),
+		cmocka_unit_test(test_KISSReassemble_gap),
+		cmocka_unit_test(test_KISSReassemble_wrong_msgid),
+		cmocka_unit_test(test_KISSReassemble_start_midstream),
+		cmocka_unit_test(test_KISSReassemble_restart),
+		cmocka_unit_test(test_KISSReassemble_runt),
 	};
 
 	ardop_test_setup();

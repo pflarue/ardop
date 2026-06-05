@@ -6,7 +6,9 @@
 
 A new `--kiss` (or `-K`) command line option starts a TCP [KISS](https://www.ax25.net/kiss.aspx) server, allowing external AX.25 software such as APRS clients to use ardopcf as a simple FEC modem.  KISS data frames received from a connected client are decapsulated and the raw AX.25 frame they contain is transmitted using ARDOP FEC.  AX.25 frames decoded from received ARDOP FEC frames are KISS encapsulated and sent to all connected clients.
 
-The option takes a `[address:]port` argument.  If the address is omitted, the server listens on loopback (127.0.0.1) only.  Enabling KISS forces FEC protocol mode.  Each AX.25 frame is carried in a single ARDOP FEC frame, so the configured FEC mode (FECMODE) must hold at least 256 bytes per frame; otherwise the KISS server will not start.
+The option takes a `[address:]port` argument.  If the address is omitted, the server listens on loopback (127.0.0.1) only.  Enabling KISS forces FEC protocol mode.
+
+An AX.25 frame too large for a single ARDOP FEC frame is fragmented over several FEC frames sent back to back within one transmission, each carrying a small fragmentation header, and reassembled by the receiver.  This allows the more robust narrow-band FEC modes (such as `4PSK.500.100`, which carries 128 bytes per frame) to be used even when they cannot hold a full AX.25 frame in a single FEC frame.  Because FEC has no ARQ, a lost fragment loses the whole AX.25 frame, so robustness still benefits from a FEC mode large enough to need few fragments.
 
 ### 2024.10.31: [ardopcf](https://github.com/pflarue/ardop) v1.0.4.1.3 from v1.0.4.1.2
 

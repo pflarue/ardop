@@ -8,12 +8,21 @@
 // received ARDOP FEC frames are KISS encapsulated and sent to all connected
 // clients.
 //
-// Each KISS data frame is carried in a single ARDOP FEC frame ("stuff the
-// AX.25 frame in the ARDOP frame").  The configured FEC mode (FECMODE) must
-// therefore be large enough to hold the largest packet to be sent.  If a
-// packet does not fit in a single FEC frame, the FEC layer will split it over
-// multiple frames, but the receiving side has no way to recombine them, so
-// such packets would be delivered to KISS clients as separate fragments.
+// An AX.25 frame too large for a single ARDOP FEC frame is fragmented over
+// several FEC frames sent back to back within one transmission.  Each FEC frame
+// payload begins with a 2-byte fragmentation header ([msgid][ (last << 7) |
+// index ]) so the receiver can reassemble the original AX.25 frame.  Because the
+// channel is half duplex, the fragments of one AX.25 frame always arrive
+// contiguously (a colliding transmission destroys both), so a single receive
+// reassembler suffices: a new fragment with index 0 starts a fresh frame, an
+// out-of-sequence fragment discards the partial, and the last-fragment flag
+// completes it.  There is no ARQ, so a lost fragment loses the whole AX.25 frame.
+//
+// On transmit the AX.25 frames pending transmission are held in a queue and fed
+// to the FEC modulator one frame at a time, only while the modem is idle.  This
+// keeps each AX.25 frame's fragments aligned to FEC-frame boundaries; pipelining
+// a second frame into the FEC byte-stream queue while the first is still being
+// carved would misalign the fragmentation headers.
 
 #include <stdbool.h>
 
@@ -44,6 +53,9 @@
 #define MSG_NOSIGNAL 0
 #endif
 
+#include <stdlib.h>
+#include <string.h>
+
 #include "os_util.h"
 #include "ARDOPC.h"
 #include "ardopcommon.h"
@@ -69,6 +81,22 @@ bool StartFEC(UCHAR * bytData, int Len, char * strDataMode, int intRepeats, bool
 static SOCKET KISSListenSock = INVALID_SOCKET;
 static SOCKET KISSClients[KISS_MAX_CLIENTS];
 static KISSDecoder KISSDecoders[KISS_MAX_CLIENTS];
+
+// Receive-side reassembler for AX.25 frames fragmented over multiple FEC frames.
+static KISSReassembler KISSRxReasm;
+
+// Transmit-side FIFO of complete AX.25 frames awaiting transmission.  Frames are
+// fed to the FEC modulator one at a time by KISSPumpTx() while the modem is idle,
+// so each frame's fragments stay aligned to FEC-frame boundaries.
+#define KISS_TXQ_MAX 64
+typedef struct {
+	UCHAR *data;
+	int len;
+} KISSTxEntry;
+static KISSTxEntry KISSTxQ[KISS_TXQ_MAX];
+static int KISSTxQHead = 0;  // index of the oldest queued frame
+static int KISSTxQCount = 0;  // number of frames currently queued
+static UCHAR KISSTxMsgId = 0;  // fragmentation msgid, increments per AX.25 frame
 
 // Return the single-frame payload capacity (bytes) of the named FEC mode, or 0
 // if the mode is unknown.
@@ -164,6 +192,100 @@ int KISSDecoderByte(KISSDecoder *d, UCHAR b)
 	return 0;
 }
 
+// Build the concatenated fragment buffer for one AX.25 frame.  See ardopcommon.h
+// for the contract.  Every fragment except the last is exactly framecap bytes so
+// the FEC layer's fixed-size carving reproduces the fragments exactly.
+int KISSFragmentBuild(const UCHAR *axdata, int len, int framecap, UCHAR msgid,
+	UCHAR *out, int outsize)
+{
+	int chunk = framecap - KISS_FRAG_HDR;
+	if (chunk < 1 || len <= 0)
+		return -1;
+
+	int nfrags = (len + chunk - 1) / chunk;
+	if (nfrags > KISS_FRAG_MAXFRAGS)
+		return -1;
+
+	int o = 0;
+	for (int i = 0; i < nfrags; i++)
+	{
+		int off = i * chunk;
+		int clen = len - off;
+		if (clen > chunk)
+			clen = chunk;
+		bool last = (i == nfrags - 1);
+
+		if (o + KISS_FRAG_HDR + clen > outsize)
+			return -1;
+
+		out[o++] = msgid;
+		out[o++] = (last ? 0x80 : 0x00) | (UCHAR)(i & 0x7F);
+		memcpy(out + o, axdata + off, clen);
+		o += clen;
+	}
+	return o;
+}
+
+void KISSReassemblerReset(KISSReassembler *r)
+{
+	r->len = 0;
+	r->active = false;
+	r->expectedIndex = 0;
+	r->msgid = 0;
+}
+
+// Feed one received FEC-frame payload (with its fragmentation header) to the
+// reassembler.  See ardopcommon.h for the contract.
+int KISSReassembleFrame(KISSReassembler *r, const UCHAR *frame, int frameLen,
+	UCHAR *out, int outsize)
+{
+	if (frameLen < KISS_FRAG_HDR)
+		return -1;  // runt; leave any partial untouched
+
+	UCHAR msgid = frame[0];
+	bool last = (frame[1] & 0x80) != 0;
+	int index = frame[1] & 0x7F;
+	const UCHAR *payload = frame + KISS_FRAG_HDR;
+	int plen = frameLen - KISS_FRAG_HDR;
+
+	if (index == 0)
+	{
+		// Start (or restart) a reassembly, discarding any partial in progress.
+		r->active = true;
+		r->len = 0;
+		r->msgid = msgid;
+	}
+	else if (!r->active || msgid != r->msgid || index != r->expectedIndex)
+	{
+		// Out of sequence, or a fragment of a different frame: drop the partial.
+		r->active = false;
+		return -1;
+	}
+
+	if (r->len + plen > (int)sizeof(r->buf))
+	{
+		r->active = false;
+		return -1;  // would overflow the reassembly buffer; give up
+	}
+
+	memcpy(r->buf + r->len, payload, plen);
+	r->len += plen;
+	r->expectedIndex = index + 1;
+
+	if (!last)
+		return 0;  // more fragments expected
+
+	// Last fragment: the AX.25 frame is complete.
+	int total = r->len;
+	r->active = false;
+	if (total <= 0)
+		return 0;  // completed but empty; nothing to deliver
+	if (total > outsize)
+		return -1;  // caller's buffer too small
+	memcpy(out, r->buf, total);
+	return total;
+}
+
 // Parse the --kiss argument, which is "[addr:]port".  If addr is omitted, the
 // server listens on loopback only.  Returns true on success.
 bool KISSConfig(const char *arg)
@@ -206,22 +328,27 @@ bool KISSInit()
 		KISSClients[i] = INVALID_SOCKET;
 		KISSDecoderReset(&KISSDecoders[i]);
 	}
+	KISSReassemblerReset(&KISSRxReasm);
+	for (int i = 0; i < KISS_TXQ_MAX; i++)
+	{
+		free(KISSTxQ[i].data);
+		KISSTxQ[i].data = NULL;
+	}
+	KISSTxQHead = 0;
+	KISSTxQCount = 0;
 
 	if (KISSPort == 0)
 		return false;
 
-	// The KISS bridge maps one AX.25 frame to one ARDOP FEC frame.  If the
-	// configured FEC mode cannot carry at least 256 bytes in a single frame,
-	// AX.25 packets would be fragmented across multiple FEC frames, which the
-	// receiver cannot reassemble.  Treat this as a hard failure.
+	// AX.25 frames larger than one FEC frame are fragmented across several FEC
+	// frames and reassembled by the receiver, so any valid FEC mode works.  Only
+	// a mode with no usable per-frame payload (smaller than the fragmentation
+	// header) is a hard failure.
 	int cap = KISSModeCapacity(strFECMode);
-	if (cap < 256)
+	if (cap <= KISS_FRAG_HDR)
 	{
-		ZF_LOGE("KISS: FEC mode %s carries only %d bytes per frame, but at"
-			" least 256 are required for KISS operation.  KISS server not"
-			" started.  Set a larger FECMODE (e.g. 16QAM.500.100 = 256 bytes,"
-			" 4FSK.2000.600 = 600 bytes, or 16QAM.2000.100 = 1024 bytes).",
-			strFECMode, cap);
+		ZF_LOGE("KISS: FEC mode %s has no usable per-frame capacity (%d bytes)."
+			"  KISS server not started.  Set a valid FECMODE.", strFECMode, cap);
 		KISSPort = 0;
 		return false;
 	}
@@ -284,36 +411,87 @@ bool KISSInit()
 	ioctl(KISSListenSock, FIONBIO, &param);
 
 	ZF_LOGI("KISS: listening for TCP KISS connections on %s:%d (FEC mode %s,"
-		" %d bytes/frame)",
-		KISSAddr[0] ? KISSAddr : "127.0.0.1", KISSPort, strFECMode, cap);
+		" %d bytes/FEC frame; AX.25 frames larger than %d bytes are fragmented)",
+		KISSAddr[0] ? KISSAddr : "127.0.0.1", KISSPort, strFECMode, cap,
+		cap - KISS_FRAG_HDR);
 
 	return true;
 }
 
-// Transmit one decapsulated AX.25 frame using ARDOP FEC.
-static void KISSTransmit(UCHAR *axdata, int len)
+// Queue one decapsulated AX.25 frame for transmission.  A private copy is made;
+// the frame is fragmented and modulated later by KISSPumpTx() once the modem is
+// idle, so that we never pipeline a second frame into the FEC byte-stream queue
+// while the first is still being carved into FEC frames.
+static void KISSEnqueueTx(const UCHAR *axdata, int len)
 {
 	if (len <= 0)
 		return;
 
-	// Guard against a runtime FECMODE change to a frame too small to hold this
-	// packet in a single FEC frame.  Dropping it is preferable to transmitting
-	// a fragmented frame the receiver cannot reassemble.
-	int cap = KISSModeCapacity(strFECMode);
-	if (cap < len)
+	if (KISSTxQCount >= KISS_TXQ_MAX)
 	{
-		ZF_LOGE("KISS: dropping %d byte AX.25 frame; current FEC mode %s holds"
-			" only %d bytes per frame and the frame would be fragmented.",
-			len, strFECMode, cap);
+		ZF_LOGW("KISS: transmit queue full (%d frames); dropping %d byte AX.25"
+			" frame.", KISS_TXQ_MAX, len);
 		return;
 	}
 
-	ZF_LOGI("KISS: transmitting %d byte AX.25 frame via FEC (%s)", len, strFECMode);
+	UCHAR *copy = malloc(len);
+	if (copy == NULL)
+	{
+		ZF_LOGE("KISS: out of memory queueing %d byte AX.25 frame.", len);
+		return;
+	}
+	memcpy(copy, axdata, len);
 
-	// Send without an ARDOP IDFrame.  The source callsign is carried within the
-	// AX.25 frame, and an ARDOP IDFrame would be meaningless to AX.25 clients.
-	if (!StartFEC(axdata, len, strFECMode, FECRepeats, false))
-		ZF_LOGW("KISS: StartFEC() failed for received KISS frame.");
+	int slot = (KISSTxQHead + KISSTxQCount) % KISS_TXQ_MAX;
+	KISSTxQ[slot].data = copy;
+	KISSTxQ[slot].len = len;
+	KISSTxQCount++;
+}
+
+// If an AX.25 frame is queued and the modem is idle, fragment it across one or
+// more FEC frames and start transmitting.  Called regularly from KISSPoll().
+static void KISSPumpTx()
+{
+	if (KISSListenSock == INVALID_SOCKET || KISSTxQCount == 0)
+		return;
+
+	// Only start a transmission while the modem is idle (not already sending and
+	// not receiving a frame).  Feeding the FEC queue while a previous frame is
+	// still being carved would misalign the fragmentation headers.
+	if (ProtocolState != DISC)
+		return;
+
+	KISSTxEntry *e = &KISSTxQ[KISSTxQHead];
+
+	int cap = KISSModeCapacity(strFECMode);
+	// Worst-case fragmented size: the frame plus a header per fragment.
+	UCHAR frags[KISS_FRAME_MAX + KISS_FRAG_MAXFRAGS * KISS_FRAG_HDR];
+	int flen = KISSFragmentBuild(e->data, e->len, cap, KISSTxMsgId,
+		frags, sizeof(frags));
+	if (flen < 0)
+	{
+		ZF_LOGE("KISS: cannot fragment %d byte AX.25 frame for FEC mode %s (%d"
+			" bytes/frame); dropping.", e->len, strFECMode, cap);
+	}
+	else
+	{
+		int chunk = cap - KISS_FRAG_HDR;
+		int nfrags = (e->len + chunk - 1) / chunk;
+		ZF_LOGI("KISS: transmitting %d byte AX.25 frame as %d FEC fragment(s)"
+			" (%s, msgid %u)", e->len, nfrags, strFECMode, KISSTxMsgId);
+
+		// Send without an ARDOP IDFrame.  The source callsign is carried within
+		// the AX.25 frame, and an ARDOP IDFrame would be meaningless to clients.
+		if (!StartFEC(frags, flen, strFECMode, FECRepeats, false))
+			ZF_LOGW("KISS: StartFEC() failed for queued KISS frame.");
+		KISSTxMsgId++;
+	}
+
+	// Dequeue whether the frame was sent or dropped.
+	free(e->data);
+	e->data = NULL;
+	KISSTxQHead = (KISSTxQHead + 1) % KISS_TXQ_MAX;
+	KISSTxQCount--;
 }
 
 // Process one complete (already de-escaped) KISS frame.
@@ -326,8 +504,9 @@ static void KISSProcessFrame(UCHAR *frame, int len)
 
 	if (cmd == 0x00)
 	{
-		// Data frame.  The remainder is the raw AX.25 frame.
-		KISSTransmit(frame + 1, len - 1);
+		// Data frame.  The remainder is the raw AX.25 frame; queue it for
+		// transmission by KISSPumpTx() when the modem is next idle.
+		KISSEnqueueTx(frame + 1, len - 1);
 	}
 	else
 	{
@@ -367,6 +546,9 @@ void KISSPoll()
 
 	if (KISSListenSock == INVALID_SOCKET)
 		return;
+
+	// Start transmitting a queued AX.25 frame if the modem is idle.
+	KISSPumpTx();
 
 	// Accept any pending connections.
 	while (true)
@@ -433,13 +615,10 @@ void KISSPoll()
 	}
 }
 
-// KISS encapsulate an AX.25 frame and send it to all connected clients.
-// Called from the FEC receive path with a successfully decoded frame.
-void KISSSendToClients(UCHAR *axdata, int len)
+// KISS encapsulate a fully reassembled AX.25 frame and send it to all connected
+// clients.
+static void KISSDeliverFrame(const UCHAR *axdata, int len)
 {
-	if (KISSListenSock == INVALID_SOCKET || len <= 0)
-		return;
-
 	// Build the KISS frame.  Worst case each payload byte expands to two bytes,
 	// plus the leading FEND, type byte, and trailing FEND.
 	UCHAR out[2 * KISS_FRAME_MAX + 3];
@@ -469,4 +648,20 @@ void KISSSendToClients(UCHAR *axdata, int len)
 		}
 	}
 	ZF_LOGI("KISS: delivered %d byte AX.25 frame to clients.", len);
+}
+
+// Called from the FEC receive path with a successfully decoded frame.  The frame
+// carries a fragmentation header; feed it to the reassembler and deliver to KISS
+// clients only once a complete AX.25 frame has been reassembled.
+void KISSSendToClients(UCHAR *axdata, int len)
+{
+	if (KISSListenSock == INVALID_SOCKET || len <= 0)
+		return;
+
+	UCHAR frame[KISS_FRAME_MAX];
+	int flen = KISSReassembleFrame(&KISSRxReasm, axdata, len, frame, sizeof(frame));
+	if (flen <= 0)
+		return;  // fragment consumed, or out-of-sequence; nothing complete yet
+
+	KISSDeliverFrame(frame, flen);
 }

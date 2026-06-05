@@ -215,6 +215,46 @@ int KISSEncode(const UCHAR *axdata, int len, UCHAR *out, int outsize);
 void KISSDecoderReset(KISSDecoder *d);
 int KISSDecoderByte(KISSDecoder *d, UCHAR b);
 
+// AX.25-frame-over-FEC fragmentation (see KISS.c).  Each FEC frame payload
+// begins with a 2-byte fragmentation header so an AX.25 frame larger than one
+// FEC frame can be split over several FEC frames within a single transmission
+// and reassembled by the receiver.  Header is [msgid][ (last << 7) | index ].
+#define KISS_FRAG_HDR 2  // fragmentation header length in bytes
+#define KISS_FRAG_MAXFRAGS 128  // index is 7 bits, so 0..127
+
+// KISSFragmentBuild() builds the concatenated fragment buffer for one AX.25
+// frame.  axdata/len is the raw AX.25 frame, framecap is the single FEC-frame
+// capacity (as returned by KISSModeCapacity()), and msgid identifies this AX.25
+// frame.  Every fragment except the last is exactly framecap bytes so that the
+// FEC layer's fixed-size carving reproduces the fragments exactly.  Returns the
+// total number of bytes written to out, or -1 if framecap is too small, len is
+// not positive, the frame would need more than KISS_FRAG_MAXFRAGS fragments, or
+// out is too small.
+int KISSFragmentBuild(const UCHAR *axdata, int len, int framecap, UCHAR msgid,
+	UCHAR *out, int outsize);
+
+// Incremental reassembler for AX.25 frames fragmented over FEC frames.  A single
+// instance reassembles the fragment stream; because the channel is half duplex
+// the fragments of one frame always arrive contiguously, so one buffer suffices.
+typedef struct {
+	UCHAR buf[KISS_FRAME_MAX];  // AX.25 frame being reassembled
+	int len;  // bytes accumulated so far
+	bool active;  // a reassembly is in progress
+	int expectedIndex;  // next fragment index expected
+	UCHAR msgid;  // msgid of the in-progress AX.25 frame
+} KISSReassembler;
+
+void KISSReassemblerReset(KISSReassembler *r);
+
+// KISSReassembleFrame() feeds one received FEC-frame payload (including its
+// 2-byte fragmentation header) through the reassembler.  When the last fragment
+// of an AX.25 frame arrives, the reassembled frame is copied into out and its
+// length (> 0) returned.  Returns 0 if the fragment was consumed but the frame
+// is not complete (or completed empty), or -1 if the fragment was ignored
+// (runt, out of sequence, or wrong msgid), discarding any partial in progress.
+int KISSReassembleFrame(KISSReassembler *r, const UCHAR *frame, int frameLen,
+	UCHAR *out, int outsize);
+
 void RemoveDataFromQueue(int Len);
 
 void GetSemaphore();
