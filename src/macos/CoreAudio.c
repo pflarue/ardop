@@ -470,18 +470,6 @@ static void fill_asbd(AudioStreamBasicDescription *asbd, int ch) {
 	asbd->mBytesPerPacket = asbd->mBytesPerFrame * asbd->mFramesPerPacket;
 }
 
-// Find the device map index for an entry in AudioDevices by matching the name.
-// Returns -1 if not found.
-static int device_map_index_for_name(const char *name) {
-	for (int i = 0; i < deviceMapLen && AudioDevices[i] != NULL; ++i) {
-		if (AudioDevices[i]->name != NULL
-			&& strcmp(AudioDevices[i]->name, name) == 0
-		)
-			return i;
-	}
-	return -1;
-}
-
 // Open and configure an AudioQueue for the device with the given AudioQueue
 // queue handle slot.  For capture, sets up an input queue; for playback, an
 // output queue.  Binds the queue to the device identified by uid (unless uid is
@@ -663,10 +651,13 @@ bool OpenSoundPlayback(char *devstr, int ch) {
 		devstr, AudioDevices[aindex]->name);
 
 	// Translate the matched AudioDevices index into a CoreAudio device UID via
-	// the parallel device map.  Match by name since FindAudioDevice() may have
-	// matched on the alias/description.
-	int mapidx = device_map_index_for_name(AudioDevices[aindex]->name);
-	CFStringRef uid = (mapidx >= 0) ? deviceUIDs[mapidx] : NULL;
+	// the parallel device map, which is indexed identically to AudioDevices[].
+	// aindex therefore selects the UID for the exact entry FindAudioDevice()
+	// matched, regardless of whether it matched on name, alias, or description.
+	// This also keeps the scope correct when a USB CODEC enumerates as two
+	// AudioDeviceIDs sharing a name (one input, one output): FindAudioDevice()
+	// already filtered by scope, so aindex points at the right half.
+	CFStringRef uid = (aindex < deviceMapLen) ? deviceUIDs[aindex] : NULL;
 
 	ring_clear(&playbackRing);
 	if (open_audio(&playQueue, playBuffers, uid, false, ch) != noErr) {
@@ -793,10 +784,13 @@ bool OpenSoundCapture(char *devstr, int ch) {
 		devstr, AudioDevices[aindex]->name);
 
 	// Translate the matched AudioDevices index into a CoreAudio device UID via
-	// the parallel device map.  Match by name since FindAudioDevice() may have
-	// matched on the alias/description.
-	int mapidx = device_map_index_for_name(AudioDevices[aindex]->name);
-	CFStringRef uid = (mapidx >= 0) ? deviceUIDs[mapidx] : NULL;
+	// the parallel device map, which is indexed identically to AudioDevices[].
+	// aindex therefore selects the UID for the exact entry FindAudioDevice()
+	// matched, regardless of whether it matched on name, alias, or description.
+	// This also keeps the scope correct when a USB CODEC enumerates as two
+	// AudioDeviceIDs sharing a name (one input, one output): FindAudioDevice()
+	// already filtered by scope, so aindex points at the right half.
+	CFStringRef uid = (aindex < deviceMapLen) ? deviceUIDs[aindex] : NULL;
 
 	ring_clear(&captureRing);
 	if (open_audio(&recQueue, recBuffers, uid, true, ch) != noErr) {
