@@ -140,7 +140,10 @@ TXT2C ?=
 WIN32 ?= $(filter $(OS),Windows_NT)
 
 # Used to auto-detect macOS (Darwin) for native builds.
+UNAME_S = "NONPOSIX"
+ifeq ($(WIN32),)
 UNAME_S := $(shell uname -s)
+endif
 
 # Determine build directory based on target platform
 ifneq ($(WIN32),)
