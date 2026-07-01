@@ -174,7 +174,7 @@ bool Capturing = false;
 // was decoded.  Initializing it to 0 should normally ensure that
 // DecodeCompleteTime is less than future values of Now, avoiding an unexpected
 // and excessive delay if attempting to transmit before ever decoding any
-// recevied frames.
+// received frames.
 // TODO: Now, as defined in windows/os_util.c (for windows) is the time since
 // windows was started, which resets every 2^32 ms, which is about 50 days.
 // While this is unlikely to occur, something should be implemented to keep
@@ -1579,7 +1579,7 @@ bool SendID(const StationId * id, char * reason) {
 	unsigned char bytIDSent[80];
 	int Len;
 
-	// Scheduler needs to ensure this isnt called if already playing
+	// Scheduler needs to ensure this isn't called if already playing
 	if (SoundIsPlaying) {
 		// LastIDFrameTime is not reset.  So, this doesn't cancel sending the
 		// IDFrame, it only delays it.
@@ -1922,7 +1922,7 @@ void CheckTimers() {
 		SendID(&ARQStationFinalId, "ARQ FinalID");
 	}
 
-	// Send Conect Request (from ARQCALL command)
+	// Send Connect Request (from ARQCALL command)
 
 	if (NeedConReq) {
 		NeedConReq = 0;
