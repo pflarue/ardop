@@ -40,6 +40,17 @@
  */
 #define ZF_LOG_BUF_SZ 4000
 
+/* Our buffer is deliberately larger than PIPE_BUF on Apple platforms (macOS and
+ * iOS define PIPE_BUF as 512, while Linux uses 4096). This means a single log
+ * line may not be written atomically to a pipe there, which is an acceptable
+ * tradeoff for being able to log long data frames. Disable zf_log's static
+ * assert that enforces ZF_LOG_BUF_SZ <= PIPE_BUF on those platforms; the check
+ * remains active on Linux and others.
+ */
+#if defined(__APPLE__)
+#define ZF_LOG_NO_PIPE_BUF_ASSERT 1
+#endif
+
 /* UTC log timestamps */
 #define ZF_LOG_USE_UTC_TIME 1
 

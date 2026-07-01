@@ -12,6 +12,8 @@ const char ProductVersion[] = "1.0.4.1.3_develop";
 const char OSName[] = "windows";
 #elif __ANDROID__
 const char OSName[] = "android";
+#elif __APPLE__
+const char OSName[] = "macos";
 #else
 const char OSName[] = "linux";
 #endif

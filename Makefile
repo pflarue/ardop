@@ -73,15 +73,26 @@ OBJS = \
 	$(BUILDDIR)/src/common/ptt.o \
 	$(BUILDDIR)/src/common/eutf8.o \
 
+# Object files shared by the Unix-like platforms (Linux and macOS)
+OBJS_UNIX = \
+	$(BUILDDIR)/src/unix/os_util.o \
+
 # Linux-only object files
 OBJS_LIN = \
 	$(BUILDDIR)/src/linux/ALSA.o \
 	$(BUILDDIR)/src/linux/os_util.o \
+	$(OBJS_UNIX) \
 
 # Windows-only object files
 OBJS_WIN = \
 	$(BUILDDIR)/src/windows/Waveform.o \
 	$(BUILDDIR)/src/windows/os_util.o \
+
+# macOS-only object files
+OBJS_MAC = \
+	$(BUILDDIR)/src/macos/CoreAudio.o \
+	$(BUILDDIR)/src/macos/os_util.o \
+	$(OBJS_UNIX) \
 
 # user-facing executables, like ardopcf
 OBJS_EXE = \
@@ -113,7 +124,8 @@ endef
 CPPFLAGS += -Isrc -Ilib
 CFLAGS = -g -MMD
 LDLIBS = -lm -lpthread
-LDFLAGS = -Xlinker -Map=$(BUILDDIR)/output.map
+# LDFLAGS (notably the linker-map flag) and CC are platform-specific and are
+# set in the platform-selection block below.
 CC = gcc
 CC_NATIVE ?= $(CC)
 
@@ -127,15 +139,30 @@ TXT2C ?=
 # Leave empty for OS auto-detection
 WIN32 ?= $(filter $(OS),Windows_NT)
 
+# Used to auto-detect macOS (Darwin) for native builds.
+UNAME_S := $(shell uname -s)
+
 # Determine build directory based on target platform
 ifneq ($(WIN32),)
 PLATFORM := windows
 OBJS += $(OBJS_WIN)
 LDLIBS += -lwsock32 -lwinmm -lsetupapi -lws2_32 -lhid
+LDFLAGS = -Xlinker -Map=$(BUILDDIR)/output.map
+else ifeq ($(UNAME_S),Darwin)
+PLATFORM := macos
+OBJS += $(OBJS_MAC)
+# CoreAudio (audio I/O and device enumeration) and its supporting frameworks.
+LDLIBS += -framework CoreAudio -framework AudioToolbox -framework CoreFoundation
+# macOS ld64 spells the link-map option '-map <file>', unlike GNU ld's
+# '-Map=<file>'.
+LDFLAGS = -Xlinker -map -Xlinker $(BUILDDIR)/output.map
+# Default to the system compiler (clang) on macOS unless overridden.
+CC = cc
 else
 PLATFORM := linux
 OBJS += $(OBJS_LIN)
 LDLIBS += -lrt -lasound
+LDFLAGS = -Xlinker -Map=$(BUILDDIR)/output.map
 endif
 
 # Build directory structure
