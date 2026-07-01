@@ -420,7 +420,7 @@ char HelpScreen[] =
 	"-p device or --ptt device            Device to use for PTT control using RTS\n"
 	// RTS:device is also permitted, but is equivalent to just device
 	"                                     or DTR:device to use DTR for PTT instead of RTS,\n"
-#ifdef __ARM_ARCH
+#if defined(__ARM_ARCH) && defined(__linux__)
 	"                                     or GPIO:pin to use a hardware GPIO pin for PTT\n"
 	"                                     (Raspberry Pi only, use GPIO:-pin to invert PTT state)\n"
 #endif
@@ -429,9 +429,11 @@ char HelpScreen[] =
 	"                                     or CM108:VID:PID of CM108-like Device to use for PTT.\n"
 	"                                     Using CM108:? displays a list of VID:PID values for attached\n"
 	"                                     devices known to be CM108 compatible for PTT control.\n"
-#else
+#elif defined(__linux__)
 	// For Linux, CM108 devices like /dev/hidraw0 are used.
 	"                                     or CM108:device of CM108-like device to use for PTT.\n"
+#elif defined(__APPLE__)
+	"                                     PTT with CM108-like devices not currently supported on MacOS.\n"
 #endif
 	"-k string or --keystring string      String (hex or ASCII) to send to the radio to key PTT\n"
 	"-u string or --unkeystring string    String (hex or ASCII) to send to the radio to unkey PTT\n"
