@@ -166,6 +166,16 @@ LDLIBS += -framework CoreAudio -framework AudioToolbox -framework CoreFoundation
 LDFLAGS = -Xlinker -map -Xlinker $(BUILDDIR)/output.map
 # Default to the system compiler (clang) on macOS unless overridden.
 CC = cc
+# Homebrew is not on the compiler/linker default search paths, so add its
+# include and library directories.  This is where cmocka (required by
+# `make test`) is found.  HOMEBREW_PREFIX is auto-detected via `brew` and
+# works for both Apple Silicon (/opt/homebrew) and Intel (/usr/local)
+# installs; it may be overridden on the command line if `brew` is not in PATH.
+HOMEBREW_PREFIX ?= $(shell brew --prefix 2>/dev/null)
+ifneq ($(HOMEBREW_PREFIX),)
+CPPFLAGS += -I$(HOMEBREW_PREFIX)/include
+LDFLAGS += -L$(HOMEBREW_PREFIX)/lib
+endif
 else
 PLATFORM := linux
 OBJS += $(OBJS_LIN)
