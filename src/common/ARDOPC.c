@@ -1606,7 +1606,7 @@ bool SendID(const StationId * id, char * reason) {
 		LastIDFrameTime = 0;
 		return false;
 	}
-	Len = snprintf(bytIDSent, sizeof(bytIDSent), " %s:[%s] ", id_to_send->str, GridSquare.grid);
+	Len = snprintf((char *) bytIDSent, sizeof(bytIDSent), " %s:[%s] ", id_to_send->str, GridSquare.grid);
 	ZF_LOGD("SendID %s %s", bytIDSent, reason);
 
 	if ((EncLen = Encode4FSKIDFrame(id_to_send, &GridSquare, bytEncodedBytes)) <= 0) {
@@ -1745,7 +1745,7 @@ unsigned int GenCRC16(unsigned char * Data, unsigned short length)
 
 // Function to compute a 16 bit CRC value and append it to the Data... With LS byte XORed by bytFrameType
 
-void GenCRC16FrameType(char * Data, int Length, UCHAR bytFrameType)
+void GenCRC16FrameType(unsigned char * Data, int Length, UCHAR bytFrameType)
 {
 	unsigned int CRC = GenCRC16(Data, Length);
 

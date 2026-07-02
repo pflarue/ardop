@@ -143,7 +143,7 @@ void SetFilter(void * Filter());
 
 void CWID(char * strID, short * intSamples, bool blnPlay);
 UCHAR ComputeTypeParity(UCHAR bytFrameType);
-void GenCRC16FrameType(char * Data, int Length, UCHAR bytFrameType);
+void GenCRC16FrameType(unsigned char * Data, int Length, UCHAR bytFrameType);
 bool CheckCRC16FrameType(unsigned char * Data, int Length, UCHAR bytFrameType);
 char * strlop(char * buf, char delim);
 void QueueCommandToHost(char * Cmd);
@@ -151,7 +151,7 @@ void TCPQueueCommandToHost(char * Cmd);
 void SendReplyToHost(char * strText);
 void TCPSendReplyToHost(char * strText);
 void LogStats();
-int GetNextFrameData(int * intUpDn, UCHAR * bytFrameTypeToSend, UCHAR * strMod, bool blnInitialize);
+int GetNextFrameData(int * intUpDn, UCHAR * bytFrameTypeToSend, char * strMod, bool blnInitialize);
 void SendData();
 int ComputeInterFrameInterval(int intRequestedIntervalMS);
 int Encode4FSKControl(UCHAR bytFrameType, UCHAR bytSessionID, UCHAR * bytreturn);

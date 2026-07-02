@@ -127,7 +127,7 @@ void TCPSendCommandToHost(char * strText)
 	int len;
 	int ret;
 
-	len = sprintf(bytToSend,"%s\r", strText);
+	len = sprintf((char *) bytToSend,"%s\r", strText);
 
 	if (CONNECTED)
 	{
@@ -153,7 +153,7 @@ void TCPSendCommandToHostQuiet(char * strText)
 	int len;
 	int ret;
 
-	len = sprintf(bytToSend,"%s\r", strText);
+	len = sprintf((char *) bytToSend,"%s\r", strText);
 
 	if (CONNECTED)
 	{
@@ -273,13 +273,13 @@ VOID ARDOPProcessCommand(UCHAR * Buffer, int MsgLen)
 {
 	Buffer[MsgLen - 1] = 0;  // Remove CR
 
-	if (_memicmp(Buffer, "RDY", 3) == 0)
+	if (_memicmp(Buffer, (unsigned char *) "RDY", 3) == 0)
 	{
 		// Command ACK. Remove from buffer and send next if a ??????
 
 		return;
 	}
-	ProcessCommandFromHost(Buffer);
+	ProcessCommandFromHost((char *) Buffer);
 }
 
 bool InReceiveProcess = false;  // Flag to stop reentry
@@ -336,7 +336,7 @@ loop:
 		return;
 
 	// since we found the carriage return, we look at the next byte
-	ptr2 = &ARDOPBuffer[InputLen];
+	ptr2 = (char *) &ARDOPBuffer[InputLen];
 
 	// I am not sure why we are comparing the distance to the next byte in the buffer,
 	// since it should always evalute to 1, because ptr is the location of the carriage return,
@@ -373,7 +373,7 @@ loop:
 		InputLen -= MsgLen;
 
 		InReceiveProcess = true;
-		ARDOPProcessCommand(Buffer, MsgLen);
+		ARDOPProcessCommand((unsigned char *) Buffer, MsgLen);
 		InReceiveProcess = false;
 
 		if (InputLen < 0)
@@ -467,7 +467,7 @@ loop:
 		memmove(ARDOPDataBuffer, &ARDOPDataBuffer[MsgLen],  DataInputLen);
 
 	InReceiveProcess = true;
-	AddDataToDataToSend(Buffer, DataLen);
+	AddDataToDataToSend((unsigned char *) Buffer, DataLen);
 	InReceiveProcess = false;
 
 	// See if anything else in buffer
@@ -596,7 +596,7 @@ void TCPHostPoll() {
 	fd_set errorfs;
 	struct timeval timeout;
 	int ret;
-	int addrlen = sizeof(struct sockaddr_in);
+	unsigned int addrlen = sizeof(struct sockaddr_in);
 	struct sockaddr_in sin;
 	u_long param=1;
 
@@ -816,10 +816,10 @@ Lost:
 		// - avaliable at https://www.cantab.net/users/john.wiseman/Downloads/Beta/
 		// Source code also looks avaliable there. Would be cool to get it better documented.
 
-		int Len, addrLen = addrlen = sizeof(struct sockaddr_in);
+		int Len;
 		char GUIMsg[256];
 
-		Len = recvfrom(GUISock, GUIMsg, 256, 0, (struct sockaddr *)&GUIHost, &addrLen);
+		Len = recvfrom(GUISock, GUIMsg, 256, 0, (struct sockaddr *)&GUIHost, &addrlen);
 
 		if (Len > 0)
 		{

@@ -309,7 +309,7 @@ void ProcessCommandFromHost(char * strCMD)
 	char cmdReply[4096];
 
 	if (WG_DevMode)
-		wg_send_hostmsg(0, 'F', strCMD);
+		wg_send_hostmsg(0, 'F', (unsigned char *) strCMD);
 
 	strFault[0] = 0;
 
@@ -397,6 +397,9 @@ void ProcessCommandFromHost(char * strCMD)
 				break;
 			case RXO:
 				snprintf(strFault, sizeof(strFault), "Not from mode RXO");
+				break;
+			case Undef:
+				snprintf(strFault, sizeof(strFault), "PROTOCOLMODE not set");
 				break;
 		}
 
@@ -1578,7 +1581,7 @@ void ProcessCommandFromHost(char * strCMD)
 			goto cmddone;
 		}
 
-		SendtoGUI('F', ptrParams, strlen(ptrParams));
+		SendtoGUI('F', (unsigned char *) ptrParams, strlen(ptrParams));
 		goto cmddone;
 	}
 
@@ -2209,7 +2212,7 @@ void SendCommandToHost(char * strText)
 {
 	TCPSendCommandToHost(strText);
 	if (WG_DevMode)
-		wg_send_hostmsg(0, 'C', strText);
+		wg_send_hostmsg(0, 'C', (unsigned char *) strText);
 }
 
 
@@ -2217,14 +2220,14 @@ void SendCommandToHostQuiet(char * strText)  // Higher Debug Level for PTT
 {
 	TCPSendCommandToHostQuiet(strText);
 	if (WG_DevMode)
-		wg_send_hostmsg(0, 'T', strText);
+		wg_send_hostmsg(0, 'T', (unsigned char *) strText);
 }
 
 void QueueCommandToHost(char * strText)
 {
 	TCPQueueCommandToHost(strText);
 	if (WG_DevMode)
-		wg_send_hostmsg(0, 'Q', strText);
+		wg_send_hostmsg(0, 'Q', (unsigned char *) strText);
 }
 
 void SendReplyToHost(char * strText)

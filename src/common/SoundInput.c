@@ -2095,7 +2095,7 @@ bool Acquire2ToneLeaderSymbolFraming()
 
 		GoertzelRealImag(intFilteredMixedSamples, intLocalPtr + i, 120, 30, &dblReal, &dblImag);   // Carrier at 1500 Hz nominal Positioning
 		dblCarPh = atan2f(dblImag, dblReal);
-		dblAbsPhErr = fabsf(dblCarPh - (ceil(dblCarPh / M_PI) * M_PI));
+		dblAbsPhErr = (float) fabs(dblCarPh - (ceil(dblCarPh / M_PI) * M_PI));
 		if (dblAbsPhErr < dblMinAbsPhErr)
 		{
 			dblMinAbsPhErr = dblAbsPhErr;
@@ -2609,7 +2609,7 @@ int Acquire4FSKFrameType()
 		QueueCommandToHost("PENDING");  // early pending notice to stop scanners
 
 	sprintf(Offset, "Offset %5.1f", dblOffsetHz);
-	SendtoGUI('O', Offset, strlen(Offset));
+	SendtoGUI('O', (unsigned char *) Offset, strlen(Offset));
 
 	if (NewType >= 0 &&  IsShortControlFrame(NewType))  // update the constellation if a short frame (no data to follow)
 		Update4FSKConstellation(&intToneMags[0], &intLastRcvdFrameQuality);
@@ -3116,7 +3116,7 @@ bool Decode4FSKConReq(StationId* caller, StationId* target)
 		intBW = 2000;
 
 	if (FrameOK) {
-		snprintf(bytData, sizeof(bytData), "%s %s", caller->str, target->str);
+		snprintf((char *) bytData, sizeof(bytData), "%s %s", caller->str, target->str);
 	}
 	else {
 		bytData[0] = '\0';
@@ -3231,8 +3231,8 @@ bool Decode4FSKPing(StationId* caller, StationId* target)
 		return false;
 	}
 
-	snprintf(bytData, sizeof(bytData), "%s %s", caller->str, target->str);
-	DrawRXFrame(1, bytData);
+	snprintf((char *) bytData, sizeof(bytData), "%s %s", caller->str, target->str);
+	DrawRXFrame(1, (char *) bytData);
 	char fr_info[32] = "";
 	snprintf(fr_info, sizeof(fr_info), "Ping %s>%s", caller->str, target->str);
 	wg_send_rxframet(0, 1, fr_info);
@@ -3655,11 +3655,11 @@ bool DecodeFrame(int xxx, uint8_t bytData[MAX_DATA_LENGTH])
 
 			blnDecodeOK = Decode4FSKID(IDFRAME, &LastDecodedStationCaller, &gridSQ);
 
-			frameLen = snprintf(bytData, MAX_DATA_LENGTH, "ID:%s [%s]:" , LastDecodedStationCaller.str, gridSQ.grid);
+			frameLen = snprintf((char *) bytData, MAX_DATA_LENGTH, "ID:%s [%s]:" , LastDecodedStationCaller.str, gridSQ.grid);
 
 			if (blnDecodeOK) {
 				ZF_LOGI("[DecodeFrame] IDFrame: %s [%s]", LastDecodedStationCaller.str, gridSQ.grid);
-				DrawRXFrame(1, bytData);
+				DrawRXFrame(1, (char *) bytData);
 				wg_send_rxframet(0, 1, (char *)bytData);
 			}
 
@@ -4216,7 +4216,7 @@ int UpdatePhaseConstellation(short * intPhases, short * intMag, char * strMod, b
 		else
 			dblRadErrorInner += fabsf(dblAvgRadInner - intMag[i]);
 
-		dblPhaseError = fabsf(((0.001 * intPhases[i]) - intP * dbPhaseStep));  // always positive and < .5 *  dblPhaseStep
+		dblPhaseError = (float) fabs(((0.001 * intPhases[i]) - intP * dbPhaseStep));  // always positive and < .5 *  dblPhaseStep
 		dblPhaseErrorSum += dblPhaseError;
 
 #ifdef PLOTCONSTELLATION
@@ -4288,14 +4288,14 @@ VOID Track1Car4FSK(short * intSamples, int * intPtr, int intSampPerSymbol, float
 
 	if (dblMagEarly > dblMag && dblMagEarly > dblMagLate)
 	{
-		*intPtr --;
+		(*intPtr)--;
 		Corrections--;
 		if (AccumulateStats)
 			intAccumFSKTracking--;
 	}
 	else if (dblMagLate > dblMag && dblMagLate > dblMagEarly)
 	{
-		*intPtr ++;
+		(*intPtr)++;
 		Corrections++;
 		if (AccumulateStats)
 			intAccumFSKTracking++;

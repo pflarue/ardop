@@ -279,7 +279,7 @@ int CreateWav(const char *tag, short *ptr, int num) {
 	return 0;
 }
 
-char Leds[8]= {0};
+unsigned char Leds[8]= {0};
 unsigned int PKTLEDTimer = 0;
 
 void SetLED(int LED, int State) {
@@ -290,23 +290,22 @@ void SetLED(int LED, int State) {
 }
 
 void DrawTXMode(const char * Mode) {
-	unsigned char Msg[64];
+	char Msg[64];
 	strcpy(Msg, Mode);
-	SendtoGUI('T', Msg, strlen(Msg) + 1);  // TX Frame
+	SendtoGUI('T', (unsigned char *) Msg, strlen(Msg) + 1);  // TX Frame
 }
 
 void DrawTXFrame(const char * Frame) {
-	unsigned char Msg[64];
+	char Msg[64];
 	strcpy(Msg, Frame);
-	SendtoGUI('T', Msg, strlen(Msg) + 1);  // TX Frame
+	SendtoGUI('T', (unsigned char *) Msg, strlen(Msg) + 1);  // TX Frame
 }
 
 void DrawRXFrame(int State, const char * Frame) {
-	unsigned char Msg[64];
-
+	char Msg[64];
 	Msg[0] = State;  // Pending/Good/Bad
 	strcpy(&Msg[1], Frame);
-	SendtoGUI('R', Msg, strlen(Frame) + 1);  // RX Frame
+	SendtoGUI('R', (unsigned char *) Msg, strlen(Frame) + 1);  // RX Frame
 }
 // mySetPixel() uses 3 bytes from Pixels per call.  So it must be 3 times the
 // size of the larger of inPhases[0] or intToneMags/4. (intToneMags/4 is larger)
@@ -352,15 +351,16 @@ void updateDisplay() {
 //	 SendtoGUI('C', Pixels, pixelPointer - Pixels);
 }
 void DrawAxes(int Qual, char * Mode) {
-	UCHAR Msg[80];
+	char Msg[80];
 	SendtoGUI('C', Pixels, pixelPointer - Pixels);
 	wg_send_pixels(0, Pixels, pixelPointer - Pixels);
 	LogConstellation();
 	pixelPointer = Pixels;
 
 	sprintf(Msg, "%s Quality: %d", Mode, Qual);
-	SendtoGUI('Q', Msg, strlen(Msg) + 1);
+	SendtoGUI('Q', (unsigned char *) Msg, strlen(Msg) + 1);
 }
+
 void DrawDecode(char * Decode) {
 }
 
@@ -978,7 +978,7 @@ void displayState(const char * State)
 {
 	char Msg[80];
 	strcpy(Msg, State);
-	SendtoGUI('S', Msg, strlen(Msg) + 1);  // Protocol State
+	SendtoGUI('S', (unsigned char *) Msg, strlen(Msg) + 1);  // Protocol State
 }
 
 
@@ -986,7 +986,7 @@ void displayCall(int dirn, const char * Call)
 {
 	char Msg[32];
 	sprintf(Msg, "%c%s", dirn, Call);
-	SendtoGUI('I', Msg, strlen(Msg));
+	SendtoGUI('I', (unsigned char *) Msg, strlen(Msg));
 }
 
 // When decoding WAV files, WavNow will be set to the offset from the

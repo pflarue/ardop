@@ -146,7 +146,7 @@ UCHAR bytLastACKedDataFrameType;
 
 int Encode4FSKControl(UCHAR bytFrameType, UCHAR bytSessionID, UCHAR * bytreturn);
 int IRSNegotiateBW(int intConReqFrameType);
-int GetNextFrameData(int * intUpDn, UCHAR * bytFrameTypeToSend, UCHAR * strMod, bool blnInitialize);
+int GetNextFrameData(int * intUpDn, UCHAR * bytFrameTypeToSend, char * strMod, bool blnInitialize);
 bool CheckForDisconnect();
 
 void LogStats();
@@ -316,7 +316,8 @@ void SetARDOPProtocolState(int value) {
 		wg_send_irsled(0, true);
 		bytLastACKedDataFrameType = 0;  // Clear on entry to IRS or IRS to ISS states. 3/15/2018
 		break;
-
+	default:
+		break;
 	// Case ProtocolState.IDLE
 	// stcStatus.BackColor = System.Drawing.Color.NavajoWhite
 	// Case ProtocolState.OFFLINE
@@ -822,10 +823,6 @@ void SendData() {
 		return;
 
 	switch (ProtocolState) {
-	case IDLE:
-		ZF_LOGI("[ARDOPProtocol.SendData] Sending Data from IDLE state! Exit SendData");
-		return;
-
 	case ISS:
 		if (CheckForDisconnect())
 			return;
@@ -935,6 +932,10 @@ void SendData() {
 			ZF_LOGI("[ARDOPprotocol.SendData]  Send IDLE with Repeat, Set ProtocolState=IDLE ");
 			return;
 		}
+	default:
+		ZF_LOGI("[ARDOPProtocol.SendData] Sending Data from %s state! Exit SendData",
+			ARDOPStates[ProtocolState]);
+		return;
 	}
 }
 
@@ -943,7 +944,7 @@ void SendData() {
 
 // a simple function to get an available frame type for the session bandwidth.
 
-int GetNextFrameData(int * intUpDn, UCHAR * bytFrameTypeToSend, UCHAR * strMod, bool blnInitialize)
+int GetNextFrameData(int * intUpDn, UCHAR * bytFrameTypeToSend, char * strMod, bool blnInitialize)
 {
 	// Initialize if blnInitialize = true
 	// Then call with intUpDn and blnInitialize = false:
@@ -1070,17 +1071,17 @@ void InitializeConnection()
 void ProcessUnconnectedConReqFrame(int intFrameType, UCHAR * bytData) {
 	static char strLastStringPassedToHost[80] = "";
 	char strDisplay[128];
-	char * ToCall = strlop(bytData, ' ');
+	char * ToCall = strlop((char *) bytData, ' ');
 	int Len;
 
 	if (!(intFrameType >= ConReqmin && intFrameType <= ConReqmax))
 		return;
 
 	if (ToCall == NULL)  // messed up by COn Req processing
-		ToCall = bytData + strlen(bytData) + 1;
+		ToCall = (char *) bytData + strlen((char *) bytData) + 1;
 
 	Len = sprintf(strDisplay, " [%s: %s > %s]", Name(intFrameType), bytData, ToCall);
-	AddTagToDataAndSendToHost(strDisplay, "ARQ", Len);
+	AddTagToDataAndSendToHost((unsigned char *) strDisplay, "ARQ", Len);
 }
 
 // This is the main subroutine for processing ARQ frames
@@ -2209,6 +2210,9 @@ int IRSNegotiateBW(int intConReqFrameType) {
 	// if acceptable bandwidth sets stcConnection.intSessionBW
 
 	switch (ARQBandwidth) {
+	case UNDEFINED:
+		ZF_LOGE("Unexpected UNDEFINED ARQBandwidth in IRSNegotiateBW().");
+		return ConRejBW;  // ConRejBW	
 	case B200FORCED:
 		if ((intConReqFrameType >= ConReq200M && intConReqFrameType <= ConReq2000M)|| intConReqFrameType == ConReq200F) {
 			intSessionBW = 200;

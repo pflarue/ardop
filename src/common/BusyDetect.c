@@ -99,6 +99,9 @@ bool BusyDetect3(float * dblMag, int intStart, int intStop)  // this only called
 
 	switch (ARQBandwidth)
 	{
+	case UNDEFINED:
+		ZF_LOGE("Unexpected UNDEFINED ARQBandwidth in BusyDetect3().");
+		return true;	
 	case B200MAX:
 	case B200FORCED:
 		blnBusy = (dblAvgStoNNarrow > (3 + 0.008 * powf(BusyDet, 4))) || (dblAvgStoNWide > (5 + 0.02 * powf(BusyDet, 4)));

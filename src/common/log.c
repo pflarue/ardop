@@ -311,7 +311,7 @@ void ardop_log_session_header(
 		"A",
 		"%s,%06ld+00:00\n************************* ARQ session stats with %s  %d minutes ****************************\n",
 		datefmt,
-		now.tv_usec,
+		(long) now.tv_usec,
 		remote_callsign,
 		(int)duration
 	);

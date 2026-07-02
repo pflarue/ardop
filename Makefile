@@ -154,6 +154,11 @@ LDFLAGS = -Xlinker -Map=$(BUILDDIR)/output.map
 else ifeq ($(UNAME_S),Darwin)
 PLATFORM := macos
 OBJS += $(OBJS_MAC)
+# Suppress the unhelpful gnu-folding-constant warning.
+# See comments at https://ffmpeg.org/pipermail/ffmpeg-cvslog/2025-May/148334.html
+#  about using -fno-common for compiler behavior on Apple similar to the default
+#  used by gcc as used for Linux and Windows.
+CFLAGS += -Wno-gnu-folding-constant -fno-common
 # CoreAudio (audio I/O and device enumeration) and its supporting frameworks.
 LDLIBS += -framework CoreAudio -framework AudioToolbox -framework CoreFoundation
 # macOS ld64 spells the link-map option '-map <file>', unlike GNU ld's
