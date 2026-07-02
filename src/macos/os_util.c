@@ -3,7 +3,8 @@
 // The timing, signal handling, serial (COM) port, and TCP helpers shared with
 // the Linux backend live in src/unix/os_util.c.  This file holds only the parts
 // that differ on macOS: CM108 HID PTT (not supported) and serial device
-// enumeration (which scans /dev/cu.*).
+// enumeration (which scans /dev/cu.*, skipping Apple-internal debug/Bluetooth
+// nodes that are present on every Mac but unusable for CAT/PTT).
 
 #include <dirent.h>
 #include <errno.h>
@@ -76,11 +77,35 @@ char** GetSerialStrlist() {
 			pathstr, strerror(errno));
 		return slist;
 	}
+	// Apple-internal /dev/cu.* nodes that are not usable for CAT/PTT.  These
+	// are exposed by macOS system services (Bluetooth SPP listener, kernel
+	// debug console, Wi-Fi driver debug channel) rather than by IOKit
+	// IOSerialBSDClient, so they show up in a raw /dev scan but are not real
+	// serial adapters.  cu.wlan-debug is Apple-silicon-only; the other two
+	// are present on every modern Mac.
+	static const char * const macos_internal_serial_devices[] = {
+		"cu.Bluetooth-Incoming-Port",
+		"cu.debug-console",
+		"cu.wlan-debug",
+		NULL
+	};
 	while ((dir = readdir(d)) != NULL) {
 		if (dir->d_type == DT_DIR || dir->d_name[0] == '.')
 			continue;
 		if (strncmp("cu.", dir->d_name, strlen("cu.")) != 0)
 			continue;  // not a callout serial port
+		bool is_internal = false;
+		for (int i = 0; macos_internal_serial_devices[i] != NULL; i++) {
+			if (strcmp(dir->d_name, macos_internal_serial_devices[i]) == 0) {
+				is_internal = true;
+				break;
+			}
+		}
+		if (is_internal) {
+			ZF_LOGD("Skipping macOS-internal serial device %s%s",
+				pathstr, dir->d_name);
+			continue;
+		}
 		if (slist == NULL) {
 			if ((slist = (char **) malloc(sizeof(char *))) == NULL) {
 				ZF_LOGE("Error from malloc() in GetSerialStrlist() (%s)",
