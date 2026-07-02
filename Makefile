@@ -103,12 +103,18 @@ TESTS = \
 	$(BUILDDIR)/test/ardop/test_ARDOPCommon \
 	$(BUILDDIR)/test/ardop/test_HostInterface \
 	$(BUILDDIR)/test/ardop/test_Locator \
-	$(BUILDDIR)/test/ardop/test_log \
 	$(BUILDDIR)/test/ardop/test_Packed6 \
 	$(BUILDDIR)/test/ardop/test_StationId \
-	$(BUILDDIR)/test/ardop/test_ARDOPCommon_processargs \
 	$(BUILDDIR)/test/ardop/test_eutf8 \
 	$(BUILDDIR)/test/ardop/test_txframe \
+
+# Unit tests that inject mock functions using the GNU ld `--wrap` option.
+# Apple's linker (ld64 / ld-prime) does not support `--wrap`, so these tests
+# cannot be built on macOS; they are added to TESTS only on Linux and Windows
+# in the platform-selection block below.
+TESTS_WRAP = \
+	$(BUILDDIR)/test/ardop/test_log \
+	$(BUILDDIR)/test/ardop/test_ARDOPCommon_processargs \
 
 # unit test common code
 TEST_OBJS_COMMON = \
@@ -151,9 +157,12 @@ PLATFORM := windows
 OBJS += $(OBJS_WIN)
 LDLIBS += -lwsock32 -lwinmm -lsetupapi -lws2_32 -lhid
 LDFLAGS = -Xlinker -Map=$(BUILDDIR)/output.map
+# GNU ld supports --wrap, so the mock-injecting tests can be built.
+TESTS += $(TESTS_WRAP)
 else ifeq ($(UNAME_S),Darwin)
 PLATFORM := macos
 OBJS += $(OBJS_MAC)
+# TESTS_WRAP is intentionally not added here: Apple's linker lacks --wrap.
 # Suppress the unhelpful gnu-folding-constant warning.
 # See comments at https://ffmpeg.org/pipermail/ffmpeg-cvslog/2025-May/148334.html
 #  about using -fno-common for compiler behavior on Apple similar to the default
@@ -179,6 +188,8 @@ endif
 else
 PLATFORM := linux
 OBJS += $(OBJS_LIN)
+# GNU ld supports --wrap, so the mock-injecting tests can be built.
+TESTS += $(TESTS_WRAP)
 LDLIBS += -lrt -lasound
 LDFLAGS = -Xlinker -Map=$(BUILDDIR)/output.map
 endif
