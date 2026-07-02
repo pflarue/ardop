@@ -12,6 +12,10 @@
 #		environments may also work but are not tested.
 #			mingw32-make
 #
+#		For macOS, the default build requires the Xcode command line tools
+#		(which provide clang and make).  Install them with:
+#			xcode-select --install
+#
 #	`make test` which builds the executable and also runs some tests also
 #	requires installation of cmocka, which is not required for the default build.
 #		On Debian/Ubuntu this is easily installed with:
@@ -19,6 +23,20 @@
 #
 #		Package managers for other Linux distributions are also likely to
 #		provide easy installation of cmocka.
+#
+#		On macOS, install cmocka with Homebrew (https://brew.sh):
+#			brew install cmocka
+#		Homebrew is not on the compiler's default search path, so the macOS
+#		build adds Homebrew's include/ and lib/ directories automatically
+#		(see HOMEBREW_PREFIX in the platform-selection block below).  If
+#		`brew` is not in your PATH, pass the prefix explicitly, e.g.:
+#			make test HOMEBREW_PREFIX=/opt/homebrew
+#
+#		Two tests (test_log and test_ARDOPCommon_processargs) inject mock
+#		functions using the GNU ld `--wrap` option.  Apple's linker does not
+#		support `--wrap`, so on macOS `make test` builds and runs only the
+#		remaining tests; these two are skipped there but still run on Linux
+#		and Windows.
 #
 #		In the following description of how to install cmocka for Windows, a
 #		winlibs MinGW installation is assumed to be located at `C:\winlibs`
