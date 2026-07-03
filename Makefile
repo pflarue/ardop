@@ -101,6 +101,7 @@ OBJS_EXE = \
 # unit test executables
 TESTS = \
 	$(BUILDDIR)/test/ardop/test_ARDOPCommon \
+	$(BUILDDIR)/test/ardop/test_ardop_lib \
 	$(BUILDDIR)/test/ardop/test_HostInterface \
 	$(BUILDDIR)/test/ardop/test_Locator \
 	$(BUILDDIR)/test/ardop/test_log \
@@ -253,6 +254,15 @@ $(BUILDDIR)/test/ardop/test_ARDOPCommon_processargs: WRAP := \
 	printf puts ardop_log_start InitAudio \
 	GetCM108Strlist GetSerialStrlist updateWebGuiNonAudioConfig \
 	OpenCOMPort tcpconnect OpenCM108 OpenSoundCapture OpenSoundPlayback \
+
+# test_ardop_lib exercises the embeddable library facade (src/embed/ardop_lib.c)
+# in isolation.  It links only that object and supplies its own fakes for the
+# modem-core seam, so it needs no --wrap and builds with Apple's ld64 too.  The
+# embed object is not part of the main OBJS, so name it as an explicit
+# prerequisite as well as in the recipe's OBJS.
+$(BUILDDIR)/test/ardop/test_ardop_lib: $(BUILDDIR)/src/embed/ardop_lib.o
+$(BUILDDIR)/test/ardop/test_ardop_lib: OBJS := \
+	$(BUILDDIR)/src/embed/ardop_lib.o
 
 # Implicit rules to build object files in build directory
 $(BUILDDIR)/%.o: %.c
