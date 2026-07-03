@@ -1,0 +1,752 @@
+// CoreAudio audio for iOS / iPadOS
+//
+// This is the iOS audio backend for the embedded ardopcf library.  It
+// implements the platform audio interface declared in common/audio.h.  It is a
+// close port of the macOS backend (src/macos/CoreAudio.c): the AudioQueue based
+// capture/playback path and the mutex-protected ring buffers that bridge
+// CoreAudio's callback model to ardopcf's polling model are identical.
+//
+// What differs from macOS:
+//   * There is no CoreAudio HAL on iOS, so devices are not enumerated and an
+//     AudioQueue is not bound to a specific device by UID.  Instead the queue
+//     always uses the current input/output route of the shared AVAudioSession.
+//     The application selects that route (built-in mic, USB-C/Lightning audio,
+//     Bluetooth, ...) and activates the session through the Swift layer before
+//     starting the modem.
+//   * GetDevices() reports a single logical "default" route plus NOSOUND.
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <pthread.h>
+
+#include <AudioToolbox/AudioToolbox.h>
+#include <CoreFoundation/CoreFoundation.h>
+
+#include "common/os_util.h"
+#include "common/audio.h"
+#include "common/log.h"
+#include "common/wav.h"
+#include "common/ardopcommon.h"
+#include "common/ptt.h"
+#include "common/Webgui.h"
+
+// The name reported for the single logical audio device.  Opening any non-empty
+// device name (other than NOSOUND) uses the current AVAudioSession route.
+#define IOS_DEFAULT_DEVICE "default"
+
+// Used by the RESTORE option of OpenSoundCapture()/OpenSoundPlayback().
+char LastGoodCaptureDevice[DEVSTRSZ] = "";  // same size as CaptureDevice
+char LastGoodPlaybackDevice[DEVSTRSZ] = "";  // same size as PlaybackDevice
+
+extern bool WriteRxWav;  // Record RX controlled by Command line/TX/Timer
+extern bool HWriteRxWav;  // Record RX controlled by host command RECRX
+extern struct WavFile *txwff;  // For recording of filtered TX audio
+
+void txSleep(unsigned int mS);
+void StartRxWav();
+
+// TX and RX audio are signed short integers: +- 32767
+extern int SampleNo;  // Total number of samples for this transmission.
+extern int Number;  // Number of samples waiting to be sent
+
+// txbuffer and TxIndex are globals shared with Modulate.c via audio.h
+// Two buffers of 0.1 sec duration for TX audio.
+short txbuffer[2][SendSize];
+// index to next txbuffer to be filled..
+int TxIndex = 0;
+
+short inbuffer[2][ReceiveSize];  // Two buffers of 0.1 Sec duration for RX audio.
+int inIndex = 0;  // inbuffer being used 0 or 1
+
+int m_sampleRate = 12000;  // Ardopcf always uses 12000 samples per second
+
+// Number of AudioQueue buffers to use for capture and playback.  AudioQueue
+// requires several buffers in flight to play/record without gaps.
+#define NUM_AQ_BUFFERS 4
+// Number of mono sample frames per AudioQueue buffer.  240 frames = 20 ms at
+// 12 kHz, which matches ReceiveSize and gives reasonable callback latency.
+#define AQ_FRAMES_PER_BUFFER 240
+
+// Ring buffer capacity in mono samples (shorts).  At 12 kHz, 48000 samples is
+// 4 seconds of audio, which is plenty of slack for the polling code to keep up
+// with the callbacks (and vice versa).
+#define RINGSIZE 48000
+
+// A simple single-producer/single-consumer ring buffer of mono int16 samples,
+// protected by a mutex.  The capture ring is written by the input callback and
+// read by PollReceivedSamples().  The playback ring is written by
+// SoundCardWrite()/SendtoCard() and read by the output callback.
+typedef struct {
+	short buf[RINGSIZE];
+	int head;  // next write position
+	int tail;  // next read position
+	int count;  // number of samples currently stored
+	pthread_mutex_t mutex;
+} RingBuffer;
+
+static RingBuffer captureRing;
+static RingBuffer playbackRing;
+
+static void ring_init(RingBuffer *r) {
+	r->head = 0;
+	r->tail = 0;
+	r->count = 0;
+	pthread_mutex_init(&r->mutex, NULL);
+}
+
+// Write up to n samples into the ring buffer.  If the ring is full, excess
+// samples are dropped (this should not happen in normal operation since the
+// ring is large compared to the audio rate).  Returns the number written.
+static int ring_write(RingBuffer *r, const short *data, int n) {
+	pthread_mutex_lock(&r->mutex);
+	int written = 0;
+	while (written < n && r->count < RINGSIZE) {
+		r->buf[r->head] = data[written];
+		r->head = (r->head + 1) % RINGSIZE;
+		++r->count;
+		++written;
+	}
+	pthread_mutex_unlock(&r->mutex);
+	return written;
+}
+
+// Read up to n samples from the ring buffer.  Returns the number actually read
+// (may be less than n if fewer are available).
+static int ring_read(RingBuffer *r, short *data, int n) {
+	pthread_mutex_lock(&r->mutex);
+	int rd = 0;
+	while (rd < n && r->count > 0) {
+		data[rd] = r->buf[r->tail];
+		r->tail = (r->tail + 1) % RINGSIZE;
+		--r->count;
+		++rd;
+	}
+	pthread_mutex_unlock(&r->mutex);
+	return rd;
+}
+
+static int ring_count(RingBuffer *r) {
+	pthread_mutex_lock(&r->mutex);
+	int c = r->count;
+	pthread_mutex_unlock(&r->mutex);
+	return c;
+}
+
+static void ring_clear(RingBuffer *r) {
+	pthread_mutex_lock(&r->mutex);
+	r->head = 0;
+	r->tail = 0;
+	r->count = 0;
+	pthread_mutex_unlock(&r->mutex);
+}
+
+// AudioQueue handles.  NULL when not open.
+static AudioQueueRef playQueue = NULL;
+static AudioQueueRef recQueue = NULL;
+static AudioQueueBufferRef playBuffers[NUM_AQ_BUFFERS];
+static AudioQueueBufferRef recBuffers[NUM_AQ_BUFFERS];
+static bool playRunning = false;
+static bool recRunning = false;
+
+// End-of-transmission PTT timing.  The output AudioQueue runs continuously
+// (playing silence between transmissions), so an empty playback ring only means
+// the last samples have been handed to the queue, not that they have left the
+// audio hardware.  To avoid dropping PTT before the modulated audio has
+// actually been transmitted, track the output queue play position (in frames)
+// at the end of the last real (non-silence) audio.  SoundFlush() then waits for
+// the hardware play head (AudioQueueGetCurrentTime()) to reach it before
+// unkeying.  Both counters are in output frames on the same timeline as
+// AudioQueueGetCurrentTime()'s mSampleTime, which starts at 0 when the queue is
+// started.
+static pthread_mutex_t playPosMutex = PTHREAD_MUTEX_INITIALIZER;
+static double outFramesEnqueued = 0;  // frames handed to the output queue
+static double lastRealOutFrame = 0;   // play position at end of last real audio
+
+void StartCapture() {
+	Capturing = true;
+	DiscardOldSamples();
+	ClearAllMixedSamples();
+	State = SearchingForLeader;
+}
+
+// Populate AudioDevices with the single logical audio route plus NOSOUND.
+// iOS has no device enumeration HAL; input/output routing is handled by the
+// shared AVAudioSession, configured from the application via the Swift layer.
+void GetDevices() {
+	int devindex;
+	DeviceInfo *dev;
+
+	// Clean up previous results
+	FreeDevices(&AudioDevices);
+	InitDevices(&AudioDevices);
+
+	devindex = ExtendDevices(&AudioDevices);
+	dev = AudioDevices[devindex];
+	dev->name = strdup(IOS_DEFAULT_DEVICE);
+	dev->desc = strdup("Default audio route (AVAudioSession)");
+	dev->alias = NULL;
+	dev->capture = true;
+	dev->playback = true;
+
+	// Always include NOSOUND as a device suitable for both capture and
+	// playback so that AudioDevices[] is never completely empty.
+	devindex = ExtendDevices(&AudioDevices);
+	dev = AudioDevices[devindex];
+	dev->name = strdup("NOSOUND");
+	dev->desc = strdup("A dummy audio device for diagnostic use.");
+	dev->capture = true;
+	dev->playback = true;
+}
+
+// AudioQueue input (capture) callback.  Called on an AudioQueue-managed thread
+// when a buffer of captured audio is available.  The buffer holds interleaved
+// int16 samples (mono or stereo per Cch).  Extract the desired channel and push
+// the mono samples into the capture ring, then re-enqueue the buffer.
+static void inputCallback(
+	void *inUserData,
+	AudioQueueRef inAQ,
+	AudioQueueBufferRef inBuffer,
+	const AudioTimeStamp *inStartTime,
+	UInt32 inNumPackets,
+	const AudioStreamPacketDescription *inPacketDescs
+) {
+	(void) inUserData;
+	(void) inStartTime;
+	(void) inNumPackets;
+	(void) inPacketDescs;
+
+	const short *samples = (const short *) inBuffer->mAudioData;
+	int nframes = inBuffer->mAudioDataByteSize / sizeof(short);
+
+	if (Cch == 2) {
+		// Interleaved stereo.  Pick the configured channel.
+		nframes /= 2;
+		int start = UseLeftRX ? 0 : 1;
+		short mono[AQ_FRAMES_PER_BUFFER * 2];
+		int count = 0;
+		for (int n = 0; n < nframes && count < (int) (sizeof(mono) / sizeof(short)); ++n)
+			mono[count++] = samples[start + 2 * n];
+		ring_write(&captureRing, mono, count);
+	} else {
+		// Mono.
+		ring_write(&captureRing, samples, nframes);
+	}
+
+	if (recRunning)
+		AudioQueueEnqueueBuffer(inAQ, inBuffer, 0, NULL);
+}
+
+// AudioQueue output (playback) callback.  Called when the queue needs more
+// audio to play.  Fill the buffer from the playback ring, packing mono samples
+// into the interleaved channel layout selected by UseLeftTX/UseRightTX.  Output
+// silence when the ring is empty (an underrun, which is normal at the start and
+// end of a transmission).
+static void outputCallback(
+	void *inUserData,
+	AudioQueueRef inAQ,
+	AudioQueueBufferRef inBuffer
+) {
+	(void) inUserData;
+
+	int frames = AQ_FRAMES_PER_BUFFER;
+	short mono[AQ_FRAMES_PER_BUFFER];
+	int got = ring_read(&playbackRing, mono, frames);
+	// Pad with silence if the ring did not have enough samples.
+	for (int n = got; n < frames; ++n)
+		mono[n] = 0;
+
+	short *out = (short *) inBuffer->mAudioData;
+	if (Pch == 2) {
+		for (int n = 0; n < frames; ++n) {
+			out[2 * n] = UseLeftTX ? mono[n] : 0;
+			out[2 * n + 1] = UseRightTX ? mono[n] : 0;
+		}
+		inBuffer->mAudioDataByteSize = frames * 2 * sizeof(short);
+	} else {
+		for (int n = 0; n < frames; ++n)
+			out[n] = mono[n];
+		inBuffer->mAudioDataByteSize = frames * sizeof(short);
+	}
+
+	// Advance the play position.  This buffer is re-enqueued at the current
+	// write head; if it carried real audio (got > 0), the last real sample of
+	// this transmission ends at that position + got.  SoundFlush() waits for the
+	// hardware to play up to lastRealOutFrame before dropping PTT.
+	pthread_mutex_lock(&playPosMutex);
+	if (got > 0)
+		lastRealOutFrame = outFramesEnqueued + got;
+	outFramesEnqueued += frames;
+	pthread_mutex_unlock(&playPosMutex);
+
+	if (playRunning)
+		AudioQueueEnqueueBuffer(inAQ, inBuffer, 0, NULL);
+}
+
+// Build the AudioStreamBasicDescription for a 16-bit signed PCM stream with the
+// given number of channels at 12 kHz.
+static void fill_asbd(AudioStreamBasicDescription *asbd, int ch) {
+	memset(asbd, 0, sizeof(*asbd));
+	asbd->mSampleRate = m_sampleRate;
+	asbd->mFormatID = kAudioFormatLinearPCM;
+	asbd->mFormatFlags = kAudioFormatFlagIsSignedInteger
+		| kAudioFormatFlagIsPacked;
+	asbd->mBitsPerChannel = 16;
+	asbd->mChannelsPerFrame = ch;
+	asbd->mFramesPerPacket = 1;
+	asbd->mBytesPerFrame = ch * sizeof(short);
+	asbd->mBytesPerPacket = asbd->mBytesPerFrame * asbd->mFramesPerPacket;
+}
+
+// Open and configure an AudioQueue using the current AVAudioSession route.  For
+// capture, sets up an input queue; for playback, an output queue.  On success,
+// returns noErr with *queue set and the AudioQueue buffers allocated and (for
+// capture) enqueued.  On failure, returns a non-zero OSStatus and leaves
+// *queue == NULL.
+static OSStatus open_audio(
+	AudioQueueRef *queue,
+	AudioQueueBufferRef *buffers,
+	bool iscapture,
+	int ch
+) {
+	OSStatus status;
+	AudioStreamBasicDescription asbd;
+	const char *forstr = iscapture ? "capture" : "playback";
+	fill_asbd(&asbd, ch);
+
+	*queue = NULL;
+
+	if (iscapture) {
+		status = AudioQueueNewInput(&asbd, inputCallback, NULL,
+			NULL, kCFRunLoopCommonModes, 0, queue);
+	} else {
+		status = AudioQueueNewOutput(&asbd, outputCallback, NULL,
+			NULL, kCFRunLoopCommonModes, 0, queue);
+	}
+	if (status != noErr) {
+		ZF_LOGE("Error creating AudioQueue for %s (OSStatus %d)",
+			forstr, (int) status);
+		*queue = NULL;
+		return status;
+	}
+
+	// On iOS the queue uses the current AVAudioSession input/output route; there
+	// is no per-device binding as there is on macOS.
+
+	int bytesPerBuffer = AQ_FRAMES_PER_BUFFER * ch * sizeof(short);
+	for (int i = 0; i < NUM_AQ_BUFFERS; ++i) {
+		status = AudioQueueAllocateBuffer(*queue, bytesPerBuffer, &buffers[i]);
+		if (status != noErr) {
+			ZF_LOGE("Error allocating AudioQueue buffer %i for %s (OSStatus %d)",
+				i, forstr, (int) status);
+			AudioQueueDispose(*queue, true);
+			*queue = NULL;
+			return status;
+		}
+		if (iscapture) {
+			// Capture buffers must be enqueued to receive audio.
+			AudioQueueEnqueueBuffer(*queue, buffers[i], 0, NULL);
+		} else {
+			// Playback buffers are primed with silence and enqueued so that
+			// the queue can start.
+			memset(buffers[i]->mAudioData, 0, bytesPerBuffer);
+			buffers[i]->mAudioDataByteSize = bytesPerBuffer;
+			AudioQueueEnqueueBuffer(*queue, buffers[i], 0, NULL);
+		}
+	}
+
+	if (!iscapture) {
+		// The primed silence buffers occupy the first frames of the queue
+		// timeline, which starts at 0 when AudioQueueStart() is called.
+		pthread_mutex_lock(&playPosMutex);
+		outFramesEnqueued = (double)(NUM_AQ_BUFFERS * AQ_FRAMES_PER_BUFFER);
+		lastRealOutFrame = 0;
+		pthread_mutex_unlock(&playPosMutex);
+	}
+
+	ZF_LOGD("Opened AudioQueue for %s with %i channel(s).", forstr, ch);
+	return noErr;
+}
+
+// Close the playback audio device if one is open and set TXEnabled=false.
+// do_getdevices is passed to updateWebGuiAudioConfig()
+void CloseSoundPlayback(bool do_getdevices) {
+	if (playQueue != NULL) {
+		playRunning = false;
+		AudioQueueStop(playQueue, true);
+		AudioQueueDispose(playQueue, true);
+		playQueue = NULL;
+	}
+	ring_clear(&playbackRing);
+	PlaybackDevice[0] = 0x00;  // empty string
+	SoundIsPlaying = false;
+	TXEnabled = false;
+	KeyPTT(false);  // In case PTT is engaged.
+	updateWebGuiAudioConfig(do_getdevices);
+}
+
+// Open the playback (output) audio route.
+// If devstr matches PlaybackDevice and ch matches Pch and TXEnabled is true,
+// then do nothing but write a debug log message.  Otherwise, if TXEnabled is
+// true, then CloseSoundPlayback() is called before attempting to open devstr.
+// On iOS any non-empty device name (other than NOSOUND) opens the current
+// AVAudioSession output route; the name is retained only for reporting.
+// If devstr is the special device name "RESTORE", do nothing if TXEnabled is
+// true; otherwise reopen LastGoodPlaybackDevice if set.
+// If devstr is an empty string "", then close the existing playback device if
+// one is open, and then always return false.
+bool OpenSoundPlayback(char *devstr, int ch) {
+	// Keep AudioDevices current for status/reporting.
+	GetDevices();
+	if (devstr[0] == 0x00) {
+		if (TXEnabled)
+			CloseSoundPlayback(false);  // calls updateWebGuiAudioConfig(false);
+		return false;
+	}
+	if (TXEnabled) {
+		// Compare only the first DEVSTRSZ - 1 bytes (exclude terminating null)
+		if ((strncmp(devstr, PlaybackDevice, DEVSTRSZ - 1) == 0 && ch == Pch)
+			|| strcmp(devstr, "RESTORE") == 0
+		) {
+			ZF_LOGD("OpenSoundPlayback(%s) matches already open device.",
+				devstr);
+			return true;
+		}
+		// Close the existing device.  This also sets TXEnabled=false and calls
+		// updateWebGuiAudioConfig(false).
+		CloseSoundPlayback(false);
+	}
+	// make PlaybackDevice an empty string.  If devstr cannot be opened, then
+	// TXEnabled will remain false and PlaybackDevice will remain empty.
+	PlaybackDevice[0] = 0x00;
+	Pch = -1;
+
+	if (strcmp(devstr, "RESTORE") == 0) {
+		if (LastGoodPlaybackDevice[0] == 0x00)
+			return false;  // no LastGoodPlaybackDevice to open.
+		devstr = LastGoodPlaybackDevice;
+	}
+
+	if (strcmp(devstr, "NOSOUND") == 0 || strcmp(devstr, "-1") == 0) {
+		// For testing/diagnostic purposes, NOSOUND uses no audio device.
+		TXEnabled = true;
+		strcpy(PlaybackDevice, "NOSOUND");
+		strcpy(LastGoodPlaybackDevice, PlaybackDevice);
+		Pch = ch;
+		updateWebGuiAudioConfig(false);
+		return true;
+	}
+
+	// iOS: open the current AVAudioSession output route.
+	ring_clear(&playbackRing);
+	if (open_audio(&playQueue, playBuffers, false, ch) != noErr) {
+		// Error already logged.
+		playQueue = NULL;
+		return false;
+	}
+
+	playRunning = true;
+	OSStatus status = AudioQueueStart(playQueue, NULL);
+	if (status != noErr) {
+		ZF_LOGE("Error starting playback AudioQueue (OSStatus %d)",
+			(int) status);
+		playRunning = false;
+		AudioQueueDispose(playQueue, true);
+		playQueue = NULL;
+		return false;
+	}
+
+	TXEnabled = true;
+	snprintf(PlaybackDevice, DEVSTRSZ, "%s", devstr);
+	strcpy(LastGoodPlaybackDevice, PlaybackDevice);
+	Pch = ch;
+	updateWebGuiAudioConfig(false);
+	return true;
+}
+
+// Close the capture audio device if one is open and set RXEnabled=false.
+// do_getdevices is passed to updateWebGuiAudioConfig()
+void CloseSoundCapture(bool do_getdevices) {
+	if (recQueue != NULL) {
+		recRunning = false;
+		AudioQueueStop(recQueue, true);
+		AudioQueueDispose(recQueue, true);
+		recQueue = NULL;
+	}
+	ring_clear(&captureRing);
+	CaptureDevice[0] = 0x00;  // empty string
+	RXEnabled = false;
+	updateWebGuiAudioConfig(do_getdevices);
+}
+
+// Open the capture (input) audio route.  Behaves like OpenSoundPlayback() but
+// for the input route, and starts the capture (RX) processing state.
+bool OpenSoundCapture(char *devstr, int ch) {
+	// Keep AudioDevices current for status/reporting.
+	GetDevices();
+	if (devstr[0] == 0x00) {
+		if (RXEnabled)
+			CloseSoundCapture(false);  // calls updateWebGuiAudioConfig(false);
+		return false;
+	}
+	if (RXEnabled) {
+		// Compare only the first DEVSTRSZ - 1 bytes (exclude terminating null)
+		if ((strncmp(devstr, CaptureDevice, DEVSTRSZ - 1) == 0 && ch == Cch)
+			|| strcmp(devstr, "RESTORE") == 0
+		) {
+			ZF_LOGD("OpenSoundCapture(%s) matches already open device.",
+				devstr);
+			return true;
+		}
+		// Close the existing device.  This also sets RXEnabled=false and calls
+		// updateWebGuiAudioConfig(false).
+		CloseSoundCapture(false);
+	}
+	// make CaptureDevice an empty string.  If devstr cannot be opened, then
+	// RXEnabled will remain false and CaptureDevice will remain empty.
+	CaptureDevice[0] = 0x00;
+	Cch = -1;
+
+	if (strcmp(devstr, "RESTORE") == 0) {
+		if (LastGoodCaptureDevice[0] == 0x00)
+			return false;  // no LastGoodCaptureDevice to open.
+		devstr = LastGoodCaptureDevice;
+	}
+
+	if (strcmp(devstr, "NOSOUND") == 0 || strcmp(devstr, "-1") == 0) {
+		// For testing/diagnostic purposes, NOSOUND uses no audio device.
+		RXEnabled = true;
+		RXSilent = false;  // NOSOUND is always silent, so ignore silence.
+		wg_send_rxenabled(0, RXEnabled);
+		strcpy(CaptureDevice, "NOSOUND");
+		strcpy(LastGoodCaptureDevice, CaptureDevice);
+		Cch = ch;
+		updateWebGuiAudioConfig(false);
+		return true;
+	}
+
+	// iOS: open the current AVAudioSession input route.
+	ring_clear(&captureRing);
+	if (open_audio(&recQueue, recBuffers, true, ch) != noErr) {
+		// Error already logged.
+		recQueue = NULL;
+		return false;
+	}
+
+	recRunning = true;
+	OSStatus status = AudioQueueStart(recQueue, NULL);
+	if (status != noErr) {
+		ZF_LOGE("Error starting capture AudioQueue (OSStatus %d)",
+			(int) status);
+		recRunning = false;
+		AudioQueueDispose(recQueue, true);
+		recQueue = NULL;
+		return false;
+	}
+
+	RXEnabled = true;
+	RXSilent = false;
+	snprintf(CaptureDevice, DEVSTRSZ, "%s", devstr);
+	strcpy(LastGoodCaptureDevice, CaptureDevice);
+	Cch = ch;
+	if (!SoundIsPlaying)
+		StartCapture();
+	updateWebGuiAudioConfig(false);
+	return true;
+}
+
+// Stage nSamples mono samples for playback by pushing them into the playback
+// ring buffer.  The output AudioQueue callback packs them into the configured
+// channel layout.  Block (yielding with txSleep()) until there is room in the
+// ring for the samples.
+// return true on success and false on failure
+bool SoundCardWrite(short *input, unsigned int nSamples) {
+	if (!TXEnabled) {
+		ZF_LOGW("SoundCardWrite() called when not TXEnabled. Ignoring.");
+		return false;
+	}
+	if (strcmp(PlaybackDevice, "NOSOUND") == 0)
+		return true;  // Do nothing, indicate success.
+
+	unsigned int written = 0;
+	int waitcount = 0;
+	while (written < nSamples && TXEnabled) {
+		int n = ring_write(&playbackRing, input + written,
+			(int) (nSamples - written));
+		written += n;
+		if (written < nSamples) {
+			// Ring is full.  Wait for the output callback to drain it.
+			txSleep(20);
+			// Guard against waiting forever if the queue has stalled.
+			if (++waitcount > 500) {
+				ZF_LOGE("Timeout waiting to stage playback samples. "
+					" Setting TXEnabled to false.");
+				CloseSoundPlayback(true);  // calls updateWebGuiAudioConfig(true);
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+// Stage for playback the contents (n samples) of the txbuffer[TxIndex]
+// return true on success and false on failure.
+// This will block until samples can be staged.
+bool SendtoCard(int n) {
+	if (!TXEnabled) {
+		ZF_LOGW("SendtoCard() called when not TXEnabled. Ignoring.");
+		return false;
+	}
+	if (!SoundCardWrite(&txbuffer[TxIndex][0], n))
+		return false;
+
+	if (txwff != NULL)
+		WriteWav(&txbuffer[TxIndex][0], n, txwff);
+	return true;
+}
+
+// Read up to nSamples mono samples from the capture ring buffer into input.
+// Returns the number of samples actually read.  If fewer than nSamples are
+// available, returns 0 without consuming any samples (mirroring ALSA's
+// SoundCardRead() returning 0 when insufficient samples are available).
+int SoundCardRead(short *input, unsigned int nSamples) {
+	if (!RXEnabled) {
+		ZF_LOGD("SoundCardRead() called when not RXEnabled.  Ignoring.");
+		return 0;
+	}
+	if (ring_count(&captureRing) < (int) nSamples)
+		return 0;  // Insufficient samples available.  Do nothing.
+	return ring_read(&captureRing, input, (int) nSamples);
+}
+
+bool AudioInit = false;
+
+void InitAudio(bool quiet) {
+	ring_init(&captureRing);
+	ring_init(&playbackRing);
+
+	GetDevices();
+	if (ZF_LOG_ON_VERBOSE && !quiet) {
+		LogDevices(AudioDevices, "All audio devices", false, false);
+	} else if (!quiet) {
+		LogDevices(AudioDevices, "Capture (input) Devices", true, false);
+		LogDevices(AudioDevices, "Playback (output) Devices", false, true);
+	}
+	AudioInit = true;
+}
+
+// Process any captured samples
+// Ideally call at least every 100 mS, more than 200 will loose data
+void PollReceivedSamples() {
+	if (strcmp(CaptureDevice, "NOSOUND") == 0)
+		return;
+
+	if (SoundCardRead(&inbuffer[0][0], ReceiveSize) == 0)
+		return;  // No samples to process
+
+	if (Capturing) {
+		ProcessNewSamples(&inbuffer[0][0], ReceiveSize);
+	} else {
+		// PreprocessNewSamples() writes these samples to the RX wav file when
+		// specified, even though not Capturing.  This produces a time
+		// continuous Wav file which can be useful for diagnostic purposes.
+		// If Capturing, this is called from ProcessNewSamples().
+		PreprocessNewSamples(&inbuffer[0][0], ReceiveSize);
+	}
+}
+
+void StopCapture() {
+	Capturing = false;
+	return;
+}
+
+// Adds a trailer to the audio samples that have been staged with SendtoCard(),
+// and then block until all of the staged audio has been played.  Before
+// returning, it calls KeyPTT(false) and enables the Capturing state.
+// return true on success and false on failure.  On failure, still set
+// KeyPTT(false) and enables the Capturing state
+bool SoundFlush() {
+	// Append Trailer then send remaining samples
+	// if AddTrailer() or SendtoCard() fail, TXEnabled will be set to false
+	if (TXEnabled && AddTrailer() && SendtoCard(Number)) {
+		ZF_LOGD("SoundFlush(): %d samples staged for playout.", SampleNo);
+	} else {
+		ZF_LOGW("SoundFlush() called when not TXEnabled. Ignoring.");
+	}
+	// PTT must not be dropped until all of the modulated audio has actually been
+	// transmitted.  The output AudioQueue buffers audio beyond the ring, so wait
+	// in two stages: first until the ring has been drained into the queue, then
+	// until the audio hardware has played through the end of the last real
+	// audio.
+	if (strcmp(PlaybackDevice, "NOSOUND") != 0 && TXEnabled) {
+		// 1. Wait until the output callback has pulled all staged audio out of
+		//    the ring and into the AudioQueue.
+		int waitcount = 0;
+		while (ring_count(&playbackRing) > 0 && TXEnabled) {
+			txSleep(5);
+			if (++waitcount > 2000) {  // ~10 sec safety timeout
+				ZF_LOGW("SoundFlush(): timeout draining playback ring.");
+				break;
+			}
+		}
+		// 2. Wait until the hardware play head reaches the end of the last real
+		//    audio.  The one-buffer margin covers the small race between the
+		//    ring emptying and the callback recording the final play position.
+		pthread_mutex_lock(&playPosMutex);
+		double target = lastRealOutFrame + AQ_FRAMES_PER_BUFFER;
+		pthread_mutex_unlock(&playPosMutex);
+		waitcount = 0;
+		while (TXEnabled && playQueue != NULL) {
+			AudioTimeStamp ts;
+			if (AudioQueueGetCurrentTime(playQueue, NULL, &ts, NULL) != noErr
+				|| !(ts.mFlags & kAudioTimeStampSampleTimeValid)
+			) {
+				// Queue play time unavailable; fall back to an elapsed-time
+				// estimate based on when PTT was keyed.
+				int txlenMs = SampleNo / 12 + 20;  // 12 kHz, 20 ms TXTAIL
+				if (pttOnTime + txlenMs > Now)
+					txSleep((pttOnTime + txlenMs) - Now);
+				break;
+			}
+			if (ts.mSampleTime >= target)
+				break;
+			txSleep(5);
+			if (++waitcount > 2000) {  // ~10 sec safety timeout
+				ZF_LOGW("SoundFlush(): timeout waiting for audio playout.");
+				break;
+			}
+		}
+	}
+
+	SoundIsPlaying = false;
+
+	if (blnEnbARQRpt > 0 || blnDISCRepeating)  // Start Repeat Timer if frame should be repeated
+		dttNextPlay = Now + intFrameRepeatInterval + extraDelay;
+
+	KeyPTT(false);  // Unkey the Transmitter
+	if (txwff != NULL) {
+		CloseWav(txwff);
+		txwff = NULL;
+	}
+
+	StartCapture();
+
+	if (WriteRxWav && !HWriteRxWav) {
+		// Start recording if not already recording, else extend the recording time.
+		// Note that this is disabled if HWriteRxWav is true.
+		StartRxWav();
+	}
+	return TXEnabled;
+}
+
+// Return true if OpenSoundCapture("RESTORE") might succeed, else false
+bool crestorable() {
+	return LastGoodCaptureDevice[0] != 0x00;
+}
+
+// Return true if OpenSoundPlayback("RESTORE") might succeed, else false
+bool prestorable() {
+	return LastGoodPlaybackDevice[0] != 0x00;
+}

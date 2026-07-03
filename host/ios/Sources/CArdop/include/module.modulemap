@@ -1,0 +1,4 @@
+module CArdop {
+    header "ardop_lib.h"
+    export *
+}
