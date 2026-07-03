@@ -152,6 +152,13 @@ static AudioQueueBufferRef recBuffers[NUM_AQ_BUFFERS];
 static bool playRunning = false;
 static bool recRunning = false;
 
+// AudioDeviceIDs of the currently open capture and playback devices, used by
+// CheckAudioDevicesAlive() to detect when a device is disconnected (e.g. a USB
+// radio like the QMX is powered off).  Set to kAudioObjectUnknown when no real
+// device is open (closed, or the NOSOUND dummy device).
+static AudioDeviceID openCaptureID = kAudioObjectUnknown;
+static AudioDeviceID openPlaybackID = kAudioObjectUnknown;
+
 // End-of-transmission PTT timing.  The output AudioQueue runs continuously
 // (playing silence between transmissions), so an empty playback ring only means
 // the last samples have been handed to the queue, not that they have left the
@@ -263,6 +270,34 @@ static CFStringRef device_uid(AudioDeviceID devid) {
 	if (AudioObjectGetPropertyData(devid, &addr, 0, NULL, &size, &uid) != noErr)
 		return NULL;
 	return uid;  // owned by caller
+}
+
+// Return true if the device with the given AudioDeviceID is still present and
+// alive.  When a device is disconnected (unplugged, or a USB radio is powered
+// off), the CoreAudio HAL either reports it as not alive or removes the device
+// object entirely, in which case the property query fails.  Both cases are
+// treated as "not alive".  kAudioObjectUnknown (no real device open, e.g.
+// NOSOUND) is treated as alive so the caller's own guards decide what to do.
+static bool device_is_alive(AudioDeviceID devid) {
+	if (devid == kAudioObjectUnknown)
+		return true;
+
+	AudioObjectPropertyAddress addr;
+	addr.mSelector = kAudioDevicePropertyDeviceIsAlive;
+	addr.mScope = kAudioObjectPropertyScopeGlobal;
+	addr.mElement = kAudioObjectPropertyElementMain;
+
+	// Once the HAL has removed the device object, it is no longer a valid
+	// AudioObject and AudioObjectHasProperty() returns false.  Guard with it so
+	// that the subsequent get does not log HAL errors for an expected condition.
+	if (!AudioObjectHasProperty(devid, &addr))
+		return false;
+
+	UInt32 alive = 0;
+	UInt32 size = sizeof(alive);
+	if (AudioObjectGetPropertyData(devid, &addr, 0, NULL, &size, &alive) != noErr)
+		return false;
+	return alive != 0;
 }
 
 // Populate AudioDevices with both Playback and Capture devices.
@@ -564,6 +599,7 @@ void CloseSoundPlayback(bool do_getdevices) {
 	}
 	ring_clear(&playbackRing);
 	PlaybackDevice[0] = 0x00;  // empty string
+	openPlaybackID = kAudioObjectUnknown;
 	SoundIsPlaying = false;
 	TXEnabled = false;
 	KeyPTT(false);  // In case PTT is engaged.
@@ -632,6 +668,7 @@ bool OpenSoundPlayback(char *devstr, int ch) {
 		TXEnabled = true;
 		strcpy(PlaybackDevice, "NOSOUND");
 		strcpy(LastGoodPlaybackDevice, PlaybackDevice);
+		openPlaybackID = kAudioObjectUnknown;
 		Pch = ch;
 		updateWebGuiAudioConfig(false);
 		return true;
@@ -680,6 +717,9 @@ bool OpenSoundPlayback(char *devstr, int ch) {
 	TXEnabled = true;
 	snprintf(PlaybackDevice, DEVSTRSZ, "%s", devstr);
 	strcpy(LastGoodPlaybackDevice, PlaybackDevice);
+	// Remember the AudioDeviceID so CheckAudioDevicesAlive() can notice if this
+	// device is later disconnected.
+	openPlaybackID = (aindex < deviceMapLen) ? deviceIDs[aindex] : kAudioObjectUnknown;
 	Pch = ch;
 	updateWebGuiAudioConfig(false);
 	return true;
@@ -697,6 +737,7 @@ void CloseSoundCapture(bool do_getdevices) {
 	}
 	ring_clear(&captureRing);
 	CaptureDevice[0] = 0x00;  // empty string
+	openCaptureID = kAudioObjectUnknown;
 	RXEnabled = false;
 	updateWebGuiAudioConfig(do_getdevices);
 }
@@ -765,6 +806,7 @@ bool OpenSoundCapture(char *devstr, int ch) {
 		wg_send_rxenabled(0, RXEnabled);
 		strcpy(CaptureDevice, "NOSOUND");
 		strcpy(LastGoodCaptureDevice, CaptureDevice);
+		openCaptureID = kAudioObjectUnknown;
 		Cch = ch;
 		updateWebGuiAudioConfig(false);
 		return true;
@@ -814,6 +856,9 @@ bool OpenSoundCapture(char *devstr, int ch) {
 	RXSilent = false;
 	snprintf(CaptureDevice, DEVSTRSZ, "%s", devstr);
 	strcpy(LastGoodCaptureDevice, CaptureDevice);
+	// Remember the AudioDeviceID so CheckAudioDevicesAlive() can notice if this
+	// device is later disconnected.
+	openCaptureID = (aindex < deviceMapLen) ? deviceIDs[aindex] : kAudioObjectUnknown;
 	Cch = ch;
 	if (!SoundIsPlaying)
 		StartCapture();
@@ -904,9 +949,64 @@ void InitAudio(bool quiet) {
 	AudioInit = true;
 }
 
+// Detect when an open audio device has been disconnected (e.g. a USB radio
+// like the QMX is powered off, or an interface is unplugged).  Unlike ALSA,
+// where a read/write on a vanished device returns an error that the polling
+// code notices, CoreAudio's AudioQueue callbacks keep running silently against
+// a dead device, so nothing would otherwise detect the loss.  This is polled
+// from PollReceivedSamples().  When a device is found to be gone, the
+// corresponding capture/playback path is closed, which sets RXEnabled/TXEnabled
+// to false, drops PTT, and updates the WebGui to show the audio as DISABLED.
+void CheckAudioDevicesAlive() {
+	// PollReceivedSamples() calls this roughly every 10 ms while RXEnabled.
+	// Querying the CoreAudio HAL that often is unnecessary (and each query may
+	// round trip to coreaudiod), so throttle the actual device checks to about
+	// twice per second.  Detecting a disconnect within ~0.5 s is far faster than
+	// a human can react to a powered off radio.
+	static unsigned int lastCheck = 0;
+	unsigned int now = Now;
+	// (now - lastCheck) wraps correctly with unsigned arithmetic.
+	if (lastCheck != 0 && (now - lastCheck) < 500)
+		return;
+	lastCheck = now;
+
+	// Capture.  Skip NOSOUND (openCaptureID is kAudioObjectUnknown for it).
+	if (RXEnabled
+		&& strcmp(CaptureDevice, "NOSOUND") != 0
+		&& openCaptureID != kAudioObjectUnknown
+		&& !device_is_alive(openCaptureID)
+	) {
+		ZF_LOGW("Capture audio device '%s' is no longer available.  It may have"
+			" been disconnected or powered off.  Setting RXEnabled to false.",
+			CaptureDevice);
+		if (ZF_LOG_ON_VERBOSE)
+			// For testing with testhost.py
+			SendCommandToHost("STATUS RXENABLED FALSE");
+		CloseSoundCapture(true);  // calls updateWebGuiAudioConfig(true);
+	}
+
+	// Playback.  Skip NOSOUND (openPlaybackID is kAudioObjectUnknown for it).
+	if (TXEnabled
+		&& strcmp(PlaybackDevice, "NOSOUND") != 0
+		&& openPlaybackID != kAudioObjectUnknown
+		&& !device_is_alive(openPlaybackID)
+	) {
+		ZF_LOGW("Playback audio device '%s' is no longer available.  It may have"
+			" been disconnected or powered off.  Setting TXEnabled to false.",
+			PlaybackDevice);
+		if (ZF_LOG_ON_VERBOSE)
+			// For testing with testhost.py
+			SendCommandToHost("STATUS TXENABLED FALSE");
+		CloseSoundPlayback(true);  // calls updateWebGuiAudioConfig(true);
+	}
+}
+
 // Process any captured samples
 // Ideally call at least every 100 mS, more than 200 will loose data
 void PollReceivedSamples() {
+	// Notice and react to a capture/playback device that has been disconnected.
+	CheckAudioDevicesAlive();
+
 	if (strcmp(CaptureDevice, "NOSOUND") == 0)
 		return;
 
