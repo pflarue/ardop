@@ -12,6 +12,10 @@
 #		environments may also work but are not tested.
 #			mingw32-make
 #
+#		For macOS, the default build requires the Xcode command line tools
+#		(which provide clang and make).  Install them with:
+#			xcode-select --install
+#
 #	`make test` which builds the executable and also runs some tests also
 #	requires installation of cmocka, which is not required for the default build.
 #		On Debian/Ubuntu this is easily installed with:
@@ -19,6 +23,20 @@
 #
 #		Package managers for other Linux distributions are also likely to
 #		provide easy installation of cmocka.
+#
+#		On macOS, install cmocka with Homebrew (https://brew.sh):
+#			brew install cmocka
+#		Homebrew is not on the compiler's default search path, so the macOS
+#		build adds Homebrew's include/ and lib/ directories automatically
+#		(see HOMEBREW_PREFIX in the platform-selection block below).  If
+#		`brew` is not in your PATH, pass the prefix explicitly, e.g.:
+#			make test HOMEBREW_PREFIX=/opt/homebrew
+#
+#		Two tests (test_log and test_ARDOPCommon_processargs) inject mock
+#		functions using the GNU ld `--wrap` option.  Apple's linker does not
+#		support `--wrap`, so on macOS `make test` builds and runs only the
+#		remaining tests; these two are skipped there but still run on Linux
+#		and Windows.
 #
 #		In the following description of how to install cmocka for Windows, a
 #		winlibs MinGW installation is assumed to be located at `C:\winlibs`
@@ -103,12 +121,18 @@ TESTS = \
 	$(BUILDDIR)/test/ardop/test_ARDOPCommon \
 	$(BUILDDIR)/test/ardop/test_HostInterface \
 	$(BUILDDIR)/test/ardop/test_Locator \
-	$(BUILDDIR)/test/ardop/test_log \
 	$(BUILDDIR)/test/ardop/test_Packed6 \
 	$(BUILDDIR)/test/ardop/test_StationId \
-	$(BUILDDIR)/test/ardop/test_ARDOPCommon_processargs \
 	$(BUILDDIR)/test/ardop/test_eutf8 \
 	$(BUILDDIR)/test/ardop/test_txframe \
+
+# Unit tests that inject mock functions using the GNU ld `--wrap` option.
+# Apple's linker (ld64 / ld-prime) does not support `--wrap`, so these tests
+# cannot be built on macOS; they are added to TESTS only on Linux and Windows
+# in the platform-selection block below.
+TESTS_WRAP = \
+	$(BUILDDIR)/test/ardop/test_log \
+	$(BUILDDIR)/test/ardop/test_ARDOPCommon_processargs \
 
 # unit test common code
 TEST_OBJS_COMMON = \
@@ -151,9 +175,12 @@ PLATFORM := windows
 OBJS += $(OBJS_WIN)
 LDLIBS += -lwsock32 -lwinmm -lsetupapi -lws2_32 -lhid
 LDFLAGS = -Xlinker -Map=$(BUILDDIR)/output.map
+# GNU ld supports --wrap, so the mock-injecting tests can be built.
+TESTS += $(TESTS_WRAP)
 else ifeq ($(UNAME_S),Darwin)
 PLATFORM := macos
 OBJS += $(OBJS_MAC)
+# TESTS_WRAP is intentionally not added here: Apple's linker lacks --wrap.
 # Suppress the unhelpful gnu-folding-constant warning.
 # See comments at https://ffmpeg.org/pipermail/ffmpeg-cvslog/2025-May/148334.html
 #  about using -fno-common for compiler behavior on Apple similar to the default
@@ -166,9 +193,21 @@ LDLIBS += -framework CoreAudio -framework AudioToolbox -framework CoreFoundation
 LDFLAGS = -Xlinker -map -Xlinker $(BUILDDIR)/output.map
 # Default to the system compiler (clang) on macOS unless overridden.
 CC = cc
+# Homebrew is not on the compiler/linker default search paths, so add its
+# include and library directories.  This is where cmocka (required by
+# `make test`) is found.  HOMEBREW_PREFIX is auto-detected via `brew` and
+# works for both Apple Silicon (/opt/homebrew) and Intel (/usr/local)
+# installs; it may be overridden on the command line if `brew` is not in PATH.
+HOMEBREW_PREFIX ?= $(shell brew --prefix 2>/dev/null)
+ifneq ($(HOMEBREW_PREFIX),)
+CPPFLAGS += -I$(HOMEBREW_PREFIX)/include
+LDFLAGS += -L$(HOMEBREW_PREFIX)/lib
+endif
 else
 PLATFORM := linux
 OBJS += $(OBJS_LIN)
+# GNU ld supports --wrap, so the mock-injecting tests can be built.
+TESTS += $(TESTS_WRAP)
 LDLIBS += -lrt -lasound
 LDFLAGS = -Xlinker -Map=$(BUILDDIR)/output.map
 endif
