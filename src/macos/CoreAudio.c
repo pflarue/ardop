@@ -250,6 +250,24 @@ static char *device_name(AudioDeviceID devid) {
 	return out;
 }
 
+// Convert an owned CFStringRef to a freshly-allocated UTF-8 C string.
+// Returns NULL on failure.  Does NOT release the input CFStringRef —
+// the caller retains that responsibility.
+static char *cfstring_to_utf8(CFStringRef s) {
+	if (s == NULL)
+		return NULL;
+	CFIndex len = CFStringGetMaximumSizeForEncoding(
+		CFStringGetLength(s), kCFStringEncodingUTF8) + 1;
+	char *out = (char *) malloc(len);
+	if (out == NULL)
+		return NULL;
+	if (!CFStringGetCString(s, out, len, kCFStringEncodingUTF8)) {
+		free(out);
+		return NULL;
+	}
+	return out;
+}
+
 // Get a device's UID as an owned CFStringRef, or NULL on failure.  The caller
 // is responsible for CFRelease()ing the result.
 static CFStringRef device_uid(AudioDeviceID devid) {
@@ -339,16 +357,32 @@ void GetDevices() {
 		// On macOS there is no useful separate description, so reuse the name
 		// (truncated) as the description.
 		dev->desc = strdup(dev->name);
-		dev->alias = NULL;  // No numeric-alias scheme on macOS.
 		dev->capture = (inch > 0);
 		dev->playback = (outch > 0);
 
 		// Record the device id and UID in the parallel map at the same index.
+		CFStringRef uidcf = device_uid(devid);
 		if (devindex < MAX_AUDIO_DEVICES) {
 			deviceIDs[devindex] = devid;
-			deviceUIDs[devindex] = device_uid(devid);  // owned, may be NULL
+			deviceUIDs[devindex] = uidcf;  // owned CFStringRef, may be NULL
 			if (devindex + 1 > deviceMapLen)
 				deviceMapLen = devindex + 1;
+		}
+		// Expose the CoreAudio UID (stable per-instance identifier) as the
+		// device alias.  When macOS surfaces multiple devices sharing the
+		// same friendly name — e.g. three USB Audio CODEC radio interfaces
+		// from the same vendor — the friendly name alone is ambiguous and
+		// FindAudioDevice()'s exact-name match picks whichever device happens
+		// to be enumerated first.  Populating alias with the UID lets a host
+		// program that already knows the UID (via CoreAudio's own APIs) pass
+		// that UID as the device string, and FindAudioDevice's name-or-alias
+		// exact match will then bind the correct device.  Legacy callers
+		// passing only the friendly name are unaffected.
+		dev->alias = cfstring_to_utf8(uidcf);
+		if (dev->alias != NULL && strlen(dev->alias) > (DEVSTRSZ - 1)) {
+			// Truncate to DEVSTRSZ - 1 like name/desc for consistency with
+			// FindAudioDevice's DEVSTRSZ-bounded compare.
+			dev->alias[DEVSTRSZ - 1] = '\0';
 		}
 		free(name);
 	}
