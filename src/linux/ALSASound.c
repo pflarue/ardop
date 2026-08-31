@@ -1560,10 +1560,8 @@ int SoundCardRead(short * input, unsigned int nSamples)
 		else
 			start = 1;
 
-		for (n = start; n < (ret * 2); n+=2)  // return alternate
-		{
-			input[n] = samples[n];
-		}
+		for (n = 0; n < ret; n++)  // pack the selected channel into consecutive samples
+			input[n] = samples[2 * n + start];
 	}
 	return ret;
 }
