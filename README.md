@@ -1,5 +1,25 @@
 # ardopcf
 
+## I have decided to discontinue development of ardopcf and will not be accepting any additional pull requests.  - Peter LaRue AI7YN
+
+Maybe I'll create one more release using some of what is currently in the [develop branch](https://github.com/pflarue/ardop/tree/develop) (or maybe not).
+
+For anyone interested in continued development of Ardop, I encourage you to either fork this repo and move forward, or create a new implementation.  I hope that one of these occurs, because until a new open source cross platform alternative is well supported by Winlink RMS stations, it is important that Ardop continue to be usable.  However, I have other projects that I'd rather spend my time on.  In addition to the opportunity for continued traditional development, perhaps using some of the contents of the [develop branch](https://github.com/pflarue/ardop/tree/develop) that never made it into a release of ardopcf, two projects linked below demonstrate how AI tools might also be useful.  I can't comment on the quality of these efforts.  However, as AI tools continue to improve, I believe that their use by someone who is both a competent programmer and who understands how to evaluate the quality of AI output, may be able to produce something better organized and more reliable that ardopcf.
+
+Just as I chose the name ardopcf when I created a fork of John Wiseman's ardopc, I ask anyone releasing something based on ardopcf to also give it a new name.  As I've written elsewhere, I also strongly recommend that anyone producing something that is not over-the-air compatible with ARDOP_WIN and ardopcf not use "ardop" as a part of its name.  Both of these are to help avoid confusing users.
+
+While I believe that ardopcf is suitable for continued use, here are some links to other Ardop implementations.  If you know of (or are the author of) an Ardop implementation that you'd like me to add to this list, create a [GitHub Issue](https://github.com/pflarue/ardop/issues) to let me know about it.  This list does not include any fork of ardopcf that still uses that name.
+
+https://winlink.org  Some of the downloads linked from this site include ARDOP_WIN, the latest version of the original Windows-only Ardop implementation by Rick Muething.
+
+https://www.cantab.net/users/john.wiseman/Documents/ARDOPC.html or https://github.com/g8bpq/ardop.  John Wiseman's Ardop implementation that ardopcf was forked from.
+
+https://dl2man.de/ARDOP or https://dl2man.de/ARDOP/client.  ARDOP Winlink, a Winlink client and new implementation of Ardop that runs entirely in a web browser by Manuel DL2MAN.  DL2MAN is well known for developing the (tr)uSDX with Guido PE1NNZ.
+
+https://github.com/rfb/ardopb.  ardopb, an AI driven re-implementation of ARDOP, by Ryan Barber.  
+
+-----------------------------
+
 The Amateur Radio Digital Open Protocol (Ardop) is a protocol for exchange of digital data encoded as audio and transmitted over amateur radio.  **ardopcf** is an Open-Source cross-platform implmentation of Ardop.  While **ardopcf** is usable and being used, it is likely to still contain bugs, and it is still under active development.  The primary goals of the ongoing develpment effort are to improve both stability and over the air performance.  Ongoing efforts to reorganize the code base to make it easier to understand, debug, and maintain help support these goals.
 
 > **For Ardop Developers - about AI:**
